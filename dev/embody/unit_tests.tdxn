@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 368
-generator: Embody/6.2.22
+build: 369
+generator: Embody/6.2.23
 td_build: 099.2025.33070
-source_file: Embody-6.326.toe
-exported_at: '2026-09-06T20:53:53Z'
+source_file: Embody-6.327.toe
+exported_at: '2026-09-06T23:43:17Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -30,14 +30,14 @@ sequences:
   - {}
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: results
   type: tableDAT
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 19
+    rows: 23
     cols: 5
   flags:
   - viewer
@@ -67,7 +67,7 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/unit_tests/test_sandbox.tdxn
 - name: test_updater
   type: textDAT

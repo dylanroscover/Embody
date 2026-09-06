@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 2487
-generator: Embody/6.2.21
+build: 2488
+generator: Embody/6.2.23
 td_build: 099.2025.33070
-source_file: Embody-6.324.toe
-exported_at: '2026-09-06T20:50:57Z'
+source_file: Embody-6.326.toe
+exported_at: '2026-09-06T23:43:05Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -14,5 +14,5 @@ flags:
 - viewer
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators: []

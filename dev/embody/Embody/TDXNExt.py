@@ -499,7 +499,16 @@ def resolve_tdn_name(tdn, slug=None):
 
 
 class TDXNExt:
-	"""Extension for exporting/importing TouchDesigner networks as .tdn (YAML v2.0)."""
+	"""Extension for exporting/importing TouchDesigner networks as .tdxn (YAML v2.0)."""
+
+	# The tag strings TDXN shipped under before the TDXN rename. Every
+	# READER accepts these forever (see tdxnTags / tdxnExcludeTags): the
+	# literal string lives on operators inside networks we do not own, so
+	# dropping it would make a user's tagged COMPs read as untagged --
+	# silently out of the lifecycle, no error anywhere. Writers only ever
+	# use the configured parameter value.
+	_LEGACY_TDXN_TAG = 'tdn'
+	_LEGACY_TDXN_EXCLUDE_TAG = 'tdn_exclude'
 
 	def __init__(self, ownerComp: 'COMP') -> None:
 		self.ownerComp: 'COMP' = ownerComp
@@ -2094,8 +2103,9 @@ class TDXNExt:
 		of TDXN-managed COMPs. If no TDXN-tagged COMPs exist, exports
 		everything directly without prompting.
 		"""
-		tdn_tag = self.ownerComp.par.Tdxntag.val
-		tdn_comps = root.findChildren(tags=[tdn_tag])
+		# findChildren(tags=[...]) is OR across the list, so both the
+		# configured and legacy tags are swept in one pass.
+		tdn_comps = root.findChildren(tags=self.tdxnTags())
 		# Exclude Embody + descendants, non-COMPs, and system paths
 		embody_path = self.ownerComp.path + '/'
 		tdn_comps = [c for c in tdn_comps
@@ -6824,8 +6834,136 @@ class TDXNExt:
 		"""Check if a COMP has its own TDXN externalization tag."""
 		if not target.isCOMP:
 			return False
-		tdn_tag = self.ownerComp.par.Tdxntag.val
-		return tdn_tag in target.tags
+		accepted = self.tdxnTags()
+		return any(t in target.tags for t in accepted)
+
+	def tdxnTags(self) -> list:
+		"""Every tag string that marks a TDXN boundary.
+
+		The configured tag first, then the legacy 'tdn' it replaced. Read
+		BOTH, always: an existing network carries the literal old string on
+		its operators, so a reader that matches only the configured value
+		silently stops seeing every COMP a user already tagged -- they would
+		look untagged, drop out of the lifecycle, and stop exporting, with no
+		error anywhere. Writers use the configured value alone.
+		"""
+		try:
+			configured = str(self.ownerComp.par.Tdxntag.val).strip()
+		except Exception:
+			configured = ''
+		tags = [t for t in (configured, TDXNExt._LEGACY_TDXN_TAG) if t]
+		return list(dict.fromkeys(tags))
+
+	def tdxnExcludeTags(self) -> list:
+		"""Exclude-tag equivalents of tdxnTags -- same both-names rule."""
+		try:
+			configured = str(self.ownerComp.par.Tdxnexcludetag.eval()).strip()
+		except Exception:
+			configured = ''
+		tags = [t for t in (configured, TDXNExt._LEGACY_TDXN_EXCLUDE_TAG) if t]
+		return list(dict.fromkeys(tags))
+
+	def MigrateTagsToTDXN(self, dry_run: bool = False,
+						  scope: str = '') -> dict:
+		"""Re-tag operators carrying the legacy TDN tags onto the configured ones.
+
+		Readers accept both forever (see tdxnTags), so this is cosmetic
+		rather than load-bearing -- nothing breaks if a user never runs it,
+		which is why it is opt-in and not run on load.
+
+		Rewrites three shapes: the bare boundary tag, the bare exclude tag,
+		and any 'tdn_exclude:<suffix>' qualifier (dat_content and friends),
+		whose suffix is preserved. Idempotent -- derived from the tags each
+		operator actually carries, so a re-run after an interruption
+		converges. Never removes a tag without adding its replacement.
+
+		Args:
+			dry_run: Compute the plan, change nothing.
+			scope: Optional op-path prefix to limit the sweep.
+
+		Returns:
+			{'retagged': [...], 'excluded': [...], 'qualifiers': [...],
+			 'count': int, 'dry_run': bool}
+		"""
+		new_tag = str(self.ownerComp.par.Tdxntag.val).strip()
+		new_excl = str(self.ownerComp.par.Tdxnexcludetag.eval()).strip()
+		old_tag = TDXNExt._LEGACY_TDXN_TAG
+		old_excl = TDXNExt._LEGACY_TDXN_EXCLUDE_TAG
+		out = {'retagged': [], 'excluded': [], 'qualifiers': [],
+			   'count': 0, 'dry_run': bool(dry_run)}
+		if not new_tag:
+			out['refused'] = 'the TDXN tag parameter is empty'
+			return out
+
+		root = op('/')
+		embody = self.ownerComp.path + '/'
+		seen = set()
+		candidates = []
+		for tag in (old_tag, old_excl):
+			if not tag:
+				continue
+			for o in root.findChildren(tags=[tag]):
+				if o.id not in seen:
+					seen.add(o.id)
+					candidates.append(o)
+		# Qualifier tags ('tdn_exclude:dat_content') are not matched by a
+		# findChildren tag search, so sweep those separately.
+		if old_excl:
+			marker = old_excl + ':'
+			for o in root.findChildren():
+				try:
+					if any(t.startswith(marker) for t in o.tags):
+						if o.id not in seen:
+							seen.add(o.id)
+							candidates.append(o)
+				except Exception:
+					continue
+
+		for o in candidates:
+			try:
+				path = o.path
+			except Exception:
+				continue
+			if path.startswith(embody) or path == self.ownerComp.path:
+				continue
+			if scope and not (path == scope or path.startswith(scope + '/')):
+				continue
+			try:
+				tags = set(o.tags)
+			except Exception:
+				continue
+			add, drop, kind = set(), set(), None
+			if old_tag in tags and old_tag != new_tag:
+				add.add(new_tag); drop.add(old_tag); kind = 'retagged'
+			if old_excl and old_excl in tags and old_excl != new_excl:
+				add.add(new_excl); drop.add(old_excl); kind = kind or 'excluded'
+			if old_excl and new_excl:
+				marker = old_excl + ':'
+				for t in tags:
+					if t.startswith(marker) and old_excl != new_excl:
+						add.add(new_excl + ':' + t[len(marker):])
+						drop.add(t)
+						kind = kind or 'qualifiers'
+			if not add:
+				continue
+			out[kind if kind in out else 'retagged'].append(path)
+			out['count'] += 1
+			if dry_run:
+				continue
+			try:
+				# Add before removing: an interruption between the two
+				# leaves the operator carrying BOTH, which every reader
+				# accepts, rather than neither.
+				for t in add:
+					o.tags.add(t)
+				for t in drop:
+					o.tags.discard(t)
+			except Exception as e:
+				self._log(f'Tag migration failed for {path}: {e}', 'ERROR')
+		if out['count'] and not dry_run:
+			self._log(f'Re-tagged {out["count"]} operator(s) from the legacy '
+					  f'TDN tags to {new_tag!r}/{new_excl!r}', 'INFO')
+		return out
 
 	def _hasExcludeTag(self, target):
 		"""Is this COMP tagged for exclusion from the TDXN system?
@@ -6838,8 +6976,8 @@ class TDXNExt:
 		"""
 		if not target.isCOMP or target.type == 'annotate':
 			return False
-		exclude_tag = self.ownerComp.par.Tdxnexcludetag.eval()
-		return bool(exclude_tag) and exclude_tag in target.tags
+		accepted = self.tdxnExcludeTags()
+		return any(t in target.tags for t in accepted)
 
 	def _hasTOXTag(self, target):
 		"""Check if a COMP has its own TOX externalization tag."""

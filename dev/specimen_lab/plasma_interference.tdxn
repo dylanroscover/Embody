@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.10
+generator: Embody/6.2.23
 td_build: 099.2025.33070
-source_file: Embody-6.313.toe
-exported_at: '2026-09-04T20:29:02Z'
+source_file: Embody-6.327.toe
+exported_at: '2026-09-06T23:43:19Z'
 network_path: /specimen_lab/plasma_interference
 options:
   include_dat_content: false
@@ -99,7 +99,7 @@ custom_pars:
     value: 1350
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: out1
   type: outTOP

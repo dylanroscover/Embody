@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 1229
-generator: Embody/6.2.23
+build: 1230
+generator: Embody/6.2.24
 td_build: 099.2025.33070
-source_file: Embody-6.326.toe
-exported_at: '2026-09-06T20:53:56Z'
+source_file: Embody-6.327.toe
+exported_at: '2026-09-06T23:43:24Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -197,13 +197,13 @@ custom_pars:
   - name: Tdxntag
     style: Str
     label: TDXN Tag
+    default: tdxn
     help: 'Tag string applied to COMPs externalized with the TDXN strategy (their children are exported as human-readable YAML network files). The value stays ''tdn'': it is written into every tagged COMP in every existing project, so changing it would orphan them.'
-    value: tdn
   - name: Tdxnexcludetag
     style: Str
     label: TDXN Exclude Tag
     startSection: true
-    default: tdn_exclude
+    default: tdxn_exclude
     help: 'Tag family for excluding things from the TDXN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDXN -- never exported, never inlined in parent .tdxn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDXN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
   TDXN:
   - name: Tdxnmode
@@ -851,7 +851,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.23
+    value: 6.2.24
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1019,6 +1019,108 @@ operators:
   color: [0.67, 0.67, 0.67]
   tags:
   - tdn_exclude:dat_content
+  dat_content:
+  - - '16:43:10   19302 INFO    EnvoyExt: Processing: run_tests'
+  - - '16:43:10   19302 INFO    EnvoyExt: Recovery point: "Embody-6.326.toe" saved 169.2 min ago'
+  - - '16:43:10   19302 INFO    TestRunnerExt: Discovered 4 test suite(s) [deferred-per-test]'
+  - - '16:43:10   19310 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox'''
+  - - '16:43:10   19310 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\switch_to_tox.tdxn'
+  - - '16:43:10   19310 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox'''
+  - - '16:43:10   19310 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox'' delete_file=True rows=314'
+  - - '16:43:10   19310 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox.tdxn'' delete_file=True'
+  - - '16:43:10   19310 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox'''
+  - - '16:43:10   19310 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox'''
+  - - '16:43:10   19311 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tox.tdxn)'
+  - - '16:43:10   19311 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tdn'''
+  - - '16:43:10   19311 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tdn'''
+  - - '16:43:10   19311 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\switch_to_tdn.tdxn'
+  - - '16:43:10   19311 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tdn'''
+  - - '16:43:10   19311 SUCCESS TDXNExt: Network unchanged, kept C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\switch_to_tdn.tdxn'
+  - - '16:43:10   19311 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/switch_to_tdn'
+  - - '16:43:10   19323 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox'''
+  - - '16:43:10   19323 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\rem_tdn_no_tox.tdxn'
+  - - '16:43:10   19323 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox'''
+  - - '16:43:10   19323 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox'' delete_file=True rows=314'
+  - - '16:43:10   19323 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox.tdxn'' delete_file=True'
+  - - '16:43:11   19335 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_no_tox.tdxn)'
+  - - '16:43:11   19335 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag'''
+  - - '16:43:11   19335 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\rem_tdn_tag.tdxn'
+  - - '16:43:11   19335 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag'''
+  - - '16:43:11   19335 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag'' delete_file=True rows=314'
+  - - '16:43:11   19335 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag.tdxn'' delete_file=True'
+  - - '16:43:11   19347 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_tag.tdxn)'
+  - - '16:43:11   19347 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color'''
+  - - '16:43:11   19347 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\rem_tdn_color.tdxn'
+  - - '16:43:11   19347 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color'''
+  - - '16:43:11   19347 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color'' delete_file=True rows=314'
+  - - '16:43:11   19347 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color.tdxn'' delete_file=True'
+  - - '16:43:11   19359 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tdn_color.tdxn)'
+  - - '16:43:11   19359 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ext'''
+  - - '16:43:11   19359 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ext'''
+  - - '16:43:11   19359 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ext'''
+  - - '16:43:12   19371 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_no_convert'''
+  - - '16:43:12   19371 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_no_convert'''
+  - - '16:43:12   19371 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_no_convert'''
+  - - '16:43:12   19383 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_tag'''
+  - - '16:43:12   19383 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_tag'''
+  - - '16:43:12   19383 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_tag'''
+  - - '16:43:12   19395 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_color'''
+  - - '16:43:12   19395 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_color'''
+  - - '16:43:12   19395 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_color'''
+  - - '16:43:12   19407 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ro'''
+  - - '16:43:12   19407 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ro'''
+  - - '16:43:12   19407 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/rem_tox_ro'''
+  - - '16:43:12   19418 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb'''
+  - - '16:43:12   19418 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_breadcrumb.tdxn'
+  - - '16:43:13   19418 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb'''
+  - - '16:43:13   19418 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb'' delete_file=True rows=314'
+  - - '16:43:13   19418 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb.tdxn'' delete_file=True'
+  - - '16:43:13   19430 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_breadcrumb.tdxn)'
+  - - '16:43:13   19430 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_keep_file'''
+  - - '16:43:13   19430 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_keep_file.tdxn'
+  - - '16:43:13   19430 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_keep_file'''
+  - - '16:43:13   19430 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_keep_file'' delete_file=False rows=314'
+  - - '16:43:13   19430 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_keep_file.tdxn'' delete_file=False'
+  - - '16:43:13   19442 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/nonexistent_issue48_probe'' delete_file=True rows=313'
+  - - '16:43:13   19454 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row'''
+  - - '16:43:13   19454 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_remove_row.tdxn'
+  - - '16:43:13   19454 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row'''
+  - - '16:43:13   19454 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row'' delete_file=True rows=314'
+  - - '16:43:13   19454 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row.tdxn'' delete_file=True'
+  - - '16:43:13   19465 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_remove_row.tdxn)'
+  - - '16:43:13   19465 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color'''
+  - - '16:43:13   19465 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_reset_color.tdxn'
+  - - '16:43:13   19465 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color'''
+  - - '16:43:13   19465 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color'' delete_file=True rows=314'
+  - - '16:43:13   19465 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color.tdxn'' delete_file=True'
+  - - '16:43:13   19472 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_reset_color.tdxn)'
+  - - '16:43:13   19472 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect'''
+  - - '16:43:14   19472 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_no_resurrect.tdxn'
+  - - '16:43:14   19472 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect'''
+  - - '16:43:14   19472 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect'' delete_file=True rows=314'
+  - - '16:43:14   19472 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect.tdxn'' delete_file=True'
+  - - '16:43:14   19484 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_no_resurrect.tdxn)'
+  - - '16:43:14   19484 SUCCESS EmbodyExt: Tag ''tdxn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag'''
+  - - '16:43:14   19484 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_strategy_handlers\workspace\x_strip_tag.tdxn'
+  - - '16:43:14   19484 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag'''
+  - - '16:43:14   19484 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag'' delete_file=True rows=314'
+  - - '16:43:14   19484 INFO    EmbodyExt: _removeTDNStrategy: found row 313, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag.tdxn'' delete_file=True'
+  - - '16:43:14   19496 SUCCESS EmbodyExt: Removed TDXN externalization for /embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag (embody/unit_tests/test_sandbox/sandbox_test_strategy_handlers/workspace/x_strip_tag.tdxn)'
+  - - '16:43:14   19496 SUCCESS TDXNExt: Network unchanged, kept C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox.tdxn'
+  - - '16:43:14   19496 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox'
+  - - '16:43:14   19496 SUCCESS TestRunnerExt: Tests complete: 22/22 passed'
+  - - '16:43:17   19671 INFO    EnvoyExt: Processing: save_project'
+  - - '16:43:17   19671 INFO    envoy_setup:1557: Registered instance "Embody-6.327" in envoy.json (port 9870)'
+  - - '16:43:17   19671 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests.tdxn'
+  - - '16:43:17   19671 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests'
+  - - '16:43:18   19671 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '16:43:18   19671 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
+  - - '16:43:18   19671 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '16:43:18   19671 SUCCESS EmbodyExt: Exported TDXN for /embody'
+  - - '16:43:18   19671 SUCCESS EmbodyExt: Saved 3 externalizations'
+  - - '16:43:20   19671 INFO    EmbodyExt: Exporting portable .tox: stripping 559 file reference(s) and 116 tagged operator(s) from /embody/Embody'
+  - - '16:43:22   19671 INFO    specimen_publish:47: Specimen publish: 6 written, 0 unchanged, 0 missing'
+  dat_content_format: table
 - name: null2
   type: nullCHOP
   parameters:
@@ -1889,6 +1991,152 @@ operators:
     color: [0.67, 0.67, 0.67]
     tags:
     - tdn_exclude:dat_content
+    dat_content:
+    - - name
+      - value
+      - r
+      - g
+      - b
+      - show
+    - - font
+      - '41.0909'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - rowh
+      - '120'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - pad
+      - '14'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - c0w0
+      - '240'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row0
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r0c0
+      - ✓ Embody
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r0c1
+      - v6.2.24
+      - '0.4000'
+      - '0.4400'
+      - '0.5000'
+      - '1'
+    - - c0w1
+      - '375'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row1
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r1c0
+      - ✓ Saved 1s ago
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r1c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w2
+      - '217'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row2
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r2c0
+      - ✓ Envoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r2c1
+      - ✓ Convoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - c0w3
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row3
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r3c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r3c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w4
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row4
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r4c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r4c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    dat_content_format: table
   - name: parexec_status
     type: parameterexecuteDAT
     parameters:
