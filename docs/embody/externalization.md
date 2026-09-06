@@ -191,8 +191,8 @@ Embody applies it to its own two runtime tables — the log FIFO and the status 
 
 When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDXN-managed COMPs:
 
-- **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF).
-- **At-risk storage** — `comp.storage` entries on the TDXN COMP or its descendants that won't be preserved when **Embed Storage in TDNs** is OFF.
+- **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs** parameter is OFF).
+- **At-risk storage** — `comp.storage` entries on the TDXN COMP or its descendants that won't be preserved when **Embed Storage** is OFF.
 
 DATs carrying `tdn_exclude:dat_content` are also skipped — losing that content is the declared intent, so warning about it would contradict the export.
 
@@ -202,7 +202,7 @@ If at-risk content is found, Embody prompts you with four options:
 
 | Button | Behavior |
 |--------|----------|
-| **Externalize DATs** | Tag and externalize the at-risk DATs so their content is saved to files on disk. Storage has no externalization path — enable **Embed Storage in TDNs** to preserve it. (Shown as **Continue** when only storage is at risk.) |
+| **Externalize DATs** | Tag and externalize the at-risk DATs so their content is saved to files on disk. Storage has no externalization path — enable **Embed Storage** to preserve it. (Shown as **Continue** when only storage is at risk.) |
 | **Always Externalize** | Externalize now, and do so automatically on future saves without asking. Sets `Tdndatsafety = 'externalize'`. |
 | **Skip Once** | Proceed with this save. Skipped content is logged so you know exactly what was dropped. You will be prompted again next save. |
 | **Always Skip** | Proceed and suppress the check on future saves. Sets `Tdndatsafety = 'ignore'` — the same opt-out described below. |
@@ -210,7 +210,7 @@ If at-risk content is found, Embody prompts you with four options:
 The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDXN settings. Setting `Tdndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
 
 !!! tip
-    To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
+    To avoid this prompt entirely, either enable **Embed DATs** / **Embed Storage** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
 
 !!! warning "Embedded VFS files are not supported by TDXN"
     TDXN does **not** capture a COMP's Virtual File System. Files embedded in a

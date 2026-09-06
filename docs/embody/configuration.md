@@ -52,8 +52,8 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
     - **Upgrading from the old `Tdnenable` toggle**: on first project open after upgrade, Embody detects the legacy parameter in `.embody/config.json` and shows a one-shot dialog offering Export-on-Save (recommended) or a one-click restore of the previous Full behavior via Roundtrip mode. Your existing `.tdxn` files and tracked COMP entries are preserved across the switch; the nudge fires once per project and never again.
 - **Cascade to Children** — When tagging a COMP for TDXN, automatically tag all child COMPs so each gets its own `.tdxn` file
 - **Large TDXN Warning** — *Ask* (default) prompts when a `.tdxn` file exceeds 5 MB, *Quiet* suppresses the warning
-- **Embed DATs in TDNs** — Include DAT content in TDXN exports
-- **Embed Storage in TDNs** — Include Python storage entries in TDXN exports (can be overridden per-COMP from the tagging menu)
+- **Embed DATs** — Include DAT content in TDXN exports
+- **Embed Storage** — Include Python storage entries in TDXN exports (can be overridden per-COMP from the tagging menu)
 - **TDXN Create on Start** — Reconstruct TDXN-strategy COMPs from `.tdxn` files on project open (Roundtrip mode only; greyed in Off/Export)
 - **Strip on Save** — Strip children from TDXN-strategy COMPs on save (Roundtrip mode only; greyed in Off/Export — Export-on-Save never strips)
 - **Palette Handling** — How to handle TD palette COMPs (e.g. `abletonLink`, Widget components) during TDXN export. *Ask* (default) prompts on first encounter per COMP with four choices; *Black Box* always references the palette and skips internal children (correct for stock palette COMPs); *Full Export* always exports all internals (for heavily customized palette COMPs). Native operator templates (`/sys/TDTox/defaultCOMPs/`) are excluded from palette detection — a plain `buttonCOMP` or `panelCOMP` is treated as a regular COMP, not a palette clone. See [TDXN Palette Handling](../tdxn/specification.md#palette-handling) for details

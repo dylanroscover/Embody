@@ -11,7 +11,7 @@ Items that sat here and have since shipped -- kept one revision for the record:
 
 - **Headless fresh-install runs.** The smoke harness seeds dialog responses
   and runs a virgin install unattended end to end (startup verdict plus a
-  feature phase: TDN round-trip, checkpoint, portable export, Envoy, Convoy).
+  feature phase: TDXN round-trip, checkpoint, portable export, Envoy, Convoy).
   What remains of the old "Next up" item is the narrower polish below.
 - **Streaming SSE bridge (A-46).** Tool responses stream incrementally with
   idle-window and absolute caps -- the shared prerequisite the elicitation

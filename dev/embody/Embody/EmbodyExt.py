@@ -11957,7 +11957,7 @@ class EmbodyExt:
         msg = (f'TDXN content will be dropped on next save.\n\n'
                f'{body}\n\n'
                f'Note: storage has no externalization path -- enable Embed '
-               f'Storage in TDNs to preserve it, or dismiss to proceed.\n\n'
+               f'Storage to preserve it, or dismiss to proceed.\n\n'
                f'"Always" choices are remembered (revert anytime via the '
                f'TDXN content-safety parameter on Embody).')
 
