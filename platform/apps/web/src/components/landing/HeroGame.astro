@@ -9,7 +9,9 @@
 // forked off the op two back (or a fresh generator when there is none),
 // converging into its lower input, so forks and deltas appear as they do in
 // a real network. Each run sits inside an annotation that encloses it, titled
-// by function. The camera follows Embot, so the world keeps sliding between
+// after the ops actually in it (RUN_TITLE) -- and its filters are drawn
+// without replacement, so no block is three of the same operator under a name
+// that would not survive a look. The camera follows Embot, so the world keeps sliding between
 // hops (the forward momentum the headline promises), and every tile he lands
 // on pulses Envoy's accent exactly like the editor's node pulse. He says what
 // each op did, in EnvoyExt's own words. The first chain is the network the
@@ -87,11 +89,40 @@ import Embot from "./Embot.astro";
     popToSOP: "pulled the points back to the CPU",
     datToCHOP: "turned the table into channels"
   };
-  const TITLES: Record<Fam | "RENDER", string[]> = {
-    TOP: ["noise pipeline", "compositing", "post", "feedback loop", "output"],
-    CHOP: ["modulation", "audio analysis", "smoothing", "control"],
-    SOP: ["geometry", "terrain"], POP: ["particles", "point cloud"], DAT: ["data in"], COMP: ["scene"], RENDER: ["render"]
-  };
+  // An annotation is titled after what the run actually contains -- never a
+  // random pick from the family, which is how a chain of three filterCHOPs
+  // ended up labelled "control". First match wins, strongest identity first:
+  // a run holding a feedbackTOP is a feedback loop whatever else is in it.
+  const RUN_TITLE: Array<[string, string]> = [
+    ["renderTOP", "render"],
+    ["geometryCOMP", "scene"],
+    ["feedbackTOP", "feedback loop"],
+    ["glslTOP", "shader"],
+    ["compositeTOP", "compositing"],
+    ["edgeTOP", "edge detect"],
+    ["noisePOP", "displacement"],
+    ["gridPOP", "point cloud"],
+    // gridSOP outranks its filters: a run that BUILDS the geometry is named
+    // for that, not for the transform applied to it (grid + noise is caught
+    // by the terrain pair rule above). A bridged continuation carries no
+    // generator, so it falls through to what it actually does.
+    ["gridSOP", "geometry"],
+    ["noiseSOP", "displacement"],
+    ["transformSOP", "placement"],
+    ["webclientDAT", "data in"],
+    ["textDAT", "data in"],
+    ["lfoCHOP", "modulation"],
+    ["noiseCHOP", "jitter"],
+    ["filterCHOP", "smoothing"],
+    ["mathCHOP", "signal math"],
+    ["hsvadjustTOP", "colour"],
+    ["levelTOP", "grade"],
+    ["blurTOP", "blur"],
+    ["transformTOP", "transform"],
+    ["noiseTOP", "noise"],
+    ["rampTOP", "gradient"],
+    ["constantTOP", "colour"]
+  ];
   // The first chain is the sample network the old backdrop showed.
   const SEED_CHAIN: Array<[string, string]> = [
     ["noise_source", "noiseTOP"], ["feedback1", "feedbackTOP"], ["transform1", "transformTOP"],
@@ -138,10 +169,15 @@ import Embot from "./Embot.astro";
     const floorY = () => floorFromTop();
 
     // A wire leaves the source's right edge at mid-height and enters the
-    // destination's left edge at its input slot (upper or lower third).
+    // destination's left edge at its input: mid-height for a single-input
+    // op (as the editor draws it), upper or lower third for a combiner. A
+    // same-row single-input wire is therefore level and drawn straight; only
+    // a lane change or a combiner slot earns the S-curve.
     function wirePath(from: Tile, to: Tile, slot: number): string {
       const x1 = from.x + from.w, y1 = from.top + from.h / 2;
-      const x2 = to.x, y2 = to.top + to.h * (slot === 0 ? 0.36 : 0.64);
+      const frac = to.inputs.length > 1 ? (slot === 0 ? 0.36 : 0.64) : 0.5;
+      const x2 = to.x, y2 = to.top + to.h * frac;
+      if (Math.abs(y2 - y1) < 0.5) return `M${x1} ${y1} L${x2} ${y2}`;
       const c = Math.max(24, (x2 - x1) / 2);
       return `M${x1} ${y1} C${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}`;
     }
@@ -232,6 +268,18 @@ import Embot from "./Embot.astro";
       a.el.style.height = `${bottom - top}px`;
     }
 
+    // The title an author would write over this block, from the ops in it. The
+    // two pair rules come first: a grid displaced by noise IS terrain, and the
+    // POP equivalent is a particle system -- naming either after the noise
+    // alone would undersell it.
+    function titleFor(run: Tile[]): string {
+      const has = (type: string) => run.some((t) => t.type === type);
+      if (has("gridSOP") && has("noiseSOP")) return "terrain";
+      if (has("gridPOP") && has("noisePOP")) return "particles";
+      for (const [type, title] of RUN_TITLE) if (has(type)) return title;
+      return "network";
+    }
+
     function addAnnot(run: Tile[], title: string): void {
       if (!run.length) return;
       const el = document.createElement("div");
@@ -255,7 +303,6 @@ import Embot from "./Embot.astro";
     // the next family. Wrapped in its annotation.
     function addRun(): void {
       const run: Tile[] = [];
-      let title: string;
       nextX += 70 * K; // clear space between annotation boxes, as the editor keeps
       if (!chainOpen) {
         family = pick<Fam>(["TOP", "TOP", "TOP", "CHOP", "SOP", "POP", "DAT"]);
@@ -263,15 +310,21 @@ import Embot from "./Embot.astro";
         run.push(addTile(pick(GENERATORS[family]), []));
       } else {
         stepLane();
-        const f = FILTERS[family];
-        if (f.length) addFilter(pick(f), run);
       }
-      title = pick(TITLES[family]);
-      const filters = FILTERS[family];
-      const n = filters.length ? Math.floor(rand(1, 4)) : 0;
-      for (let i = 0; i < n; i++) {
-        if (Math.random() < 0.3) stepLane();
-        addFilter(pick(filters), run);
+      // Filters are drawn WITHOUT replacement, so a run never stacks the same
+      // op three times -- nobody wires transformSOP into transformSOP into
+      // transformSOP, and it is what made these blocks unnameable. A family
+      // with a shallow filter list therefore gets a shorter run, not a
+      // repetitive one.
+      const pool = [...FILTERS[family]];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j] as string, pool[i] as string];
+      }
+      const chosen = pool.slice(0, Math.min(Math.floor(rand(1, 4)), pool.length));
+      for (const [i, type] of chosen.entries()) {
+        if (i > 0 && Math.random() < 0.3) stepLane();
+        addFilter(type, run);
       }
       const bridges = BRIDGES[family];
       const nullType = NULLS[family];
@@ -279,7 +332,6 @@ import Embot from "./Embot.astro";
       if (!bridges.length || (nullType && Math.random() < 0.35)) {
         if (nullType && prev) run.push(addTile(nullType, [[prev, 0]]));
         chainOpen = false;
-        title = family === "TOP" ? "output" : title;
       } else {
         const [bridgeType, to] = pick(bridges);
         if (Math.random() < 0.4) stepLane();
@@ -288,13 +340,12 @@ import Embot from "./Embot.astro";
         if (to === "RENDER") {
           run.push(addTile("renderTOP", [[bridge, 0]]));
           family = "TOP";
-          title = "render";
         } else {
           family = to;
         }
         chainOpen = true;
       }
-      addAnnot(run, title);
+      addAnnot(run, titleFor(run));
     }
 
     function addSeedChain(): void {
