@@ -2,11 +2,15 @@
 
 ## v6.2.19
 
-Envoy can now see and capture any operator, not just TOPs.
+Envoy sees every operator, recovers from its own errors, and can set up a machine unattended.
 
 - **Capture every operator type.** New `capture_op` works on CHOPs, SOPs, POPs, DATs, COMPs and MATs, not just TOPs.
-- **Cleaner failures.** Every error carries a stable code and a recovery hint; a bad shader is reported at the operator that uses it.
-- **The download no longer carries leftovers from the dev machine.** Convoy fixes: the node loop revives itself, and each node shows one row. +21 tests.
+- **Cleaner failures.** Every error carries a stable code and a recovery hint, and a broken shader is reported at the operator that uses it.
+- **Unstick a frozen TouchDesigner.** New tools list and dismiss the modal dialogs that block it -- and still answer while TD's main thread is hung.
+- **Set up a bare machine.** `embody.tools/bootstrap.py` installs Embody into a `.toe` offline and answers the setup wizard on first open, so a render node comes up ready with no clicks.
+- **Fixes.** The download no longer carries leftovers from the dev machine; tools can address one instance per call; Convoy revives its own loop and shows one row per node. +21 tests.
+
+Plus a new Credits section in the README, and a rebuilt embody.tools.
 
 ## v6.2.13
 

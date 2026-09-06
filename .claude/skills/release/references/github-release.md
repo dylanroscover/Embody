@@ -36,7 +36,7 @@ Detect the version using the **first strategy that succeeds**, in order:
 - Present the release notes to the user for approval before creating the release.
 
 **The body is the changelog entry verbatim -- the same hard cap applies** (see
-`SKILL.md` step 2: one line of theme, max 3 bullets, under 80 words). Never
+`SKILL.md` step 2: one line of theme, 3-5 bullets, under ~160 words). Never
 expand it for the release page: a GitHub release is skimmed even harder than a
 changelog, and an exhaustive one reads as AI slop. The intro paragraph is 2
 sentences, plain, and never grows.

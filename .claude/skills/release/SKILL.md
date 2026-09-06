@@ -93,15 +93,23 @@ One-line summary of the release themes.
 
 ### Length is a hard cap (standing user directive)
 
-**One line of theme. Max 3 bullets, one line each. Whole entry under 80 words.**
+**One line of theme. 3-5 bullets, one to two lines each. Under ~160 words.**
 
-Canonical shape: `v6.0.250` in `docs/changelog.md` -- a one-line theme and ONE
-bullet, for a release carrying a PE-subsystem fix, an in-place repair path, a
-packaging refusal and 74 tests. Match it.
+Nobody reads a wall of bullets, and an exhaustive one reads as AI slop. Twelve
+changes still get <= 5 bullets: group by theme, and give the leftovers one
+combined **Fixes.** bullet rather than a bullet each. The detail lives in the
+commit log and the diff.
 
-Nobody reads a wall of bullets, and an exhaustive one reads as AI slop. Ten
-changes still get 3 bullets: group by theme, cut what a user cannot act on. The
-detail lives in the commit log and the diff.
+But **too short is also wrong** -- do not drop a user-facing feature to make
+the count. A shipped tool, a new install path or a fixed crash each earn their
+line; only internals get cut. A small release can be one bullet (`v6.0.250` in
+`docs/changelog.md` is the model); a big one uses all five.
+
+**Unreleased intermediate versions fold into the published entry.**
+`project.save()` bumps the version on every save, so most numbers never ship.
+Consolidate the whole tag-to-tag range (`git log <lasttag>..HEAD`) into the one
+entry -- and never leave a shipped feature out of it because it landed under a
+version that was superseded.
 
 Always cut:
 
