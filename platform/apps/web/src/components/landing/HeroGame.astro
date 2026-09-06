@@ -30,7 +30,7 @@ import Embot from "./Embot.astro";
 </div>
 
 <script>
-  import { Embot, registerBot, reducedMotion, now, rand, OP_DESCRIPTIONS, JUMP_DUR, HOP_MIN, HOP_DWELL } from "../../lib/embot";
+  import { Embot, registerBot, reducedMotion, now, rand, OP_DESCRIPTIONS, JUMP_DUR, HOP_MIN, HOP_DWELL, FIGURE_TOP, FIGURE_BOTTOM } from "../../lib/embot";
 
   type Fam = "TOP" | "CHOP" | "SOP" | "POP" | "DAT" | "COMP";
   type Input = [Tile, number]; // source tile, input slot (0 = top, 1 = bottom)
@@ -443,8 +443,12 @@ import Embot from "./Embot.astro";
       const k = 1 - Math.exp(-dt * 3.5);
       const targetCamX = Math.max(0, b.base.x * b.S - W * 0.5);
       camX += (targetCamX - camX) * k;
-      const rowCenter = current ? current.top + TILE_H / 2 : floorFromTop() + TILE_H / 2;
-      const targetCamY = rowCenter - bandCenter();
+      // EMBOT is what gets centred in the band, not the row he stands on: his
+      // feet sit ON the tile's top edge, so centring the row parked him a half
+      // tile plus his whole height above the middle. Measured from the target
+      // row rather than his live arc, so the camera does not bob every hop.
+      const rowTop = current ? current.top : floorFromTop();
+      const targetCamY = rowTop - ((FIGURE_TOP + FIGURE_BOTTOM) / 2) * b.S - bandCenter();
       camY += (targetCamY - camY) * k;
       b.offsetX = camX;
       b.offsetY = camY;
