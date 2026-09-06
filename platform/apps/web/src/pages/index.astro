@@ -319,11 +319,20 @@ const jsonLd = {
     width: 100%;
     align-self: center;
     scroll-margin-top: 7rem; /* #install anchor jumps clear of the fixed nav pill */
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    /* The brightest surface on the page: lifted above --bg-elevated (the
+       tiles behind it sit at ~#1f2321), a brighter edge, and a deep two-layer
+       shadow so the card visibly floats over the hero graph. Both layers are
+       AMBIENT -- zero offset, so the card is lit from straight on and the
+       darkness sits evenly on all four sides instead of pooling underneath.
+       Reach for spread, not offset-y, to tune how far it reads: each layer
+       extends blur/2 + spread beyond the edge (35px and 8px here). */
+    background: #2a2f2c;
+    border: 1px solid rgba(200, 208, 201, 0.22);
     border-radius: var(--radius);
     padding: 1.2rem 1.4rem 1.1rem;
-    box-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.65);
+    box-shadow:
+      0 0 90px -10px rgba(0, 0, 0, 0.9),
+      0 0 36px -10px rgba(0, 0, 0, 0.7);
   }
   .install__hint {
     margin: 0;

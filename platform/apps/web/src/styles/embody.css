@@ -1660,16 +1660,16 @@ pre {
 .hero-annot {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid rgba(200, 208, 201, 0.16);
+  border: 1px solid rgba(200, 208, 201, 0.12);
   border-radius: 8px;
-  background: rgba(46, 58, 52, 0.22);
+  background: rgba(14, 18, 16, 0.5);
 }
 .hero-annot__title {
   display: block;
   padding: 0.38rem 0.65rem;
   border-bottom: 1px solid rgba(200, 208, 201, 0.1);
   border-radius: 8px 8px 0 0;
-  background: rgba(46, 58, 52, 0.38);
+  background: rgba(14, 18, 16, 0.7);
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -1683,8 +1683,8 @@ pre {
   border: 1px solid rgba(200, 208, 201, 0.24);
   border-left-width: 4px;
   border-radius: 6px;
-  background: rgba(31, 35, 33, 0.92);
-  opacity: 0.9;
+  background: rgba(24, 28, 26, 0.94);
+  opacity: 0.88;
   transition: box-shadow 450ms ease, border-color 450ms ease, opacity 450ms ease;
 }
 .hero-tile__name {
