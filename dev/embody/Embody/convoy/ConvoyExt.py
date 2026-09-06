@@ -709,7 +709,8 @@ class ConvoyExt:
             return '%dh ago' % int(age // 3600)
         return '%dd ago' % int(age // 86400)
 
-    def _nodeStatusRows(self, result):
+    @staticmethod
+    def _nodeStatusRows(result, client=None):
         """Turn a bounded client directory result into UI-only row values.
 
         Deliberately minimal -- Node Name, IP, Status, Last Seen. The node's
@@ -721,14 +722,15 @@ class ConvoyExt:
             return None
         rows = []
         nodes = result.get('nodes') or ()
-        # Through the one sanctioned resolver (MAIN THREAD; see _client).
-        # An older or stubbed client without the helper shows the raw list.
-        collapse = getattr(self._safeClient(), 'collapse_same_process_nodes', None)
+        # `client` is the convoy_client module the CALLER resolved on the
+        # main thread (see _client); without it, or on an older module that
+        # lacks the helper, the raw list is shown.
+        collapse = getattr(client, 'collapse_same_process_nodes', None)
         if collapse is not None:
             try:
                 nodes = collapse(nodes, result.get('host_id'))
-            except Exception as e:
-                self._log('node rows not collapsed: %s' % (e,), 'DEBUG')
+            except Exception:
+                pass
         for node in nodes:
             if not isinstance(node, dict):
                 continue
@@ -803,7 +805,7 @@ class ConvoyExt:
 
     def _applyNetworkNodes(self, result):
         """Apply one worker-fetched directory without erasing good stale data."""
-        rows = self._nodeStatusRows(result)
+        rows = self._nodeStatusRows(result, client=self._safeClient())
         if rows is not None:
             # The raw node dicts (with node_id) back the readout's
             # synchronous edits: a confirmed Forget filters THIS cache

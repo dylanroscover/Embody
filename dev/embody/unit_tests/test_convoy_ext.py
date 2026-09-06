@@ -710,7 +710,8 @@ class TestNetworkStatusProjection(ConvoyExtBase):
         rows = self.convoy._nodeStatusRows({
             'state': 'nodes', 'host_id': 'a' * 32,
             'nodes': [remote('7', '6.0.232'), remote('4', '6.0.233'),
-                      local('1'), local('2')]})
+                      local('1'), local('2')]},
+            client=self.convoy._safeClient())
         names = [r['Nodename'] for r in rows]
         self.assertEqual(names.count('TEC-C3A / transmon.1'), 1,
                          'one process, one row')

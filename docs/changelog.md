@@ -1,6 +1,8 @@
 # Changelog
 
-## v6.2.18
+## v6.2.19
+
+(6.2.18 was superseded before it was published: its CI caught the Convoy operation registry missing `capture_op` and a static projection turned into a method. Both fixed here; nothing else changed.)
 
 Envoy sees every operator, names its errors, lints shaders where they are used, and addresses instances per call -- four ideas adopted from td-mcp-rs, now credited in the README. Plus the landing page's Embot and wordmark work.
 

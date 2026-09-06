@@ -575,6 +575,14 @@ PHASE1_OPERATIONS = {
         mutating=False, executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True,
         side_effects={"cooks": True, "writes_temp_image": True}),
+    # Same contract as capture_top for every other family (a non-TOP renders
+    # through a transient OP Viewer TOP node-side); same temp-image spill.
+    "capture_op": _operation(
+        {"op_path": "string", "format": "jpeg|png?", "quality": "number?",
+         "max_resolution": "int?", "inline": "bool?"},
+        mutating=False, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"cooks": True, "writes_temp_image": True}),
     "get_logs": _operation(
         {"level": "string?", "count": "int?", "since_id": "int?",
          "source": "string?"}, mutating=False, executes_arbitrary_code=False,
@@ -7407,7 +7415,7 @@ class HostApp:
 
     def _materialize_node_result(self, result, job):
         """Persist terminal TD results without leaking remote paths/bytes."""
-        if job.get("operation") == "capture_top":
+        if job.get("operation") in ("capture_top", "capture_op"):
             capture = self._materialize_capture_result(result, job)
             if capture is not None:
                 return capture
