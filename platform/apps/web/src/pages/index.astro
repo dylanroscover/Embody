@@ -308,9 +308,14 @@ const jsonLd = {
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
-    /* Same width + center axis as .hero__shot so the card's edges line up
-       with the screenshot below it. */
-    max-width: 900px;
+    /* Narrow enough to read as a card, not a band. The floor is the hint
+       line: it wants 601px unwrapped and the card adds 2 x 1.4rem of padding,
+       so 646px is the narrowest that keeps "paste this into a TouchDesigner
+       Textport..." on ONE line -- 660 leaves a little slack. (It was 900px to
+       line up with a .hero__shot screenshot that no longer exists.) The
+       command itself scrolls inside .install__code, so it never sets the
+       width. */
+    max-width: 660px;
     width: 100%;
     align-self: center;
     scroll-margin-top: 7rem; /* #install anchor jumps clear of the fixed nav pill */
