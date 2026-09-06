@@ -2145,7 +2145,7 @@ def export_network(ext, root_path='/', include_dat_content=None,
                    output_file=None, max_depth=None, embed_all=False):
     """Delegate to TDXN extension for network export.
 
-    include_dat_content=None means "the Embeddatsintdns toggle", the same
+    include_dat_content=None means "the Embeddatsintdxns toggle", the same
     default the MCP tool documents (the handler used to say True).
     interactive=False: a programmatic export must log the locked-content
     warning, never raise a modal that pins the main thread until a click

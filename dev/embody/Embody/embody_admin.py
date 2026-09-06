@@ -1429,6 +1429,21 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
         ext.my.store('_init_complete', True)
         return False
     params = data['params']
+    # config.json is keyed by PARAMETER NAME, so the TDN -> TDXN rename
+    # would silently drop each of these settings back to its default on
+    # every existing install. Normalize legacy keys to the current names
+    # first; the map lives on EmbodyExt beside the live-par migration.
+    renames = getattr(ext, '_TDXN_PAR_RENAMES', None) or {}
+    if renames:
+        migrated = {}
+        for key, entry in params.items():
+            base, suffix = key, ''
+            if (key not in renames
+                    and key[-1:] in ('r', 'g', 'b', 'a')
+                    and key[:-1] in renames):
+                base, suffix = key[:-1], key[-1]   # RGBA component
+            migrated[renames.get(base, base) + suffix] = entry
+        params = migrated
     restored = 0
     ext._restoring_settings = True
     try:
@@ -1455,14 +1470,14 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
     ext.my.store('_init_complete', True)
     ext.Log(f'Restored {restored} settings from config.json', 'INFO')
     # TDXN mode migration detection: an upgrading user will have
-    # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
+    # 'Tdnenable' in their persisted params but not 'Tdxnmode'. Defer
     # the nudge dialog so init can complete cleanly first.
     # Guarded by a schedule-time flag so a second _restoreSettings in
     # the same session (e.g. onCreate then onStart) can't queue a
     # second dialog before the first one fires.
     already_scheduled = ext.my.fetch(
         '_tdn_migration_scheduled', False, search=False)
-    if ('Tdnenable' in params and 'Tdnmode' not in params
+    if ('Tdnenable' in params and 'Tdxnmode' not in params
             and not already_scheduled):
         prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
         ext.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
@@ -1482,7 +1497,7 @@ def show_tdn_migration_nudge(ext) -> None:
     """One-time dialog after upgrading from the binary Tdnenable toggle.
 
     Fires when a user opens a project previously saved with the old
-    Tdnenable toggle and no Tdnmode selection yet. Offers a choice
+    Tdnenable toggle and no Tdxnmode selection yet. Offers a choice
     between restoring Full bidirectional sync (their prior behavior)
     or adopting the new Export-on-Save default (recommended).
 
@@ -1530,7 +1545,7 @@ def show_tdn_migration_nudge(ext) -> None:
                  'Restore Full (previous behavior)'])
     if choice == 1:
         try:
-            ext.my.par.Tdnmode = 'full'
+            ext.my.par.Tdxnmode = 'full'
             ext._applyTdnModeGating()
             ext.Log('TDXN mode restored to Full per user choice', 'INFO')
         except Exception as e:

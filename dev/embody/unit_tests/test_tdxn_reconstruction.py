@@ -1300,7 +1300,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		deleted).
 		"""
 		import os
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		parent = self.sandbox.create(baseCOMP, 'rl_parent')
 		child = parent.create(baseCOMP, 'rl_child')
 		child.create(noiseTOP, 'payload')
@@ -1349,7 +1349,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		emptied COMP -- the transiently-emptied-shell signature; the
 		explicit manager save (allow_empty) still may."""
 		import os
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		comp = self.sandbox.create(baseCOMP, 'guard_victim')
 		comp.create(noiseTOP, 'payload')
 		try:
@@ -4535,7 +4535,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		so every Refresh left externalizations.tsv with a one-line diff
 		(field 2026-08-29). The column records when the FILE changed.
 		"""
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		comp = self.sandbox.create(baseCOMP, 'ts_stable')
 		comp.create(noiseTOP, 'payload')
 		ext = self.embody_ext

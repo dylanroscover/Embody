@@ -793,7 +793,7 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         # 'tdn', so 'tdxn' is the natural wrong guess) -- an unchecked return
         # reported success while nothing was tagged.
         if not op.Embody.ext.Embody.applyTagToOperator(target, tag_type):
-            tdn_tag = op.Embody.par.Tdntag.eval()
+            tdn_tag = op.Embody.par.Tdxntag.eval()
             return {'error': f'{op_path}: tag_type {tag_type!r} was rejected. '
                              f'COMPs accept "tox" or {tdn_tag!r} (the TDXN '
                              f'strategy keeps the frozen {tdn_tag!r} value); '
@@ -806,7 +806,7 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         # a stale/wrong .tox -- the tox par plays no role in TDXN strategy).
         if target.family == 'DAT':
             file_path = target.par.file.eval()
-        elif tag_type == op.Embody.par.Tdntag.eval():
+        elif tag_type == op.Embody.par.Tdxntag.eval():
             file_path = (op.Embody.ext.Embody._getStrategyFilePath(
                 target.path, 'tdn')
                 or target.fetch('_tdn_rel_path', '', search=False))
@@ -877,7 +877,7 @@ def remove_externalization_tag(ext, op_path: str,
         embody = op.Embody.ext.Embody
         removed = [tag for tag in embody.getTags()
                    if target.tags and tag in target.tags]
-        is_tdn = (op.Embody.par.Tdntag.eval() in removed
+        is_tdn = (op.Embody.par.Tdxntag.eval() in removed
                   or bool(embody._getStrategyFilePath(target.path, 'tdn')))
         rows_before = _tracked_rows(embody, target.path)
 

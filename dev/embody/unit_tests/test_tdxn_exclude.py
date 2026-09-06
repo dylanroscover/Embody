@@ -36,7 +36,7 @@ class TestTDNExclude(EmbodyTestCase):
 
     @property
     def exclude_tag(self):
-        return self.embody.par.Tdnexcludetag.val
+        return self.embody.par.Tdxnexcludetag.val
 
     # ------------------------------------------------------------------
     # Fixture: parent -> {keep, drop[excluded] -> inside}
@@ -82,13 +82,13 @@ class TestTDNExclude(EmbodyTestCase):
         """If the exclude tag name is blank, nothing must be excluded -
         an empty tag must never match every operator."""
         c = self.sandbox.create(baseCOMP, 'guard')
-        prev = self.embody.par.Tdnexcludetag.val
-        self.embody.par.Tdnexcludetag.val = ''
+        prev = self.embody.par.Tdxnexcludetag.val
+        self.embody.par.Tdxnexcludetag.val = ''
         try:
             self.assertFalse(self.tdn_ext._hasExcludeTag(c),
                 'Empty exclude-tag name must not exclude operators')
         finally:
-            self.embody.par.Tdnexcludetag.val = prev
+            self.embody.par.Tdxnexcludetag.val = prev
 
     # ------------------------------------------------------------------
     # B. getTags never leaks the exclude tag
@@ -212,15 +212,15 @@ class TestTDNExclude(EmbodyTestCase):
 
     def test_exclusion_holds_regardless_of_cascade_toggle(self):
         parent, keep, drop, inside = self._build()
-        prev = self.embody.par.Tdncascade.eval()
+        prev = self.embody.par.Tdxncascade.eval()
         try:
             for cascade in (False, True):
-                self.embody.par.Tdncascade.val = cascade
+                self.embody.par.Tdxncascade.val = cascade
                 doc = self._export_doc(parent)
                 self.assertNotIn('drop', self._op_names(doc),
-                    f'Exclusion must win with Tdncascade={cascade}')
+                    f'Exclusion must win with Tdxncascade={cascade}')
         finally:
-            self.embody.par.Tdncascade.val = prev
+            self.embody.par.Tdxncascade.val = prev
 
     # ------------------------------------------------------------------
     # I. Cascade auto-tagging must skip excluded children (the real path)
@@ -296,15 +296,15 @@ class TestTDNExclude(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_getTags_collision_preserves_real_tag(self):
-        prev = self.embody.par.Tdnexcludetag.val
+        prev = self.embody.par.Tdxnexcludetag.val
         py = self.embody.par.Pytag.eval()
-        self.embody.par.Tdnexcludetag.val = py  # collide exclude tag with 'py'
+        self.embody.par.Tdxnexcludetag.val = py  # collide exclude tag with 'py'
         try:
             self.assertIn(py, self.embody_ext.getTags('DAT'),
                 'Naming the exclude tag identically to a real tag must not '
                 'drop that real tag from the selector (filter by name).')
         finally:
-            self.embody.par.Tdnexcludetag.val = prev
+            self.embody.par.Tdxnexcludetag.val = prev
 
     # ------------------------------------------------------------------
     # M. Excluded children do not dirty the parent fingerprint (H)

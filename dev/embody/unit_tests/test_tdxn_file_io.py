@@ -1054,7 +1054,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
 		# Tag the child for TDN
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		# Export the child first so it's in the table
 		child_path = self.embody_ext._buildTDNRelPath(child)
@@ -1097,7 +1097,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		# Add child to table
 		child_path = self.embody_ext._buildTDNRelPath(child)
@@ -1126,7 +1126,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		child_path = self.embody_ext._buildTDNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
@@ -1162,7 +1162,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		# Add to table but no file on disk
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		from datetime import datetime
 		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1314,12 +1314,12 @@ class TestTDNFileIO(EmbodyTestCase):
 		child1 = parent.create(baseCOMP, 'child1')
 		child2 = parent.create(baseCOMP, 'child2')
 		parent.create(textDAT, 'leaf_dat')  # DATs should not be tagged
-		tdn_tag = self.embody.par.Tdntag.val
+		tdn_tag = self.embody.par.Tdxntag.val
 		# Directly add tag to parent (skip full externalization pipeline
 		# to avoid file writes that reinitialize the extension)
 		parent.tags.add(tdn_tag)
-		orig_cascade = self.embody.par.Tdncascade.eval()
-		self.embody.par.Tdncascade = True
+		orig_cascade = self.embody.par.Tdxncascade.eval()
+		self.embody.par.Tdxncascade = True
 		try:
 			self.embody_ext._cascadeTDNTag(parent)
 			self.assertIn(tdn_tag, child1.tags)
@@ -1328,7 +1328,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			leaf = parent.op('leaf_dat')
 			self.assertNotIn(tdn_tag, leaf.tags)
 		finally:
-			self.embody.par.Tdncascade = orig_cascade
+			self.embody.par.Tdxncascade = orig_cascade
 			parent.tags.discard(tdn_tag)
 			child1.tags.discard(tdn_tag)
 			child2.tags.discard(tdn_tag)
@@ -1337,24 +1337,24 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""With cascade OFF, tagging a parent should not tag children."""
 		parent = self.sandbox.create(baseCOMP, 'nocascade_parent')
 		child = parent.create(baseCOMP, 'child')
-		tdn_tag = self.embody.par.Tdntag.val
-		orig_cascade = self.embody.par.Tdncascade.eval()
-		self.embody.par.Tdncascade = False
+		tdn_tag = self.embody.par.Tdxntag.val
+		orig_cascade = self.embody.par.Tdxncascade.eval()
+		self.embody.par.Tdxncascade = False
 		try:
 			self.embody_ext.applyTagToOperator(parent, tdn_tag)
 			self.assertNotIn(tdn_tag, child.tags)
 		finally:
-			self.embody.par.Tdncascade = orig_cascade
+			self.embody.par.Tdxncascade = orig_cascade
 
 	def test_large_tdn_warning_suppressed(self):
-		"""Tdncascadewarn='quiet' should prevent the dialog from showing."""
+		"""Tdxncascadewarn='quiet' should prevent the dialog from showing."""
 		# Create a file over threshold
 		big_file = Path(self._temp_dir) / 'big.tdn'
 		big_file.write_text('x' * 5_100_000)  # > 5 MB
-		orig_warn = self.embody.par.Tdncascadewarn.eval()
-		orig_cascade = self.embody.par.Tdncascade.eval()
-		self.embody.par.Tdncascadewarn = 'quiet'
-		self.embody.par.Tdncascade = False
+		orig_warn = self.embody.par.Tdxncascadewarn.eval()
+		orig_cascade = self.embody.par.Tdxncascade.eval()
+		self.embody.par.Tdxncascadewarn = 'quiet'
+		self.embody.par.Tdxncascade = False
 		try:
 			log_id = self._get_log_id()
 			self.embody.ext.TDXN._warnLargeTDN(str(big_file), '/test')
@@ -1362,27 +1362,27 @@ class TestTDNFileIO(EmbodyTestCase):
 			has_silence = self._has_log_message(log_id, 'warning silenced')
 			self.assertFalse(has_silence)
 		finally:
-			self.embody.par.Tdncascadewarn = orig_warn
-			self.embody.par.Tdncascade = orig_cascade
+			self.embody.par.Tdxncascadewarn = orig_warn
+			self.embody.par.Tdxncascade = orig_cascade
 
 	def test_large_tdn_warning_shown(self):
-		"""Tdncascadewarn='ask' with large file should show dialog."""
+		"""Tdxncascadewarn='ask' with large file should show dialog."""
 		big_file = Path(self._temp_dir) / 'big.tdn'
 		big_file.write_text('x' * 5_100_000)  # > 5 MB
-		orig_warn = self.embody.par.Tdncascadewarn.eval()
-		orig_cascade = self.embody.par.Tdncascade.eval()
-		self.embody.par.Tdncascadewarn = 'ask'
-		self.embody.par.Tdncascade = False
+		orig_warn = self.embody.par.Tdxncascadewarn.eval()
+		orig_cascade = self.embody.par.Tdxncascade.eval()
+		self.embody.par.Tdxncascadewarn = 'ask'
+		self.embody.par.Tdxncascade = False
 		# Seed auto-response: button 0 = OK (dismiss without silencing)
 		self.embody.store('_smoke_test_responses', {
 			'Large TDN File': 0})
 		try:
 			self.embody.ext.TDXN._warnLargeTDN(str(big_file), '/test')
 			# Dialog was intercepted - warn pref should still be 'ask'
-			self.assertEqual(self.embody.par.Tdncascadewarn.eval(), 'ask')
+			self.assertEqual(self.embody.par.Tdxncascadewarn.eval(), 'ask')
 		finally:
-			self.embody.par.Tdncascadewarn = orig_warn
-			self.embody.par.Tdncascade = orig_cascade
+			self.embody.par.Tdxncascadewarn = orig_warn
+			self.embody.par.Tdxncascade = orig_cascade
 			try:
 				self.embody.unstore('_smoke_test_responses')
 			except Exception:

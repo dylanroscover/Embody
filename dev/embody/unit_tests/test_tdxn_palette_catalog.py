@@ -483,55 +483,55 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		"""Per-COMP storage 'blackbox' wins over any par value."""
 		comp = self._fakePalette()
 		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'blackbox')
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'fullexport'
+			self.embody.par.Tdxnpalettehandling = 'fullexport'
 			self.assertEqual(
 				self.tdn._resolvePaletteHandling(comp), 'blackbox',
 				'Storage override must win over par value')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G02_storage_override_fullexport(self):
 		"""Per-COMP storage 'fullexport' wins too."""
 		comp = self._fakePalette()
 		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'fullexport')
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'blackbox'
+			self.embody.par.Tdxnpalettehandling = 'blackbox'
 			self.assertEqual(
 				self.tdn._resolvePaletteHandling(comp), 'fullexport')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G03_par_blackbox_no_prompt(self):
 		"""Par set to blackbox returns directly, no prompt."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'blackbox'
+			self.embody.par.Tdxnpalettehandling = 'blackbox'
 			self.assertEqual(
 				self.tdn._resolvePaletteHandling(comp), 'blackbox')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G04_par_fullexport_no_prompt(self):
 		"""Par set to fullexport returns directly, no prompt."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'fullexport'
+			self.embody.par.Tdxnpalettehandling = 'fullexport'
 			self.assertEqual(
 				self.tdn._resolvePaletteHandling(comp), 'fullexport')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G05_ask_prompt_blackbox_this(self):
 		"""Par='ask' + prompt choice 0 -> blackbox, stored on target."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.par.Tdxnpalettehandling = 'ask'
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 0})
@@ -542,16 +542,16 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 				'blackbox',
 				'Choice must be persisted on the target COMP')
 			# Par must remain unchanged for this-COMP choices
-			self.assertEqual(self.embody.par.Tdnpalettehandling.eval(), 'ask')
+			self.assertEqual(self.embody.par.Tdxnpalettehandling.eval(), 'ask')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G06_ask_prompt_fullexport_this(self):
 		"""Par='ask' + prompt choice 1 -> fullexport, stored on target."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.par.Tdxnpalettehandling = 'ask'
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 1})
@@ -560,45 +560,45 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			self.assertEqual(
 				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
 				'fullexport')
-			self.assertEqual(self.embody.par.Tdnpalettehandling.eval(), 'ask')
+			self.assertEqual(self.embody.par.Tdxnpalettehandling.eval(), 'ask')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G07_ask_prompt_blackbox_for_all(self):
 		"""Par='ask' + prompt choice 2 -> flips par to blackbox, nothing stored on target."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.par.Tdxnpalettehandling = 'ask'
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 2})
 			result = self.tdn._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'blackbox')
 			self.assertEqual(
-				self.embody.par.Tdnpalettehandling.eval(), 'blackbox',
+				self.embody.par.Tdxnpalettehandling.eval(), 'blackbox',
 				'"for all" must flip the par')
 			self.assertIsNone(
 				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
 				'"for all" must not write per-COMP storage')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G08_ask_prompt_fullexport_for_all(self):
 		"""Par='ask' + prompt choice 3 -> flips par to fullexport."""
 		comp = self._fakePalette()
-		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		saved_par = self.embody.par.Tdxnpalettehandling.eval()
 		try:
-			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.par.Tdxnpalettehandling = 'ask'
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 3})
 			result = self.tdn._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'fullexport')
 			self.assertEqual(
-				self.embody.par.Tdnpalettehandling.eval(), 'fullexport')
+				self.embody.par.Tdxnpalettehandling.eval(), 'fullexport')
 		finally:
-			self.embody.par.Tdnpalettehandling = saved_par
+			self.embody.par.Tdxnpalettehandling = saved_par
 
 	def test_G09_export_blackbox_omits_children(self):
 		"""End-to-end: blackbox mode emits palette_clone=true, no children."""

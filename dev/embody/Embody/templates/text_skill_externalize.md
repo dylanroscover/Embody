@@ -57,10 +57,10 @@ The exported `.tox` works in any TD project with no missing file errors.
 
 ## TDXN Export - Palette COMP Handling
 
-When exporting a TDXN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` par on the Embody COMP's TDXN page:
+When exporting a TDXN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdxnpalettehandling` par on the Embody COMP's TDXN page:
 
 - **Ask** (default): On first encounter of each palette COMP, a four-button dialog appears - *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All*, *Full Export for All*. The per-COMP choice is stored via `comp.store('_tdn_palette_handling', ...)` so repeated exports don't re-prompt.
 - **Black Box**: reference the palette only, emit `"palette_clone": true`, skip internal children. Correct for stock palette COMPs.
 - **Full Export**: export all children as if the COMP were a regular user COMP. Use only when palette internals have been heavily customized.
 
-Check and override programmatically: `op.Embody.par.Tdnpalettehandling = 'blackbox' | 'fullexport' | 'ask'`, or force a specific COMP: `op('/path/to/comp').store('_tdn_palette_handling', 'fullexport')`.
+Check and override programmatically: `op.Embody.par.Tdxnpalettehandling = 'blackbox' | 'fullexport' | 'ask'`, or force a specific COMP: `op('/path/to/comp').store('_tdn_palette_handling', 'fullexport')`.

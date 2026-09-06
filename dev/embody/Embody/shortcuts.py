@@ -61,7 +61,7 @@ ACTIONS = (
     ('Shortcutrefresh', 'Refresh Tracking', f'{PRIMARY_TOKEN}+shift+r'),
     ('Shortcutexportproject', 'Export Project to TDXN', f'{PRIMARY_TOKEN}+shift+e'),
     ('Shortcutexportcomp', 'Export Current COMP to TDXN', f'{PRIMARY_TOKEN}+alt+e'),
-    ('Shortcutcopytdn', 'Copy Selected COMP as TDXN', f'{PRIMARY_TOKEN}+shift+c'),
+    ('Shortcutcopytdxn', 'Copy Selected COMP as TDXN', f'{PRIMARY_TOKEN}+shift+c'),
 )
 SHORTCUT_PARS = tuple(a[0] for a in ACTIONS)
 
@@ -392,7 +392,7 @@ HELP_DESCRIPTIONS = {
     'Shortcutrefresh': 'Refresh tracking state.',
     'Shortcutexportproject': 'Export the whole project to .tdxn.',
     'Shortcutexportcomp': 'Export just the current network to .tdxn.',
-    'Shortcutcopytdn': 'Copy the selected COMP as portable TDXN.',
+    'Shortcutcopytdxn': 'Copy the selected COMP as portable TDXN.',
 }
 
 

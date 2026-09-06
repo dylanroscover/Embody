@@ -737,7 +737,7 @@ class TestTDNExportImport(EmbodyTestCase):
     # --- tdn_exclude:<par> per-parameter export exclusion (2026-08-24) ---
 
     def _omit_tag(self, name):
-        prefix = str(self.embody.par.Tdnexcludetag.eval()).strip()
+        prefix = str(self.embody.par.Tdxnexcludetag.eval()).strip()
         return f'{prefix}:{name}'
 
     def test_tdn_omit_drops_constant_value(self):
@@ -807,7 +807,7 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertIn(self._omit_tag('tx'), rebuilt.tags)
 
     def test_tdn_omit_empty_prefix_disables(self):
-        par = self.embody.par.Tdnexcludetag
+        par = self.embody.par.Tdxnexcludetag
         old = par.eval()
         par.val = ''
         try:
@@ -843,7 +843,7 @@ class TestTDXNReviewFixes(EmbodyTestCase):
         emb = self.embody_ext
         comp = self.sandbox.create(baseCOMP, 'adhoc_victim')
         comp.create(noiseTOP, 'noise1')
-        emb.applyTagToOperator(comp, self.embody.par.Tdntag.val)
+        emb.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
         emb._handleTDNAddition(comp)
         rel = emb._getStrategyFilePath(comp.path, 'tdn')
         canonical = str(emb.buildAbsolutePath(rel))

@@ -249,7 +249,7 @@ class TestToxdropExpr(EmbodyTestCase):
     def test_exclude_tag_ancestry_helper(self):
         """_hasExcludeTagInAncestry honors the tag on the COMP itself AND on
         any ancestor (the tag marks a whole app-managed subtree)."""
-        tag = self.embody.par.Tdnexcludetag.eval()
+        tag = self.embody.par.Tdxnexcludetag.eval()
         parent = self.sandbox.create(baseCOMP, 'excl_parent')
         child = parent.create(baseCOMP, 'excl_child')
         plain = self.sandbox.create(baseCOMP, 'excl_plain')
@@ -268,7 +268,7 @@ class TestToxdropExpr(EmbodyTestCase):
         """_checkExternalToxPar must not route tdn_exclude'd COMPs (or their
         descendants) to the resolver -- tagged subtrees are invisible to the
         dropped-.tox sweep (issue #60)."""
-        tag = self.embody.par.Tdnexcludetag.eval()
+        tag = self.embody.par.Tdxnexcludetag.eval()
         excluded = self._make('excl_dropped')
         excluded.tags.add(tag)
         inner = excluded.create(baseCOMP, 'excl_inner')
@@ -302,7 +302,7 @@ class TestToxdropExpr(EmbodyTestCase):
         descendants inside a tdn_exclude'd tree -- the docs promise
         ancestry semantics, and own-tag-only would re-tag app-managed
         subtrees on a full-project externalize (issue #60)."""
-        tag = self.embody.par.Tdnexcludetag.eval()
+        tag = self.embody.par.Tdxnexcludetag.eval()
         root = self.sandbox.create(baseCOMP, 'skip_root')
         root.tags.add(tag)
         inner = root.create(baseCOMP, 'skip_inner')

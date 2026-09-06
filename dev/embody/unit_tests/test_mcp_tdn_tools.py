@@ -4,7 +4,7 @@ Test suite: MCP TDN network tools.
 Covers:
   A. read_tdn returns a valid TDN dict for a representative COMP
   B. read_tdn include_dat_content toggle
-  C. read_tdn succeeds in all three Tdnmode values (off / export / full)
+  C. read_tdn succeeds in all three Tdxnmode values (off / export / full)
   D. Token-budget regression: read_tdn payload is materially smaller than
      an equivalent get_op walk (locks in the central MCP-efficiency claim)
   E. export_network / import_network MCP handlers round-trip a network
@@ -116,17 +116,17 @@ class TestMCPTDNTools(EmbodyTestCase):
     def test_read_tdn_works_in_all_modes(self):
         parexec = self.embody.op('parexec')
         was_active = parexec.par.active.eval()
-        mode_was = self.embody.par.Tdnmode.eval()
+        mode_was = self.embody.par.Tdxnmode.eval()
         parexec.par.active = False
         try:
             for mode in ('off', 'export', 'full'):
-                self.embody.par.Tdnmode.val = mode
+                self.embody.par.Tdxnmode.val = mode
                 result = self.envoy._read_tdn(comp_path=self.fixture.path)
                 self.assertTrue(result.get('success'),
                     f'read_tdn failed in mode={mode}: {result.get("error")}')
                 self.assertIn('operators', result['tdn'])
         finally:
-            self.embody.par.Tdnmode.val = mode_was
+            self.embody.par.Tdxnmode.val = mode_was
             self.embody_ext._applyTdnModeGating()
             parexec.par.active = was_active
 

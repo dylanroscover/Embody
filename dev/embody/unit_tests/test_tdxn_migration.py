@@ -75,7 +75,7 @@ class TestTdxnMigration(EmbodyTestCase):
         """Create a TDN-tagged COMP with content and externalize it."""
         comp = parent.create(baseCOMP, name)
         comp.create(constantTOP, 'content')
-        comp.tags.add(self.embody.par.Tdntag.val)
+        comp.tags.add(self.embody.par.Tdxntag.val)
         self.embody_ext.handleAddition(comp)
         return comp
 

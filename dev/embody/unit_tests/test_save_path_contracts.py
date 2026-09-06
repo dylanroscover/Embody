@@ -118,12 +118,12 @@ class TestDeferredDirtySweep(_SyntheticTable):
 
     def setUp(self):
         super().setUp()
-        self._orig_tdnmode = self.embody.par.Tdnmode.eval()
-        self.embody.par.Tdnmode = 'full'
+        self._orig_tdnmode = self.embody.par.Tdxnmode.eval()
+        self.embody.par.Tdxnmode = 'full'
         self._primed = []
 
     def tearDown(self):
-        self.embody.par.Tdnmode = self._orig_tdnmode
+        self.embody.par.Tdxnmode = self._orig_tdnmode
         for p in self._primed:
             self.embody_ext._tdn_fingerprints.pop(p, None)
         for attr in ('_DIRTY_SWEEP_BUDGET_MS',):
@@ -217,7 +217,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
 
     def test_root_and_excluded_comps_never_enter_the_queue(self):
         comp = self.sandbox.create(baseCOMP, 'sweep_excluded')
-        comp.tags = [self.embody.par.Tdnexcludetag.eval()]
+        comp.tags = [self.embody.par.Tdxnexcludetag.eval()]
         self._table([self._mkrow('/', type='base', strategy='tdn'),
                      self._mkrow(comp.path, type='base', strategy='tdn')])
         self.embody_ext._dirtyHandlerDeferred()

@@ -64,7 +64,7 @@ class TestAutoExternalize(EmbodyTestCase):
         self.embody.par.Autoexternalize = 'comps'
         c = self._box.create('baseCOMP', 'ae_co_comp')
         d = self._box.create('textDAT', 'ae_co_dat')
-        self.assertEqual(self._decide(c), self.embody.par.Tdntag.val)
+        self.assertEqual(self._decide(c), self.embody.par.Tdxntag.val)
         self.assertIsNone(self._decide(d))
 
     def test_dats_only_tags_dat_not_comp(self):
@@ -78,7 +78,7 @@ class TestAutoExternalize(EmbodyTestCase):
         self.embody.par.Autoexternalize = 'both'
         c = self._box.create('baseCOMP', 'ae_both_comp')
         d = self._box.create('textDAT', 'ae_both_dat')
-        self.assertEqual(self._decide(c), self.embody.par.Tdntag.val)
+        self.assertEqual(self._decide(c), self.embody.par.Tdxntag.val)
         self.assertIsNotNone(self._decide(d))
 
     # --- non-externalizable family ---
@@ -94,7 +94,7 @@ class TestAutoExternalize(EmbodyTestCase):
         self.embody.par.Autoexternalize = 'both'
         parent = self._box.create('baseCOMP', 'ae_tdn_parent')
         # Raw tag add (no export) to simulate an already-externalized ancestor.
-        parent.tags.add(self.embody.par.Tdntag.val)
+        parent.tags.add(self.embody.par.Tdxntag.val)
         child = parent.create('baseCOMP', 'ae_child')
         child_dat = parent.create('textDAT', 'ae_child_dat')
         self.assertIsNone(self._decide(child))
@@ -112,7 +112,7 @@ class TestAutoExternalize(EmbodyTestCase):
     def test_already_tagged_comp_returns_none(self):
         self.embody.par.Autoexternalize = 'both'
         c = self._box.create('baseCOMP', 'ae_already')
-        c.tags.add(self.embody.par.Tdntag.val)
+        c.tags.add(self.embody.par.Tdxntag.val)
         self.assertIsNone(self._decide(c))
 
     # --- copy path: inherited-state reset (the copy footgun) ---
@@ -123,11 +123,11 @@ class TestAutoExternalize(EmbodyTestCase):
 
     def test_reset_clears_inherited_comp_tag(self):
         c = self._box.create('baseCOMP', 'ae_reset_comp')
-        c.tags.add(self.embody.par.Tdntag.val)
+        c.tags.add(self.embody.par.Tdxntag.val)
         if hasattr(c.par, 'externaltox'):
             c.par.externaltox = 'ae_probe/stale.tox'
         self.embody_ext._resetInheritedExternalization(c)
-        self.assertNotIn(self.embody.par.Tdntag.val, c.tags)
+        self.assertNotIn(self.embody.par.Tdxntag.val, c.tags)
         if hasattr(c.par, 'externaltox'):
             self.assertEqual(c.par.externaltox.eval(), '')
 
@@ -152,10 +152,10 @@ class TestAutoExternalize(EmbodyTestCase):
         # With the pref off, a copy keeps its inherited tags untouched.
         self.embody.par.Autoexternalize = 'neither'
         c = self._box.create('baseCOMP', 'ae_copy_off')
-        c.tags.add(self.embody.par.Tdntag.val)
+        c.tags.add(self.embody.par.Tdxntag.val)
         r = self.embody_ext.autoExternalizeCopiedOp(c)
         self.assertIsNone(r)
-        self.assertIn(self.embody.par.Tdntag.val, c.tags)
+        self.assertIn(self.embody.par.Tdxntag.val, c.tags)
 
     def test_copied_op_gates_on_family(self):
         # pref = comps -> a copied DAT is left alone (not this family).

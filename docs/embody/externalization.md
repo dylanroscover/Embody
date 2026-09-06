@@ -107,7 +107,7 @@ If you want a parent `.tdxn` that's fully self-contained (snapshot mode), pass `
 
 ### TDXN Mode (master switch)
 
-The `Tdnmode` parameter on the Embody COMP selects how the TDXN subsystem behaves at save/open time:
+The `Tdxnmode` parameter on the Embody COMP selects how the TDXN subsystem behaves at save/open time:
 
 | Mode | On save (++ctrl+s++) | On project open | When to pick |
 |------|----------------------|-----------------|--------------|
@@ -122,9 +122,9 @@ You can switch modes at any time — existing `.tdxn` files on disk and tracked 
 
 ### Excluding a COMP from TDXN (the `tdn_exclude` tag)
 
-The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDXN system**. Tagged COMPs are invisible to TDXN: never exported, never inlined in a parent's `.tdxn`, never stripped on save, never destroyed by reconstruction.
+The `Tdxnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDXN system**. Tagged COMPs are invisible to TDXN: never exported, never inlined in a parent's `.tdxn`, never stripped on save, never destroyed by reconstruction.
 
-**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdn_exclude` to that child to keep it opted out.
+**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdxncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdn_exclude` to that child to keep it opted out.
 
 **Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdn_exclude` is the only durable opt-out.
 
@@ -203,11 +203,11 @@ If at-risk content is found, Embody prompts you with four options:
 | Button | Behavior |
 |--------|----------|
 | **Externalize DATs** | Tag and externalize the at-risk DATs so their content is saved to files on disk. Storage has no externalization path — enable **Embed Storage** to preserve it. (Shown as **Continue** when only storage is at risk.) |
-| **Always Externalize** | Externalize now, and do so automatically on future saves without asking. Sets `Tdndatsafety = 'externalize'`. |
+| **Always Externalize** | Externalize now, and do so automatically on future saves without asking. Sets `Tdxndatsafety = 'externalize'`. |
 | **Skip Once** | Proceed with this save. Skipped content is logged so you know exactly what was dropped. You will be prompted again next save. |
-| **Always Skip** | Proceed and suppress the check on future saves. Sets `Tdndatsafety = 'ignore'` — the same opt-out described below. |
+| **Always Skip** | Proceed and suppress the check on future saves. Sets `Tdxndatsafety = 'ignore'` — the same opt-out described below. |
 
-The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDXN settings. Setting `Tdndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
+The preference is stored in the **Content Safety** parameter (`Tdxndatsafety`) and can be changed at any time from the Embody COMP's TDXN settings. Setting `Tdxndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
 
 !!! tip
     To avoid this prompt entirely, either enable **Embed DATs** / **Embed Storage** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
@@ -230,7 +230,7 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
 
     The save-time warning covers only locked operators the TDXN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDXN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
 
-    During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDXN settings to re-enable the dialog.
+    During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdxnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDXN settings to re-enable the dialog.
 
 ### Empty-network overwrite protection
 
@@ -290,7 +290,7 @@ Embody restores externalized operators from disk when a project is opened *and t
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDXN** | Children are reconstructed from `.tdxn` YAML files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
+| **TDXN** | Children are reconstructed from `.tdxn` YAML files — **Roundtrip mode only** | `Tdxnmode = Roundtrip` + `Tdxncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
 In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdxn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdxn` files exist purely for git diff / MCP reads.
@@ -384,7 +384,7 @@ Both conditions matter: hooks alone would be too eager, because third-party comp
 
 ## Palette Handling During TDXN Export
 
-When a TDXN export encounters a TD palette COMP (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` parameter on the TDXN page to decide how to handle it:
+When a TDXN export encounters a TD palette COMP (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdxnpalettehandling` parameter on the TDXN page to decide how to handle it:
 
 - **Ask** (default): Prompts with four buttons on first encounter of each palette COMP.
     - *Black Box* — this COMP: reference only, skip children. Decision stored on the COMP via `comp.store('_tdn_palette_handling', 'blackbox')`.

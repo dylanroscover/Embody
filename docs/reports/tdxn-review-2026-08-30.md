@@ -51,7 +51,7 @@ tests do not exercise.
 
 - **DAT text silently dropped when `file` points at a missing or diverged
   file** (v). `_isDATContentSavedOnDisk` returns `bool(par.file.eval())` --
-  no existence or content check -- so with `Embeddatsintdns=False` (the
+  no existence or content check -- so with `Embeddatsintdxns=False` (the
   default) the export omits the text and the import restores `''`. Its own
   docstring promises "on any doubt return False".
 - **Custom-par `enable` / `enableExpr` / `password` never exported** (v):
@@ -75,7 +75,7 @@ tests do not exercise.
 - **Unknown or empty `$t` template reference silently deletes a custom-par
   page** (v): spec says "log a warning, skip that page"; code logs nothing
   and `_flattenCustomPars` drops it.
-- **`Tdncreateonstart` gate precedes export-mode crash recovery** (v):
+- **`Tdxncreateonstart` gate precedes export-mode crash recovery** (v):
   `reconstructTDNComps` returns before `_recoverMissingTDNComps` when the par
   is off, and `_applyTdnModeGating` greys the par out in export mode -- a
   value the user cannot see decides whether crash recovery runs, silently.
@@ -216,7 +216,7 @@ Every finding above was worked in the same session. Status by item:
   `scanner-ts/src/envelope_parity.test.ts` and
   `Collection/tests/test_tdn_envelope.py`.
 - Unknown `$t`: logged as a WARNING, page skipped (unconditional resolver).
-- `Tdncreateonstart`: the gate now sits after the export-mode branch.
+- `Tdxncreateonstart`: the gate now sits after the export-mode branch.
 - Lost tsv row: `_handleTDNAddition` adopts the existing suffix and never
   mints over a surviving file with an empty network.
 - `_resolveOutputPath('auto')`: non-root exports go through

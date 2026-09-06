@@ -27,7 +27,7 @@ def _runAction(par_name):
 		if pane and pane.owner:
 			e.ext.TDXN.ExportNetworkAsync(
 				root_path=pane.owner.path, output_file='auto')
-	elif par_name == 'Shortcutcopytdn':
+	elif par_name == 'Shortcutcopytdxn':
 		e.ext.TDXN.copySelectedToClipboard()
 
 

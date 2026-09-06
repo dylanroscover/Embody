@@ -79,7 +79,7 @@ def onInitTD(self):
 
 Embody uses TDXN (TouchDesigner eXternal Network) files to externalize COMP contents as diffable YAML. When Embody reconstructs a TDXN COMP it calls `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdxn` file.
 
-**When reconstruction runs depends on `Tdnmode`.** In the experimental **Roundtrip** mode, every TDXN COMP is reconstructed on project open (and stripped/restored on every save), so the timing below applies in full. In the default **Export-on-Save** mode the `.toe` stays authoritative on open — existing COMPs are **not** rebuilt, only a COMP *absent* from the `.toe` is reconstructed from its `.tdxn`, and save does not strip. Even so, treat the deferral pattern below as the safe default: it also covers manual `import_network` reloads, which use `clear_first=True` in any mode.
+**When reconstruction runs depends on `Tdxnmode`.** In the experimental **Roundtrip** mode, every TDXN COMP is reconstructed on project open (and stripped/restored on every save), so the timing below applies in full. In the default **Export-on-Save** mode the `.toe` stays authoritative on open — existing COMPs are **not** rebuilt, only a COMP *absent* from the `.toe` is reconstructed from its `.tdxn`, and save does not strip. Even so, treat the deferral pattern below as the safe default: it also covers manual `import_network` reloads, which use `clear_first=True` in any mode.
 
 The timing sequence on project open (Roundtrip mode, or an absent-COMP recovery):
 

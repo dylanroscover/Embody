@@ -146,7 +146,7 @@ AI-client connectivity tier, listed separately under
 | `test_tdxn_palette_catalog` | 34 | Palette-clone detection and handling |
 | `test_tdxn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
 | `test_tdxn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
-| `test_tdxn_mode` | 15 | Tdnmode gating (off / export / full) |
+| `test_tdxn_mode` | 15 | Tdxnmode gating (off / export / full) |
 | `test_dat_restoration` | 20 | DAT restoration from disk on startup |
 | `test_tdxn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
 | `test_tdxn_yaml` | 14 | TDXN v2.0 YAML emitter / parser |

@@ -356,7 +356,7 @@ class TestTDNHelpers(EmbodyTestCase):
         # A nested TDN boundary raises its own warning when IT exports.
         root = self.sandbox.create(baseCOMP, 'lk_root_tdn')
         sub = root.create(baseCOMP, 'sub_tdn')
-        sub.tags.add(self.embody.par.Tdntag.val)
+        sub.tags.add(self.embody.par.Tdxntag.val)
         self._lockedTop(sub, 'locked_nested')
         self.assertEqual(self.tdn._findLockedNonDATs(root), [])
 
@@ -364,7 +364,7 @@ class TestTDNHelpers(EmbodyTestCase):
         # An exclude-tagged subtree is invisible to TDN entirely.
         root = self.sandbox.create(baseCOMP, 'lk_root_excl')
         sub = root.create(baseCOMP, 'sub_excl')
-        sub.tags.add(self.embody.par.Tdnexcludetag.val)
+        sub.tags.add(self.embody.par.Tdxnexcludetag.val)
         self._lockedTop(sub, 'locked_nested')
         self.assertEqual(self.tdn._findLockedNonDATs(root), [])
 
@@ -380,7 +380,7 @@ class TestTDNHelpers(EmbodyTestCase):
         # Tags on the export root itself do not hide its own children --
         # only tags strictly BETWEEN the child and the root form a boundary.
         root = self.sandbox.create(baseCOMP, 'lk_root_self')
-        root.tags.add(self.embody.par.Tdntag.val)
+        root.tags.add(self.embody.par.Tdxntag.val)
         t = self._lockedTop(root, 'locked_direct')
         self.assertIn(t, self.tdn._findLockedNonDATs(root))
 
@@ -482,7 +482,7 @@ class TestTDNHelpers(EmbodyTestCase):
         # Seed the auto-response: button 1 = "Don't show again".
         self.embody.store('_smoke_test_responses',
                           {'Embody -- Locked Content Warning': 1})
-        pref = getattr(self.embody.par, 'Tdnlockedwarn', None)
+        pref = getattr(self.embody.par, 'Tdxnlockedwarn', None)
         orig_pref = pref.eval() if pref is not None else None
         try:
             self.tdn._showLockedWarnDialog('test message')

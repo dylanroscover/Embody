@@ -56,7 +56,7 @@ Use the `read_tdn` MCP tool to return a live network as a TDXN dict without writ
 - `max_depth` — Cap recursion on large roots
 - `embed_all` — Recurse into TDXN-tagged COMPs instead of skipping their children
 
-Works in all three `Tdnmode` values. See [Import & Export → Reading a Network](import-export.md#reading-a-network-no-disk-io) for the full scope-boundary guide (when to reach for `get_parameter`, `get_op_errors`, `get_dat_content`, etc. instead).
+Works in all three `Tdxnmode` values. See [Import & Export → Reading a Network](import-export.md#reading-a-network-no-disk-io) for the full scope-boundary guide (when to reach for `get_parameter`, `get_op_errors`, `get_dat_content`, etc. instead).
 
 ### Export
 
@@ -106,4 +106,4 @@ COMPs can use TDXN as their externalization strategy (instead of `.tox`). With T
 
 By default (Export-on-Save) the `.toe` is the source of truth on open, so COMPs are **not** rebuilt from `.tdxn` — Embody only reconstructs a TDXN COMP that is *absent* from the `.toe` (e.g. an agent built it and the `.toe` was never saved). In **Roundtrip** mode, every TDXN COMP is reconstructed from its `.tdxn` file on open.
 
-This is configured per-COMP through the Embody externalization interface, and the mode is set via the `Tdnmode` parameter (Off / Export-on-Save / Roundtrip).
+This is configured per-COMP through the Embody externalization interface, and the mode is set via the `Tdxnmode` parameter (Off / Export-on-Save / Roundtrip).

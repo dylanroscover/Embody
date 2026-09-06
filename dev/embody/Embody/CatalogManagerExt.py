@@ -235,7 +235,7 @@ class CatalogManagerExt:
 		"""Write a scan Status value UNLESS Embody is Disabled.
 
 		EnsureCatalogs runs regardless of the Status par (it is gated only
-		on Tdnmode), but Update() gates on Status == 'Disabled' -- so a
+		on Tdxnmode), but Update() gates on Status == 'Disabled' -- so a
 		scan writing 'Scanning...' / 'Enabled' over 'Disabled' would
 		silently re-enable a user's disabled Embody (panel finding).
 		"""

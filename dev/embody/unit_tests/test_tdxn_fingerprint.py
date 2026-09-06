@@ -106,7 +106,7 @@ class TestTDNFingerprint(EmbodyTestCase):
         comp.create(constantCHOP, 'c')
         rel = None
         try:
-            emb.applyTagToOperator(comp, self.embody.par.Tdntag.eval())
+            emb.applyTagToOperator(comp, self.embody.par.Tdxntag.eval())
             tbl = emb.Externalizations
             for r in range(1, tbl.numRows):
                 if tbl[r, 'path'].val == comp.path:
@@ -151,12 +151,12 @@ class TestTDNDirtyState(EmbodyTestCase):
         super().setUp()
         self._orig_table = self.embody.par.Externalizations.eval()
         self._orig_link = self.embody.par.Externalizations.val  # restore the VALUE: .path is absolute
-        self._orig_tdnmode = self.embody.par.Tdnmode.eval()
+        self._orig_tdnmode = self.embody.par.Tdxnmode.eval()
         self._primed = None
 
     def tearDown(self):
         self.embody.par.Externalizations = self._orig_link
-        self.embody.par.Tdnmode = self._orig_tdnmode
+        self.embody.par.Tdxnmode = self._orig_tdnmode
         if self._primed is not None:
             self.embody_ext._tdn_fingerprints.pop(self._primed, None)
         super().tearDown()
@@ -179,7 +179,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         # Stale runtime flag from a prior scan (dirty is runtime-only
         # since 2026-08-20; the tsv column stays blank by contract).
         self.embody_ext._setDirtyState(comp.path, 'True')
-        self.embody.par.Tdnmode = 'full'
+        self.embody.par.Tdxnmode = 'full'
         # Prime the baseline so the live network reads CLEAN (matches baseline).
         self.embody_ext._storeTDNFingerprint(comp)
         self._primed = comp.path
@@ -197,7 +197,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'change_comp')
         comp.create(constantCHOP, 'c')
         t = self._tdn_table(comp.path, dirty='')
-        self.embody.par.Tdnmode = 'full'
+        self.embody.par.Tdxnmode = 'full'
         self.embody_ext._storeTDNFingerprint(comp)
         self._primed = comp.path
         # Mutate the network so it diverges from the baseline.
@@ -375,7 +375,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
         g2 = root.create(geometryCOMP, 'g2')
         for i, o in enumerate((note, kid, n1, g1, g2)):
             o.nodeX, o.nodeY = i * 200, 0
-        emb.applyTagToOperator(root, self.embody.par.Tdntag.val)
+        emb.applyTagToOperator(root, self.embody.par.Tdxntag.val)
         emb._handleTDNAddition(root)
         return root, note, kid, n1, g1, g2
 

@@ -83,7 +83,7 @@ def onStart():
 	# Must run before ReconstructTDNComps (frame 60) for best results,
 	# but the embedded tableDAT covers exports during the scan window.
 	# Skip entirely in Off mode -- catalogs exist for TDXN export compaction
-	# and palette-clone detection; both are dormant when Tdnmode=off.
+	# and palette-clone detection; both are dormant when Tdxnmode=off.
 	run(
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
 		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
@@ -393,13 +393,13 @@ def _runPreSaveExternalization():
 	# Phase 2: Strip children from exported COMPs so the .toe stays small.
 	# Only strip COMPs whose export succeeded - stripping without a valid
 	# .tdn on disk would permanently destroy the children.
-	# Gated on Tdnmode: Export mode skips strip entirely (.toe is truth).
-	# Full mode runs strip when Tdnstriponsave is on.
+	# Gated on Tdxnmode: Export mode skips strip entirely (.toe is truth).
+	# Full mode runs strip when Tdxnstriponsave is on.
 	if mode != 'full':
 		parent.Embody.ext.Embody.Log(
 			'TDXN mode=export -- skipping Phase 2 strip', 'DEBUG')
 		return
-	if not parent.Embody.par.Tdnstriponsave.eval():
+	if not parent.Embody.par.Tdxnstriponsave.eval():
 		return
 
 	# Save pane owner paths that fall inside TDXN COMPs before stripping.

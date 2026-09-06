@@ -223,7 +223,7 @@ class TestSmokeRelease(EmbodyTestCase):
         required_pars = [
             'Status', 'Version', 'Build', 'Envoyenable', 'Envoyport',
             'Logtofile', 'Logfolder', 'Filecleanup', 'Toxdropexpr',
-            'Tdnstriponsave', 'Refresh',
+            'Tdxnstriponsave', 'Refresh',
         ]
         for par_name in required_pars:
             par = getattr(self.embody.par, par_name, None)
@@ -639,7 +639,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """POP sequence + default-valued custom Float + nested tdn_exclude tag
         all survive a TDN export/import round-trip."""
         tdn = self._tdn()
-        exclude_tag = self.embody.par.Tdnexcludetag.eval()
+        exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 
         src = self._make_sandbox_comp('v6_feature_src')
 

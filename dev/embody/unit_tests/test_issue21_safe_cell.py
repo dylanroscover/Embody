@@ -285,8 +285,8 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         # descriptor; assigning via cls.attr would silently strip the
         # staticmethod and turn it into a regular method, breaking every
         # other caller that does TDXNExt._read_existing_tdn(path).
-        orig_tdnmode = embody.par.Tdnmode.eval()
-        orig_strip_on_save = bool(embody.par.Tdnstriponsave.eval())
+        orig_tdnmode = embody.par.Tdxnmode.eval()
+        orig_strip_on_save = bool(embody.par.Tdxnstriponsave.eval())
         orig_update = ext_class.Update
         orig_get_tdn = ext_class._getTDNStrategyComps
         orig_safety = ext_class._checkTDNContentSafety
@@ -314,8 +314,8 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         embody.unstore('_tdn_pane_restore')
 
         # Apply patches
-        embody.par.Tdnmode = 'full'
-        embody.par.Tdnstriponsave = True
+        embody.par.Tdxnmode = 'full'
+        embody.par.Tdxnstriponsave = True
         ext_class.Update = lambda self_, suppress_refresh=False: None
         ext_class._getTDNStrategyComps = lambda self_: list(fake_tdn_comps)
         ext_class._checkTDNContentSafety = lambda self_: None
@@ -380,8 +380,8 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
             tdn_class.ExportNetwork = orig_export
             tdn_class._read_existing_tdn = orig_read
             tdn_class._tdn_content_equal = orig_equal
-            embody.par.Tdnmode = orig_tdnmode
-            embody.par.Tdnstriponsave = orig_strip_on_save
+            embody.par.Tdxnmode = orig_tdnmode
+            embody.par.Tdxnstriponsave = orig_strip_on_save
             embody.unstore('_tdn_stripped_paths')
             embody.unstore('_tdn_pane_restore')
 

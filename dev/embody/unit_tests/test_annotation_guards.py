@@ -8,7 +8,7 @@ semantic `annotations:` section (export _exportAnnotations / import Phase
 and their color/i/help tables) are TD-managed stock content cloned from
 /sys/TDTox/TDAnnotate. Before these guards, a non-utility annotation (as
 Envoy's create_annotation used to make) was an ordinary COMP subtree:
-ExternalizeProject's flat walks, Tdncascade, and the pre-save at-risk-DAT
+ExternalizeProject's flat walks, Tdxncascade, and the pre-save at-risk-DAT
 sweep could tag its internals as their own TDN/source boundaries -- whose
 reconstruction then gutted the widget (empty color table -> float(None)
 cook errors) and stranded orphan files on disk (the TDN annotation
@@ -90,7 +90,7 @@ class TestAnnotationGuards(EmbodyTestCase):
 
     def test_applyTag_refuses_annotate(self):
         ann = self._annotate()
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.assertFalse(self.embody_ext.applyTagToOperator(ann, tdn_tag))
         self.assertNotIn(tdn_tag, ann.tags)
         self.assertNotIn(ann.path, self._table_paths())
@@ -98,7 +98,7 @@ class TestAnnotationGuards(EmbodyTestCase):
     def test_applyTag_refuses_annotate_interior_comp(self):
         ann = self._annotate()
         inner = ann.create(baseCOMP, 'guard_tag_comp')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.assertFalse(self.embody_ext.applyTagToOperator(inner, tdn_tag))
         self.assertNotIn(tdn_tag, inner.tags)
         self.assertNotIn(inner.path, self._table_paths())
@@ -128,7 +128,7 @@ class TestAnnotationGuards(EmbodyTestCase):
         parent = self.workspace.create(baseCOMP, 'cascade_parent')
         ann = self._annotate(parent)
         self.embody_ext._cascadeTDNTag(parent)
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.assertNotIn(tdn_tag, ann.tags)
         self.assertNotIn(ann.path, self._table_paths())
 
@@ -234,7 +234,7 @@ class TestAnnotationGuards(EmbodyTestCase):
         open for legacy cleanup."""
         ann = self._annotate()
         inner = ann.create(baseCOMP, 'tagsetter_inner')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.assertFalse(self.embody_ext.tagSetter(ann, tdn_tag))
         self.assertNotIn(tdn_tag, ann.tags)
         self.assertFalse(self.embody_ext.tagSetter(inner, tdn_tag))

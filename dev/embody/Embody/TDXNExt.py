@@ -117,7 +117,7 @@ TDXN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
 # BOTH format tokens, permanently.
 #
 # NOT derived from these -- frozen 'tdn' identity/wire values, forever:
-#   externalizations `strategy` token, par.Tdntag default, the diff=tdn git
+#   externalizations `strategy` token, par.Tdxntag default, the diff=tdn git
 #   driver name, the `tdn_ref` key, the _embody_tdn envelope marker, the
 #   MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
 #   Every one is PERSISTED somewhere Embody does not own and cannot
@@ -542,7 +542,7 @@ class TDXNExt:
 		# during full-project externalization.
 		self._locked_warn_batch: Optional[list] = None
 		# Session-scoped "Don't show again" fallback for .toes saved
-		# before the Tdnlockedwarn parameter existed. Reset on reinit.
+		# before the Tdxnlockedwarn parameter existed. Reset on reinit.
 		self._locked_warn_quiet: bool = False
 		# Clipboard auto-paste watcher: prompt ONCE when a new _embody_tdn
 		# envelope appears on the OS clipboard. No keyboard shortcut -- TD's
@@ -1479,14 +1479,14 @@ class TDXNExt:
 			if per_comp is not None:
 				include_dat_content = per_comp
 			else:
-				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
+				include_dat_content = self.ownerComp.par.Embeddatsintdxns.eval()
 
 		if include_storage is None:
 			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
 			if per_comp is not None:
 				include_storage = per_comp
 			else:
-				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
+				include_storage = self.ownerComp.par.Embedstorageintdxns.eval()
 
 		options = {
 			'include_dat_content': include_dat_content,
@@ -1774,14 +1774,14 @@ class TDXNExt:
 			if per_comp is not None:
 				include_dat_content = per_comp
 			else:
-				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
+				include_dat_content = self.ownerComp.par.Embeddatsintdxns.eval()
 
 		if include_storage is None:
 			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
 			if per_comp is not None:
 				include_storage = per_comp
 			else:
-				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
+				include_storage = self.ownerComp.par.Embedstorageintdxns.eval()
 
 		done_event = Event()
 
@@ -2094,7 +2094,7 @@ class TDXNExt:
 		of TDXN-managed COMPs. If no TDXN-tagged COMPs exist, exports
 		everything directly without prompting.
 		"""
-		tdn_tag = self.ownerComp.par.Tdntag.val
+		tdn_tag = self.ownerComp.par.Tdxntag.val
 		tdn_comps = root.findChildren(tags=[tdn_tag])
 		# Exclude Embody + descendants, non-COMPs, and system paths
 		embody_path = self.ownerComp.path + '/'
@@ -3408,7 +3408,7 @@ class TDXNExt:
 	def _datContentExcluded(self, target) -> bool:
 		"""Is this DAT's content opted out via tdn_exclude:dat_content?"""
 		try:
-			prefix = str(self.ownerComp.par.Tdnexcludetag.eval()).strip()
+			prefix = str(self.ownerComp.par.Tdxnexcludetag.eval()).strip()
 			if not prefix:
 				return False
 			return f'{prefix}:{TDXNExt._DAT_CONTENT_EXCLUDE}' in target.tags
@@ -3430,7 +3430,7 @@ class TDXNExt:
 			tags = target.tags
 			if not tags:
 				return set()
-			prefix = str(self.ownerComp.par.Tdnexcludetag.eval()).strip()
+			prefix = str(self.ownerComp.par.Tdxnexcludetag.eval()).strip()
 			if not prefix:
 				return set()
 			marker = prefix + ':'
@@ -6461,7 +6461,7 @@ class TDXNExt:
 
 		Precedence:
 		  1. Per-COMP storage override (`_tdn_palette_handling`).
-		  2. Embody `Tdnpalettehandling` par:
+		  2. Embody `Tdxnpalettehandling` par:
 		       - `blackbox` / `fullexport` -> return directly.
 		       - `ask` -> prompt user via `_promptPaletteHandling`, which
 		         stores the decision on the target and returns it.
@@ -6476,7 +6476,7 @@ class TDXNExt:
 			return stored
 
 		try:
-			par_val = self.ownerComp.par.Tdnpalettehandling.eval()
+			par_val = self.ownerComp.par.Tdxnpalettehandling.eval()
 		except Exception:
 			par_val = 'blackbox'
 
@@ -6486,14 +6486,14 @@ class TDXNExt:
 		# par_val == 'ask' (or unexpected).
 		# Read-only / non-interactive callers (e.g. diff_tdn's gather) set
 		# _tdn_suppress_palette_prompt so export never blocks on a modal dialog
-		# and never mutates the Tdnpalettehandling par. Fall back to the safe
+		# and never mutates the Tdxnpalettehandling par. Fall back to the safe
 		# 'blackbox' handling and warn instead of prompting.
 		if getattr(self, '_tdn_suppress_palette_prompt', False):
 			try:
 				self._log(
 					f'Palette handling is "ask" but export is non-interactive '
 					f'for {target.path}; using "blackbox" (palette internals '
-					f'export as references). Set Tdnpalettehandling explicitly '
+					f'export as references). Set Tdxnpalettehandling explicitly '
 					f'to silence this.', 'WARNING')
 			except Exception:
 				pass
@@ -6507,8 +6507,8 @@ class TDXNExt:
 		Four buttons:
 		  0: Black Box (this COMP)     -> stored on target
 		  1: Full Export (this COMP)   -> stored on target
-		  2: Black Box for All         -> Tdnpalettehandling = blackbox
-		  3: Full Export for All       -> Tdnpalettehandling = fullexport
+		  2: Black Box for All         -> Tdxnpalettehandling = blackbox
+		  3: Full Export for All       -> Tdxnpalettehandling = fullexport
 		Returns the effective handling string.
 		"""
 		try:
@@ -6537,13 +6537,13 @@ class TDXNExt:
 			return 'fullexport'
 		if choice == 2:
 			try:
-				self.ownerComp.par.Tdnpalettehandling = 'blackbox'
+				self.ownerComp.par.Tdxnpalettehandling = 'blackbox'
 			except Exception:
 				pass
 			return 'blackbox'
 		if choice == 3:
 			try:
-				self.ownerComp.par.Tdnpalettehandling = 'fullexport'
+				self.ownerComp.par.Tdxnpalettehandling = 'fullexport'
 			except Exception:
 				pass
 			return 'fullexport'
@@ -6824,7 +6824,7 @@ class TDXNExt:
 		"""Check if a COMP has its own TDXN externalization tag."""
 		if not target.isCOMP:
 			return False
-		tdn_tag = self.ownerComp.par.Tdntag.val
+		tdn_tag = self.ownerComp.par.Tdxntag.val
 		return tdn_tag in target.tags
 
 	def _hasExcludeTag(self, target):
@@ -6838,7 +6838,7 @@ class TDXNExt:
 		"""
 		if not target.isCOMP or target.type == 'annotate':
 			return False
-		exclude_tag = self.ownerComp.par.Tdnexcludetag.eval()
+		exclude_tag = self.ownerComp.par.Tdxnexcludetag.eval()
 		return bool(exclude_tag) and exclude_tag in target.tags
 
 	def _hasTOXTag(self, target):
@@ -7596,7 +7596,7 @@ class TDXNExt:
 			# writes its file but does NOT join the lifecycle.
 			if root_path != '/':
 				try:
-					tdn_tag = self.ownerComp.par.Tdntag.val
+					tdn_tag = self.ownerComp.par.Tdxntag.val
 				except Exception:
 					tdn_tag = ''
 				if not (target is not None and tdn_tag
@@ -7623,17 +7623,17 @@ class TDXNExt:
 	def _warnLargeTDN(self, filepath: str, root_path: str) -> None:
 		"""Show a one-time warning when a TDXN file exceeds the size threshold.
 
-		Uses the Tdncascadewarn parameter (ask/quiet) to control whether
+		Uses the Tdxncascadewarn parameter (ask/quiet) to control whether
 		the dialog is shown. 'Don't show again' sets the parameter to
 		'quiet' permanently.
 		"""
 		LARGE_TDN_THRESHOLD = 5_000_000  # 5 MB
 
 		# Already using cascade -- no point warning
-		if self.ownerComp.par.Tdncascade.eval():
+		if self.ownerComp.par.Tdxncascade.eval():
 			return
 
-		warn_pref = getattr(self.ownerComp.par, 'Tdncascadewarn', None)
+		warn_pref = getattr(self.ownerComp.par, 'Tdxncascadewarn', None)
 		if warn_pref is None or warn_pref.eval() != 'ask':
 			return
 
@@ -7657,7 +7657,7 @@ class TDXNExt:
 			buttons=['OK', "Don't show again"])
 
 		if choice == 1:  # Don't show again
-			self.ownerComp.par.Tdncascadewarn = 'quiet'
+			self.ownerComp.par.Tdxncascadewarn = 'quiet'
 			self._log('Large TDXN warning silenced', 'INFO')
 
 	# Shared footer for the locked-content dialogs (single and combined).
@@ -7679,7 +7679,7 @@ class TDXNExt:
 		in TDXN but their frozen content (pixels, channels, geometry) is
 		NOT stored. This warns users so they aren't surprised by data loss.
 
-		The export dialog honors the Tdnlockedwarn preference (ask/quiet,
+		The export dialog honors the Tdxnlockedwarn preference (ask/quiet,
 		set by the dialog's "Don't show again" button). While a batch
 		sweep is active (beginLockedWarnBatch), findings are collected
 		and shown as ONE combined dialog at flushLockedWarnBatch -- a
@@ -7731,13 +7731,13 @@ class TDXNExt:
 		"""True when the locked-content dialog should be shown.
 
 		Defensive getattr (unlike other known pars): a .toe saved before
-		the Tdnlockedwarn parameter existed treats the missing par as
+		the Tdxnlockedwarn parameter existed treats the missing par as
 		'ask' -- warn by default, with _locked_warn_quiet as the
 		session-scoped opt-out until the par exists.
 		"""
 		if self._locked_warn_quiet:
 			return False
-		pref = getattr(self.ownerComp.par, 'Tdnlockedwarn', None)
+		pref = getattr(self.ownerComp.par, 'Tdxnlockedwarn', None)
 		return pref is None or pref.eval() == 'ask'
 
 	def beginLockedWarnBatch(self):
@@ -7773,7 +7773,7 @@ class TDXNExt:
 
 		Routed through Embody's _messageBox so headless tests can seed
 		responses and the save-window suppression applies. Opting out
-		persists to the Tdnlockedwarn parameter; if the par is missing
+		persists to the Tdxnlockedwarn parameter; if the par is missing
 		(pre-par .toe), falls back to a session-scoped flag."""
 		try:
 			choice = self.ownerComp.ext.Embody._messageBox(
@@ -7784,14 +7784,14 @@ class TDXNExt:
 		if choice != 1:
 			return
 		self._locked_warn_quiet = True
-		pref = getattr(self.ownerComp.par, 'Tdnlockedwarn', None)
+		pref = getattr(self.ownerComp.par, 'Tdxnlockedwarn', None)
 		if pref is not None:
 			pref.val = 'quiet'
 			self._log('Locked content warning silenced', 'INFO')
 		else:
 			self._log(
 				'Locked content warning silenced for this session only '
-				'(Tdnlockedwarn parameter missing -- opt-out cannot '
+				'(Tdxnlockedwarn parameter missing -- opt-out cannot '
 				'persist)', 'WARNING')
 
 	def _findLockedNonDATs(self, root_op):
@@ -7900,7 +7900,7 @@ class TDXNExt:
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
 	def copySelectedToClipboard(self) -> dict:
-		"""Copy-TDXN shortcut handler (Shortcutcopytdn binding, default
+		"""Copy-TDXN shortcut handler (Shortcutcopytdxn binding, default
 		ctrl+shift+c / cmd+shift+c): copy the COMP selected in the current
 		network to the OS clipboard as a portable _embody_tdn envelope.
 		Mirror of pasteNetworkAsNewComp (clipboard auto-paste). No-op

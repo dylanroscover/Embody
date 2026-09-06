@@ -107,7 +107,7 @@ def _load_theme():
 	except Exception:
 		uncommitted = (0.60, 0.30, 0.03, 1.0)
 
-	tdn_saved_raw = _par4('Tdnsavedcolor')
+	tdn_saved_raw = _par4('Tdxnsavedcolor')
 	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
 
 	# TDXN exporting -- warm shift from TDXN saved blue

@@ -60,7 +60,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
     def _tagged_comp_with_child(self, name):
         """Create a TDN-tagged COMP holding one child, inside the sandbox."""
         comp = self.sandbox.create(baseCOMP, name)
-        comp.tags.add(self.embody.par.Tdntag.val)
+        comp.tags.add(self.embody.par.Tdxntag.val)
         comp.create(textDAT, 'payload').text = 'payload text'
         return comp
 

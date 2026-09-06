@@ -115,7 +115,7 @@ class TestCustomParameters(EmbodyTestCase):
 
         # Tag eligible COMPs
         if use_tdn:
-            comp_tag = ext.my.par.Tdntag.val
+            comp_tag = ext.my.par.Tdxntag.val
             for oper in root.findChildren(type=COMP):
                 if ext._shouldSkipOp(oper, paths_to_exclude):
                     continue
@@ -390,31 +390,31 @@ class TestCustomParameters(EmbodyTestCase):
     # ==================================================================
 
     def test_embeddatsintdns_toggle_triggers_reexport(self):
-        """Toggle Embeddatsintdns, verify reexport is triggered via logs."""
+        """Toggle Embeddatsintdxns, verify reexport is triggered via logs."""
         log_id = self._get_log_id()
-        original = self.embody.par.Embeddatsintdns.eval()
+        original = self.embody.par.Embeddatsintdxns.eval()
         new_val = 0 if original else 1
-        self._set_and_track('Embeddatsintdns', new_val)
+        self._set_and_track('Embeddatsintdxns', new_val)
         # parexec fires async at end-of-frame; call directly to test synchronously
         self.embody.ext.TDXN.reexportAllTDNs()
         # Check logs for reexport message
         has_reexport = self._has_log_message(log_id, 'Re-exporting')
         has_no_tdn = self._has_log_message(log_id, 'No TDN exports')
         self.assertTrue(has_reexport or has_no_tdn,
-                        'Expected reexport log message after toggling Embeddatsintdns')
+                        'Expected reexport log message after toggling Embeddatsintdxns')
 
     def test_tdncreateonstart_toggle(self):
-        """Toggle Tdncreateonstart off and on."""
-        original = self.embody.par.Tdncreateonstart.eval()
+        """Toggle Tdxncreateonstart off and on."""
+        original = self.embody.par.Tdxncreateonstart.eval()
         new_val = 0 if original else 1
-        self._set_and_track('Tdncreateonstart', new_val)
+        self._set_and_track('Tdxncreateonstart', new_val)
         expected = bool(new_val)
-        self.assertEqual(bool(self.embody.par.Tdncreateonstart.eval()), expected)
+        self.assertEqual(bool(self.embody.par.Tdxncreateonstart.eval()), expected)
 
     def test_tdnfile_accepts_path(self):
-        """Set Tdnfile to a path, verify accepted."""
-        self._set_and_track('Tdnfile', '/tmp/test_file.tdn')
-        self.assertEqual(self.embody.par.Tdnfile.eval(), '/tmp/test_file.tdn')
+        """Set Tdxnfile to a path, verify accepted."""
+        self._set_and_track('Tdxnfile', '/tmp/test_file.tdn')
+        self.assertEqual(self.embody.par.Tdxnfile.eval(), '/tmp/test_file.tdn')
 
     def test_networkpath_accepts_path(self):
         """Set Networkpath to a path, verify accepted."""
@@ -426,7 +426,7 @@ class TestCustomParameters(EmbodyTestCase):
         parexec = self.embody.op('parexec')
         parexec.par.active = False
         try:
-            self._set_and_track('Tdnfile', '/nonexistent/path/fake.tdn')
+            self._set_and_track('Tdxnfile', '/nonexistent/path/fake.tdn')
             self._set_and_track('Networkpath', self.sandbox.path)
         finally:
             parexec.par.active = True

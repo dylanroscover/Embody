@@ -330,7 +330,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp = parent.create(baseCOMP, name)
         # Put a child inside so TDN export has content
         comp.create(constantTOP, 'content')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         comp.tags.add(tdn_tag)
         self.embody_ext.handleAddition(comp)
         old_path = comp.path
@@ -501,7 +501,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp1, old_path1, old_rel1 = self._externalize_tdn_comp(self.workspace, 'tdn_amb1')
         comp2 = self.workspace.create(baseCOMP, 'tdn_amb2')
         comp2.create(constantTOP, 'content')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         comp2.tags.add(tdn_tag)
         # comp2 is tagged but NOT externalized - it's untracked
 

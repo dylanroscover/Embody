@@ -3262,7 +3262,7 @@ class EnvoyMCPServer:
             Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
-            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            Tdxnpalettehandling parameter on the Embody COMP ('blackbox' |
             'fullexport' | 'ask'), or per COMP via
             comp.store('_tdn_palette_handling', 'blackbox').
 
@@ -3401,7 +3401,7 @@ class EnvoyMCPServer:
 
             Args:
                 root_path: Root COMP to export from (default "/" for entire project)
-                include_dat_content: Include DAT text/table content (default None = use Embeddatsintdns toggle)
+                include_dat_content: Include DAT text/table content (default None = use Embeddatsintdxns toggle)
                 output_file: File path to write the TDXN to. Use "auto" to generate name. None returns dict only.
                     An output_file that is NOT the COMP's tracked file is a snapshot: the
                     tracking row and the canonical file are left alone.
@@ -3412,7 +3412,7 @@ class EnvoyMCPServer:
             Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
-            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            Tdxnpalettehandling parameter on the Embody COMP ('blackbox' |
             'fullexport' | 'ask'), or per COMP via
             comp.store('_tdn_palette_handling', 'blackbox').
 
@@ -3449,7 +3449,7 @@ class EnvoyMCPServer:
             Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
-            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            Tdxnpalettehandling parameter on the Embody COMP ('blackbox' |
             'fullexport' | 'ask'), or per COMP via
             comp.store('_tdn_palette_handling', 'blackbox').
 

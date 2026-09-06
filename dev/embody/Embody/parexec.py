@@ -186,20 +186,20 @@ def onValueChange(par, prev):
 		# off = Embody pages only. Pure visibility -- no state touched.
 		parent.Embody.showCustomOnly = not bool(par.eval())
 
-	elif par.name == 'Tdnmode':
+	elif par.name == 'Tdxnmode':
 		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
 
-	elif par.name == 'Embeddatsintdns':
+	elif par.name == 'Embeddatsintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
 			parent.Embody.ext.TDXN.reexportAllTDNs()
 
-	elif par.name == 'Embedstorageintdns':
+	elif par.name == 'Embedstorageintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
 			parent.Embody.ext.TDXN.reexportAllTDNs()
 
-	elif par.name == 'Tdncascade':
+	elif par.name == 'Tdxncascade':
 		state = 'enabled' if par.eval() else 'disabled'
 		parent.Embody.ext.Embody.Log(f'TDXN cascade {state}', 'INFO')
 
@@ -396,8 +396,8 @@ def onPulse(par):
 	elif par.name == 'Resetshortcuts':
 		mod.shortcuts.resetDefaults(parent.Embody)
 
-	elif par.name == 'Importtdn':
-		file_path = parent.Embody.par.Tdnfile.eval()
+	elif par.name == 'Importtdxn':
+		file_path = parent.Embody.par.Tdxnfile.eval()
 		target = parent.Embody.par.Networkpath.eval()
 		target_path = str(target) if target else '/'
 		clear_first = getattr(parent.Embody.ext.Embody, '_import_clear_first', False)

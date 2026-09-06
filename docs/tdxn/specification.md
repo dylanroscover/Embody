@@ -263,7 +263,7 @@ One tag per parameter (`tdn_exclude:file`, `tdn_exclude:Port`). The operator, it
 - **Visible by design**: the tag round-trips in the operator's `tags:` list, so the exported document records *why* the parameter is absent — and because the marker survives reconstruction, the next export omits it again.
 - **Top-level parameters only**: sequence block parameters are not omittable.
 - **Validation**: a tag naming a parameter the operator does not have logs a `WARNING` at export ("nothing omitted"), so a typo cannot silently no-op.
-- The prefix is the same `Tdnexcludetag` parameter that governs whole-COMP exclusion (default `tdn_exclude`); clearing it disables the whole family.
+- The prefix is the same `Tdxnexcludetag` parameter that governs whole-COMP exclusion (default `tdn_exclude`); clearing it disables the whole family.
 
 The Embody UI exposes this through the tagger's **Exclude from tdn** action on TDXN COMPs — a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters (and the bare whole-COMP `tdn_exclude` for dragged COMPs), listing every exclusion in the COMP's subtree, each removable via its **×**.
 
@@ -965,7 +965,7 @@ Every TouchDesigner operator has a `.storage` dictionary for persistent Python d
 
 ### Per-COMP Storage Toggle
 
-Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` storage key to `false` on the target COMP, or globally via Embody's `Embedstorageintdns` parameter. When disabled, the `options.include_storage` field is `false` and operator storage entries are omitted — except for Embody control keys (`embed_dats_in_tdn`, `embed_storage_in_tdn`) which are always preserved to maintain round-trip fidelity of export preferences.
+Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` storage key to `false` on the target COMP, or globally via Embody's `Embedstorageintdxns` parameter. When disabled, the `options.include_storage` field is `false` and operator storage entries are omitted — except for Embody control keys (`embed_dats_in_tdn`, `embed_storage_in_tdn`) which are always preserved to maintain round-trip fidelity of export preferences.
 
 ### Format
 
@@ -1160,7 +1160,7 @@ The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at sta
 
 #### Palette Handling
 
-When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDXN page decides what to do:
+When the export path encounters a detected palette COMP, the `Tdxnpalettehandling` parameter on Embody's TDXN page decides what to do:
 
 | Value | Behavior |
 |---|---|
@@ -1265,7 +1265,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 Importing a `.tdxn` file reconstructs the network in a pre-phase plus a series of ordered phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
-When `clear_first` is set, existing children are destroyed before import — **except** COMPs carrying the exclude tag (the `Tdnexcludetag` parameter's value, `tdn_exclude` by default), which are preserved. Excluded COMPs are invisible to TDXN (absent from the `.tdxn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
+When `clear_first` is set, existing children are destroyed before import — **except** COMPs carrying the exclude tag (the `Tdxnexcludetag` parameter's value, `tdn_exclude` by default), which are preserved. Excluded COMPs are invisible to TDXN (absent from the `.tdxn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
 
 | Phase | Action | Details |
 |-------|--------|---------|

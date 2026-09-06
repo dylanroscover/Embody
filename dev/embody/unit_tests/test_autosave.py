@@ -234,7 +234,7 @@ class TestAutosave(EmbodyTestCase):
         ext = self.embody_ext
         self.assertEqual(
             ext._extBoundaryTags(),
-            frozenset((self.embody.par.Tdntag.eval(),
+            frozenset((self.embody.par.Tdxntag.eval(),
                        self.embody.par.Toxtag.eval())),
             'boundary tags must be exactly the exporter\'s TDXN + TOX tags')
 

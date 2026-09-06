@@ -198,8 +198,8 @@ def onProjectPreSave():
         # print(f"Error deleting old release: {e}")
         pass
 
-    # Clear TDN UI pars so the baked .tox doesn't carry stale paths
-    comp.par.Tdnfile = ''
+    # Clear TDXN UI pars so the baked .tox doesn't carry stale paths
+    comp.par.Tdxnfile = ''
     comp.par.Networkpath = ''
 
     # save out self-contained portable .tox (strips external file references)

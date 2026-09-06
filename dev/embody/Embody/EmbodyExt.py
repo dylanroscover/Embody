@@ -93,12 +93,12 @@ class EmbodyExt:
         'Folder', 'Envoyenable', 'Envoyport', 'Aiclient', 'Configclient',
         'Aiprojectroot', 'Aiprojectrootcustom',
         # Tag names
-        'Toxtag', 'Tdntag', 'Tdnexcludetag', 'Pytag', 'Csvtag', 'Dattag',
+        'Toxtag', 'Tdxntag', 'Tdxnexcludetag', 'Pytag', 'Csvtag', 'Dattag',
         'Htmltag', 'Jsontag', 'Mdtag', 'Rtftag', 'Txttag',
         'Xmltag', 'Glsltag', 'Tsvtag',
         # Tag colors
         'Toxtagcolorr', 'Toxtagcolorg', 'Toxtagcolorb',
-        'Tdntagcolorr', 'Tdntagcolorg', 'Tdntagcolorb',
+        'Tdxntagcolorr', 'Tdxntagcolorg', 'Tdxntagcolorb',
         'Clonetagcolorr', 'Clonetagcolorg', 'Clonetagcolorb',
         'Taggingmenucolorr', 'Taggingmenucolorg', 'Taggingmenucolorb',
         'Dattagcolorr', 'Dattagcolorg', 'Dattagcolorb',
@@ -112,9 +112,9 @@ class EmbodyExt:
         # defaults every time and re-prompted forever (issue #60).
         'Toxdropexpr',
         # TDXN
-        'Tdnmode',
-        'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
-        'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
+        'Tdxnmode',
+        'Embeddatsintdxns', 'Embedstorageintdxns', 'Tdxndatsafety',
+        'Tdxncascade', 'Tdxncreateonstart', 'Tdxnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
         # Clipboard auto-paste watcher consent (TDXN page). Persisting the
         # user's own choice is what makes the release-export scrub of this
@@ -136,7 +136,7 @@ class EmbodyExt:
         'Enablekeyboardshortcuts',
         'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
         'Shortcutrefresh', 'Shortcutexportproject', 'Shortcutexportcomp',
-        'Shortcutcopytdn', 'Shortcuttagger',
+        'Shortcutcopytdxn', 'Shortcuttagger',
     })
 
     # Launch specs and every other per-client fact now live in ONE place:
@@ -185,8 +185,102 @@ class EmbodyExt:
     # INITIALIZATION
     # ==========================================================================
 
+    # TDN-era custom parameter names -> TDXN. The FORMAT was renamed in
+    # 6.1; the parameter names lagged, so a tooltip read "Tdntagcolorr"
+    # under a "TDXN Tag Color" label. Keyed by ParGroup BASE name:
+    # setting Par.name on a group member renames the WHOLE group and
+    # re-derives the component suffixes (probed 2026-09-06 --
+    # Tdntagcolorr.name = 'Tdxntagcolorr' yields Tdxntagcolorrr/rg/rb/ra),
+    # so the base name is set ONCE. Value, style, expression and mode all
+    # survive. A plain par is a ParGroup of one, so one form covers both.
+    # config.json is keyed by parameter NAME -- embody_admin.restore_settings
+    # normalizes legacy keys with this same map. Change both or every
+    # user's saved settings silently revert to defaults.
+    # 'Tdnenable' is deliberately ABSENT: it is a pre-6.1 config.json key
+    # read by the mode-migration nudge, never a live parameter.
+    _TDXN_PAR_RENAMES = {
+        'Tdntags': 'Tdxntags',
+        'Tdntagcolor': 'Tdxntagcolor',
+        'Tdntag': 'Tdxntag',
+        'Tdnexcludetag': 'Tdxnexcludetag',
+        'Tdnmode': 'Tdxnmode',
+        'Embeddatsintdns': 'Embeddatsintdxns',
+        'Embedstorageintdns': 'Embedstorageintdxns',
+        'Tdncascade': 'Tdxncascade',
+        'Tdncascadewarn': 'Tdxncascadewarn',
+        'Tdnlockedwarn': 'Tdxnlockedwarn',
+        'Tdncreateonstart': 'Tdxncreateonstart',
+        'Tdnstriponsave': 'Tdxnstriponsave',
+        'Tdnpalettehandling': 'Tdxnpalettehandling',
+        'Tdnfile': 'Tdxnfile',
+        'Importtdn': 'Importtdxn',
+        'Tdnsavedcolor': 'Tdxnsavedcolor',
+        'Shortcutcopytdn': 'Shortcutcopytdxn',
+        'Recordcopytdn': 'Recordcopytdxn',
+        'Tdndatsafety': 'Tdxndatsafety',
+    }
+
+    def _migrateTdxnParNames(self, comp: COMP = None) -> int:
+        """Rename any TDN-era custom par group to its TDXN name.
+
+        Idempotent, and NON-DESTRUCTIVE by construction: it only ever
+        renames. If the target name is somehow already present, the group
+        is left alone and logged -- a migration must never destroy a
+        user's parameter to resolve a collision. (An earlier draft used
+        getattr(comp.parGroup, name, None) as the existence test; that is
+        TRUTHY for names that do not exist, so it took a destroy() branch
+        and wiped all 25 pars off the live COMP -- 2026-09-06. Membership
+        is tested against a real name set, never getattr.)
+
+        comp: target COMP, defaulting to the owner. Present so the
+        migration can be exercised on a throwaway COMP before it is ever
+        pointed at a real one.
+        """
+        target = comp if comp is not None else self.my
+        names = {g.name for pg in target.customPages for g in pg.parGroups}
+        renamed = 0
+        for page in list(target.customPages):
+            for grp in list(page.parGroups):
+                new = self._TDXN_PAR_RENAMES.get(grp.name)
+                if not new:
+                    continue
+                if new in names:
+                    self._logSafe(
+                        f'TDXN par migration: {grp.name} left as-is, '
+                        f'{new} already exists', 'WARNING')
+                    continue
+                old = grp.name
+                try:
+                    grp[0].name = new
+                except Exception as e:
+                    self._logSafe(
+                        f'TDXN par rename failed for {old}: {e}', 'WARNING')
+                    continue
+                names.discard(old)
+                names.add(new)
+                renamed += 1
+        if renamed:
+            self._logSafe(
+                f'Renamed {renamed} TDN-era parameter groups to TDXN', 'INFO')
+        return renamed
+
+    def _logSafe(self, msg: str, level: str = 'INFO') -> None:
+        """Log without ever raising -- callable from init-time migrations
+        that run before the logging parameters are readable."""
+        try:
+            self.Log(msg, level)
+        except Exception:
+            pass
+
     def __init__(self, ownerComp: COMP) -> None:
         self.my = ownerComp
+
+        # MUST run before any par read below: a self-updated install keeps
+        # its live custom pars, so TDN-era names arrive attached to this
+        # (TDXN-reading) code. Rename-only and idempotent -- a no-op once
+        # migrated. Proven non-destructive on a throwaway COMP incl. the
+        # both-names-present case before it was ever wired in here.
+        self._migrateTdxnParNames()
 
         # Parameter-dialog page filter (the POPX pattern). Default shows
         # only Embody's custom pages; the Advanced-page 'Show Built-in
@@ -2106,7 +2200,7 @@ class EmbodyExt:
             if not tracked:
                 return False
             tox_tag = self.my.par.Toxtag.val
-            tdn_tag = self.my.par.Tdntag.val
+            tdn_tag = self.my.par.Tdxntag.val
             candidates = 0
             for child in self.root.children:
                 if child.family != 'COMP':
@@ -3901,7 +3995,7 @@ class EmbodyExt:
             if dirty and st['save_dirty']:
                 st['exports'].append(('tox', oper.path))
         if self._tdnEnabled():
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
             st['exclude_tag'] = exclude_tag
             st['tdn_paths'] = self._getTDNPaths()
             st['ext_tags'] = self._extBoundaryTags()
@@ -4029,16 +4123,16 @@ class EmbodyExt:
         # names the exclude tag identically to a real tag can't silently drop
         # that real tag. _hasExcludeTag (TDXNExt) reads the par directly.
         tags = [par.eval() for par in self.my.pars('*tag')
-                if par.name != 'Tdnexcludetag']
+                if par.name != 'Tdxnexcludetag']
         if selection == 'tox':
             return [t for t in tags if t == self.my.par.Toxtag.val]
         elif selection == 'tdn':
-            return [t for t in tags if t == self.my.par.Tdntag.val]
+            return [t for t in tags if t == self.my.par.Tdxntag.val]
         elif selection == 'comp':
-            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdxntag.val}
             return [t for t in tags if t in comp_tags]
         elif selection == 'DAT':
-            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdxntag.val}
             return [t for t in tags if t not in comp_tags]
         return tags
 
@@ -4721,7 +4815,7 @@ class EmbodyExt:
                 # pars per frame would undo the point of chunking.
                 self._coarse_sweep_ctx = (
                     tdn_paths,
-                    self.my.par.Tdnexcludetag.eval(),
+                    self.my.par.Tdxnexcludetag.eval(),
                     self._extBoundaryTags())
             tdn_paths, exclude_tag, ext_tags = self._coarse_sweep_ctx
             cursor = self._coarse_sweep_cursor
@@ -6268,7 +6362,7 @@ class EmbodyExt:
         TDXNExt._hasTDNTag / _hasTOXTag, which stop the export at exactly
         these tags.
         """
-        return frozenset((self.my.par.Tdntag.eval(),
+        return frozenset((self.my.par.Tdxntag.eval(),
                           self.my.par.Toxtag.eval()))
 
     @property
@@ -6301,7 +6395,7 @@ class EmbodyExt:
         if tdn_paths is None:
             tdn_paths = self._getTDNPaths()
         if exclude_tag is None:
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
         current = self._computeTDNFingerprint(comp, tdn_paths, exclude_tag,
@@ -6324,7 +6418,7 @@ class EmbodyExt:
         if tdn_paths is None:
             tdn_paths = self._getTDNPaths()
         if exclude_tag is None:
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
         self._tdn_fingerprints[comp.path] = self._computeTDNFingerprint(
@@ -6598,7 +6692,7 @@ class EmbodyExt:
         # every COMP so the per-COMP full-table scan doesn't repeat.
         if self._tdnEnabled():
             tdn_paths = self._getTDNPaths()
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
             ext_tags = self._extBoundaryTags()
             for oper in self.getExternalizedOps(COMP, strategy='tdn'):
                 # Skip root "/" (Full Project export, not a managed COMP) and
@@ -6657,7 +6751,7 @@ class EmbodyExt:
             self._dirty_queue = []
             return
 
-        exclude_tag = self.my.par.Tdnexcludetag.eval()
+        exclude_tag = self.my.par.Tdxnexcludetag.eval()
         # Skip root "/" (Full Project export) and app-managed excluded COMPs,
         # exactly as dirtyHandler does.
         queue = [
@@ -6702,7 +6796,7 @@ class EmbodyExt:
             tdn_paths = self._getTDNPaths()
         exclude_tag = getattr(self, '_dirty_exclude_tag', None)
         if exclude_tag is None:
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
         ext_tags = getattr(self, '_dirty_ext_tags', None)
         deadline = time.perf_counter() + self._DIRTY_SWEEP_BUDGET_MS / 1000.0
         i = getattr(self, '_dirty_idx', 0)
@@ -6819,7 +6913,7 @@ class EmbodyExt:
     def handleAddition(self, oper: OP) -> None:
         """Process a newly tagged operator for externalization."""
         # Route TDXN-tagged COMPs to the TDXN handler
-        if oper.family == 'COMP' and self.my.par.Tdntag.val in oper.tags:
+        if oper.family == 'COMP' and self.my.par.Tdxntag.val in oper.tags:
             self._handleTDNAddition(oper)
             return
 
@@ -6939,14 +7033,14 @@ class EmbodyExt:
             self.Log(f"Added TDXN '{oper.path}'", "SUCCESS")
 
             # Cascade: auto-tag child COMPs if enabled
-            if self.my.par.Tdncascade.eval():
+            if self.my.par.Tdxncascade.eval():
                 self._cascadeTDNTag(oper)
         else:
             # Roll back the just-applied tag: a tagged-but-untracked COMP is
             # a dead end -- applyTagToOperator no-ops while the tag is
             # present, so every retry would silently do nothing until the
             # user strips the tag by hand.
-            oper.tags.discard(self.my.par.Tdntag.val)
+            oper.tags.discard(self.my.par.Tdxntag.val)
             self.Log(
                 f"TDXN export failed for {oper.path}: {result.get('error')} "
                 f"-- tag rolled back, fix the error and re-tag to retry",
@@ -6959,7 +7053,7 @@ class EmbodyExt:
         through the applyTagToOperator -> _handleTDNAddition ->
         _cascadeTDNTag chain, processing each level in order.
         """
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
         for child in parent_comp.findChildren(type=COMP, depth=1):
             # Annotations never cascade: they are captured semantically by
             # the parent's annotations: section, and tagging one turns its
@@ -7431,7 +7525,7 @@ class EmbodyExt:
             return
 
         embody_path = self.my.path
-        exclude_tag = self.my.par.Tdnexcludetag.eval()
+        exclude_tag = self.my.par.Tdxnexcludetag.eval()
         internal, external = [], []
         for comp in comps_with_filefolder:
             if comp.path == embody_path or comp.path.startswith(embody_path + '/'):
@@ -7461,7 +7555,7 @@ class EmbodyExt:
         per COMP.
         """
         if exclude_tag is None:
-            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            exclude_tag = self.my.par.Tdxnexcludetag.eval()
         if not exclude_tag:
             return False
         o = comp
@@ -7606,7 +7700,7 @@ class EmbodyExt:
         To avoid false matches, only same-parent candidates are considered
         and only when there is exactly one unambiguous candidate.
         """
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
         table = self.Externalizations
 
         # Collect all TDXN paths currently in the table (excluding the
@@ -8780,7 +8874,7 @@ class EmbodyExt:
         elif oper.family == 'COMP':
             switch.par.index = 2
             tox_tag = self.my.par.Toxtag.val
-            tdn_tag = self.my.par.Tdntag.val
+            tdn_tag = self.my.par.Tdxntag.val
             if tox_tag in oper.tags:
                 run(lambda: self.setupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
@@ -8883,7 +8977,7 @@ class EmbodyExt:
             btn_embed.par.display = embed_visible
             if embed_visible:
                 per_comp = oper.fetch('embed_dats_in_tdn', None, search=False)
-                effective = per_comp if per_comp is not None else self.my.par.Embeddatsintdns.eval()
+                effective = per_comp if per_comp is not None else self.my.par.Embeddatsintdxns.eval()
                 btn_embed.par.label = '\u229e  Embed DATs in tdxn  \u2713' if effective else '\u229e  Embed DATs in tdxn'
                 btn_embed.par.colorr = self.my.par.Taggingmenucolorr.eval()
                 btn_embed.par.colorg = self.my.par.Taggingmenucolorg.eval()
@@ -8895,7 +8989,7 @@ class EmbodyExt:
             btn_embed_storage.par.display = embed_visible
             if embed_visible:
                 per_comp = oper.fetch('embed_storage_in_tdn', None, search=False)
-                effective = per_comp if per_comp is not None else self.my.par.Embedstorageintdns.eval()
+                effective = per_comp if per_comp is not None else self.my.par.Embedstorageintdxns.eval()
                 btn_embed_storage.par.label = '\u229e  Embed storage in tdxn  \u2713' if effective else '\u229e  Embed storage in tdxn'
                 btn_embed_storage.par.colorr = self.my.par.Taggingmenucolorr.eval()
                 btn_embed_storage.par.colorg = self.my.par.Taggingmenucolorg.eval()
@@ -8962,7 +9056,7 @@ class EmbodyExt:
         self.setupTagger(oper)
 
         # COMP tags that should not appear as "Convert to" options for DATs
-        comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+        comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdxntag.val}
 
         # Use replicated buttons for "Convert to <format>" options
         tags = self.tagger.op('tags')
@@ -9064,7 +9158,7 @@ class EmbodyExt:
         else:
             if subtitle:
                 subtitle.par.text = target.path
-            exclude_tag = str(self.my.par.Tdnexcludetag.eval()).strip()
+            exclude_tag = str(self.my.par.Tdxnexcludetag.eval()).strip()
             prefix = exclude_tag
             # Full paths, not target-relative: two ops with the same
             # name (root + a child) must stay distinguishable (field
@@ -9099,7 +9193,7 @@ class EmbodyExt:
         o = op(op_path)
         if o is None:
             return
-        base = str(self.my.par.Tdnexcludetag.eval()).strip()
+        base = str(self.my.par.Tdxnexcludetag.eval()).strip()
         if kind == 'comp':
             tag = base
         else:
@@ -9120,7 +9214,7 @@ class EmbodyExt:
         if panel is None:
             return
         target = op(panel.fetch('omit_target', '', search=False) or '')
-        exclude_tag = str(self.my.par.Tdnexcludetag.eval()).strip()
+        exclude_tag = str(self.my.par.Tdxnexcludetag.eval()).strip()
         prefix = exclude_tag
 
         def in_scope(o):
@@ -9130,7 +9224,7 @@ class EmbodyExt:
         for item in items:
             if isinstance(item, Par):
                 if not prefix:
-                    self.Log('Tdnexcludetag is empty -- exclusions '
+                    self.Log('Tdxnexcludetag is empty -- exclusions '
                              'are disabled', 'WARNING')
                     continue
                 owner = item.owner
@@ -9148,7 +9242,7 @@ class EmbodyExt:
                              f'will not export', 'SUCCESS')
             elif isinstance(item, COMP):
                 if not exclude_tag:
-                    self.Log('Tdnexcludetag is empty -- COMP exclusion '
+                    self.Log('Tdxnexcludetag is empty -- COMP exclusion '
                              'is disabled', 'WARNING')
                     continue
                 if item is target:
@@ -9277,7 +9371,7 @@ class EmbodyExt:
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
                 tox_tag = self.my.par.Toxtag.val
-                tdn_tag = self.my.par.Tdntag.val
+                tdn_tag = self.my.par.Tdxntag.val
                 other_tag = tdn_tag if tag == tox_tag else tox_tag
                 if other_tag in oper.tags:
                     self._removeCompStrategy(oper, other_tag)
@@ -9308,7 +9402,7 @@ class EmbodyExt:
                                          delete_file=delete_file)
                     oper.par.externaltox = ''
                     oper.par.externaltox.readOnly = False
-                elif tag == self.my.par.Tdntag.val:
+                elif tag == self.my.par.Tdxntag.val:
                     self._removeTDNStrategy(oper.path,
                                             delete_file=delete_file)
             elif oper.family == 'DAT':
@@ -9365,7 +9459,7 @@ class EmbodyExt:
                                  delete_file=delete_file)
             oper.par.externaltox = ''
             oper.par.externaltox.readOnly = False
-        elif tag == self.my.par.Tdntag.val:
+        elif tag == self.my.par.Tdxntag.val:
             self._removeTDNStrategy(oper.path, delete_file=delete_file)
 
     def _removeTDNStrategy(self, op_path: str, delete_file: bool = True) -> None:
@@ -9467,8 +9561,8 @@ class EmbodyExt:
         if oper.family == 'COMP':
             if tag == self.my.par.Toxtag.val:
                 return (self.my.par.Toxtagcolorr, self.my.par.Toxtagcolorg, self.my.par.Toxtagcolorb)
-            elif tag == self.my.par.Tdntag.val:
-                return (self.my.par.Tdntagcolorr, self.my.par.Tdntagcolorg, self.my.par.Tdntagcolorb)
+            elif tag == self.my.par.Tdxntag.val:
+                return (self.my.par.Tdxntagcolorr, self.my.par.Tdxntagcolorg, self.my.par.Tdxntagcolorb)
             self.Log("Use TOX or TDXN tag for COMPs", "ERROR")
             return None
         elif oper.family == 'DAT':
@@ -9664,7 +9758,7 @@ class EmbodyExt:
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
                 tox_tag = self.my.par.Toxtag.val
-                tdn_tag = self.my.par.Tdntag.val
+                tdn_tag = self.my.par.Tdxntag.val
                 other_tag = tdn_tag if tag == tox_tag else tox_tag
                 if other_tag in oper.tags:
                     self._removeCompStrategy(oper, other_tag)
@@ -9694,7 +9788,7 @@ class EmbodyExt:
                         timestamp, oper.dirty, '', ''
                     ])
                     self.Log(f"Added existing TOX externalization to table", "SUCCESS")
-            elif oper.family == 'COMP' and tag == self.my.par.Tdntag.val:
+            elif oper.family == 'COMP' and tag == self.my.par.Tdxntag.val:
                 self._handleTDNAddition(oper)
 
         return True
@@ -9805,7 +9899,7 @@ class EmbodyExt:
         # already captured by that ancestor's .tdn/.tox -- don't double-manage
         # (and don't collide with the TDXN parent/child model).
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
         ancestor = oper.parent()
         while ancestor is not None and ancestor.path != '/':
             if (tox_tag in ancestor.tags or tdn_tag in ancestor.tags
@@ -9875,7 +9969,7 @@ class EmbodyExt:
         source's files. Recurses through a copied COMP's descendants so a TDXN
         export captures live content only (no stale source-file references)."""
         tox = self.my.par.Toxtag.val
-        tdn = self.my.par.Tdntag.val
+        tdn = self.my.par.Tdxntag.val
         dat_tag_set = set(self.getTags('DAT'))
 
         def clear(o):
@@ -9915,7 +10009,7 @@ class EmbodyExt:
     def handleStrategySwitch(self, oper: OP) -> None:
         """Switch a COMP between TOX and TDXN strategies."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
 
         # A refused switch (e.g. the annotate guard) keeps the OLD tag --
         # bail out entirely so externalizeImmediate does not re-export the
@@ -9933,7 +10027,7 @@ class EmbodyExt:
     def handleStrategySave(self, oper: OP) -> None:
         """Save the current strategy for a COMP."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
 
         if tox_tag in oper.tags:
             # allow_empty: this is the one EXPLICIT save gesture, so a
@@ -9955,7 +10049,7 @@ class EmbodyExt:
     def handleReload(self, oper: OP) -> None:
         """Reload a COMP from its external tdn/tox file on disk."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
 
         # Determine strategy from tags, falling back to table for untagged COMPs
         if tdn_tag in oper.tags:
@@ -10027,7 +10121,7 @@ class EmbodyExt:
             # filled by import Phase 8.6).
             try:
                 tdn_paths = self._getTDNPaths()
-                exclude_tag = self.my.par.Tdnexcludetag.eval()
+                exclude_tag = self.my.par.Tdxnexcludetag.eval()
                 self._storeTDNFingerprint(oper, tdn_paths, exclude_tag)
                 prefix = oper.path.rstrip('/') + '/'
                 for comp_path, _rel in self._getTDNStrategyComps():
@@ -10067,7 +10161,7 @@ class EmbodyExt:
         if per_comp is not None:
             effective = per_comp
         else:
-            effective = self.my.par.Embeddatsintdns.eval()
+            effective = self.my.par.Embeddatsintdxns.eval()
 
         # Toggle to explicit opposite
         new_val = not effective
@@ -10093,7 +10187,7 @@ class EmbodyExt:
         if per_comp is not None:
             effective = per_comp
         else:
-            effective = self.my.par.Embedstorageintdns.eval()
+            effective = self.my.par.Embedstorageintdxns.eval()
 
         # Toggle to explicit opposite
         new_val = not effective
@@ -10155,7 +10249,7 @@ class EmbodyExt:
         tracking entry, and resets operator color.
         """
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
 
         if tdn_tag in oper.tags:
             # removeTDNEntry strips the tags itself (issue #48)
@@ -10216,7 +10310,7 @@ class EmbodyExt:
         Avoids the full Update() scan of all dirty operators.
         """
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
 
         is_tox = tox_tag in oper.tags
         is_tdn = tdn_tag in oper.tags
@@ -10305,7 +10399,7 @@ class EmbodyExt:
 
         # Process COMPs
         if use_tdn:
-            comp_tag = self.my.par.Tdntag.val
+            comp_tag = self.my.par.Tdxntag.val
             for oper in self.root.findChildren(type=COMP):
                 if self._shouldSkipOp(oper, paths_to_exclude):
                     continue
@@ -10544,7 +10638,7 @@ class EmbodyExt:
         # create-on-start gate belongs HERE: it is greyed out in export mode
         # (a full-only par), yet it sat above the export branch and silently
         # switched crash recovery off (TDXN review 2026-08-30).
-        if not self.my.par.Tdncreateonstart.eval():
+        if not self.my.par.Tdxncreateonstart.eval():
             self.Log('TDXN create-on-start is off -- skipping full '
                      'reconstruction', 'INFO')
             return
@@ -10834,7 +10928,7 @@ class EmbodyExt:
         results = {'found': [], 'restored': [], 'failed': []}
         if self._tdnMode() == 'off':
             return results
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
         if not tdn_tag:
             return results
 
@@ -10965,7 +11059,7 @@ class EmbodyExt:
         return results
 
     # Params visible only in 'full' mode (strip/reconstruction concepts).
-    _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
+    _TDN_FULL_ONLY_PARAMS = {'Tdxnstriponsave', 'Tdxncreateonstart'}
 
     def migrateToTDXN(self, auto: bool = False, dry_run: bool = False,
                       scope: Optional[str] = None) -> dict:
@@ -11259,11 +11353,11 @@ class EmbodyExt:
         return changed
 
     def _tdnMode(self) -> str:
-        """Return 'off' | 'export' | 'full' from Tdnmode menu.
+        """Return 'off' | 'export' | 'full' from Tdxnmode menu.
 
         Defaults to 'export' if the parameter is missing (legacy .tox).
         """
-        par = getattr(self.my.par, 'Tdnmode', None)
+        par = getattr(self.my.par, 'Tdxnmode', None)
         if par is None:
             return 'export'
         try:
@@ -11446,14 +11540,14 @@ class EmbodyExt:
         return was_active
 
     def _applyTdnModeGating(self) -> None:
-        """Three-way UI gating for TDXN-page parameters based on Tdnmode.
+        """Three-way UI gating for TDXN-page parameters based on Tdxnmode.
 
-        - Off: all params greyed except Tdnmode itself.
-        - Export: strip/reconstruction params (Tdnstriponsave, Tdncreateonstart)
+        - Off: all params greyed except Tdxnmode itself.
+        - Export: strip/reconstruction params (Tdxnstriponsave, Tdxncreateonstart)
           greyed; remaining Embed/cascade/picker params stay live.
         - Full: all params live.
         """
-        master = getattr(self.my.par, 'Tdnmode', None)
+        master = getattr(self.my.par, 'Tdxnmode', None)
         if master is None:
             return
         mode = self._tdnMode()
@@ -11467,7 +11561,7 @@ class EmbodyExt:
                 if page.name not in ('TDXN', 'TDN'):
                     continue
                 for p in page.pars:
-                    if p.name == 'Tdnmode':
+                    if p.name == 'Tdxnmode':
                         continue
                     try:
                         if mode == 'off':
@@ -11479,13 +11573,13 @@ class EmbodyExt:
                     except Exception:
                         pass
         except Exception as e:
-            self.Log(f'Could not apply Tdnmode gating: {e}', 'DEBUG')
+            self.Log(f'Could not apply Tdxnmode gating: {e}', 'DEBUG')
 
     # Backward-compat alias (old name used inside Update / parexec history).
     _applyTdnEnableGating = _applyTdnModeGating
 
     def _onTdnModeChanged(self, mode: str) -> None:
-        """Handle a Tdnmode change from parexec.
+        """Handle a Tdxnmode change from parexec.
 
         Transitions surface the impact so the user isn't surprised:
         - TO off with tracked TDXN COMPs: confirmation dialog (preserve files).
@@ -11521,7 +11615,7 @@ class EmbodyExt:
                     if parexec:
                         parexec.par.active = False
                     try:
-                        self.my.par.Tdnmode = 'export'
+                        self.my.par.Tdxnmode = 'export'
                     finally:
                         if parexec:
                             parexec.par.active = was_active
@@ -11717,7 +11811,7 @@ class EmbodyExt:
             # Resolve embed_dats: per-COMP override -> global parameter
             per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
             embed_on = (per_comp if per_comp is not None
-                        else self.my.par.Embeddatsintdns.eval())
+                        else self.my.par.Embeddatsintdxns.eval())
             if embed_on:
                 continue  # Content will be preserved in TDXN
 
@@ -11787,7 +11881,7 @@ class EmbodyExt:
 
         return result
 
-    # Storage keys preserved even when Embedstorageintdns is off
+    # Storage keys preserved even when Embedstorageintdxns is off
     # (mirrors TDXNExt logic that exports these as control metadata).
     _STORAGE_CONTROL_KEYS = {'embed_dats_in_tdn', 'embed_storage_in_tdn'}
     # Embody-only runtime keys, ON TOP OF TDXNExt.SKIP_STORAGE_KEYS. These
@@ -11846,7 +11940,7 @@ class EmbodyExt:
             # Resolve embed_storage: per-COMP override -> global parameter
             per_comp = comp.fetch('embed_storage_in_tdn', None, search=False)
             embed_on = (per_comp if per_comp is not None
-                        else self.my.par.Embedstorageintdns.eval())
+                        else self.my.par.Embedstorageintdxns.eval())
             if embed_on:
                 continue  # Storage preserved in TDXN
 
@@ -11969,12 +12063,12 @@ class EmbodyExt:
         if choice == 0:
             return 'externalize'
         elif choice == 1:
-            self.my.par.Tdndatsafety = 'externalize'
+            self.my.par.Tdxndatsafety = 'externalize'
             self.Log('TDXN content safety preference set to Always '
                      'Externalize', 'INFO')
             return 'externalize'
         elif choice == 3:
-            self.my.par.Tdndatsafety = 'ignore'
+            self.my.par.Tdxndatsafety = 'ignore'
             self.Log('TDXN content safety preference set to Always Skip '
                      '-- save-time warnings disabled (re-enable via the '
                      'TDXN content-safety parameter on Embody)', 'INFO')
@@ -12006,10 +12100,10 @@ class EmbodyExt:
         """Check for at-risk DATs AND storage in TDXN COMPs.
 
         Called from onProjectPreSave() before the TDXN export/strip cycle.
-        Prompts user or auto-externalizes per Tdndatsafety preference.
+        Prompts user or auto-externalizes per Tdxndatsafety preference.
         On skip, logs a SUCCESS summary naming what was dropped.
         """
-        safety_par = getattr(self.my.par, 'Tdndatsafety', None)
+        safety_par = getattr(self.my.par, 'Tdxndatsafety', None)
         preference = safety_par.eval() if safety_par else 'ask'
 
         if preference == 'ignore':
@@ -12224,10 +12318,10 @@ class EmbodyExt:
 
         # Apply tag and color
         if strategy == 'tdn':
-            tag = self.my.par.Tdntag.val
-            color = (self.my.par.Tdntagcolorr.eval(),
-                     self.my.par.Tdntagcolorg.eval(),
-                     self.my.par.Tdntagcolorb.eval())
+            tag = self.my.par.Tdxntag.val
+            color = (self.my.par.Tdxntagcolorr.eval(),
+                     self.my.par.Tdxntagcolorg.eval(),
+                     self.my.par.Tdxntagcolorb.eval())
         else:
             tag = self.my.par.Toxtag.val
             color = (self.my.par.Toxtagcolorr.eval(),
@@ -12303,7 +12397,7 @@ class EmbodyExt:
             return
 
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdntag.val
+        tdn_tag = self.my.par.Tdxntag.val
         embody_path = self.my.path
         reconciled = 0
         failed = 0
@@ -13083,9 +13177,9 @@ class EmbodyExt:
                 return
 
         self._import_clear_first = clear_first
-        self.my.par.Tdnfile = str(path)
+        self.my.par.Tdxnfile = str(path)
         self.my.par.Networkpath = network_path
-        self.my.par.Importtdn.pulse()
+        self.my.par.Importtdxn.pulse()
 
     def _inferTargetFromPath(self, file_path: str) -> Optional[str]:
         """Derive a TD COMP path from a .tdn file's location relative to project.folder.

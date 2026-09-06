@@ -225,7 +225,7 @@ class TestShortcuts(EmbodyTestCase):
         # carry one -- buildDispatch keeps first-in-ACTIONS as a safety.
         m = self.sc
         default = m.DEFAULTS['Shortcutmanager']
-        self.embody.par.Shortcutcopytdn.val = default  # raw .val: no parexec
+        self.embody.par.Shortcutcopytdxn.val = default  # raw .val: no parexec
         table = m.buildDispatch(self.embody)
         self.assertEqual(table[m.matchForm(default)], 'Shortcutmanager')
 
@@ -322,19 +322,19 @@ class TestShortcuts(EmbodyTestCase):
     def test_duplicate_of(self):
         m = self.sc
         default = m.DEFAULTS['Shortcutmanager']
-        self.assertEqual(m.duplicateOf(self.embody, 'Shortcutcopytdn', default),
+        self.assertEqual(m.duplicateOf(self.embody, 'Shortcutcopytdxn', default),
                          'Shortcutmanager')
         # A par never duplicates itself
         self.assertIsNone(m.duplicateOf(self.embody, 'Shortcutmanager', default))
         self.assertIsNone(m.duplicateOf(self.embody, 'Shortcutmanager', ''))
         # validate() no longer reports duplicates (they are blocked instead)
         self.assertEqual(
-            m.validate(self.embody, 'Shortcutcopytdn', 'ctrl+alt+F9'), [])
+            m.validate(self.embody, 'Shortcutcopytdxn', 'ctrl+alt+F9'), [])
         if m._isMac():
             # The other physical modifier is a DIFFERENT binding on macOS
             other = default.replace('cmd', 'ctrl')
             self.assertIsNone(
-                m.duplicateOf(self.embody, 'Shortcutcopytdn', other))
+                m.duplicateOf(self.embody, 'Shortcutcopytdxn', other))
 
     def test_validate_reserved_warns(self):
         m = self.sc
@@ -531,8 +531,8 @@ class TestShortcuts(EmbodyTestCase):
         # value with a warning -- duplicates are blocked, not just warned.
         m = self.sc
         pe = self.embody.op('parexec').module
-        par = self.embody.par.Shortcutcopytdn
-        own_default = m.DEFAULTS['Shortcutcopytdn']
+        par = self.embody.par.Shortcutcopytdxn
+        own_default = m.DEFAULTS['Shortcutcopytdxn']
         par.val = m.DEFAULTS['Shortcutupdateall']  # already held
         pe.onValueChange(par, own_default)
         self.assertEqual(str(par.eval()), own_default)

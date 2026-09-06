@@ -1,5 +1,5 @@
 """
-Test suite: TDN master mode menu (`Tdnmode`).
+Test suite: TDN master mode menu (`Tdxnmode`).
 
 Verifies the three-mode menu (Off / Export-on-Save (MCP) / Full Import/Export
 (Experimental)) correctly gates:
@@ -33,7 +33,7 @@ class TestTdnMode(EmbodyTestCase):
         self.embody.store('_smoke_test_responses', {
             'Embody - Disable TDXN': 1,  # 1 = 'Keep network files (disable only)'
         })
-        self._mode_was = self.embody.par.Tdnmode.eval()
+        self._mode_was = self.embody.par.Tdxnmode.eval()
 
     def tearDown(self):
         # Restore mode without firing parexec side-effects.
@@ -41,7 +41,7 @@ class TestTdnMode(EmbodyTestCase):
         was_active = parexec.par.active.eval()
         parexec.par.active = False
         try:
-            self.embody.par.Tdnmode.val = self._mode_was
+            self.embody.par.Tdxnmode.val = self._mode_was
         finally:
             parexec.par.active = was_active
         # Re-apply gating so par.enable state matches the restored mode.
@@ -59,12 +59,12 @@ class TestTdnMode(EmbodyTestCase):
         super().tearDown()
 
     def _setMode(self, mode: str) -> None:
-        """Set Tdnmode with parexec suppressed (no side-effects)."""
+        """Set Tdxnmode with parexec suppressed (no side-effects)."""
         parexec = self.embody.op('parexec')
         was_active = parexec.par.active.eval()
         parexec.par.active = False
         try:
-            self.embody.par.Tdnmode.val = mode
+            self.embody.par.Tdxnmode.val = mode
         finally:
             parexec.par.active = was_active
 
@@ -73,23 +73,23 @@ class TestTdnMode(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_tdnmode_parameter_exists_as_menu(self):
-        par = getattr(self.embody.par, 'Tdnmode', None)
-        self.assertIsNotNone(par, 'Tdnmode parameter must exist')
+        par = getattr(self.embody.par, 'Tdxnmode', None)
+        self.assertIsNotNone(par, 'Tdxnmode parameter must exist')
         self.assertEqual(par.style, 'Menu')
 
     def test_tdnmode_menu_has_three_values(self):
-        par = self.embody.par.Tdnmode
+        par = self.embody.par.Tdxnmode
         names = list(par.menuNames)
         self.assertEqual(sorted(names), ['export', 'full', 'off'])
 
     def test_tdnmode_default_is_export(self):
-        self.assertEqual(self.embody.par.Tdnmode.default, 'export')
+        self.assertEqual(self.embody.par.Tdxnmode.default, 'export')
 
     def test_tdnmode_lives_on_tdn_page(self):
         found_page = None
         for page in self.embody.customPages:
             for p in page.pars:
-                if p.name == 'Tdnmode':
+                if p.name == 'Tdxnmode':
                     found_page = page.name
                     break
             if found_page:
@@ -136,10 +136,10 @@ class TestTdnMode(EmbodyTestCase):
         self.assertIn('mode=export', messages)
 
     def test_export_mode_recovery_runs_with_createonstart_off(self):
-        """Tdncreateonstart is greyed out in export mode but used to gate
+        """Tdxncreateonstart is greyed out in export mode but used to gate
         crash recovery silently (TDXN review 2026-08-30)."""
         self._setMode('export')
-        par = self.embody.par.Tdncreateonstart
+        par = self.embody.par.Tdxncreateonstart
         saved = par.eval()
         ext = self.embody_ext
         calls = []
@@ -264,8 +264,8 @@ class TestTdnMode(EmbodyTestCase):
         page = self._getTdnPage()
         self.assertIsNotNone(page)
         for p in page.pars:
-            if p.name == 'Tdnmode':
-                self.assertTrue(p.enable, 'Tdnmode itself must stay live')
+            if p.name == 'Tdxnmode':
+                self.assertTrue(p.enable, 'Tdxnmode itself must stay live')
             else:
                 self.assertFalse(p.enable,
                     f'{p.name} should be greyed in Off mode')
@@ -276,7 +276,7 @@ class TestTdnMode(EmbodyTestCase):
         full_only = self.embody_ext._TDN_FULL_ONLY_PARAMS
         page = self._getTdnPage()
         for p in page.pars:
-            if p.name == 'Tdnmode':
+            if p.name == 'Tdxnmode':
                 self.assertTrue(p.enable)
             elif p.name in full_only:
                 self.assertFalse(p.enable,

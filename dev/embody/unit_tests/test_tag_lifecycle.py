@@ -236,7 +236,7 @@ class TestTagLifecycle(EmbodyTestCase):
         silently does nothing until the tag is stripped by hand.
         """
         comp = self.workspace.create(containerCOMP, 'rollback_victim')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         initial_rows = self.embody_ext.Externalizations.numRows
 
         cls = type(self.embody.ext.TDXN)

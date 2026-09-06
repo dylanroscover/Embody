@@ -81,7 +81,7 @@ class TestRemoveExternalization(EmbodyTestCase):
         """REGRESSION: _removeExternalization must NOT add the other strategy tag."""
         comp = self.workspace.create(baseCOMP, 'rem_no_convert')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
         self.embody_ext.handleAddition(comp)
 
@@ -96,7 +96,7 @@ class TestRemoveExternalization(EmbodyTestCase):
     def test_remove_tdn_removes_tag(self):
         """_removeExternalization should remove the tdn tag from a COMP."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_tag')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
 
         self.embody_ext._removeExternalization(comp)
@@ -106,7 +106,7 @@ class TestRemoveExternalization(EmbodyTestCase):
         """REGRESSION: _removeExternalization must NOT add tox tag when removing TDN."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_no_tox')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
 
         self.embody_ext._removeExternalization(comp)
@@ -116,7 +116,7 @@ class TestRemoveExternalization(EmbodyTestCase):
     def test_remove_tdn_resets_color(self):
         """_removeExternalization should reset color after TDN removal."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_color')
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
 
         self.embody_ext._removeExternalization(comp)
@@ -147,7 +147,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
     def _externalizedTDN(self, name):
         """Create a TDN-externalized COMP with a live table row."""
         comp = self.workspace.create(baseCOMP, name)
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
         self.assertIn(tdn_tag, comp.tags, 'Precondition: comp must be tagged')
         return comp, tdn_tag
@@ -246,7 +246,7 @@ class TestHandleStrategySwitch(EmbodyTestCase):
         """HandleStrategySwitch should convert a TOX COMP to TDN."""
         comp = self.workspace.create(baseCOMP, 'switch_to_tdn')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
 
         self.embody_ext.handleStrategySwitch(comp)
@@ -257,7 +257,7 @@ class TestHandleStrategySwitch(EmbodyTestCase):
         """HandleStrategySwitch should convert a TDN COMP to TOX."""
         comp = self.workspace.create(baseCOMP, 'switch_to_tox')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdntag.val
+        tdn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
 
         self.embody_ext.handleStrategySwitch(comp)

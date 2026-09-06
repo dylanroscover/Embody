@@ -130,7 +130,7 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path=comp.path, tag_type='tdn')
         self.assertTrue(ext_result.get('success'),
             f"externalize failed: {ext_result.get('error')}")
-        tdn_tag = self.embody.par.Tdntag.eval()
+        tdn_tag = self.embody.par.Tdxntag.eval()
         self.assertIn(tdn_tag, comp.tags, 'Precondition: comp tagged tdn')
 
         result = self.envoy._remove_externalization_tag(op_path=comp.path)

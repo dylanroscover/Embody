@@ -427,7 +427,7 @@ class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
     def setUp(self):
         super().setUp()
         self.emb = self.embody_ext
-        self.exclude_tag = self.embody.par.Tdnexcludetag.eval()
+        self.exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 
     def _fp(self, comp, tdn_paths=None, exclude_tag=None):
         return self.emb._computeTDNFingerprint(comp, tdn_paths, exclude_tag)

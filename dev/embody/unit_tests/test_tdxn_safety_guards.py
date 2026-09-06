@@ -8,7 +8,7 @@ Covers:
   C. Combined dialog surfaces both DATs and storage
   D. Dialog offers Skip Once + an explicit, reversible Always Skip
      (the old bare single-click "Never Ask" label stays gone); the
-     "Always" buttons persist the Tdndatsafety preference
+     "Always" buttons persist the Tdxndatsafety preference
   E. Skip logs a SUCCESS summary of what was dropped
 """
 
@@ -26,13 +26,13 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         # The sandbox lives inside a registered TDN-strategy COMP
         # (test_sandbox in the unit_tests project), so storage we set on
         # self.sandbox is detected by _findAtRiskStorage under that parent.
-        self._prev_embed_storage = self.embody.par.Embedstorageintdns.eval()
-        self._prev_embed_dats = self.embody.par.Embeddatsintdns.eval()
-        self.embody.par.Embedstorageintdns.val = False
-        self.embody.par.Embeddatsintdns.val = False
+        self._prev_embed_storage = self.embody.par.Embedstorageintdxns.eval()
+        self._prev_embed_dats = self.embody.par.Embeddatsintdxns.eval()
+        self.embody.par.Embedstorageintdxns.val = False
+        self.embody.par.Embeddatsintdxns.val = False
         # Preference: 'ask' so the check routes through the prompt.
-        self._prev_safety = self.embody.par.Tdndatsafety.eval()
-        self.embody.par.Tdndatsafety.val = 'ask'
+        self._prev_safety = self.embody.par.Tdxndatsafety.eval()
+        self.embody.par.Tdxndatsafety.val = 'ask'
         # Intercept messageBox so tests never actually block on UI.
         self._captured = []
         self._orig_messageBox = self.embody_ext._messageBox
@@ -48,9 +48,9 @@ class TestTDNSafetyGuards(EmbodyTestCase):
 
     def tearDown(self):
         self.embody_ext._messageBox = self._orig_messageBox
-        self.embody.par.Embedstorageintdns.val = self._prev_embed_storage
-        self.embody.par.Embeddatsintdns.val = self._prev_embed_dats
-        self.embody.par.Tdndatsafety.val = self._prev_safety
+        self.embody.par.Embedstorageintdxns.val = self._prev_embed_storage
+        self.embody.par.Embeddatsintdxns.val = self._prev_embed_dats
+        self.embody.par.Tdxndatsafety.val = self._prev_safety
         super().tearDown()
 
     # ------------------------------------------------------------------
@@ -120,7 +120,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
 
     # ------------------------------------------------------------------
     # B. Dialog - Skip Once + explicit reversible Always Skip; both
-    #    "Always" buttons persist the Tdndatsafety preference
+    #    "Always" buttons persist the Tdxndatsafety preference
     # ------------------------------------------------------------------
 
     def test_prompt_offers_skip_once_and_always_skip(self):
@@ -140,33 +140,33 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             self.sandbox.unstore('risky')
 
     def test_always_skip_persists_ignore_preference(self):
-        """'Always Skip' (index 3) sets Tdndatsafety='ignore' so future
+        """'Always Skip' (index 3) sets Tdxndatsafety='ignore' so future
         saves don't warn, and still skips the current save."""
         self.sandbox.store('risky', 'data')
         try:
             self._scripted_choice = 3  # Always Skip
             self.embody_ext._checkTDNContentSafety()
-            self.assertEqual(self.embody.par.Tdndatsafety.eval(), 'ignore',
+            self.assertEqual(self.embody.par.Tdxndatsafety.eval(), 'ignore',
                 'Always Skip must persist the ignore preference')
         finally:
             self.sandbox.unstore('risky')
 
     def test_always_externalize_persists_externalize_preference(self):
-        """'Always Externalize' (index 1) sets Tdndatsafety='externalize'."""
+        """'Always Externalize' (index 1) sets Tdxndatsafety='externalize'."""
         self.sandbox.store('risky', 'data')
         try:
             self._scripted_choice = 1  # Always Externalize
             self.embody_ext._checkTDNContentSafety()
-            self.assertEqual(self.embody.par.Tdndatsafety.eval(),
+            self.assertEqual(self.embody.par.Tdxndatsafety.eval(),
                              'externalize',
                 'Always Externalize must persist the externalize preference')
         finally:
             self.sandbox.unstore('risky')
 
     def test_ignore_preference_suppresses_prompt(self):
-        """With Tdndatsafety='ignore' (the result of Always Skip), no dialog
+        """With Tdxndatsafety='ignore' (the result of Always Skip), no dialog
         is shown even when at-risk content exists - that is the whole point."""
-        self.embody.par.Tdndatsafety.val = 'ignore'
+        self.embody.par.Tdxndatsafety.val = 'ignore'
         self.sandbox.store('risky', 'data')
         try:
             self.embody_ext._checkTDNContentSafety()

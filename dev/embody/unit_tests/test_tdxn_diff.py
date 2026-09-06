@@ -24,7 +24,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
         p = pg.appendFloat('Testval', label='Test Value')[0]
         p.default = 0.0
         p.val = 0.0
-        self.embody_ext.applyTagToOperator(comp, self.embody.par.Tdntag.eval())
+        self.embody_ext.applyTagToOperator(comp, self.embody.par.Tdxntag.eval())
         rel = None
         tbl = self.embody_ext.Externalizations
         for r in range(1, tbl.numRows):

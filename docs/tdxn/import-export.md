@@ -13,7 +13,7 @@ Use the `read_tdn` tool to return the live network as a TDXN dict **without writ
 | `max_depth` | `null` (unlimited) | Cap recursion on large roots |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of skipping their children |
 
-Works in all three `Tdnmode` values (Off / Export-on-Save / Roundtrip) — `read_tdn` reads live state, not `.tdxn` files on disk.
+Works in all three `Tdxnmode` values (Off / Export-on-Save / Roundtrip) — `read_tdn` reads live state, not `.tdxn` files on disk.
 
 ### When NOT to use `read_tdn`
 
