@@ -1,5 +1,5 @@
 {
-  "name": "external_ref_tdn",
+  "name": "external_ref_tdxn",
   "why": "tdn_ref points at content not present in this payload.",
   "surfaces": [
     "external_refs"

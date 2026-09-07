@@ -282,7 +282,7 @@ class TestMCPAnnotations(EmbodyTestCase):
     #
     # create_annotation adopts the TD-UI convention (utility=True), and every
     # op-path tool resolves utility ops via resolve_op. Regression source: the
-    # TDN annotation double-serialization report (2026-07-21) -- delete_op
+    # TDXN annotation double-serialization report (2026-07-21) -- delete_op
     # returned "Operator not found" on a path get_annotations had just listed,
     # pushing agents to raw .destroy() (which is not deletion-durable).
     # =========================================================================

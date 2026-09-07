@@ -1,5 +1,5 @@
 """
-Test suite: TDN reconstruction - comprehensive round-trip fidelity,
+Test suite: TDXN reconstruction - comprehensive round-trip fidelity,
 reconstruction simulation, and resilience testing.
 
 Tests ExportNetwork -> ImportNetwork round-trips across all operator families,
@@ -19,7 +19,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 ParMode = type(op('/').par.clone.mode)
 
 
-class TestTDNReconstruction(EmbodyTestCase):
+class TestTDXNReconstruction(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
@@ -62,7 +62,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		return orig_tdn, reimp['tdn'], result
 
 	def _simulateReconstruction(self, parent):
-		"""Mirrors the real onProjectPreSave strip + ReconstructTDNComps reimport flow."""
+		"""Mirrors the real onProjectPreSave strip + ReconstructTDXNComps reimport flow."""
 		orig = self.tdn.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
@@ -74,7 +74,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			c.destroy()
 		self.assertEqual(len(parent.children), 0)
 
-		# Reconstruct (like ReconstructTDNComps)
+		# Reconstruct (like ReconstructTDXNComps)
 		result = self.tdn.ImportNetwork(
 			target_path=parent.path, tdn=orig_tdn, clear_first=False)
 		self.assertTrue(result.get('success'), f'Reconstruct failed: {result}')
@@ -105,7 +105,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def _verifyNetworkFidelity(self, original_ops, reimported_ops,
 							orig_type_defaults=None, reimp_type_defaults=None):
-		"""Deep recursive comparison of two TDN operator arrays.
+		"""Deep recursive comparison of two TDXN operator arrays.
 
 		Resolves type_defaults into per-op params before comparing, so
 		redistribution between shared and per-op sections doesn't cause
@@ -498,7 +498,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			orig_tdn.get('type_defaults'), reimp_tdn.get('type_defaults'))
 
 	def test_A11_idempotent_double_roundtrip(self):
-		"""Double round-trip should produce identical TDN."""
+		"""Double round-trip should produce identical TDXN."""
 		self.sandbox.create(noiseTOP, 'n1')
 		self.sandbox.create(baseCOMP, 'c1').create(textDAT, 'inner')
 		_, reimp1_tdn, _ = self._roundTrip(self.sandbox)
@@ -1283,7 +1283,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 											delete_file=True)
 
 	def test_D10_individual_reload_recurses_into_nested_tdn(self):
-		"""_reloadTDN on a parent fills nested externalized-TDN children
+		"""_reloadTDXN on a parent fills nested externalized-TDXN children
 		AND re-baselines dirty-detection.
 
 		The reload used to leave a tdn_ref child as an EMPTY SHELL --
@@ -1311,7 +1311,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			# tdn_ref pointer (its initial export predated the child's
 			# tag).
 			self.assertTrue(
-				self.embody_ext.saveTDN(parent.path, allow_empty=True))
+				self.embody_ext.saveTDXN(parent.path, allow_empty=True))
 
 			child_rel = self.embody_ext._getStrategyFilePath(
 				child.path, 'tdn')
@@ -1323,11 +1323,11 @@ class TestTDNReconstruction(EmbodyTestCase):
 			# revert the file so disk differs from the baseline.
 			child.create(levelTOP, 'extra')
 			self.assertTrue(
-				self.embody_ext.saveTDN(child.path, allow_empty=True))
+				self.embody_ext.saveTDXN(child.path, allow_empty=True))
 			with open(child_abs, 'w', encoding='utf-8', newline='\n') as f:
 				f.write(disk_before_edit)
 
-			self.embody_ext._reloadTDN(parent)
+			self.embody_ext._reloadTDXN(parent)
 
 			rchild = self.sandbox.op('rl_parent/rl_child')
 			self.assertIsNotNone(rchild, 'reload must recreate the child')
@@ -1337,7 +1337,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				'.tdn, never an empty shell')
 			self.assertIn(tdn_tag, rchild.tags)
 			self.assertFalse(
-				self.embody_ext._isTDNDirty(rchild),
+				self.embody_ext._isTDXNDirty(rchild),
 				'freshly reloaded content must not read dirty -- a '
 				'stale fingerprint is the empty-overwrite vector')
 		finally:
@@ -1369,7 +1369,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				'the .tdn on disk must be byte-identical after the '
 				'refusal')
 			self.assertTrue(
-				self.embody_ext.saveTDN(comp.path, allow_empty=True),
+				self.embody_ext.saveTDXN(comp.path, allow_empty=True),
 				'an explicit allow_empty save must return True')
 			self.assertNotEqual(
 				os.path.getsize(abs_path), size_before,
@@ -2234,9 +2234,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		tdn_doc = orig['tdn']
 
-		# Verify custom_pars in exported TDN
+		# Verify custom_pars in exported TDXN
 		self.assertIn('custom_pars', tdn_doc,
-			'TDN should include target COMP custom_pars')
+			'TDXN should include target COMP custom_pars')
 
 		# Import with clear_first (simulates reconstruction)
 		result = self.tdn.ImportNetwork(
@@ -2278,9 +2278,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 			root_path=self.sandbox.path, include_dat_content=True)
 		tdn_doc = orig['tdn']
 
-		# Verify parameters in exported TDN
+		# Verify parameters in exported TDXN
 		self.assertIn('parameters', tdn_doc,
-			'TDN should include target COMP non-default parameters')
+			'TDXN should include target COMP non-default parameters')
 
 		result = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,
@@ -2290,7 +2290,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(self.sandbox.par.parentshortcut.eval(), 'mycomp')
 
 	def test_K12_target_pars_on_missing_shell(self):
-		"""Custom pars must be created on a bare COMP from TDN data."""
+		"""Custom pars must be created on a bare COMP from TDXN data."""
 		page = self.sandbox.appendCustomPage('Config')
 		page.appendFloat('Threshold', label='Threshold')
 		self.sandbox.par.Threshold = 0.75
@@ -2306,7 +2306,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			p.destroy()
 		self.assertFalse(hasattr(self.sandbox.par, 'Threshold'))
 
-		# Import should recreate custom pars from TDN
+		# Import should recreate custom pars from TDXN
 		result = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
@@ -2316,14 +2316,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertAlmostEqual(self.sandbox.par.Threshold.eval(), 0.75)
 
 	def test_K13_backward_compat_no_container_fields(self):
-		"""Import of TDN without top-level custom_pars/parameters must not error."""
+		"""Import of TDXN without top-level custom_pars/parameters must not error."""
 		self.sandbox.create(noiseTOP, 'noise1')
 
 		orig = self.tdn.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		tdn_doc = orig['tdn']
 
-		# Strip the new fields to simulate old TDN format
+		# Strip the new fields to simulate old TDXN format
 		tdn_doc.pop('custom_pars', None)
 		tdn_doc.pop('parameters', None)
 
@@ -2424,7 +2424,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.sandbox.fetch('config', search=False), {'nested': True})
 
 	def test_K19_type_mismatch_warning(self):
-		"""Importing a TDN with mismatched type should warn but succeed."""
+		"""Importing a TDXN with mismatched type should warn but succeed."""
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2443,16 +2443,16 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 
 	def test_L01_embody_excluded_from_tdn_strategy(self):
-		"""Embody path should be excluded from _getTDNStrategyComps."""
-		comps = self.embody_ext._getTDNStrategyComps()
+		"""Embody path should be excluded from _getTDXNStrategyComps."""
+		comps = self.embody_ext._getTDXNStrategyComps()
 		embody_path = self.embody.path
 		for comp_path, _ in comps:
 			self.assertNotEqual(comp_path, embody_path,
-				'Embody itself should be excluded from TDN strategy comps')
+				'Embody itself should be excluded from TDXN strategy comps')
 
 	def test_L02_embody_ancestor_excluded(self):
 		"""Embody's ancestor should also be excluded."""
-		comps = self.embody_ext._getTDNStrategyComps()
+		comps = self.embody_ext._getTDXNStrategyComps()
 		embody_path = self.embody.path
 		for comp_path, _ in comps:
 			self.assertFalse(
@@ -2673,7 +2673,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	#   -> TD saves .toe -> onProjectPostSave -> restore -> Refresh
 	#   -> checkOpsForContinuity()
 	#
-	# These tests exist because the TDN round-trip tests (sections A-K)
+	# These tests exist because the TDXN round-trip tests (sections A-K)
 	# all passed while a critical bug destroyed externalized files on
 	# every save. The round-trip tests operate in an isolated sandbox
 	# and never exercise the externalizations table, continuity check,
@@ -2703,35 +2703,35 @@ class TestTDNReconstruction(EmbodyTestCase):
 					return True
 		return False
 
-	# --- P1-P3: _getTDNStrategyComps filtering ---
+	# --- P1-P3: _getTDXNStrategyComps filtering ---
 
 	def test_P01_embody_descendants_excluded_from_strip(self):
-		"""Embody descendants must be excluded from _getTDNStrategyComps.
+		"""Embody descendants must be excluded from _getTDXNStrategyComps.
 
 		This is the exact bug that caused ctrl-s to delete help/text_help:
-		/embody/Embody/help was a TDN COMP inside Embody, and the filter
+		/embody/Embody/help was a TDXN COMP inside Embody, and the filter
 		only excluded Embody itself and ancestors, not descendants.
 		"""
-		comps = self.embody_ext._getTDNStrategyComps()
+		comps = self.embody_ext._getTDXNStrategyComps()
 		embody_path = self.embody.path
 		for comp_path, _ in comps:
 			self.assertFalse(
 				comp_path.startswith(embody_path + '/'),
-				f'Embody descendant {comp_path} must be excluded from TDN stripping')
+				f'Embody descendant {comp_path} must be excluded from TDXN stripping')
 
 	def test_P02_external_tdn_comps_still_included(self):
-		"""TDN COMPs outside Embody should still be returned for stripping."""
-		# Create a TDN COMP outside Embody and register it
+		"""TDXN COMPs outside Embody should still be returned for stripping."""
+		# Create a TDXN COMP outside Embody and register it
 		tdn_comp = self.sandbox.create(baseCOMP, 'tdn_test_comp')
 		tdn_comp.create(noiseTOP, 'child1')
 		tdn_path = tdn_comp.path
 		rel_path = f'embody/{tdn_comp.name}.tdn'
 		self._addTableRow(tdn_path, 'base', 'tdn', rel_path)
 		try:
-			comps = self.embody_ext._getTDNStrategyComps()
+			comps = self.embody_ext._getTDXNStrategyComps()
 			found = any(cp == tdn_path for cp, _ in comps)
 			self.assertTrue(found,
-				f'{tdn_path} should be included in TDN strategy comps')
+				f'{tdn_path} should be included in TDXN strategy comps')
 		finally:
 			self._removeTableRow(tdn_path, 'tdn')
 
@@ -2740,23 +2740,23 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		Regression guard for the specific COMP that was destroyed.
 		"""
-		comps = self.embody_ext._getTDNStrategyComps()
+		comps = self.embody_ext._getTDXNStrategyComps()
 		help_path = self.embody.path + '/help'
 		for comp_path, _ in comps:
 			self.assertNotEqual(comp_path, help_path,
 				f'{help_path} must never be stripped')
 
-	# --- P4-P6: checkOpsForContinuity skips TDN children ---
+	# --- P4-P6: checkOpsForContinuity skips TDXN children ---
 
 	def test_P04_continuity_check_skips_pure_tdn_children(self):
-		"""checkOpsForContinuity must skip TDN-managed children (no own strategy).
+		"""checkOpsForContinuity must skip TDXN-managed children (no own strategy).
 
-		Operators inside TDN COMPs that don't have their own externalization
-		strategy are purely managed by TDN import/export. The continuity check
+		Operators inside TDXN COMPs that don't have their own externalization
+		strategy are purely managed by TDXN import/export. The continuity check
 		must skip them to prevent false deletions during the strip/restore
 		save cycle.
 		"""
-		# Create a TDN COMP and a child DAT in the sandbox
+		# Create a TDXN COMP and a child DAT in the sandbox
 		tdn_comp = self.sandbox.create(baseCOMP, 'tdn_parent')
 		child_dat = tdn_comp.create(textDAT, 'tracked_child')
 		child_dat.text = 'important content'
@@ -2766,7 +2766,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_rel = f'embody/{tdn_comp.name}.tdn'
 		child_rel = f'embody/{tdn_comp.name}/tracked_child.txt'
 
-		# Register both - child has EMPTY strategy (purely TDN-managed)
+		# Register both - child has EMPTY strategy (purely TDXN-managed)
 		self._addTableRow(tdn_path, 'base', 'tdn', tdn_rel)
 		self._addTableRow(child_path, 'text', '', child_rel)
 
@@ -2781,13 +2781,13 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# The child's row must still exist (no own strategy -> skipped)
 			self.assertTrue(self._tableHasRow(child_path),
-				'Continuity check must NOT remove pure TDN-managed children')
+				'Continuity check must NOT remove pure TDXN-managed children')
 		finally:
 			self._removeTableRow(child_path)
 			self._removeTableRow(tdn_path, 'tdn')
 
 	def test_P04b_continuity_detects_deleted_individually_externalized_child(self):
-		"""Individually-externalized children inside TDN COMPs must be checked.
+		"""Individually-externalized children inside TDXN COMPs must be checked.
 
 		When a child has its own strategy (py, tsv, etc.), it was explicitly
 		externalized and should go through normal continuity checking -
@@ -2822,10 +2822,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self._removeTableRow(tdn_path, 'tdn')
 
 	def test_P05_continuity_check_still_catches_real_missing_ops(self):
-		"""Operators NOT inside TDN COMPs should still be caught as missing."""
-		# Use a top-level fake path that cannot be a child of any TDN-strategy
+		"""Operators NOT inside TDXN COMPs should still be caught as missing."""
+		# Use a top-level fake path that cannot be a child of any TDXN-strategy
 		# COMP regardless of what other tests have run. Paths under /embody or
-		# /embody/Embody can become TDN children after z03 runs its TDN
+		# /embody/Embody can become TDXN children after z03 runs its TDXN
 		# externalization; a root-level path is always safe.
 		orphan_path = '/__test_orphan_dat_continuity_p05'
 		orphan_rel = 'embody/orphan_dat.txt'
@@ -2848,7 +2848,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self._removeTableRow(orphan_path)
 
 	def test_P06_nested_pure_tdn_children_also_skipped(self):
-		"""Deeply nested TDN-managed children (no own strategy) should be skipped."""
+		"""Deeply nested TDXN-managed children (no own strategy) should be skipped."""
 		tdn_comp = self.sandbox.create(baseCOMP, 'deep_tdn')
 		inner = tdn_comp.create(baseCOMP, 'inner')
 		deep_dat = inner.create(textDAT, 'deep_tracked')
@@ -2868,7 +2868,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				self.embody_ext.externalizationsFolder)
 
 			self.assertTrue(self._tableHasRow(deep_path),
-				'Deeply nested pure TDN-managed children must be skipped')
+				'Deeply nested pure TDXN-managed children must be skipped')
 		finally:
 			self._removeTableRow(deep_path)
 			self._removeTableRow(tdn_path, 'tdn')
@@ -2877,14 +2877,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_P07_strip_restore_preserves_children(self):
 		"""Full strip -> export -> restore cycle preserves all children."""
-		# Build a TDN COMP with content
+		# Build a TDXN COMP with content
 		tdn_comp = self.sandbox.create(baseCOMP, 'save_cycle_comp')
 		tdn_comp.create(noiseTOP, 'noise1')
 		d = tdn_comp.create(textDAT, 'script1')
 		d.text = 'preserved content'
 		tdn_comp.create(baseCOMP, 'inner').create(waveCHOP, 'wave1')
 
-		# Export to TDN (like Update does before strip)
+		# Export to TDXN (like Update does before strip)
 		export_result = self.tdn.ExportNetwork(
 			root_path=tdn_comp.path, include_dat_content=True)
 		self.assertTrue(export_result.get('success'))
@@ -2911,10 +2911,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		This is the exact sequence that ctrl-s triggers. Tests the complete
 		chain including table entries and the continuity check.
-		Uses empty strategy (pure TDN-managed child) since the TDN child skip
+		Uses empty strategy (pure TDXN-managed child) since the TDXN child skip
 		only applies to children without their own externalization strategy.
 		"""
-		# Create TDN COMP with a tracked child
+		# Create TDXN COMP with a tracked child
 		tdn_comp = self.sandbox.create(baseCOMP, 'full_cycle')
 		child = tdn_comp.create(textDAT, 'tracked_dat')
 		child.text = 'must survive'
@@ -2922,7 +2922,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_path = tdn_comp.path
 		child_path = child.path
 
-		# Register in table - empty strategy (TDN-managed child)
+		# Register in table - empty strategy (TDXN-managed child)
 		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdn_comp.name}.tdn')
 		self._addTableRow(child_path, 'text', '',
 			f'embody/{tdn_comp.name}/tracked_dat.txt')
@@ -2949,7 +2949,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# Verify: table entry must survive
 			self.assertTrue(self._tableHasRow(child_path),
-				'Table entry for TDN child must survive full save cycle')
+				'Table entry for TDXN child must survive full save cycle')
 
 			# Verify: operator must be restored
 			restored = tdn_comp.op('tracked_dat')
@@ -2969,11 +2969,11 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.fail(f'Update(suppress_refresh=True) raised: {e}')
 
 	def test_P10_continuity_check_during_strip_window(self):
-		"""Continuity check DURING strip (before restore) must not delete TDN-managed children.
+		"""Continuity check DURING strip (before restore) must not delete TDXN-managed children.
 
 		This is the worst-case scenario: the refresh fires between
-		strip and restore. The TDN child skip protects children without
-		their own externalization strategy (pure TDN-managed).
+		strip and restore. The TDXN child skip protects children without
+		their own externalization strategy (pure TDXN-managed).
 		Individually-externalized children are protected by suppress_refresh.
 		"""
 		tdn_comp = self.sandbox.create(baseCOMP, 'mid_strip')
@@ -2983,7 +2983,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_path = tdn_comp.path
 		child_path = child.path
 
-		# Empty strategy = pure TDN-managed child (protected by skip)
+		# Empty strategy = pure TDXN-managed child (protected by skip)
 		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdn_comp.name}.tdn')
 		self._addTableRow(child_path, 'text', '',
 			f'embody/{tdn_comp.name}/victim.txt')
@@ -3247,7 +3247,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 
 	def test_S01_export_excludes_embody_about(self):
-		"""Embody-managed About page (Build/Date/Touchbuild) is excluded from TDN export."""
+		"""Embody-managed About page (Build/Date/Touchbuild) is excluded from TDXN export."""
 		c = self.sandbox.create(baseCOMP, 'c1')
 		page = c.appendCustomPage('About')
 		pg = page.appendInt('Build', label='Build Number')
@@ -3335,7 +3335,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Verify torus1 is in the export (it has non-default params)
 		op_names = [o['name'] for o in tdn['operators']]
 		self.assertIn('torus1', op_names,
-			'Customized torus1 should be in TDN export')
+			'Customized torus1 should be in TDXN export')
 
 		# Clear and reimport
 		result = self.tdn.ImportNetwork(
@@ -3408,7 +3408,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		# Verify root-level parameters captured
 		self.assertIn('parameters', tdn,
-			'Geo COMP non-default built-in params should be in TDN')
+			'Geo COMP non-default built-in params should be in TDXN')
 		self.assertIn('tx', tdn['parameters'])
 
 		# Reset and reimport
@@ -3453,7 +3453,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertAlmostEqual(float(geo.par.tx.eval()), 5.0, places=3,
 			msg='Root params should survive strip')
 
-		# Simulate post-save: reimport from TDN
+		# Simulate post-save: reimport from TDXN
 		result = self.tdn.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'),
@@ -3529,7 +3529,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Verify material param is in the export
 		self.assertIn('parameters', tdn)
 		self.assertEqual(tdn['parameters'].get('material'), './my_mat',
-			'material reference should be in TDN export')
+			'material reference should be in TDXN export')
 
 		# Clear and reimport
 		result = self.tdn.ImportNetwork(
@@ -3638,7 +3638,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
-		# Verify tz is in the exported TDN
+		# Verify tz is in the exported TDXN
 		cam_def = next(
 			(o for o in tdn['operators'] if o['name'] == 'cam_tz0'), None)
 		self.assertIsNotNone(cam_def, 'cam_tz0 should be in export')
@@ -3728,16 +3728,16 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'tz at creation default (5) should NOT be exported')
 
 	# =================================================================
-	# Section U: Nested TDN child-skip logic
+	# Section U: Nested TDXN child-skip logic
 	# =================================================================
-	# When a parent TDN contains children for a child COMP that has its
-	# own TDN externalization entry, the child's children array must be
+	# When a parent TDXN contains children for a child COMP that has its
+	# own TDXN externalization entry, the child's children array must be
 	# skipped during import. The child's own .tdn file is the source of
 	# truth.
 	# =================================================================
 
 	def test_U01_nested_tdn_children_skipped(self):
-		"""Import skips children of child COMPs that have their own TDN entry."""
+		"""Import skips children of child COMPs that have their own TDXN entry."""
 		parent = self.sandbox.create(baseCOMP, 'parent_u01')
 		child = parent.create(baseCOMP, 'child_inner')
 		child.create(nullTOP, 'stale_op')
@@ -3748,17 +3748,17 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		parent_tdn = orig['tdn']
 
-		# Verify the parent TDN contains the nested child and its children
+		# Verify the parent TDXN contains the nested child and its children
 		child_def = None
 		for od in parent_tdn['operators']:
 			if od.get('name') == 'child_inner':
 				child_def = od
 				break
-		self.assertIsNotNone(child_def, 'child_inner must be in parent TDN')
+		self.assertIsNotNone(child_def, 'child_inner must be in parent TDXN')
 		self.assertTrue(len(child_def.get('children', [])) > 0,
-			'child_inner must have children in parent TDN')
+			'child_inner must have children in parent TDXN')
 
-		# Add child COMP to externalizations table as TDN strategy
+		# Add child COMP to externalizations table as TDXN strategy
 		child_path = child.path
 		self._addTableRow(child_path, 'base', 'tdn', 'dummy/child_inner.tdn')
 
@@ -3776,15 +3776,15 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.assertIsNotNone(restored_child,
 				'child COMP shell must be created')
 
-			# But its children should NOT have been imported from the parent TDN
+			# But its children should NOT have been imported from the parent TDXN
 			self.assertEqual(len(restored_child.children), 0,
-				'child COMP children must be skipped - its own TDN is '
+				'child COMP children must be skipped - its own TDXN is '
 				'source of truth')
 		finally:
 			self._removeTableRow(child_path)
 
 	def test_U02_non_tdn_children_imported_normally(self):
-		"""Import includes children of child COMPs without their own TDN entry."""
+		"""Import includes children of child COMPs without their own TDXN entry."""
 		parent = self.sandbox.create(baseCOMP, 'parent_u02')
 		child = parent.create(baseCOMP, 'child_normal')
 		child.create(nullTOP, 'normal_op')
@@ -3794,7 +3794,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		parent_tdn = orig['tdn']
 
-		# No TDN entry for child - children should be imported normally
+		# No TDXN entry for child - children should be imported normally
 		for c in list(parent.children):
 			c.destroy()
 
@@ -3805,10 +3805,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 		restored_child = parent.op('child_normal')
 		self.assertIsNotNone(restored_child)
 		self.assertIsNotNone(restored_child.op('normal_op'),
-			'Children of non-TDN COMPs must be imported normally')
+			'Children of non-TDXN COMPs must be imported normally')
 
 	def test_U03_depth_sorting_in_getTDNStrategyComps(self):
-		"""_getTDNStrategyComps returns entries sorted by path depth (parents first)."""
+		"""_getTDXNStrategyComps returns entries sorted by path depth (parents first)."""
 		# Add entries at different depths
 		paths = [
 			('/project/a/b/c', 'base', 'tdn', 'p/a/b/c.tdn'),
@@ -3819,7 +3819,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self._addTableRow(*p)
 
 		try:
-			result = self.embody_ext._getTDNStrategyComps()
+			result = self.embody_ext._getTDXNStrategyComps()
 			tdn_paths = [r[0] for r in result]
 
 			# Filter to just our test paths
@@ -3836,7 +3836,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				self._removeTableRow(p[0])
 
 	def test_U04_deeply_nested_skip(self):
-		"""Skip logic works for deeply nested TDN COMPs (grandchild)."""
+		"""Skip logic works for deeply nested TDXN COMPs (grandchild)."""
 		grandparent = self.sandbox.create(baseCOMP, 'gp_u04')
 		parent_comp = grandparent.create(baseCOMP, 'parent_comp')
 		child_comp = parent_comp.create(baseCOMP, 'child_comp')
@@ -3847,7 +3847,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		gp_tdn = orig['tdn']
 
-		# Only the deepest child has its own TDN entry
+		# Only the deepest child has its own TDXN entry
 		child_path = child_comp.path
 		self._addTableRow(child_path, 'base', 'tdn', 'dummy/child_comp.tdn')
 
@@ -3859,7 +3859,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				target_path=grandparent.path, tdn=gp_tdn, clear_first=False)
 			self.assertTrue(result.get('success'))
 
-			# parent_comp should have its children (it has no TDN entry)
+			# parent_comp should have its children (it has no TDXN entry)
 			restored_parent = grandparent.op('parent_comp')
 			self.assertIsNotNone(restored_parent)
 
@@ -3868,7 +3868,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.assertIsNotNone(restored_child,
 				'child COMP shell must exist')
 			self.assertEqual(len(restored_child.children), 0,
-				'Deeply nested TDN COMP children must be skipped')
+				'Deeply nested TDXN COMP children must be skipped')
 		finally:
 			self._removeTableRow(child_path)
 
@@ -3877,7 +3877,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 	# Native widget COMPs (buttonCOMP, sliderCOMP) clone from
 	# /sys/TDTox/defaultCOMPs/. As of v5.0.x they are NOT treated as
-	# palette clones at the TDN export layer (palette_clone flag is
+	# palette clones at the TDXN export layer (palette_clone flag is
 	# reserved for true user palette clones from /sys/TDBasicWidgets
 	# and similar). Native widgets export as regular COMPs with full
 	# children + the clone reference parameter, so user customizations
@@ -4007,7 +4007,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'should be omitted by the default-skipping export')
 
 	def test_V08_old_tdn_clone_params_skipped_on_import(self):
-		"""Old TDN files with clone/enablecloning params don't overwrite auto-set values."""
+		"""Old TDXN files with clone/enablecloning params don't overwrite auto-set values."""
 		crafted_tdn = {
 			'format': 'tdn',
 			'version': '1.1',
@@ -4467,7 +4467,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		Creates one of each companion-creating operator type in a single
 		network, round-trips, and verifies no duplicate companion DATs
-		accumulated. This mirrors the real-world scenario where a TDN
+		accumulated. This mirrors the real-world scenario where a TDXN
 		COMP contains multiple GLSL/script operators.
 		"""
 		created = []
@@ -4530,7 +4530,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 
 	def test_unchanged_export_leaves_the_timestamp_cell_alone(self):
-		"""v6.1.7 stopped rewriting an unchanged .tdn, but saveTDN and
+		"""v6.1.7 stopped rewriting an unchanged .tdn, but saveTDXN and
 		checkpoint still stamped the row's timestamp on the skipped write --
 		so every Refresh left externalizations.tsv with a one-line diff
 		(field 2026-08-29). The column records when the FILE changed.
@@ -4549,25 +4549,25 @@ class TestTDNReconstruction(EmbodyTestCase):
 			return real(row_key, changes, strategy)
 		ext._updateRowCells = spy
 		try:
-			# Tagging performs the first export itself, so the saveTDN
+			# Tagging performs the first export itself, so the saveTDXN
 			# right after it is already a no-op.
 			ext.applyTagToOperator(comp, tdn_tag)
 			del stamped[:]
-			self.assertTrue(ext.saveTDN(comp.path, allow_empty=True))
+			self.assertTrue(ext.saveTDXN(comp.path, allow_empty=True))
 			self.assertNotIn(True, stamped,
-				'an unchanged saveTDN must not restamp the row')
+				'an unchanged saveTDXN must not restamp the row')
 			del stamped[:]
 			self.assertTrue(ext.checkpoint(comp.path))
 			self.assertNotIn(True, stamped,
 				'an unchanged checkpoint must not restamp the row')
 			del stamped[:]
 			comp.create(levelTOP, 'extra')
-			self.assertTrue(ext.saveTDN(comp.path, allow_empty=True))
+			self.assertTrue(ext.saveTDXN(comp.path, allow_empty=True))
 			self.assertIn(True, stamped, 'a REAL change must still stamp the row')
 		finally:
 			if ext.__dict__.get('_updateRowCells') is spy:
 				del ext.__dict__['_updateRowCells']
-			ext.removeTDNEntry(comp.path, delete_file=True)
+			ext.removeTDXNEntry(comp.path, delete_file=True)
 
 	def test_runner_forced_pars_are_transient_for_export(self):
 		"""RunTests forces Filecleanup='delete' / Toxdropexpr='ignore', and

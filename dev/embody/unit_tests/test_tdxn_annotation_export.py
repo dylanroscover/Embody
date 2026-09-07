@@ -1,5 +1,5 @@
 """
-TDN annotation export + build-header tests.
+TDXN annotation export + build-header tests.
 
 Covers two format fixes:
 
@@ -23,7 +23,7 @@ except (AttributeError, NameError):
     pass
 
 
-class TestTDNAnnotationExport(EmbodyTestCase):
+class TestTDXNAnnotationExport(EmbodyTestCase):
 
     @property
     def tdn_ext(self):

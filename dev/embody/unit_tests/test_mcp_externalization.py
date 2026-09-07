@@ -82,7 +82,7 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
-    # --- TDN strategy round-trip (ghost-row regression, 2026-07-24) ---
+    # --- TDXN strategy round-trip (ghost-row regression, 2026-07-24) ---
 
     def _deleteExportedFile(self, rel_path):
         """Best-effort disk cleanup for a file the test exported."""
@@ -100,7 +100,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """REGRESSION: tag_type='tdn' must report the .tdn file.
 
         The old handler read par.externaltox for every COMP, reporting a
-        bogus .tox filename for TDN-strategy externalizations.
+        bogus .tox filename for TDXN-strategy externalizations.
         """
         comp = self.sandbox.create(baseCOMP, 'tdn_file_report')
         result = self.envoy._externalize_op(op_path=comp.path, tag_type='tdn')
@@ -113,15 +113,15 @@ class TestMCPExternalization(EmbodyTestCase):
         self.assertTrue(reported.endswith('.tdxn'),
             f"tdn externalization must report a .tdxn file, got {reported!r}")
         self.assertFalse(reported.endswith('.tox'),
-            f'must not report a .tox for a TDN externalization: {reported!r}')
+            f'must not report a .tox for a TDXN externalization: {reported!r}')
         self.envoy._remove_externalization_tag(op_path=comp.path)
         self._deleteExportedFile(reported)
 
     def test_remove_externalization_tag_tdn_prunes_row(self):
-        """REGRESSION: TDN untag must remove the table row + breadcrumb.
+        """REGRESSION: TDXN untag must remove the table row + breadcrumb.
 
-        The Update sweep deliberately excludes TDN comps from subtraction
-        detection (their lifecycle belongs to RemoveTDNEntry), so the old
+        The Update sweep deliberately excludes TDXN comps from subtraction
+        detection (their lifecycle belongs to RemoveTDXNEntry), so the old
         raw tag-strip + Update() path left a ghost row that Refresh kept
         resurrecting (found live 2026-07-24).
         """
@@ -139,13 +139,13 @@ class TestMCPExternalization(EmbodyTestCase):
         self.assertIn(tdn_tag, result.get('removed_tags', []))
 
         self.assertNotIn(tdn_tag, comp.tags,
-            'TDN untag must strip the tag')
+            'TDXN untag must strip the tag')
         rows = [self.embody_ext.Externalizations[i, 'path'].val
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
         self.assertNotIn(comp.path, rows,
-            'TDN untag must delete the tracking row (ghost-row regression)')
+            'TDXN untag must delete the tracking row (ghost-row regression)')
         self.assertIsNone(comp.fetch('_tdn_rel_path', None, search=False),
-            'TDN untag must clear the _tdn_rel_path breadcrumb')
+            'TDXN untag must clear the _tdn_rel_path breadcrumb')
         self._deleteExportedFile(ext_result.get('file'))
 
     # --- DAT auto-detection ---

@@ -248,20 +248,20 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
             ext_class.Update = original_update
 
     def test_onProjectPreSave_contains_arbitrary_exception_in_pipeline(self):
-        # Simulate a failure inside the TDN export phase, not Update itself.
+        # Simulate a failure inside the TDXN export phase, not Update itself.
         # The whole pipeline is wrapped - any exception below the Perform
         # Mode early-return must be contained.
         execute_mod = op('/embody/Embody/execute').module
         ext_class = type(self.embody_ext)
-        original = ext_class._getTDNStrategyComps
+        original = ext_class._getTDXNStrategyComps
 
         def boom(self):
             raise RuntimeError("simulated mid-pipeline crash")
-        ext_class._getTDNStrategyComps = boom
+        ext_class._getTDXNStrategyComps = boom
         try:
             execute_mod.onProjectPreSave()
         finally:
-            ext_class._getTDNStrategyComps = original
+            ext_class._getTDXNStrategyComps = original
 
     def test_strip_loop_pre_stages_stripped_paths_before_crashing(self):
         # Round-2 Agent 5 / Round-3 stress test: when StripCompChildren raises
@@ -288,13 +288,13 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         orig_tdnmode = embody.par.Tdxnmode.eval()
         orig_strip_on_save = bool(embody.par.Tdxnstriponsave.eval())
         orig_update = ext_class.Update
-        orig_get_tdn = ext_class._getTDNStrategyComps
-        orig_safety = ext_class._checkTDNContentSafety
+        orig_get_tdn = ext_class._getTDXNStrategyComps
+        orig_safety = ext_class._checkTDXNContentSafety
         orig_export = tdn_class.ExportNetwork
         orig_read = tdn_class.__dict__['_read_existing_tdn']  # staticmethod descriptor
         orig_strip = ext_class.stripCompChildren
 
-        # Fake fixtures: pretend 3 TDN COMPs exist and were exported
+        # Fake fixtures: pretend 3 TDXN COMPs exist and were exported
         fake_tdn_comps = [
             ('/__test_issue21_pre_stage/c0', 'fake/c0.tdn'),
             ('/__test_issue21_pre_stage/c1', 'fake/c1.tdn'),
@@ -317,8 +317,8 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         embody.par.Tdxnmode = 'full'
         embody.par.Tdxnstriponsave = True
         ext_class.Update = lambda self_, suppress_refresh=False: None
-        ext_class._getTDNStrategyComps = lambda self_: list(fake_tdn_comps)
-        ext_class._checkTDNContentSafety = lambda self_: None
+        ext_class._getTDXNStrategyComps = lambda self_: list(fake_tdn_comps)
+        ext_class._checkTDXNContentSafety = lambda self_: None
         ext_class.stripCompChildren = crashing_strip
         # Make every "comp exists" check return a stub object that has a path
         # and findChildren so the export loop accepts them. Easiest hack: skip
@@ -374,8 +374,8 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         finally:
             # Restore everything
             ext_class.Update = orig_update
-            ext_class._getTDNStrategyComps = orig_get_tdn
-            ext_class._checkTDNContentSafety = orig_safety
+            ext_class._getTDXNStrategyComps = orig_get_tdn
+            ext_class._checkTDXNContentSafety = orig_safety
             ext_class.stripCompChildren = orig_strip
             tdn_class.ExportNetwork = orig_export
             tdn_class._read_existing_tdn = orig_read

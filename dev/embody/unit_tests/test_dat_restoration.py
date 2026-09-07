@@ -22,8 +22,8 @@ class TestDATRestoration(EmbodyTestCase):
     def setUp(self):
         self._test_dir = Path(project.folder) / 'embody' / 'unit_tests' / '_test_temp'
         self._test_dir.mkdir(parents=True, exist_ok=True)
-        # Create a root-level sandbox outside all TDN/TOX COMPs.
-        # The normal sandbox is inside /embody/unit_tests (a TDN COMP),
+        # Create a root-level sandbox outside all TDXN/TOX COMPs.
+        # The normal sandbox is inside /embody/unit_tests (a TDXN COMP),
         # so _getDATEntries() correctly filters it. Restoration tests
         # need a parent that's NOT inside any managed COMP.
         self._root_sandbox = op('/').create(baseCOMP, '_test_dat_restore')
@@ -192,7 +192,7 @@ class TestDATRestoration(EmbodyTestCase):
                          'DATs inside TOX COMPs should be excluded')
 
     def test_restore_skips_dat_inside_tdn_comp(self):
-        """DATs inside a TDN-strategy COMP should be excluded."""
+        """DATs inside a TDXN-strategy COMP should be excluded."""
         comp_path = self._root_sandbox.path + '/tdn_parent'
         self._add_table_entry(comp_path, 'container', 'tdn',
                               'embody/unit_tests/_test_temp/tdn_parent.tdn')
@@ -205,7 +205,7 @@ class TestDATRestoration(EmbodyTestCase):
         entries = self.embody_ext._getDATEntries()
         paths = [e[0] for e in entries]
         self.assertNotIn(dat_path, paths,
-                         'DATs inside TDN COMPs should be excluded')
+                         'DATs inside TDXN COMPs should be excluded')
 
     def test_restore_skips_when_parent_missing(self):
         """DAT whose parent doesn't exist should be skipped gracefully."""
@@ -290,7 +290,7 @@ class TestTOXRestoration(EmbodyTestCase):
         self._test_dir = (Path(project.folder) / 'embody' / 'unit_tests'
                           / '_test_temp')
         self._test_dir.mkdir(parents=True, exist_ok=True)
-        # Root-level sandbox outside all TDN/TOX COMPs (see
+        # Root-level sandbox outside all TDXN/TOX COMPs (see
         # TestDATRestoration.setUp for why).
         self._root_sandbox = op('/').create(baseCOMP, '_test_tox_restore')
         self._added_paths = []

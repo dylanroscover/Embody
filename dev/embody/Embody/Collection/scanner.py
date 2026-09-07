@@ -1,7 +1,7 @@
-"""Pure Python TDN capability scanner for Embody.
+"""Pure Python TDXN capability scanner for Embody.
 
 This module intentionally imports no TouchDesigner modules. It accepts a parsed
-TDN dict and returns the frozen C2 CapabilityJson shape from contracts.py.
+TDXN dict and returns the frozen C2 CapabilityJson shape from contracts.py.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def empty_capability_counts() -> dict:
 
 
 
-MAX_SERIALIZED_TDN_BYTES = 5 * 1024 * 1024
+MAX_SERIALIZED_TDXN_BYTES = 5 * 1024 * 1024
 MAX_OPERATORS = 50000
 MAX_AST_DEPTH = 80
 MAX_AST_NODES = 10000
@@ -165,7 +165,7 @@ class _AstScanResult:
 
 
 def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
-    """Return a C2 CapabilityJson dict for a parsed TDN payload."""
+    """Return a C2 CapabilityJson dict for a parsed TDXN payload."""
     counts = empty_capability_counts()
     findings = []
 
@@ -175,18 +175,18 @@ def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
             _finding(
                 "/",
                 "storage_payloads",
-                "TDN could not be serialized safely for scanner bounds",
+                "TDXN could not be serialized safely for scanner bounds",
                 "serialization failed",
             )
         )
         return _capability(scanner_version, "blocked", counts, findings)
 
-    if serialized_size > MAX_SERIALIZED_TDN_BYTES:
+    if serialized_size > MAX_SERIALIZED_TDXN_BYTES:
         findings.append(
             _finding(
                 "/",
                 "storage_payloads",
-                "Serialized TDN exceeds 5 MB scanner bound",
+                "Serialized TDXN exceeds 5 MB scanner bound",
                 "%d bytes" % serialized_size,
             )
         )
@@ -198,7 +198,7 @@ def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
             _finding(
                 "/",
                 "denylisted_types",
-                "TDN operator count exceeds scanner bound",
+                "TDXN operator count exceeds scanner bound",
                 "%d operators" % op_count,
             )
         )

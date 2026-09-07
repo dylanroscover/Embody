@@ -1,7 +1,7 @@
-"""Default-inert TDN import transform.
+"""Default-inert TDXN import transform.
 
 This module is intentionally headless: it imports no TouchDesigner modules and
-operates only on parsed TDN dictionaries.
+operates only on parsed TDXN dictionaries.
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ SCRIPT_OP_TYPES = {
     "scriptsop",
 }
 
-# Out-of-band references the importer would otherwise restore (TOX/TDN shells).
+# Out-of-band references the importer would otherwise restore (TOX/TDXN shells).
 # Their content cannot be scanned inline, so for community paste they are removed.
 EXTERNAL_REF_KEYS = ("tox_ref", "tdn_ref")
 
@@ -269,7 +269,7 @@ STRING_PARAM_PARTS = (
 
 
 def make_inert(tdn: dict, is_pure_expr=None) -> tuple[dict, dict]:
-    """Return a deep-copied TDN dict with auto-executable surfaces disabled.
+    """Return a deep-copied TDXN dict with auto-executable surfaces disabled.
 
     is_pure_expr: optional predicate(source)->bool. When given (CollectionExt injects
     scanner.is_pure_value_expression), a parameter expression that is a PROVABLY PURE
@@ -354,7 +354,7 @@ def strip_global_shortcuts(tdn: dict) -> tuple[dict, dict]:
 
 
 def plan_community_paste(tdn: dict, scan_tdn, is_pure_expr) -> dict:
-    """The import plan for a community TDN: live if scanned clean, else inert.
+    """The import plan for a community TDXN: live if scanned clean, else inert.
 
     Pure so it can be tested without TouchDesigner; CollectionExt delegates
     here. Global shortcuts are stripped on BOTH paths (see
@@ -373,7 +373,7 @@ def plan_community_paste(tdn: dict, scan_tdn, is_pure_expr) -> dict:
 
 
 def is_inert(tdn: dict, is_pure_expr=None) -> bool:
-    """Return True iff the TDN contains no known live executable surface.
+    """Return True iff the TDXN contains no known live executable surface.
 
     is_pure_expr: same predicate make_inert takes. When given, provably-pure value
     expressions do NOT count as a live surface (they are preserved by make_inert),

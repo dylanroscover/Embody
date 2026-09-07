@@ -425,7 +425,7 @@ def ago_text(seconds):
 
 
 def autosave_step(status, now_seconds=None, now_dt=None):
-    """TDN auto-save. 'Saved <time>' is the healthy resting state.
+    """TDXN auto-save. 'Saved <time>' is the healthy resting state.
 
     The saved TIME is converted to an AGE, because the age is the whole
     question -- how long ago did the work reach disk. A bare clock wraps

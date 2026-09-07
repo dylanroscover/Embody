@@ -138,7 +138,7 @@ class TestDialogSuppression(EmbodyTestCase):
 
     # ----- The misleading-"[test]"-on-save regression --------------------
     # A save suppressed the dialog AND mislabeled it as a test context, so
-    # every Ctrl+S logged '[test] No response seeded for "TDN Content at
+    # every Ctrl+S logged '[test] No response seeded for "TDXN Content at
     # Risk" ...'. The fix splits the test gate from the save gate: a save
     # returns the safe default QUIETLY (DEBUG), only a real run still warns.
 

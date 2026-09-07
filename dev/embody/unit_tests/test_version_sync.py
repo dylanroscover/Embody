@@ -91,7 +91,7 @@ class TestVersionSync(EmbodyTestCase):
         actually shipping.
 
         A single project.save fires onProjectPreSave on two Execute DATs.
-        The Embody COMP's own DAT exports every dirty TDN row FIRST,
+        The Embody COMP's own DAT exports every dirty TDXN row FIRST,
         reading par.Version as it stands; only then does
         /embody/execute_src_ctrl bump it and bake the .tox. So every
         release shipped a .tdn one version behind its own .tox --
@@ -116,15 +116,15 @@ class TestVersionSync(EmbodyTestCase):
         self.assertIsNotNone(dat, 'the build/release Execute DAT is missing')
         self.assertTrue(
             bool(dat.par.projectpostsave.eval()),
-            'projectpostsave is off, so syncVersionIntoTDN never fires')
-        self.assertTrue(hasattr(dat.module, 'syncVersionIntoTDN'))
+            'projectpostsave is off, so syncVersionIntoTDXN never fires')
+        self.assertTrue(hasattr(dat.module, 'syncVersionIntoTDXN'))
 
     def test_the_version_sync_selects_only_embody_covering_tdn_rows(self):
         """It must re-export the rows that CONTAIN the Embody COMP, and
         never '/' -- re-exporting the whole project root on every save
         would be a far larger write than this warrants.
 
-        Drives the REAL syncVersionIntoTDN and records what it asks to be
+        Drives the REAL syncVersionIntoTDXN and records what it asks to be
         written. Re-implementing the row filter here instead would pass
         even if the function were deleted, which is what it used to do.
         """
@@ -136,13 +136,13 @@ class TestVersionSync(EmbodyTestCase):
         # skip cannot fire: the live .tdn files are already stamped with the
         # current version, so every row would otherwise be skipped and this
         # would assert on an empty list.
-        ext.saveTDN = lambda path, bump_build=True: calls.append(
+        ext.saveTDXN = lambda path, bump_build=True: calls.append(
             (path, bump_build))
         ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
         try:
-            op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
+            op('/embody/execute_src_ctrl').module.syncVersionIntoTDXN()
         finally:
-            del ext.saveTDN
+            del ext.saveTDXN
             del ext.buildAbsolutePath
         picked = [path for path, _bump in calls]
         self.assertIn(embody_path, picked,
@@ -159,13 +159,13 @@ class TestVersionSync(EmbodyTestCase):
         same drift, one size smaller."""
         ext = self.embody_ext
         calls = []
-        ext.saveTDN = lambda path, bump_build=True: calls.append(
+        ext.saveTDXN = lambda path, bump_build=True: calls.append(
             (path, bump_build))
         ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
         try:
-            op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
+            op('/embody/execute_src_ctrl').module.syncVersionIntoTDXN()
         finally:
-            del ext.saveTDN
+            del ext.saveTDXN
             del ext.buildAbsolutePath
         self.assertTrue(calls, 'the sync re-exported nothing to assert on')
         for path, bump in calls:
@@ -192,15 +192,15 @@ class TestVersionSync(EmbodyTestCase):
             # and advances the counter itself, so the starting value is
             # whatever that left behind, not the 5 seeded above.
             base = comp.par.Build.eval()
-            ext.saveTDN(comp.path, bump_build=False)
+            ext.saveTDXN(comp.path, bump_build=False)
             self.assertEqual(comp.par.Build.eval(), base,
                              'bump_build=False still advanced par.Build')
-            ext.saveTDN(comp.path, bump_build=True)
+            ext.saveTDXN(comp.path, bump_build=True)
             self.assertEqual(comp.par.Build.eval(), base + 1,
                              'the default must still bump par.Build')
         finally:
             try:
-                ext._removeTDNStrategy(comp.path, delete_file=True)
+                ext._removeTDXNStrategy(comp.path, delete_file=True)
             except Exception:
                 pass
             if abs_tdn and os.path.isfile(abs_tdn):

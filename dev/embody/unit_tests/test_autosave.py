@@ -6,7 +6,7 @@ Covers the synchronous checkpoint path and its supporting machinery:
 - EmbodyExt.checkpoint() -- frame-cheap synchronous .tdn write + clean mark
 - the touched-boundary recorder (NoteCheckpointTouch walk-up resolution)
 - the idle-settle drain queue (_pending_checkpoint_roots)
-- export-mode missing-only recovery (_recoverMissingTDNComps)
+- export-mode missing-only recovery (_recoverMissingTDXNComps)
 - the checkpoint-relevant mutating set (EnvoyExt)
 - the pre-risky guard
 
@@ -46,7 +46,7 @@ class TestAutosave(EmbodyTestCase):
         tdxn = self.embody.ext.TDXN
         for comp_path, abs_tdn in self._tdn_cleanup:
             try:
-                ext._removeTDNStrategy(comp_path, delete_file=True)
+                ext._removeTDXNStrategy(comp_path, delete_file=True)
             except Exception:
                 pass
             try:
@@ -88,7 +88,7 @@ class TestAutosave(EmbodyTestCase):
         super().tearDown()
 
     def _make_tdn(self, name):
-        """Create + externalize a small TDN COMP in the sandbox; track for cleanup."""
+        """Create + externalize a small TDXN COMP in the sandbox; track for cleanup."""
         ext = self.embody_ext
         comp = self.sandbox.create(baseCOMP, name)
         comp.create(noiseTOP, 'n1')
@@ -100,7 +100,7 @@ class TestAutosave(EmbodyTestCase):
         return comp, abs_tdn
 
     def _make_nested_tdn(self, parent_name, child_name):
-        """A TDN COMP holding a child that is SEPARATELY TDXN-externalized.
+        """A TDXN COMP holding a child that is SEPARATELY TDXN-externalized.
 
         The parent's .tdn carries only a tdn_ref for that child, so the child's
         contents live in the child's own file -- the boundary the fingerprint
@@ -193,12 +193,12 @@ class TestAutosave(EmbodyTestCase):
         # assertion of global cleanliness fails for reasons that have nothing
         # to do with the sweep (observed: 3 unrelated dirty roots).
         ext._pending_checkpoint_roots.clear()
-        ext._queueDirtyTDNRoots()
+        ext._queueDirtyTDXNRoots()
         self.assertNotIn(comp.path, ext._pending_checkpoint_roots,
                          'a freshly externalized (clean) root must NOT be queued')
         comp.op('n1').par.period = 9.0          # now genuinely dirty
         ext._pending_checkpoint_roots.clear()
-        ext._queueDirtyTDNRoots()
+        ext._queueDirtyTDXNRoots()
         self.assertIn(comp.path, ext._pending_checkpoint_roots,
                       'a changed root must be discovered by the sweep')
 
@@ -217,7 +217,7 @@ class TestAutosave(EmbodyTestCase):
         ext._pending_checkpoint_roots.clear()
         ext._COARSE_SWEEP_CAP = 1        # instance shadow; removed below
         try:
-            queued = ext._queueDirtyTDNRoots()
+            queued = ext._queueDirtyTDXNRoots()
         finally:
             del ext._COARSE_SWEEP_CAP    # back to the class attribute
         self.assertLessEqual(queued, 1,
@@ -228,7 +228,7 @@ class TestAutosave(EmbodyTestCase):
     # --- the fingerprint's recursion boundary (must match the exporter) ---
 
     def test_boundary_tags_match_the_exporter(self):
-        """TDXNExt stops the export at _hasTDNTag / _hasTOXTag. If the
+        """TDXNExt stops the export at _hasTDXNTag / _hasTOXTag. If the
         fingerprint's boundary drifts from those tags the two disagree about
         what a .tdn actually holds -- the whole class of bug here."""
         ext = self.embody_ext
@@ -241,7 +241,7 @@ class TestAutosave(EmbodyTestCase):
     def test_fingerprint_boundary_honors_the_tag_not_just_the_path_set(self):
         """The regression this fixes.
 
-        _getTDNStrategyComps deliberately omits Embody, its ancestors and its
+        _getTDXNStrategyComps deliberately omits Embody, its ancestors and its
         descendants -- correct for strip/reconstruct, wrong as a fingerprint
         boundary. Driving the boundary off that path set made a parent re-walk
         a child whose content its own file merely references (/embody re-walked
@@ -253,18 +253,18 @@ class TestAutosave(EmbodyTestCase):
         tags = ext._extBoundaryTags()
         # An EMPTY path set stands in for the excluded region: the child is
         # tagged, but absent from the set -- exactly the Embody-descendant case.
-        before = ext._computeTDNFingerprint(parent, set(), None, tags)
+        before = ext._computeTDXNFingerprint(parent, set(), None, tags)
         child.op('inner').par.period = 3.25
-        after = ext._computeTDNFingerprint(parent, set(), None, tags)
+        after = ext._computeTDXNFingerprint(parent, set(), None, tags)
         self.assertEqual(
             before, after,
             'a TDXN-tagged child must bound the walk even when the path set '
             'omits it')
         # ...and without the tag boundary it does NOT hold. This half fails if
         # the fix is ever reverted to a path-set-only boundary.
-        before_old = ext._computeTDNFingerprint(parent, set(), None, None)
+        before_old = ext._computeTDXNFingerprint(parent, set(), None, None)
         child.op('inner').par.period = 7.5
-        after_old = ext._computeTDNFingerprint(parent, set(), None, None)
+        after_old = ext._computeTDXNFingerprint(parent, set(), None, None)
         self.assertNotEqual(
             before_old, after_old,
             'path-set-only boundary should still over-walk -- if this passes, '
@@ -277,10 +277,10 @@ class TestAutosave(EmbodyTestCase):
         inner = comp.create(baseCOMP, 'plain')
         inner.create(noiseTOP, 'deep')
         ext = self.embody_ext
-        args = (ext._getTDNPaths(), None, ext._extBoundaryTags())
-        before = ext._computeTDNFingerprint(comp, *args)
+        args = (ext._getTDXNPaths(), None, ext._extBoundaryTags())
+        before = ext._computeTDXNFingerprint(comp, *args)
         inner.op('deep').par.period = 6.5
-        after = ext._computeTDNFingerprint(comp, *args)
+        after = ext._computeTDXNFingerprint(comp, *args)
         self.assertNotEqual(before, after,
                             'an embedded child must still move the fingerprint')
 
@@ -302,14 +302,14 @@ class TestAutosave(EmbodyTestCase):
         # many roots the project happens to have.
         ext._COARSE_SWEEP_CAP = 100000       # instance shadow; removed below
         try:
-            ext._queueDirtyTDNRoots(budget_ms=0.0)   # smallest possible slice
+            ext._queueDirtyTDXNRoots(budget_ms=0.0)   # smallest possible slice
             self.assertIsNotNone(ext._coarse_sweep_cursor,
                                  'a budgeted sweep must leave a live cursor')
             self.assertIn(comp.path, ext._coarse_sweep_cursor,
                           'the dirty root must be in the sweep to begin with')
             guard = 0
             while ext._coarse_sweep_cursor is not None and guard < 100000:
-                ext._queueDirtyTDNRoots(budget_ms=0.0)
+                ext._queueDirtyTDXNRoots(budget_ms=0.0)
                 guard += 1
         finally:
             del ext._COARSE_SWEEP_CAP        # back to the class attribute
@@ -323,7 +323,7 @@ class TestAutosave(EmbodyTestCase):
         caller keeps its one-shot contract."""
         ext = self.embody_ext
         ext._coarse_sweep_cursor = None
-        ext._queueDirtyTDNRoots()
+        ext._queueDirtyTDXNRoots()
         self.assertIsNone(ext._coarse_sweep_cursor,
                           'an unbudgeted sweep must complete in one call')
 
@@ -333,10 +333,10 @@ class TestAutosave(EmbodyTestCase):
         forever."""
         ext = self.embody_ext
         ext._coarse_sweep_cursor = None
-        ext._queueDirtyTDNRoots(budget_ms=0.0)
+        ext._queueDirtyTDXNRoots(budget_ms=0.0)
         self.assertIsNotNone(ext._coarse_sweep_cursor)
         ext._coarse_sweep_ctx = None        # force the context unpack to raise
-        ext._queueDirtyTDNRoots(budget_ms=0.0)
+        ext._queueDirtyTDXNRoots(budget_ms=0.0)
         self.assertIsNone(ext._coarse_sweep_cursor,
                           'a failed sweep must clear its cursor')
 
@@ -419,13 +419,13 @@ class TestAutosave(EmbodyTestCase):
         comp_path = comp.path
         comp.destroy()  # simulate a crash: net loses it, .tdn + row persist
         self.assertIsNone(op(comp_path))
-        self.embody_ext._recoverMissingTDNComps()
+        self.embody_ext._recoverMissingTDXNComps()
         rebuilt = op(comp_path)
         self.assertIsNotNone(rebuilt)
         self.assertIsNotNone(rebuilt.op('n1'))
 
     def test_delete_purges_tracking_no_resurrection(self):
-        # Deleting a tracked TDN COMP must purge its row so recovery can't
+        # Deleting a tracked TDXN COMP must purge its row so recovery can't
         # resurrect it (the delete-undo guard). _delete_op calls
         # _purgeExternalizationTracking.
         comp, abs_tdn = self._make_tdn('del_undo')
@@ -433,9 +433,9 @@ class TestAutosave(EmbodyTestCase):
         comp_path = comp.path
         self.embody_ext._purgeExternalizationTracking(comp_path)
         comp.destroy()
-        tracked = [cp for cp, _ in self.embody_ext._getTDNStrategyComps()]
+        tracked = [cp for cp, _ in self.embody_ext._getTDXNStrategyComps()]
         self.assertNotIn(comp_path, tracked)
-        self.embody_ext._recoverMissingTDNComps()
+        self.embody_ext._recoverMissingTDXNComps()
         self.assertIsNone(op(comp_path))  # NOT resurrected
 
     # --- EnvoyExt: checkpoint-relevant mutating set ---
@@ -493,16 +493,16 @@ class TestAutosave(EmbodyTestCase):
         comp, _ = self._make_tdn('cp')
         sib, _ = self._make_tdn('cp2')   # shares the 'cp' prefix
         self.embody_ext._purgeExternalizationTracking(comp.path)
-        tracked = [p for p, _ in self.embody_ext._getTDNStrategyComps()]
+        tracked = [p for p, _ in self.embody_ext._getTDXNStrategyComps()]
         self.assertNotIn(comp.path, tracked)
         self.assertIn(sib.path, tracked)  # sibling must survive
 
     def test_purge_removes_non_tdn_rows(self):
         # delete_op on an externalized DAT must remove its table row --
-        # previously only TDN rows were purged, leaving an orphan row + file
+        # previously only TDXN rows were purged, leaving an orphan row + file
         # behind until a Refresh sweep (issue #57 follow-up, 2026-07-16).
         # The row removal is synchronous (asserted here); the file deletion
-        # is deferred via run(..., delayFrames=5) like the TDN path, so it
+        # is deferred via run(..., delayFrames=5) like the TDXN path, so it
         # cannot be observed inside a synchronous test -- clean it manually.
         dat = self.sandbox.create(textDAT, 'purge_dat')
         dat.text = '# purge me'
@@ -570,7 +570,7 @@ class TestAutosave(EmbodyTestCase):
         ext._autosaveDrain(3)
         self.assertIn(comp.path, ext._pending_checkpoint_roots)
 
-    # --- nested TDN child recovery (the missing-at-start fix) ---
+    # --- nested TDXN child recovery (the missing-at-start fix) ---
 
     def test_recover_nested_tdn_child(self):
         ext = self.embody_ext
@@ -588,7 +588,7 @@ class TestAutosave(EmbodyTestCase):
         ppath, cpath = parent.path, child.path
         parent.destroy()  # destroys child too -- both missing
         self.assertIsNone(op(ppath))
-        ext._recoverMissingTDNComps()
+        ext._recoverMissingTDXNComps()
         # parent AND nested child must be rebuilt with their OWN content
         self.assertIsNotNone(op(ppath))
         self.assertIsNotNone(op(cpath), 'nested child not rebuilt')
@@ -609,9 +609,9 @@ class TestAutosave(EmbodyTestCase):
         ext._coarse_sweep_cursor = None
         ext._COARSE_SWEEP_CAP = 1        # instance shadow; removed below
         try:
-            total = len(set(ext._getTDNPaths()) | set(ext._tdn_fingerprints.keys()))
+            total = len(set(ext._getTDXNPaths()) | set(ext._tdn_fingerprints.keys()))
             for _ in range(total + 2):
-                ext._queueDirtyTDNRoots()
+                ext._queueDirtyTDXNRoots()
                 if {a.path, b.path} <= ext._pending_checkpoint_roots:
                     break
         finally:
@@ -627,7 +627,7 @@ class TestAutosave(EmbodyTestCase):
         ext = self.embody_ext
         ext._tdn_fingerprints['/nonexistent_fp_probe_root'] = ('x',)
         ext._coarse_sweep_cursor = None
-        ext._queueDirtyTDNRoots()
+        ext._queueDirtyTDXNRoots()
         self.assertNotIn('/nonexistent_fp_probe_root', ext._tdn_fingerprints,
                          'a baseline whose COMP is gone must be pruned by the sweep')
 

@@ -35,13 +35,13 @@ DISPATCH CONTRACT: intra-cluster calls are module-local (no unit test
 monkeypatches any name in this cluster -- verified). Cross-module hops go through
 the facade via ext.*: _loadInstallManifest / _loadHashManifest (embody_git stubs
 on the facade), and the spine/retained methods _findProjectRoot / _rootForMode /
-_venvPaths / _uninstallClassifyMarker / _messageBox / _getTDNStrategyComps /
+_venvPaths / _uninstallClassifyMarker / _messageBox / _getTDXNStrategyComps /
 _applyTdnModeGating. The class attr _PERSISTED_PARAMS stays on EmbodyExt (read by
 parexec.py) and is reached via ext._PERSISTED_PARAMS. Instance state
 (_settings_save_pending, _restoring_settings) lives on the ext, unchanged.
 
 The run() deferral strings target the facade stubs (ext.Embody._saveSettings /
-._showTDNMigrationNudge / ext.Envoy.Start) so they resolve after the move.
+._showTDXNMigrationNudge / ext.Envoy.Start) so they resolve after the move.
 """
 
 from __future__ import annotations
@@ -1456,7 +1456,7 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
         ext.my.store('_init_complete', True)
         return False
     params = data['params']
-    # config.json is keyed by PARAMETER NAME, so the TDN -> TDXN rename
+    # config.json is keyed by PARAMETER NAME, so the TDXN -> TDXN rename
     # would silently drop each of these settings back to its default on
     # every existing install (see normalize_legacy_par_keys).
     params = normalize_legacy_par_keys(
@@ -1499,7 +1499,7 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
         prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
         ext.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
         ext.my.store('_tdn_migration_scheduled', True)
-        run(f"op('{ext.my}').ext.Embody._showTDNMigrationNudge()",
+        run(f"op('{ext.my}').ext.Embody._showTDXNMigrationNudge()",
             delayFrames=60)
     # If Envoyenable was restored to True, kick Start() -- parexec was
     # suppressed during restore so onValueChange never fired.
@@ -1530,7 +1530,7 @@ def show_tdn_migration_nudge(ext) -> None:
 
     tdn_comps = []
     try:
-        tdn_comps = ext._getTDNStrategyComps()
+        tdn_comps = ext._getTDXNStrategyComps()
     except Exception:
         pass
 

@@ -256,7 +256,7 @@ class ConvoyExt:
     def onInitTD(self):
         """Post-init hook: defer everything that reads the network.
 
-        TDN import can delete and recreate children AFTER extension init,
+        TDXN import can delete and recreate children AFTER extension init,
         so setup that depends on internal network state waits a few frames
         and must be idempotent (td-python.md). No network work happens
         here -- the reconcile tick owns that.
@@ -274,7 +274,7 @@ class ConvoyExt:
         self._post_init_done = True
         try:
             # These two parameters are projections of host-private approval,
-            # not project-authored configuration. A saved .toe/TDN/clone may
+            # not project-authored configuration. A saved .toe/TDXN/clone may
             # therefore arrive with a stale On value, but that value must
             # never become authority merely because TouchDesigner loaded it.
             # Until the first authenticated host response arrives, the only
@@ -1045,7 +1045,7 @@ class ConvoyExt:
     def _resetUntrustedDangerProjections(self):
         """Startup snap: capability pars to host truth, never routing.
 
-        A saved .toe/TDN/clone may arrive with a stale On, but a loaded
+        A saved .toe/TDXN/clone may arrive with a stale On, but a loaded
         value must never become authority. With no cached policy the snap
         is the fail-closed default state; after a mid-session reinit (the
         per-process session survives) it is that policy. Nothing is

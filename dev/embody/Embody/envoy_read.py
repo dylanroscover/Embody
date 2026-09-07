@@ -68,7 +68,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     # sequenceBlock wrapper identity). scrub_transient=False because this is
     # a LIVE read: an export ships no runtime-status values, a read must.
     # Only in the compact mode -- include_defaults=True keeps the flat dump
-    # that test_mcp_tdn_tools' read_tdn-vs-get_op ratio test measures.
+    # that test_mcp_tdxn_tools' read_tdn-vs-get_op ratio test measures.
     sequences = {}
     if not include_defaults:
         try:
@@ -2081,7 +2081,7 @@ def get_externalizations(ext) -> dict:
                 'build': table[row, 'build'].val,
                 # Hint so an agent seeing a dirty TDXN row knows the tool
                 # that explains exactly what changed (live vs on-disk).
-                'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
+                'recommended_tool': 'diff_tdxn' if strategy == 'tdn' else None,
             })
 
         return {
@@ -2130,7 +2130,7 @@ def get_externalization_status(ext, op_path: str) -> dict:
                     'touch_build': table[row, 'touch_build'].val,
                     # Hint so an agent seeing a dirty TDXN row knows the
                     # tool that explains what changed (live vs on-disk).
-                    'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
+                    'recommended_tool': 'diff_tdxn' if strategy == 'tdn' else None,
                 }
 
         return {
@@ -2154,7 +2154,7 @@ def export_network(ext, root_path='/', include_dat_content=None,
     if not getattr(ext.ownerComp.ext, 'TDXN', None):
         return {'error': 'TDXN extension not loaded on Embody COMP'}
     # Protect .tdn files belonging to other tracked TDXN COMPs
-    protected = ext.ownerComp.ext.Embody._getAllTrackedTDNFiles(
+    protected = ext.ownerComp.ext.Embody._getAllTrackedTDXNFiles(
         exclude_path=root_path) if output_file else None
     result = ext.ownerComp.ext.TDXN.ExportNetwork(
         root_path=root_path,
@@ -2182,7 +2182,7 @@ def export_network(ext, root_path='/', include_dat_content=None,
     return result
 
 
-def read_tdn(ext, comp_path='/', include_dat_content=None,
+def read_tdxn(ext, comp_path='/', include_dat_content=None,
              max_depth=None, embed_all=False):
     """Read a network subtree as a TDXN dict (in-memory, no disk write).
 
@@ -2249,7 +2249,7 @@ def resolve_diff_target(ext, target):
     return comp_path, None
 
 
-def diff_tdn(ext, target='', max_changed_ops=200, max_bytes=60000):
+def diff_tdxn(ext, target='', max_changed_ops=200, max_bytes=60000):
     """Show what is UNSAVED in TDXN-externalized COMPs: live network(s) vs
     the on-disk .tdn(s) -- the view git cannot provide.
 

@@ -837,7 +837,7 @@ def remove_externalization_tag(ext, op_path: str,
 
     Routes through Embody's own removal handlers rather than stripping
     tags raw: the Update sweep deliberately EXCLUDES TDXN comps from
-    subtraction detection (their lifecycle belongs to RemoveTDNEntry),
+    subtraction detection (their lifecycle belongs to RemoveTDXNEntry),
     so a raw tag-strip + Update left the table row and the
     _tdn_rel_path breadcrumb behind -- a ghost row that Refresh kept
     resurrecting.
@@ -884,7 +884,7 @@ def remove_externalization_tag(ext, op_path: str,
         if is_tdn:
             # Strips tags, drops the row + _tdn_rel_path breadcrumb,
             # resets color (issue #48).
-            embody.removeTDNEntry(target.path, delete_file=delete_file)
+            embody.removeTDXNEntry(target.path, delete_file=delete_file)
         elif removed:
             rel_fp = embody.getExternalPath(target)
             embody.removeListerRow(target.path, rel_fp,
@@ -947,7 +947,7 @@ def save_externalization(ext, op_path: str) -> dict:
         if target.family == 'COMP':
             strategy = op.Embody.ext.Embody._getCompStrategy(target)
             if strategy == 'tdn':
-                written = op.Embody.ext.Embody.saveTDN(op_path)
+                written = op.Embody.ext.Embody.saveTDXN(op_path)
             else:
                 written = op.Embody.Save(op_path)
             if not written:

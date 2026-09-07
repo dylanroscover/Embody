@@ -4,10 +4,10 @@ Test suite: save-path write contracts (the v6.0.243 optimization work).
 These cover code production now depends on that nothing asserted:
 
   - `_updateRowCells` is the SOLE writer for build/timestamp/dirty/position in
-    Save(), SaveTDN(), _updatePositionInTable() and TDXNExt._trackTDNExport().
+    Save(), SaveTDXN(), _updatePositionInTable() and TDXNExt._trackTDXNExport().
     It returns False silently when a lookup misses, so a broken resolve drops a
     build stamp with no error raised anywhere.
-  - `_dirtyHandlerDeferred` / `_sweepTDNDirtyChunk` replaced the synchronous
+  - `_dirtyHandlerDeferred` / `_sweepTDXNDirtyChunk` replaced the synchronous
     `dirtyHandler(False)` on the Refresh path. The pre-existing dirty tests call
     `dirtyHandler(False)` DIRECTLY -- a path production no longer takes -- so the
     passive pipeline behind the manager's badges could stop landing flags
@@ -135,7 +135,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         """Run the sweep to completion in one call (no run() scheduling)."""
         self.embody_ext.__dict__['_DIRTY_SWEEP_BUDGET_MS'] = 100000.0
         self.embody_ext._dirtyHandlerDeferred()
-        self.embody_ext._sweepTDNDirtyChunk(self.embody_ext._dirty_gen)
+        self.embody_ext._sweepTDXNDirtyChunk(self.embody_ext._dirty_gen)
 
     def _two_comps(self):
         clean = self.sandbox.create(baseCOMP, 'sweep_clean')
@@ -145,7 +145,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         t = self._table([self._mkrow(clean.path, type='base', strategy='tdn'),
                          self._mkrow(dirty.path, type='base', strategy='tdn')])
         for comp in (clean, dirty):
-            self.embody_ext._storeTDNFingerprint(comp)
+            self.embody_ext._storeTDXNFingerprint(comp)
             self._primed.append(comp.path)
         dirty.create(constantCHOP, 'c2')   # diverge from its baseline
         return t, clean, dirty
@@ -177,7 +177,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         t, clean, dirty = self._two_comps()
         self.embody_ext.__dict__['_DIRTY_SWEEP_BUDGET_MS'] = 0.0
         self.embody_ext._dirtyHandlerDeferred()
-        self.embody_ext._sweepTDNDirtyChunk(self.embody_ext._dirty_gen)
+        self.embody_ext._sweepTDXNDirtyChunk(self.embody_ext._dirty_gen)
         self.assertGreaterEqual(self.embody_ext._dirty_idx, 1)
 
     def test_a_superseded_generation_does_nothing(self):
@@ -186,7 +186,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         stale = self.embody_ext._dirty_gen
         self.embody_ext._dirtyHandlerDeferred()      # supersedes
         before = t.text
-        self.embody_ext._sweepTDNDirtyChunk(stale)
+        self.embody_ext._sweepTDXNDirtyChunk(stale)
         self.assertEqual(0, self.embody_ext._dirty_idx)
         self.assertEqual(before, t.text)
 
@@ -199,7 +199,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         orig = cls._performMode
         try:
             cls._performMode = property(lambda s: True)
-            self.embody_ext._sweepTDNDirtyChunk(gen)
+            self.embody_ext._sweepTDXNDirtyChunk(gen)
         finally:
             cls._performMode = orig
         self.assertEqual(0, self.embody_ext._dirty_idx)
@@ -211,7 +211,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         self.embody_ext._dirtyHandlerDeferred()
         self.embody_ext._dirty_queue = ['/no/such/comp', dirty.path]
         self.embody_ext._dirty_idx = 0
-        self.embody_ext._sweepTDNDirtyChunk(self.embody_ext._dirty_gen)
+        self.embody_ext._sweepTDXNDirtyChunk(self.embody_ext._dirty_gen)
         self.assertEqual('True', self.embody_ext.dirtyState(dirty.path),
                          'a vanished path must not abort the rest of the queue')
 

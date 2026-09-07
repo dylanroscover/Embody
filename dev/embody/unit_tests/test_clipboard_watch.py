@@ -1,4 +1,4 @@
-"""Tests for the TDN clipboard auto-paste watcher (TDXNExt._clipboardWatchPoll).
+"""Tests for the TDXN clipboard auto-paste watcher (TDXNExt._clipboardWatchPoll).
 
 The watcher polls ui.clipboard; when a NEW _embody_tdn envelope appears it offers
 (via the Embody message box) to "embody it" into the current network as a new
@@ -69,7 +69,7 @@ class TestClipboardWatch(EmbodyTestCase):
         super().tearDown()
 
     def _put_envelope(self):
-        """Copy a probe COMP's TDN to the clipboard, VERIFYING it stuck.
+        """Copy a probe COMP's TDXN to the clipboard, VERIFYING it stuck.
 
         copyNetworkToClipboard writes the real OS clipboard, which every
         process on the machine shares -- another app, clipboard history, or
@@ -97,7 +97,7 @@ class TestClipboardWatch(EmbodyTestCase):
         op.Embody.ext.TDXN.copyNetworkToClipboard(probe)
         self.requireClipboardHolds(
             lambda raw: marker in raw,
-            what='a TDN envelope',
+            what='a TDXN envelope',
             reseed=lambda: op.Embody.ext.TDXN.copyNetworkToClipboard(probe))
 
     def _set_clipboard(self, text):
@@ -173,7 +173,7 @@ class TestClipboardWatch(EmbodyTestCase):
         self.assertEqual(len(calls), 1, 'dismiss debounce -> no re-prompt')
 
     def test_non_envelope_no_prompt(self):
-        self._set_clipboard('just some random text, not a TDN at all')
+        self._set_clipboard('just some random text, not a TDXN at all')
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
@@ -217,7 +217,7 @@ class TestClipboardWatch(EmbodyTestCase):
                bool(owner and owner.isCOMP)))
 
     def test_outbound_copy_does_not_prompt(self):
-        # Ctrl+Shift+C copies a COMP's TDN to the clipboard (OUTBOUND -- to share or
+        # Ctrl+Shift+C copies a COMP's TDXN to the clipboard (OUTBOUND -- to share or
         # paste elsewhere). The watcher must NOT turn around and offer to paste our
         # own export back in: copyNetworkToClipboard seeds _clip_last_sig with what it
         # just wrote, so the next poll sees no NEW (inbound) content. This is the
@@ -235,7 +235,7 @@ class TestClipboardWatch(EmbodyTestCase):
 
     def test_inbound_after_outbound_still_prompts(self):
         # Suppression is content-specific, not a blanket mute: after an outbound copy
-        # (sig = our export), a DIFFERENT TDN landing on the clipboard (the web
+        # (sig = our export), a DIFFERENT TDXN landing on the clipboard (the web
         # "embody it" button, a foreign envelope) is genuinely inbound -- a different
         # string -> a different sig -> it still prompts.
         self._put_envelope()                                   # outbound copy of cw_probe
@@ -250,4 +250,4 @@ class TestClipboardWatch(EmbodyTestCase):
         op.Embody.par.Clipboardautopaste = 1
         op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 1,
-                         'a different (inbound) TDN after an outbound copy still prompts')
+                         'a different (inbound) TDXN after an outbound copy still prompts')

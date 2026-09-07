@@ -1097,11 +1097,11 @@ class TestABlockedSpawnReportsTheSessionNotThePython(_LadderBase):
 
 
 class TestStartupConstructsConvoyExt(EmbodyTestCase):
-    """TDN mode off/export never touches the convoy COMP at open, and TD
+    """TDXN mode off/export never touches the convoy COMP at open, and TD
     constructs extensions LAZILY -- so an enabled node sat 'Disabled'
     (registration tick never started) until first incidental access
     (field 2026-08-19: 18 min dormant after a relaunch). The startup
-    phase must schedule a construction kick on EVERY TDN-mode path.
+    phase must schedule a construction kick on EVERY TDXN-mode path.
     """
 
     def test_reconstruct_schedules_the_construction_kick(self):
@@ -1109,7 +1109,7 @@ class TestStartupConstructsConvoyExt(EmbodyTestCase):
                             'EmbodyExt.py')
         with open(path, 'r', encoding='utf-8') as f:
             src = f.read()
-        body = src.split('def reconstructTDNComps', 1)[1]
+        body = src.split('def reconstructTDXNComps', 1)[1]
         head = body.split('def ', 1)[0]
         self.assertIn('.ext.ConvoyExt', head,
                       'the startup construction kick is gone')

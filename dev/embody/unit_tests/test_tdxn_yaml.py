@@ -1,7 +1,7 @@
 """
-Test suite: TDN v2.0 (JSON -> YAML) serialization.
+Test suite: TDXN v2.0 (JSON -> YAML) serialization.
 
-Covers the tdn_dump / tdn_load helpers on the TDN ext: lossless round-trip,
+Covers the tdn_dump / tdn_load helpers on the TDXN ext: lossless round-trip,
 block-scalar chomping, tab-shader fallback, YAML typing safety, JSON
 back-compat (legacy tab-indented and BOM-prefixed), determinism, trailing
 newline, no-anchors, dumper isolation, post-write validation, the textconv
@@ -58,7 +58,7 @@ def _v15_lists_to_strings(node):
     return node
 
 
-class TestTDNYaml(EmbodyTestCase):
+class TestTDXNYaml(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -442,11 +442,11 @@ class TestTDNYaml(EmbodyTestCase):
 
     def test_content_equal_still_sees_the_format_bump(self):
         """The paired inverse: 'format' is deliberately NOT in
-        TDXNExt._TDN_VOLATILE_KEYS, so the first save after upgrading rewrites
+        TDXNExt._TDXN_VOLATILE_KEYS, so the first save after upgrading rewrites
         each tracked file once and then never again. Putting it there would
         leave 6.0-stamped headers on disk forever.
         """
-        self.assertNotIn('format', self.tdn._TDN_VOLATILE_KEYS,
+        self.assertNotIn('format', self.tdn._TDXN_VOLATILE_KEYS,
                          "'format' must stay comparable so files converge")
         base = {'version': '2.0', 'operators': [{'name': 'a', 'type': 'textDAT'}]}
         self.assertFalse(

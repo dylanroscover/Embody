@@ -8,7 +8,7 @@ tag), and the boundary skips (non-externalizable family, already-externalized
 ancestor, idempotence). The side-effecting apply + settle-debounced flush are
 verified live end-to-end; here we exercise the decision matrix without file I/O.
 
-NOTE: the whole test harness lives under /embody, which is itself a TDN-
+NOTE: the whole test harness lives under /embody, which is itself a TDXN-
 externalized COMP -- so the framework's self.sandbox is ALWAYS inside an
 externalized ancestor and every decision there correctly returns None. To test
 the "returns a tag at a real boundary" cases, these tests build ops in a

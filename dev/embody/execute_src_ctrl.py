@@ -362,19 +362,19 @@ def writeReleaseManifest(comp, tox_path, version, build):
         # manifest-less releases loudly on its own.
         debug(f'[execute_src_ctrl] release manifest write failed: {e!r}')
 
-# How many 5-frame waits the sync will spend on a TDN restore that has not
+# How many 5-frame waits the sync will spend on a TDXN restore that has not
 # finished before it gives up and says so. ~2.5s at 60fps: longer than any
 # observed strip/restore, short enough that a stuck flag is reported inside
 # the same save the user is watching.
 _SYNC_MAX_WAITS = 30
 
 
-def syncVersionIntoTDN(attempt=0):
+def syncVersionIntoTDXN(attempt=0):
     """Re-export the .tdn rows that carry par.Version, AFTER the bump.
 
     THE LAG THIS REMOVES. A single project.save fires onProjectPreSave on
     two different Execute DATs. The Embody COMP's own execute DAT runs
-    first and exports every dirty TDN row -- reading par.Version as it
+    first and exports every dirty TDXN row -- reading par.Version as it
     stands, V. Only afterwards does THIS DAT bump the par to V+1 and bake
     release/Embody-v{V+1}.tox. So every release shipped a .tdn stamped one
     version behind its own .tox, provably: Embody.tdn's header carried
@@ -405,12 +405,12 @@ def syncVersionIntoTDN(attempt=0):
             # exists to stop, so give up loudly instead.
             if attempt >= _SYNC_MAX_WAITS:
                 op.Embody.Warn(
-                    'Version sync into .tdn gave up after %d waits: the TDN '
+                    'Version sync into .tdn gave up after %d waits: the TDXN '
                     'restore flag is still set, so the .tdn files may lag the '
                     '.toe by one version. A manual save will re-run it.'
                     % _SYNC_MAX_WAITS)
                 return
-            run('me.module.syncVersionIntoTDN(attempt=%d)' % (attempt + 1),
+            run('me.module.syncVersionIntoTDXN(attempt=%d)' % (attempt + 1),
                 fromOP=me, delayFrames=5)
             return
         version = str(embody.par.Version.eval() or '')
@@ -456,7 +456,7 @@ def syncVersionIntoTDN(attempt=0):
             # bump_build=False: the release manifest already recorded
             # par.Build, so a second bump would put the manifest one
             # behind the .tdn -- the same drift, one size smaller.
-            embody.ext.Embody.saveTDN(row_path, bump_build=False)
+            embody.ext.Embody.saveTDXN(row_path, bump_build=False)
     except Exception as e:
         debug(f'[execute_src_ctrl] version sync into .tdn failed: {e!r}')
 
@@ -466,6 +466,6 @@ def onProjectPostSave():
     # already on disk, and Embody's own post-save restore loop may still
     # be running whichever Execute DAT fired first.
     try:
-        run('me.module.syncVersionIntoTDN()', fromOP=me, delayFrames=5)
+        run('me.module.syncVersionIntoTDXN()', fromOP=me, delayFrames=5)
     except Exception as e:
         debug(f'[execute_src_ctrl] could not schedule the version sync: {e!r}')

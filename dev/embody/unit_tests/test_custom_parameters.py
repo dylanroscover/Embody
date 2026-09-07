@@ -3,7 +3,7 @@ Test suite: Custom parameter behavior.
 
 Tests the high-value, failure-prone custom parameters on the Embody COMP:
 Folder change (full flow), Disable/Enable lifecycle, Update/Refresh,
-TDN page controls, Logs toggles, and Envoy state verification.
+TDXN page controls, Logs toggles, and Envoy state verification.
 """
 
 import os
@@ -263,11 +263,11 @@ class TestCustomParameters(EmbodyTestCase):
             parexec.par.active = True
 
     def test_disable_z03_restore_tdn(self):
-        """Externalize full project (TDN mode), verify table is populated.
+        """Externalize full project (TDXN mode), verify table is populated.
 
-        Only checks that the table has rows - file existence and TDN/py counts
+        Only checks that the table has rows - file existence and TDXN/py counts
         are verified in z04, which runs one frame later after deferred Updates
-        (TDN exports and DAT additions) have had time to settle.
+        (TDXN exports and DAT additions) have had time to settle.
         """
         parexec = self.embody.op('parexec')
         parexec.par.active = False
@@ -281,10 +281,10 @@ class TestCustomParameters(EmbodyTestCase):
         # happen in z04 (next frame).
         table = self.embody_ext.Externalizations
         self.assertGreater(table.numRows, 1,
-                           'Externalizations table should have rows after TDN externalization')
+                           'Externalizations table should have rows after TDXN externalization')
 
     def test_disable_z04_verify_complete(self):
-        """Final verification: all operators, files, TDN/py counts are intact.
+        """Final verification: all operators, files, TDXN/py counts are intact.
 
         SELF-CONTAINED by design. This used to assert on state left behind by
         z03, relying on "runs one frame after z03 so deferred Updates have
@@ -356,7 +356,7 @@ class TestCustomParameters(EmbodyTestCase):
                            f'two checks above pass vacuously when it is. '
                            f'{shape}')
         self.assertGreater(tdn_count, 0,
-                           f'Should have at least one TDN file -- {shape}')
+                           f'Should have at least one TDXN file -- {shape}')
         self.assertGreater(py_count, 0,
                            f'Should have at least one .py file -- {shape}')
 
@@ -386,7 +386,7 @@ class TestCustomParameters(EmbodyTestCase):
         self.assertTrue(self.embody.par.Detectduplicatepaths.eval())
 
     # ==================================================================
-    # B. TDN PAGE
+    # B. TDXN PAGE
     # ==================================================================
 
     def test_embeddatsintdns_toggle_triggers_reexport(self):
@@ -396,10 +396,10 @@ class TestCustomParameters(EmbodyTestCase):
         new_val = 0 if original else 1
         self._set_and_track('Embeddatsintdxns', new_val)
         # parexec fires async at end-of-frame; call directly to test synchronously
-        self.embody.ext.TDXN.reexportAllTDNs()
+        self.embody.ext.TDXN.reexportAllTDXNs()
         # Check logs for reexport message
         has_reexport = self._has_log_message(log_id, 'Re-exporting')
-        has_no_tdn = self._has_log_message(log_id, 'No TDN exports')
+        has_no_tdn = self._has_log_message(log_id, 'No TDXN exports')
         self.assertTrue(has_reexport or has_no_tdn,
                         'Expected reexport log message after toggling Embeddatsintdxns')
 
@@ -437,7 +437,7 @@ class TestCustomParameters(EmbodyTestCase):
         # Should return an error dict, not crash
         self.assertIsNotNone(result, 'importNetworkFromFile should return a result')
         self.assertTrue(bool(result.get('error')),
-                        'Expected error in result for nonexistent TDN file')
+                        'Expected error in result for nonexistent TDXN file')
 
     # ==================================================================
     # C. ENVOY PAGE (state verification only)

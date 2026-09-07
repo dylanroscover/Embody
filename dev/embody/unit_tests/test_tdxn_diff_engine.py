@@ -10,7 +10,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNNormalize(EmbodyTestCase):
+class TestTDXNNormalize(EmbodyTestCase):
 
     def test_normalize_empty(self):
         self.assertEqual(op.Embody.ext.TDXN._normalize_tdn_for_compare({}), {})
@@ -53,7 +53,7 @@ class TestTDNNormalize(EmbodyTestCase):
         self.assertNotIn('par_templates', n)
 
 
-class TestTDNDiffEngine(EmbodyTestCase):
+class TestTDXNDiffEngine(EmbodyTestCase):
 
     def test_compression_equivalence_is_empty(self):
         inline = {'type': 'baseCOMP', 'operators': [
@@ -206,7 +206,7 @@ class TestTDNDiffEngine(EmbodyTestCase):
         self.assertEqual(d['baseline'], 'head')
 
 
-class TestTDNDiffDatContent(EmbodyTestCase):
+class TestTDXNDiffDatContent(EmbodyTestCase):
     """v6-specific: the diff engine reconciles legacy v1.5 array-of-lines
     dat_content with the v2.0 joined-string form, so an unchanged DAT does not
     show as modified across the format bump (mirrors tdn_textconv)."""

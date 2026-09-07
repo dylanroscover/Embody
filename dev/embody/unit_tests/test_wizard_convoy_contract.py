@@ -13,7 +13,7 @@ from pathlib import Path
 LOGIC = (Path(__file__).resolve().parents[1]
          / "Embody" / "wizard" / "logic.py")
 ENVOY_EXT = LOGIC.parents[1] / "EnvoyExt.py"
-WIZARD_TDN = LOGIC.parents[1] / "wizard.tdn"
+WIZARD_TDXN = LOGIC.parents[1] / "wizard.tdn"
 
 
 def _load_logic():
@@ -90,7 +90,7 @@ def test_only_explicit_none_suppresses_ai_client_configuration():
 
 
 def test_none_option_copy_does_not_claim_convoy_has_no_server():
-    source = WIZARD_TDN.read_text(encoding="utf-8")
+    source = WIZARD_TDXN.read_text(encoding="utf-8")
     assert "None - no AI assistant" in source
     assert "Convoy can still use its internal command service" in source
     assert "No .venv, server, or config" not in source
@@ -168,9 +168,9 @@ def test_every_self_initiated_writer_is_save_gated():
     log_fn = src.split("def _get_log_file_path", 1)[1].split("def ", 1)[0]
     assert log_fn.index("_projectSavedOnDisk") < log_fn.index("os.makedirs")
     add_fn = src.split("def handleAddition", 1)[1].split(
-        "def _handleTDNAddition", 1)[0]
+        "def _handleTDXNAddition", 1)[0]
     assert "_projectSavedOnDisk" in add_fn
-    tdn_fn = src.split("def _handleTDNAddition", 1)[1].split(
+    tdn_fn = src.split("def _handleTDXNAddition", 1)[1].split(
         "\n    def ", 1)[0]
     assert "_projectSavedOnDisk" in tdn_fn
     uh = src.split("def updateHandler", 1)[1].split("\n    def ", 1)[0]
@@ -209,7 +209,7 @@ def test_catalog_writes_are_save_gated_and_flushed_after_save():
 
 def test_every_option_group_is_wired_to_the_click_router():
     import yaml
-    doc = yaml.safe_load(WIZARD_TDN.read_text(encoding="utf-8"))
+    doc = yaml.safe_load(WIZARD_TDXN.read_text(encoding="utf-8"))
     clicks = next(o for o in doc["operators"] if o["name"] == "clicks")
     panels = clicks["parameters"]["panels"].split()
     assert "footer/btn_*" in panels
@@ -247,7 +247,7 @@ _CHROME = ("topspacer", "steplabel", "track", "title",
 
 def test_every_wizard_step_fits_the_panel_height():
     import yaml
-    doc = yaml.safe_load(WIZARD_TDN.read_text(encoding="utf-8"))
+    doc = yaml.safe_load(WIZARD_TDXN.read_text(encoding="utf-8"))
     ops = {o["name"]: o for o in doc["operators"]}
 
     def height(name):

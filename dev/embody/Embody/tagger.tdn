@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 34
-generator: Embody/6.2.22
+generator: Embody/6.2.24
 td_build: 099.2025.33070
-source_file: Embody-6.325.toe
-exported_at: '2026-09-06T20:53:31Z'
+source_file: Embody-6.327.toe
+exported_at: '2026-09-07T00:33:19Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -94,7 +94,7 @@ type_defaults:
 type: containerCOMP
 parameters:
   w: 180
-  h: =28 * (me.fetch('visible_count', op('./tags').numRows) + (2 if (op('./btn_copy_tdn') and op('./btn_copy_tdn').par.display.eval()) else 0)) + 2
+  h: =28 * (me.fetch('visible_count', op('./tags').numRows) + (2 if (op('./btn_copy_tdxn') and op('./btn_copy_tdxn').par.display.eval()) else 0)) + 2
   display: false
   resizecomp: =me
   repocomp: =me
@@ -571,54 +571,6 @@ operators:
   inputs:
   - parameter1
   dat_read_only: true
-- name: btn_copy_tdn
-  type: buttonCOMP
-  parameters:
-    label: =chr(10697) + '  Copy tdxn'
-    colorr: 0.2
-    colorg: 0.2
-    colorb: 0.2
-    alignorder: 0.3
-    display: =op('btn_portable').par.display.eval()
-  position: [620, 275]
-  size: [160, 134]
-  children:
-  - name: out1
-    type: outCHOP
-    position: [275, 175]
-    inputs:
-    - par1
-  - name: par1
-    type: parameterCHOP
-    position: [65, 175]
-  - name: text
-    type: textCOMP
-    parameters:
-      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
-      linespacing: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
-      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
-      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
-    position: [74, 26]
-    size: [113, 96]
-  - name: parexec1
-    type: parameterexecuteDAT
-    parameters:
-      op: ..
-      loadonstart: true
-    position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.copyNetworkToClipboard(oper)\n\treturn\n"
-    dat_content_format: text
-  - name: panelexec1
-    type: panelexecuteDAT
-    parameters:
-      loadonstart: true
-    position: [247, -81]
-    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
-    dat_content_format: text
 - name: btn_openfile
   type: buttonCOMP
   parameters:
@@ -721,7 +673,68 @@ operators:
   inputs:
   - parameter1
   dat_read_only: true
-- name: btn_paste_tdn
+- name: btn_copy_tdxn
+  type: buttonCOMP
+  parameters:
+    label: =chr(10697) + '  Copy tdxn'
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.3
+    display: =op('btn_portable').par.display.eval()
+  position: [620, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.copyNetworkToClipboard(oper)\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: switch_family
+  type: switchDAT
+  parameters:
+    index: 2
+  flags:
+  - viewer
+  position: [-600, 0]
+  size: [130, 90]
+  inputs:
+  - parameter1
+  - select_dats
+  - select_comps
+  dat_read_only: true
+- name: btn_paste_tdxn
   type: buttonCOMP
   parameters:
     label: =chr(10515) + '  Paste tdxn'
@@ -769,19 +782,6 @@ operators:
     position: [247, -81]
     dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
     dat_content_format: text
-- name: switch_family
-  type: switchDAT
-  parameters:
-    index: 2
-  flags:
-  - viewer
-  position: [-600, 0]
-  size: [130, 90]
-  inputs:
-  - parameter1
-  - select_dats
-  - select_comps
-  dat_read_only: true
 - name: btn_embed_storage
   type: buttonCOMP
   parameters:

@@ -595,7 +595,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
     def test_refused_spawn_never_commits_a_phantom_home(self):
         """REGRESSION GUARD for the desync that made Embot freeze on a stale
         node. ensureBot legitimately refuses a spawn -- botUnsafeNet fires on
-        EVERY TDN-strategy COMP (the auto-externalization default, so most COMPs
+        EVERY TDXN-strategy COMP (the auto-externalization default, so most COMPs
         in an Embody project), and botWouldBeSeen fires whenever the follow is
         off and the user is parked elsewhere. If the gate had already stamped
         _viz_home, viz would be committed to a network he never entered, and
@@ -763,7 +763,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
 
     def test_ensure_bot_refuses_unseen_net_before_table_scan(self):
         """botWouldBeSeen MUST run before botUnsafeNet: botUnsafeNet reaches
-        EmbodyExt._getTDNPaths() (a full externalizations-table scan with a
+        EmbodyExt._getTDXNPaths() (a full externalizations-table scan with a
         per-row op()), and in the suppressed state ensureBot runs its prefix
         EVERY frame."""
         dest = self.sandbox.create(baseCOMP, 'viz_unseen_dest')
@@ -813,7 +813,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
 
     def test_assemble_step_restores_template_position(self):
         """assembleStep parks the TEMPLATE source off-view before copying it.
-        The template lives in the Embody COMP (TDN strategy), so a coordinate
+        The template lives in the Embody COMP (TDXN strategy), so a coordinate
         left behind is exported into Embody.tdn -- which is exactly how all
         nine parts came to be committed at a leaked [1860, 251]."""
         tmpl = self.sandbox.create(baseCOMP, 'embot_template')

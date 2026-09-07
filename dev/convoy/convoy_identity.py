@@ -25,7 +25,7 @@ TWO IDENTIFIERS, and the split is the whole design (Dylan's call,
                  survive restarts.
 
 NOTHING IS STORED IN THE PROJECT. The earlier design put a random
-"anchor" in the Embody COMP's TDN -- a TRACKED file -- so a `git
+"anchor" in the Embody COMP's TDXN -- a TRACKED file -- so a `git
 worktree` (which this repo's own rules mandate) or a copied folder
 carried the same anchor, and two live checkouts collapsed into ONE node.
 Keying on the project folder instead makes every checkout distinct by

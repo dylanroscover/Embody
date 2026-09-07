@@ -4,7 +4,7 @@ CatalogManager - background scanner and cross-build default patching.
 On every startup, checks if a creation-values catalog exists for the
 current TD build in .embody/. If not, runs a background scan (1-2 ops
 per frame, no dropped frames) and writes the catalog. After scanning,
-compares against the source build of each TDN-externalized COMP and
+compares against the source build of each TDXN-externalized COMP and
 patches any parameters whose creation defaults shifted between builds.
 """
 
@@ -122,7 +122,7 @@ class CatalogManagerExt:
 	# =================================================================
 
 	def EnsureCatalogs(self):
-		"""Ensure op-type defaults + palette catalog are loaded into TDN.
+		"""Ensure op-type defaults + palette catalog are loaded into TDXN.
 
 		Called from execute.py onStart and onCreate. Non-blocking.
 		  - If .embody/catalog_<build>.json exists: loads from disk (fast).
@@ -182,7 +182,7 @@ class CatalogManagerExt:
 					f'cached) - resuming palette scan')
 				# Defer past the frame 30-90 restore phases (execute.py):
 				# stacking heavy palette loadTox calls on top of
-				# RestoreTOXComps / ReconstructTDNComps makes the first
+				# RestoreTOXComps / ReconstructTDXNComps makes the first
 				# seconds of a resumed launch needlessly choppy.
 				run('args[0]._resumePaletteScan()', self, delayFrames=60)
 				return
@@ -1052,7 +1052,7 @@ class CatalogManagerExt:
 	def _patchCrossBuildDefaults(self, current_catalog):
 		"""Compare catalogs across builds and patch shifted defaults.
 
-		For each TDN-externalized COMP, reads the td_build from its .tdn
+		For each TDXN-externalized COMP, reads the td_build from its .tdn
 		file, loads that build's catalog, and patches any params whose
 		creation default changed between builds.
 		"""
@@ -1060,7 +1060,7 @@ class CatalogManagerExt:
 		patches = []  # [(op_path, par_name, old_val, new_val)]
 
 		try:
-			tdn_comps = self.ownerComp.ext.Embody._getTDNStrategyComps()
+			tdn_comps = self.ownerComp.ext.Embody._getTDXNStrategyComps()
 		except Exception:
 			return
 
@@ -1142,7 +1142,7 @@ class CatalogManagerExt:
 		"""Patch operators in a COMP where defaults shifted.
 
 		Only patches params where the current value equals the NEW default
-		(meaning the user had the OLD default, which was omitted from TDN,
+		(meaning the user had the OLD default, which was omitted from TDXN,
 		and TD created it with the wrong new default).
 
 		Returns list of (op_path, par_name, old_val, new_val) tuples.

@@ -1,7 +1,7 @@
-"""Integration tests for the diff_tdn Envoy handler (_diff_tdn).
+"""Integration tests for the diff_tdn Envoy handler (_diff_tdxn).
 
 Exercises the full main-thread chain -- path resolution, non-interactive live
-export, on-disk read, normalize, diff, envelope -- against real TDN-externalized
+export, on-disk read, normalize, diff, envelope -- against real TDXN-externalized
 sandbox COMPs. Extensions are referenced inline (no caching); self.embody_ext is
 the runner's re-resolving property.
 """
@@ -12,11 +12,11 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestDiffTdnHandler(EmbodyTestCase):
+class TestDiffTdxnHandler(EmbodyTestCase):
 
     def _make_tdn_comp(self, name):
         """Create a sandbox baseCOMP with a child + custom par, externalize it
-        as TDN, and return (comp, rel_path). Caller must _cleanup()."""
+        as TDXN, and return (comp, rel_path). Caller must _cleanup()."""
         comp = self.sandbox.create(baseCOMP, name)
         child = comp.create(constantCHOP, 'c')
         child.par.value0 = 1.0
@@ -53,19 +53,19 @@ class TestDiffTdnHandler(EmbodyTestCase):
 
     def test_error_when_not_tdn_externalized(self):
         comp = self.sandbox.create(baseCOMP, 'not_tdn')
-        res = op.Embody.ext.Envoy._diff_tdn(comp.path)
+        res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
         self.assertIn('error', res)
         self.assertIn('not TDXN-externalized', res['error'])
 
     def test_error_when_op_missing(self):
-        res = op.Embody.ext.Envoy._diff_tdn('/no/such/op')
+        res = op.Embody.ext.Envoy._diff_tdxn('/no/such/op')
         self.assertIn('error', res)
 
     def test_clean_right_after_externalize(self):
         comp, child, rel = self._make_tdn_comp('diff_clean')
         try:
-            self.assertIsNotNone(rel, 'COMP should be TDN-externalized')
-            res = op.Embody.ext.Envoy._diff_tdn(comp.path)
+            self.assertIsNotNone(rel, 'COMP should be TDXN-externalized')
+            res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
             self.assertNotIn('error', res)
             self.assertEqual(res['baseline'], 'disk')
             self.assertFalse(
@@ -81,7 +81,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
             self.assertIsNotNone(rel)
             # Mutate live state away from the on-disk .tdn.
             child.par.value0 = 9.0
-            res = op.Embody.ext.Envoy._diff_tdn(comp.path)
+            res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
             self.assertNotIn('error', res)
             self.assertTrue(res['changed'],
                             'a live param edit must show as changed')
@@ -96,7 +96,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
         try:
             self.assertIsNotNone(rel)
             comp.par.Testval = 5.0  # root COMP's own custom par
-            res = op.Embody.ext.Envoy._diff_tdn(comp.path)
+            res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
             self.assertTrue(res['changed'])
             kinds = [m['kind'] for m in res['modified']]
             self.assertIn('root', kinds,
@@ -107,7 +107,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
     def test_envelope_shape(self):
         comp, child, rel = self._make_tdn_comp('diff_shape')
         try:
-            res = op.Embody.ext.Envoy._diff_tdn(comp.path)
+            res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
             for key in ('schema_version', 'baseline', 'comp_path', 'file',
                         'changed', 'counts', 'added', 'removed', 'modified',
                         'truncated', 'warnings'):
@@ -116,12 +116,12 @@ class TestDiffTdnHandler(EmbodyTestCase):
         finally:
             self._cleanup(comp, rel)
 
-    def test_status_recommends_diff_tdn(self):
+    def test_status_recommends_diff_tdxn(self):
         comp, child, rel = self._make_tdn_comp('diff_hint')
         try:
             status = op.Embody.ext.Envoy._get_externalization_status(comp.path)
             self.assertEqual(status.get('strategy'), 'tdn')
-            self.assertEqual(status.get('recommended_tool'), 'diff_tdn')
+            self.assertEqual(status.get('recommended_tool'), 'diff_tdxn')
             self.assertIn('absolute_path', status)
         finally:
             self._cleanup(comp, rel)
@@ -132,7 +132,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
         try:
             self.assertIsNotNone(rel)
             fname = rel.replace('\\', '/').rsplit('/', 1)[-1]  # bare filename
-            res = op.Embody.ext.Envoy._diff_tdn(fname)
+            res = op.Embody.ext.Envoy._diff_tdxn(fname)
             self.assertNotIn('error', res)
             self.assertEqual(res['comp_path'], comp.path)
         finally:
@@ -142,16 +142,16 @@ class TestDiffTdnHandler(EmbodyTestCase):
         comp, child, rel = self._make_tdn_comp('diff_byrel')
         try:
             self.assertIsNotNone(rel)
-            res = op.Embody.ext.Envoy._diff_tdn(rel)  # full repo-relative path
+            res = op.Embody.ext.Envoy._diff_tdxn(rel)  # full repo-relative path
             self.assertNotIn('error', res)
             self.assertEqual(res['comp_path'], comp.path)
         finally:
             self._cleanup(comp, rel)
 
     def test_project_wide_summary(self):
-        # Project-wide: every live TDN COMP, summarized. A high cap is passed so
+        # Project-wide: every live TDXN COMP, summarized. A high cap is passed so
         # the freshly-added probe is always examined regardless of how many
-        # other TDN COMPs the project already has (the default cap could
+        # other TDXN COMPs the project already has (the default cap could
         # otherwise truncate before reaching it).
         comp, child, rel = self._make_tdn_comp('diff_proj')
         try:
@@ -170,6 +170,6 @@ class TestDiffTdnHandler(EmbodyTestCase):
 
     def test_project_wide_handler_routes_empty_target(self):
         # The handler maps an empty target to the project-wide summary.
-        res = op.Embody.ext.Envoy._diff_tdn('')
+        res = op.Embody.ext.Envoy._diff_tdxn('')
         self.assertNotIn('error', res)
         self.assertEqual(res.get('scope'), 'project')

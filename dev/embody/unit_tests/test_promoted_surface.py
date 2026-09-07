@@ -430,7 +430,7 @@ class TestReceiverReachability(EmbodyTestCase):
     -- correct name, wrong receiver -- and 3432 tests passed over them, because
     every one is a UI callback (parameter pulses, manager rows) that no unit
     test exercises. It surfaced only when a real save_externalization failed
-    with "'td.containerCOMP' object has no attribute 'saveTDN'".
+    with "'td.containerCOMP' object has no attribute 'saveTDXN'".
     """
 
     # Genuine COMP/OP API. Reaching these on the COMP is correct.

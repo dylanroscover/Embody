@@ -5,23 +5,23 @@ These pin the NARROW corners of behaviors whose happy paths are covered
 elsewhere (test_tdn_yaml.py, test_tdn_file_io.py, test_tdn_sequences.py,
 test_tdn_fingerprint.py). Each class targets one seam:
 
-  TestTDNLoadMalformedJSON
+  TestTDXNLoadMalformedJSON
       tdn_load's narrowed-except (TDXNExt.py ~L94): a brace-prefixed doc that
       is invalid JSON AND invalid YAML must RAISE, not silently degrade to a
       lenient default. Plus: ExportNetwork stamps the literal TDXN_VERSION
       '2.0' (not just "a version key present").
 
-  TestTDNBlockScalarFileIO
+  TestTDXNBlockScalarFileIO
       A DAT whose text ends in 1 vs 2 trailing newlines exports to a real
       file with the correct YAML chomping indicator in the raw bytes (| vs
       |+), and importFromFile yields byte-identical text.
 
-  TestTDNBoilerplateNegativeGuards
+  TestTDXNBoilerplateNegativeGuards
       The default-compute-DAT omission (TDXNExt._exportDATContent) keys on
       DOCK IDENTITY (docked AND name == f'{dock.name}_compute'), never on
       text alone. Three negative cases must NOT be omitted.
 
-  TestTDNTextconvDegrade
+  TestTDXNTextconvDegrade
       The git textconv driver's "never make the diff worse" guard: an
       UNPARSEABLE blob (with PyYAML available) returns raw input unchanged.
 
@@ -30,8 +30,8 @@ test_tdn_fingerprint.py). Each class targets one seam:
       TDXNExt._getSequenceByName finds the real sequence; and a custom
       appendSequence resolves through the prefixed target.par tier.
 
-  TestTDNFingerprintExclusionAndRefs
-      EmbodyExt._computeTDNFingerprint -- an excluded child is omitted (vs
+  TestTDXNFingerprintExclusionAndRefs
+      EmbodyExt._computeTDXNFingerprint -- an excluded child is omitted (vs
       included differs only by that child), and a tdn_paths-referenced child
       is recorded structurally so inner param edits do NOT dirty the parent.
 
@@ -59,7 +59,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 # tdn_load narrowed-except + ExportNetwork version stamp
 # =============================================================================
 
-class TestTDNLoadMalformedJSON(EmbodyTestCase):
+class TestTDXNLoadMalformedJSON(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -146,7 +146,7 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
 # Block-scalar chomping survives an export-to-file / import-from-file cycle
 # =============================================================================
 
-class TestTDNBlockScalarFileIO(EmbodyTestCase):
+class TestTDXNBlockScalarFileIO(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -225,7 +225,7 @@ class TestTDNBlockScalarFileIO(EmbodyTestCase):
 # Boilerplate omission keys on DOCK IDENTITY, never on text alone
 # =============================================================================
 
-class TestTDNBoilerplateNegativeGuards(EmbodyTestCase):
+class TestTDXNBoilerplateNegativeGuards(EmbodyTestCase):
     """_exportDATContent omits a docked default-compute companion DAT. The
     omission must require ALL of: family DAT + docked + name ==
     f'{dock.name}_compute' + text == default. These negative cases share the
@@ -297,7 +297,7 @@ class TestTDNBoilerplateNegativeGuards(EmbodyTestCase):
 # textconv driver: unparseable blob returns raw input unchanged
 # =============================================================================
 
-class TestTDNTextconvDegrade(EmbodyTestCase):
+class TestTDXNTextconvDegrade(EmbodyTestCase):
 
     def _load_textconv(self):
         fp = os.path.join(
@@ -422,7 +422,7 @@ class TestPOPSequenceResolution(EmbodyTestCase):
 # Fingerprint exclusion + tdn_paths-referenced child
 # =============================================================================
 
-class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
+class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -430,7 +430,7 @@ class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
         self.exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 
     def _fp(self, comp, tdn_paths=None, exclude_tag=None):
-        return self.emb._computeTDNFingerprint(comp, tdn_paths, exclude_tag)
+        return self.emb._computeTDXNFingerprint(comp, tdn_paths, exclude_tag)
 
     def test_excluded_child_omitted_from_fingerprint(self):
         """An exclude-tagged child COMP is omitted from the fingerprint, so a
@@ -461,7 +461,7 @@ class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
         """An inner param edit on an EXCLUDED child must not change the
         parent fingerprint (the child is omitted entirely)."""
         parent = self.sandbox.create(baseCOMP, 'excl_inner_parent')
-        # tdn_exclude applies only to COMPs (a COMP is made invisible to TDN),
+        # tdn_exclude applies only to COMPs (a COMP is made invisible to TDXN),
         # so the excluded node must be a COMP; editing an op INSIDE it must not
         # change the parent fingerprint because the whole excluded COMP is
         # omitted from the export (and thus from the fingerprint).
@@ -485,7 +485,7 @@ class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
         inner = child.create(constantCHOP, 'inner_chop')
         child.nodeX, child.nodeY = 0, 0
 
-        tdn_paths = {child.path}  # child is separately TDN-externalized
+        tdn_paths = {child.path}  # child is separately TDXN-externalized
 
         before = self._fp(parent, tdn_paths=tdn_paths, exclude_tag=None)
         # Inner param edit deep inside the referenced child.

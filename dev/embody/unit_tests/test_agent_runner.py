@@ -301,7 +301,7 @@ class TestAgentRunnerMachinery(EmbodyTestCase):
         self.assertIsNone(probe.fetch(cls._RUN_ACTIVE_KEY, None, search=False))
 
     def test_D05_run_active_key_never_serializes(self):
-        """The run-active key is excluded from TDN storage export.
+        """The run-active key is excluded from TDXN storage export.
 
         It is wall-clock state; baking it into a committed .tdn would both
         churn the diff and restore a bogus 'a run is active' flag on load.

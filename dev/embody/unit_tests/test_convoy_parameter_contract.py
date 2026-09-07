@@ -1,6 +1,6 @@
 """Off-TD contract tests for Convoy's user-facing parameter scaffold.
 
-These tests intentionally do not import TouchDesigner. They pin the source TDN
+These tests intentionally do not import TouchDesigner. They pin the source TDXN
 that creates the page, the nested copy used by the development network, and the
 fail-closed projection helpers that can be exercised with plain Python fakes.
 """
@@ -16,7 +16,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[3]
 EMBODY_TDN = REPO / "dev" / "embody" / "Embody.tdn"
-ROOT_TDN = REPO / "dev" / "embody.tdn"
+ROOT_TDXN = REPO / "dev" / "embody.tdn"
 CONVOY_EXT = REPO / "dev" / "embody" / "Embody" / "convoy" / "ConvoyExt.py"
 EMBODY_EXT = REPO / "dev" / "embody" / "Embody" / "EmbodyExt.py"
 
@@ -136,7 +136,7 @@ def test_the_convoy_comp_carries_its_global_shortcut():
 
 def test_source_and_nested_convoy_parameter_pages_match():
     source = _convoy_page(_load_yaml(EMBODY_TDN))
-    nested = _convoy_page(_load_yaml(ROOT_TDN), nested=True)
+    nested = _convoy_page(_load_yaml(ROOT_TDXN), nested=True)
     assert nested == source
 
 

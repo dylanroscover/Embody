@@ -3483,7 +3483,7 @@ class EnvoyMCPServer:
             Returns:
                 Dict with the TDXN document under 'tdn', or {'error': ...}
             """
-            return self._execute_in_td('read_tdn', {
+            return self._execute_in_td('read_tdxn', {
                 'comp_path': comp_path,
                 'include_dat_content': include_dat_content,
                 'max_depth': max_depth,
@@ -3521,7 +3521,7 @@ class EnvoyMCPServer:
             Returns:
                 Diff envelope, project summary, or {'error': ...}
             """
-            return self._execute_in_td('diff_tdn', {
+            return self._execute_in_td('diff_tdxn', {
                 'target': target,
                 'max_changed_ops': max_changed_ops,
                 'max_bytes': max_bytes,
@@ -7175,8 +7175,8 @@ class EnvoyExt:
             # TDXN network format
             'export_network': self._export_network,
             'import_network': self._import_network,
-            'read_tdn': self._read_tdn,
-            'diff_tdn': self._diff_tdn,
+            'read_tdxn': self._read_tdxn,
+            'diff_tdxn': self._diff_tdxn,
             # Annotations
             'create_annotation': self._create_annotation,
             'get_annotations': self._get_annotations,
@@ -9036,14 +9036,14 @@ class EnvoyExt:
         """Delegate to TDXN extension for network import -- see envoy_ops."""
         return mod.envoy_ops.import_network(self, target_path, tdn, clear_first)
 
-    def _read_tdn(self, comp_path='/', include_dat_content=None,
+    def _read_tdxn(self, comp_path='/', include_dat_content=None,
                   max_depth=None, embed_all=False):
         """Read a network subtree as a TDXN dict (in-memory, no disk write) -- see envoy_read."""
-        return mod.envoy_read.read_tdn(self, comp_path, include_dat_content, max_depth, embed_all)
+        return mod.envoy_read.read_tdxn(self, comp_path, include_dat_content, max_depth, embed_all)
 
-    def _diff_tdn(self, target='', max_changed_ops=200, max_bytes=60000):
+    def _diff_tdxn(self, target='', max_changed_ops=200, max_bytes=60000):
         """Show what is UNSAVED in TDXN-externalized COMPs vs on-disk .tdn -- see envoy_read."""
-        return mod.envoy_read.diff_tdn(self, target, max_changed_ops, max_bytes)
+        return mod.envoy_read.diff_tdxn(self, target, max_changed_ops, max_bytes)
 
 
 
@@ -9076,7 +9076,8 @@ class EnvoyExt:
         'get_logs', 'get_focus', 'get_job_status',
         'get_externalizations', 'get_externalization_status', 'get_sessions',
         'query_network', 'find_children', 'get_enclosed_ops',
-        'read_tdn', 'diff_tdn', 'capture_top', 'capture_op',
+        'read_tdn', 'diff_tdn', 'read_tdxn', 'diff_tdxn',
+        'capture_top', 'capture_op',
     ]
 
     def _toolPermissionsPosture(self):

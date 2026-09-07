@@ -1,10 +1,10 @@
 """
-Test suite: TDN dirty detection via network fingerprint.
+Test suite: TDXN dirty detection via network fingerprint.
 
-Regression test for the bug where _computeTDNFingerprint captured only
+Regression test for the bug where _computeTDXNFingerprint captured only
 structural/visual properties (name, type, position, color, tags, flags,
 comment, connections, annotations) and IGNORED parameter values -- so a
-parameter edit on a TDN-strategy COMP, whether on the COMP's own top-level
+parameter edit on a TDXN-strategy COMP, whether on the COMP's own top-level
 custom pars or on a child operator, did not change the fingerprint and was
 never flagged dirty. Only structural/layout edits were detected.
 
@@ -18,7 +18,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNFingerprint(EmbodyTestCase):
+class TestTDXNFingerprint(EmbodyTestCase):
 
     def _make_comp(self):
         """A base COMP with one child and a top-level custom float par."""
@@ -32,7 +32,7 @@ class TestTDNFingerprint(EmbodyTestCase):
         return comp, child
 
     def _fp(self, comp):
-        return self.embody_ext._computeTDNFingerprint(comp)
+        return self.embody_ext._computeTDXNFingerprint(comp)
 
     # --- parameter changes (the regression) ---
 
@@ -42,7 +42,7 @@ class TestTDNFingerprint(EmbodyTestCase):
         comp.par.Testval = 5.0
         self.assertNotEqual(
             before, self._fp(comp),
-            'Top-level parameter change must change the TDN fingerprint')
+            'Top-level parameter change must change the TDXN fingerprint')
 
     def test_child_param_change_detected(self):
         comp, child = self._make_comp()
@@ -50,7 +50,7 @@ class TestTDNFingerprint(EmbodyTestCase):
         child.par.value0 = 3.0
         self.assertNotEqual(
             before, self._fp(comp),
-            'Child operator parameter change must change the TDN fingerprint')
+            'Child operator parameter change must change the TDXN fingerprint')
 
     def test_expression_change_detected(self):
         comp, _ = self._make_comp()
@@ -96,8 +96,8 @@ class TestTDNFingerprint(EmbodyTestCase):
     # --- baseline primed at externalize time (no lazy-on-first-scan gap) ---
 
     def test_baseline_primed_on_externalize(self):
-        """TDN externalization must prime the dirty-detection baseline
-        immediately -- not lazily on the first _isTDNDirty scan. Otherwise a
+        """TDXN externalization must prime the dirty-detection baseline
+        immediately -- not lazily on the first _isTDXNDirty scan. Otherwise a
         param edit landing between externalize and that first scan would be
         absorbed into the baseline and the COMP would wrongly read clean."""
         import os
@@ -115,9 +115,9 @@ class TestTDNFingerprint(EmbodyTestCase):
             # Baseline must exist right after externalize, with NO scan between.
             self.assertIn(
                 comp.path, emb._tdn_fingerprints,
-                'externalization must prime the TDN fingerprint baseline')
+                'externalization must prime the TDXN fingerprint baseline')
             self.assertFalse(
-                emb._isTDNDirty(comp),
+                emb._isTDXNDirty(comp),
                 'a freshly externalized COMP must read clean')
         finally:
             if rel:
@@ -138,11 +138,11 @@ class TestTDNFingerprint(EmbodyTestCase):
                 pass
 
 
-class TestTDNDirtyState(EmbodyTestCase):
+class TestTDXNDirtyState(EmbodyTestCase):
     """dirtyHandler clean-clearing (Fix #5) and DirtyCount strategy-awareness
-    (Fix #4) for TDN-strategy COMPs.
+    (Fix #4) for TDXN-strategy COMPs.
 
-    These swap a synthetic externalizations table (a TDN row pointing at a
+    These swap a synthetic externalizations table (a TDXN row pointing at a
     real sandbox COMP) so the table-driven dirty paths run without any file
     I/O or real externalization. The table par is restored in tearDown.
     """
@@ -162,7 +162,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         super().tearDown()
 
     def _tdn_table(self, comp_path, dirty=''):
-        """Build a synthetic table with one TDN-strategy row and swap it in."""
+        """Build a synthetic table with one TDXN-strategy row and swap it in."""
         t = self.sandbox.create(tableDAT, 'synthetic_externalizations')
         t.clear()
         t.appendRow(['path', 'strategy', 'dirty'])
@@ -181,13 +181,13 @@ class TestTDNDirtyState(EmbodyTestCase):
         self.embody_ext._setDirtyState(comp.path, 'True')
         self.embody.par.Tdxnmode = 'full'
         # Prime the baseline so the live network reads CLEAN (matches baseline).
-        self.embody_ext._storeTDNFingerprint(comp)
+        self.embody_ext._storeTDXNFingerprint(comp)
         self._primed = comp.path
         # Passive scan: the COMP is clean now, so the stale flag must clear.
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
             self.embody_ext.dirtyState(comp.path), '',
-            'A clean TDN COMP must have its stale dirty flag cleared by the '
+            'A clean TDXN COMP must have its stale dirty flag cleared by the '
             'passive scan (otherwise the indicator sticks after a revert)')
         self.assertEqual(
             t[comp.path, 'dirty'].val, '',
@@ -198,19 +198,19 @@ class TestTDNDirtyState(EmbodyTestCase):
         comp.create(constantCHOP, 'c')
         t = self._tdn_table(comp.path, dirty='')
         self.embody.par.Tdxnmode = 'full'
-        self.embody_ext._storeTDNFingerprint(comp)
+        self.embody_ext._storeTDXNFingerprint(comp)
         self._primed = comp.path
         # Mutate the network so it diverges from the baseline.
         comp.create(constantCHOP, 'c2')
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
             self.embody_ext.dirtyState(comp.path), 'True',
-            'A structurally changed TDN COMP must be flagged dirty')
+            'A structurally changed TDXN COMP must be flagged dirty')
         self.assertEqual(
             t[comp.path, 'dirty'].val, '',
             'the tsv dirty cell must stay blank -- dirty never persists')
 
-    # --- Fix #4: DirtyCount trusts the runtime state for TDN COMPs, not
+    # --- Fix #4: DirtyCount trusts the runtime state for TDXN COMPs, not
     # oper.dirty (state moved from the tsv to DirtyState, 2026-08-20) ---
 
     def test_DirtyCount_clean_tdn_comp_not_counted(self):
@@ -220,13 +220,13 @@ class TestTDNDirtyState(EmbodyTestCase):
         self.embody_ext._setDirtyState(comp.path, '')
         self.assertEqual(
             self.embody_ext.dirtyCount(), 0,
-            'A clean TDN COMP (DirtyState "") must NOT be counted')
+            'A clean TDXN COMP (DirtyState "") must NOT be counted')
 
     def test_DirtyCount_counts_dirty_tdn_comp_from_runtime(self):
         # The decisive case: the runtime state says 'True' while live
-        # oper.dirty is False. DirtyCount must read DirtyState for TDN
+        # oper.dirty is False. DirtyCount must read DirtyState for TDXN
         # COMPs regardless of oper.dirty (which is always True for real
-        # TDN COMPs and would over-count clean ones).
+        # TDXN COMPs and would over-count clean ones).
         comp = self.sandbox.create(baseCOMP, 'count_dirty')
         comp.create(constantCHOP, 'c')
         self.assertFalse(comp.dirty,
@@ -237,7 +237,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         try:
             self.assertEqual(
                 self.embody_ext.dirtyCount(), 1,
-                'A TDN COMP flagged dirty at runtime must be counted even '
+                'A TDXN COMP flagged dirty at runtime must be counted even '
                 'when live oper.dirty is False')
         finally:
             self.embody_ext._setDirtyState(comp.path, '')
@@ -280,7 +280,7 @@ class TestDirtyNeverPersists(EmbodyTestCase):
                 self.embody.ext.Envoy, comp.path, delete_file=True)
 
 
-class TestTDNFingerprintPersistence(EmbodyTestCase):
+class TestTDXNFingerprintPersistence(EmbodyTestCase):
     """The fingerprint cache must live in ownerComp storage, not on the
     extension instance. An instance dict is wiped by every extension reinit
     (any source edit), and the next sweep's assume-clean seeding then adopts
@@ -312,8 +312,8 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
         # Storage-backed runtime state must never serialize into a .tdn.
         tdn_mod = self.embody.op('TDXNExt').module
         # _suppress_dialogs: project.save() stores it True for the save
-        # window and the TDN export runs INSIDE that window -- without the
-        # exclusion every save bakes it into Embody.tdn and a later TDN
+        # window and the TDXN export runs INSIDE that window -- without the
+        # exclusion every save bakes it into Embody.tdn and a later TDXN
         # restore suppresses dialogs for the whole session.
         for key in ('_tdn_fingerprints', 'expand_order', 'git_status',
                     '_suppress_dialogs',
@@ -329,7 +329,7 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
                     '_test_saved_status', '_smoke_test_responses'):
             self.assertIn(
                 key, tdn_mod.SKIP_STORAGE_KEYS,
-                f'runtime storage key {key!r} must be skipped by TDN export')
+                f'runtime storage key {key!r} must be skipped by TDXN export')
 
     def test_no_live_embody_storage_key_escapes_the_skip_list(self):
         """CLASS-level guard: nothing in Embody's live storage may serialize.
@@ -359,7 +359,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
     """The fingerprint must dirty on EVERYTHING the export writes.
 
     TDXN review 2026-08-30: six field classes changed the file while
-    _isTDNDirty read clean -- DAT text, storage, allowCooking, dock, a newly
+    _isTDXNDirty read clean -- DAT text, storage, allowCooking, dock, a newly
     appended custom par, COMP connectors -- so an execute_python edit was
     never autosaved. And `current` was fingerprinted but never exported, a
     false-dirty. Each row here asserts export-changed == fingerprint-dirty.
@@ -376,17 +376,17 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
         for i, o in enumerate((note, kid, n1, g1, g2)):
             o.nodeX, o.nodeY = i * 200, 0
         emb.applyTagToOperator(root, self.embody.par.Tdxntag.val)
-        emb._handleTDNAddition(root)
+        emb._handleTDXNAddition(root)
         return root, note, kid, n1, g1, g2
 
     def _agree(self, root, label, mutate, expect_change=True):
         emb, tdxn = self.embody_ext, self.embody.ext.TDXN
-        emb._storeTDNFingerprint(root)
+        emb._storeTDXNFingerprint(root)
         before = tdxn.ExportNetwork(root_path=root.path)['tdn']
         mutate()
         after = tdxn.ExportNetwork(root_path=root.path)['tdn']
         changed = not tdxn._tdn_content_equal(after, before)
-        dirty = emb._isTDNDirty(root)
+        dirty = emb._isTDXNDirty(root)
         self.assertEqual(changed, expect_change,
                          f'{label}: the export did not behave as the test assumes')
         self.assertEqual(dirty, changed,
@@ -405,7 +405,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
             self._agree(root, 'COMP connector',
                         lambda: g2.inputCOMPConnectors[0].connect(g1))
         finally:
-            self.embody_ext.removeTDNEntry(root.path, delete_file=True)
+            self.embody_ext.removeTDXNEntry(root.path, delete_file=True)
 
     def test_new_definition_fields_dirty_the_fingerprint(self):
         """Fields added 2026-09-04 must dirty, or they never reach disk.
@@ -434,7 +434,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
             self._agree(root, 'componentCloneImmune',
                         lambda: setattr(kid, 'componentCloneImmune', True))
         finally:
-            self.embody_ext.removeTDNEntry(root.path, delete_file=True)
+            self.embody_ext.removeTDXNEntry(root.path, delete_file=True)
 
     def test_fingerprint_flag_list_matches_the_exporter(self):
         """The fingerprint's flag list must equal TDXNExt.DEFAULT_FLAGS.
@@ -446,7 +446,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
         embody_mod = op.Embody.op('EmbodyExt').module
         tdxn_mod = op.Embody.op('TDXNExt').module
         self.assertEqual(
-            set(embody_mod._TDN_FINGERPRINT_FLAGS),
+            set(embody_mod._TDXN_FINGERPRINT_FLAGS),
             set(tdxn_mod.DEFAULT_FLAGS),
             'fingerprint flag list drifted from TDXNExt.DEFAULT_FLAGS -- '
             'a flag the exporter writes but the fingerprint cannot see '
@@ -459,4 +459,4 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
             self._agree(root, 'current flag', lambda: setattr(n1, 'current', True),
                         expect_change=False)
         finally:
-            self.embody_ext.removeTDNEntry(root.path, delete_file=True)
+            self.embody_ext.removeTDXNEntry(root.path, delete_file=True)

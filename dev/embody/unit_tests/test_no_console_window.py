@@ -131,14 +131,14 @@ class TestScopedStaleScan(EmbodyTestCase):
             (base / 'thing_other.tdn').write_text('c', encoding='utf-8')
             (base / 'elsewhere.tdn').write_text('d', encoding='utf-8')
 
-            scoped = self._cls()._collectExistingTDNFiles(str(base), '/thing')
+            scoped = self._cls()._collectExistingTDXNFiles(str(base), '/thing')
             self.assertEqual(
                 ['child.tdn', 'thing.tdn'],
                 sorted(Path(p).name for p in scoped),
                 'scoped scan must collect <prefix>.tdn and files under '
                 '<prefix>/, and must NOT match a same-prefix sibling')
 
-            everything = self._cls()._collectExistingTDNFiles(str(base), '/')
+            everything = self._cls()._collectExistingTDXNFiles(str(base), '/')
             self.assertEqual(4, len(everything),
                              'a root export still collects every .tdn')
         finally:
@@ -174,7 +174,7 @@ class TestResolveCache(EmbodyTestCase):
         nothing. Never risk unlinking the file we just wrote.
         """
         bad = 'a-path-that-cannot-resolve'
-        deleted = self._cls()._cleanupStaleTDNFiles(
+        deleted = self._cls()._cleanupStaleTDXNFiles(
             {'whatever.tdn'}, [bad], str(project.folder),
             resolve_cache={bad: None})
         self.assertEqual([], deleted)

@@ -1,5 +1,5 @@
 """
-Test suite: TDN -> TDXN migration (EmbodyExt.migrateToTDXN).
+Test suite: TDXN -> TDXN migration (EmbodyExt.migrateToTDXN).
 
 The migration is the one v6.1.0 path that MOVES a user's files, so it gets a
 full smoke project rather than unit pokes: _buildLegacyProject() externalizes
@@ -72,7 +72,7 @@ class TestTdxnMigration(EmbodyTestCase):
             self.embody_ext._getStrategyFilePath(comp_path, 'tdn') or '')
 
     def _externalize(self, parent, name):
-        """Create a TDN-tagged COMP with content and externalize it."""
+        """Create a TDXN-tagged COMP with content and externalize it."""
         comp = parent.create(baseCOMP, name)
         comp.create(constantTOP, 'content')
         comp.tags.add(self.embody.par.Tdxntag.val)
@@ -80,7 +80,7 @@ class TestTdxnMigration(EmbodyTestCase):
         return comp
 
     def _buildLegacyProject(self):
-        """A nested TDN project in the pre-6.1 shape: all .tdn on disk.
+        """A nested TDXN project in the pre-6.1 shape: all .tdn on disk.
 
         Returns {name: comp_path}. Three levels so parent tdn_ref pointers
         exist at two depths -- a one-level tree would not exercise the
@@ -116,7 +116,7 @@ class TestTdxnMigration(EmbodyTestCase):
         # the now-.tdn table rows. Without this the refs still say .tdxn and
         # the fixture would not be a real pre-6.1 project.
         for key in ('child', 'root'):
-            self.embody_ext.saveTDN(paths[key])
+            self.embody_ext.saveTDXN(paths[key])
 
         return paths
 
@@ -127,7 +127,7 @@ class TestTdxnMigration(EmbodyTestCase):
         if not path.is_file():
             return set()
         doc = self.embody.ext.TDXN.tdn_load(path.read_text(encoding='utf-8'))
-        return self.embody_ext._collectTDNRefs(doc)
+        return self.embody_ext._collectTDXNRefs(doc)
 
     def _migrate(self, **kw):
         kw.setdefault('auto', True)
@@ -335,7 +335,7 @@ class TestTdxnMigration(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_tracked_suffix_mints_for_new_and_preserves_a_legacy_row(self):
-        """_trackedTDNSuffix is the single mechanism behind "existing files
+        """_trackedTDXNSuffix is the single mechanism behind "existing files
         are left alone". Both halves are asserted against LITERALS -- deriving
         either expectation from the function under test would pass whether the
         rule holds or not.
@@ -344,7 +344,7 @@ class TestTdxnMigration(EmbodyTestCase):
         rel = self._rel(comp.path)
         self.assertTrue(rel.endswith('.tdxn'),
                         'a NEW externalization must mint .tdxn, got %r' % rel)
-        self.assertEqual(self.embody_ext._trackedTDNSuffix(comp.path), '.tdxn')
+        self.assertEqual(self.embody_ext._trackedTDXNSuffix(comp.path), '.tdxn')
 
         legacy = rel[:-len('.tdxn')] + '.tdn'
         src, dst = self._abs(rel), self._abs(legacy)
@@ -353,7 +353,7 @@ class TestTdxnMigration(EmbodyTestCase):
         self.embody_ext._updateRowCells(
             comp.path, {'rel_file_path': legacy}, strategy='tdn')
         self.assertEqual(
-            self.embody_ext._trackedTDNSuffix(comp.path), '.tdn',
+            self.embody_ext._trackedTDXNSuffix(comp.path), '.tdn',
             'a tracked legacy row must keep .tdn -- minting here is what '
             'silently renames (and for the root resync, deletes) user files')
 

@@ -1,0 +1,52 @@
+{
+  "params": {
+    "Embeddatsintdns": {
+      "val": false
+    },
+    "Embedstorageintdns": {
+      "val": true
+    },
+    "Shortcutcopytdn": {
+      "val": "cmd+shift+c"
+    },
+    "Tdncascade": {
+      "val": false
+    },
+    "Tdncreateonstart": {
+      "val": true
+    },
+    "Tdndatsafety": {
+      "val": "ask"
+    },
+    "Tdnexcludetag": {
+      "val": "tdn_exclude"
+    },
+    "Tdnmode": {
+      "val": "export"
+    },
+    "Tdnstriponsave": {
+      "val": true
+    },
+    "Tdntag": {
+      "val": "tdn"
+    },
+    "Tdntagcolorb": {
+      "val": 0.9
+    },
+    "Tdntagcolorg": {
+      "val": 0.5
+    },
+    "Tdntagcolorr": {
+      "val": 0.3
+    },
+    "Tdnenable": {
+      "val": true
+    },
+    "Folder": {
+      "val": "embody"
+    },
+    "Verbose": {
+      "val": false
+    }
+  }
+}

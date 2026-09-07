@@ -1,5 +1,5 @@
 """
-Test suite: TDN clipboard Copy/Paste (Ctrl+Shift+C / Ctrl+Shift+V).
+Test suite: TDXN clipboard Copy/Paste (Ctrl+Shift+C / Ctrl+Shift+V).
 
 Covers TWO layers:
 
@@ -468,7 +468,7 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         return coll.op('safe_import').module if coll else None
 
     def _armed_tdn(self):
-        """A TDN lighting up armed surfaces safe_import disarms (active Execute
+        """A TDXN lighting up armed surfaces safe_import disarms (active Execute
         DAT + os.system, a file-read expr, a web IO op), so neutralization is
         OBSERVABLE: is_inert is False before routing and must be True after."""
         return {

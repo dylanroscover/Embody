@@ -1,7 +1,7 @@
 """
-Test suite: external connection preservation across TDN strip/rebuild.
+Test suite: external connection preservation across TDXN strip/rebuild.
 
-Issue #11 - wires from external siblings into a TDN-strategy BaseCOMP's
+Issue #11 - wires from external siblings into a TDXN-strategy BaseCOMP's
 own input connectors (backed by inCHOP/inTOP/etc. inside the COMP) are
 severed when the COMP's children are destroyed. The fix captures these
 external wires before strip and restores them after rebuild.
@@ -11,7 +11,7 @@ Covered paths:
     (simulates the Ctrl+S pre-save / post-save cycle and cold-open
     reconstruction).
   - ImportNetwork(clear_first=True) with live wires (simulates a user
-    reload of a TDN COMP from disk).
+    reload of a TDXN COMP from disk).
   - Tolerance when the external sibling is deleted between capture and
     restore.
 """

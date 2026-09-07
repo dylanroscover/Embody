@@ -1,5 +1,5 @@
 """
-Test suite: TDN palette catalog detection + animationCOMP DAT preservation.
+Test suite: TDXN palette catalog detection + animationCOMP DAT preservation.
 
 Covers:
 - Catalog lookup (Strategy 1 in _isPaletteClone): name + OPType match
@@ -17,7 +17,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 ParMode = type(op('/').par.clone.mode)
 
 
-class TestTDNPaletteCatalog(EmbodyTestCase):
+class TestTDXNPaletteCatalog(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
@@ -337,7 +337,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		establish-then-import, import-then-establish, and enable-last
 		all wipe). Only TD's native .toe/.tox loader restores a
 		diverged enabled clone -- such COMPs belong in TOX strategy or
-		tdn_exclude. TDN's contract: the .tdn itself must capture the
+		tdn_exclude. TDXN's contract: the .tdn itself must capture the
 		divergence faithfully, and the import must succeed with the
 		master-derived content intact.
 		"""
@@ -636,7 +636,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def _findOpInExport(self, tdn_doc, name):
-		"""Find an operator entry by name anywhere in the TDN export tree."""
+		"""Find an operator entry by name anywhere in the TDXN export tree."""
 		def walk(entries):
 			for e in entries or []:
 				if e.get('name') == name:

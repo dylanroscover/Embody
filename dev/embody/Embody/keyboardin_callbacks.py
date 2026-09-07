@@ -21,7 +21,7 @@ def _runAction(par_name):
 	elif par_name == 'Shortcutrefresh':
 		e.Refresh()
 	elif par_name == 'Shortcutexportproject':
-		e.ext.TDXN.exportProjectTDNInteractive()
+		e.ext.TDXN.exportProjectTDXNInteractive()
 	elif par_name == 'Shortcutexportcomp':
 		pane = ui.panes.current
 		if pane and pane.owner:

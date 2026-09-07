@@ -1,4 +1,4 @@
-"""Config.json key migration for the TDN -> TDXN parameter rename.
+"""Config.json key migration for the TDXN -> TDXN parameter rename.
 
 config.json is keyed by PARAMETER NAME. Renaming a parameter without
 mapping its stored key drops that setting back to its default on every
@@ -11,12 +11,27 @@ Pure-Python: runs under pytest/CI, skipped in TD.
 """
 import json
 import os
+import sys
 import unittest
+
+# The in-TD runner constructs suites with a sandbox= kwarg that a plain
+# unittest.TestCase rejects (it errored the whole suite at INIT). Subclass
+# EmbodyTestCase like the other pure-Python suites and skip inside TD --
+# this one only needs the filesystem, so pytest/CI is its home.
+runner_mod = op.unit_tests.op('TestRunnerExt').module
+EmbodyTestCase = runner_mod.EmbodyTestCase
+_IN_TD = 'td' in sys.modules
 
 REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+# Checked-in and sanitized, because the real pre-rename config lives under
+# dev/release_testing/ which is gitignored -- the coverage this suite exists
+# to provide skipped on CI and on every clone until this fixture existed.
+# NOT under fixtures/ -- that directory is the scanner-parity corpus,
+# contractually mirrored file-for-file with
+# platform/packages/scanner-ts/fixtures (contract C8).
 LEGACY_CONFIG = os.path.join(
-    REPO_ROOT, 'dev', 'release_testing', '.embody', 'config.json')
+    os.path.dirname(__file__), 'data', 'legacy_config_pre_tdxn.json')
 
 # Mirrors EmbodyExt._TDXN_PAR_RENAMES. A test asserts the two agree when
 # the extension source is readable, so this cannot drift silently.
@@ -35,8 +50,40 @@ RENAMES = {
 }
 
 
+def _load_shipped_normalizer():
+    """Extract the REAL normalize_legacy_par_keys from embody_admin.py.
+
+    embody_admin imports TouchDesigner globals, so it cannot be imported
+    under pytest. Pulling the function's own source out by AST and exec'ing
+    it tests the SHIPPED code rather than a copy that can silently drift.
+    """
+    import ast
+    src_path = os.path.join(REPO_ROOT, 'dev', 'embody', 'Embody',
+                            'embody_admin.py')
+    with open(src_path, encoding='utf-8') as fh:
+        tree = ast.parse(fh.read())
+    for node in tree.body:
+        if (isinstance(node, ast.FunctionDef)
+                and node.name == 'normalize_legacy_par_keys'):
+            ns = {}
+            exec(compile(ast.Module(body=[node], type_ignores=[]),
+                         src_path, 'exec'), ns)
+            return ns['normalize_legacy_par_keys']
+    return None
+
+
+_shipped = _load_shipped_normalizer()
+
+
 def _normalize(params, renames):
-    """Copy of embody_admin.normalize_legacy_par_keys, importable without TD."""
+    """The shipped function when extractable, else the local reference copy."""
+    if _shipped is not None:
+        return _shipped(params, renames)
+    return _reference_normalize(params, renames)
+
+
+def _reference_normalize(params, renames):
+    """Reference implementation, used only if extraction fails."""
     if not renames:
         return params
     out = {}
@@ -50,7 +97,12 @@ def _normalize(params, renames):
     return out
 
 
-class TestTdxnParKeyMigration(unittest.TestCase):
+class TestTdxnParKeyMigration(EmbodyTestCase):
+
+    def setUp(self):
+        super().setUp()
+        if _IN_TD:
+            self.skipTest('pure-Python suite -- runs under pytest/CI only')
 
     def test_the_copy_here_matches_the_extension_source(self):
         """RENAMES must not drift from EmbodyExt._TDXN_PAR_RENAMES."""
@@ -69,6 +121,14 @@ class TestTdxnParKeyMigration(unittest.TestCase):
                         found = ast.literal_eval(node.value)
         self.assertIsNotNone(found, '_TDXN_PAR_RENAMES not found in EmbodyExt')
         self.assertEqual(found, RENAMES)
+
+    def test_the_shipped_function_is_what_is_tested(self):
+        """Guard the whole suite: if extraction breaks, we are testing a copy."""
+        self.assertIsNotNone(
+            _shipped,
+            'normalize_legacy_par_keys could not be extracted from '
+            'embody_admin.py -- this suite would silently fall back to a '
+            'local copy and stop testing shipped code')
 
     def test_no_entry_is_a_no_op(self):
         """A key that maps to itself means the migration never fires."""

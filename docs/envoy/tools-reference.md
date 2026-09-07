@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 66 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 68 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 

@@ -1244,7 +1244,7 @@ def reset(ext, removeTags: bool = False) -> None:
 # disk -- their only meaningful "changed" state is git-relative (on disk but
 # not committed). Computed once per refresh sweep and stored at runtime (never
 # written to externalizations.tsv, which would churn). Powers the orange badge
-# for TOX/TDN/DAT alike. Self-disables outside a git repo.
+# for TOX/TDXN/DAT alike. Self-disables outside a git repo.
 
 def find_git_root_sync(ext):
     """Walk up from project.folder for a .git dir. Returns Path or 'no-git'.

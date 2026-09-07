@@ -101,7 +101,7 @@ DAEMON_MODULES = _python_modules(DAEMON_DIR)
 def test_convoy_tdn_carries_one_text_dat_asset_for_every_daemon_module():
     """Parity on disk is insufficient if the .tox has no DAT to carry it.
 
-    ConvoyExt reads children of ``convoy/host`` at install time.  The TDN is
+    ConvoyExt reads children of ``convoy/host`` at install time.  The TDXN is
     the version-controlled network source, so its file parameters must name
     every vendored module exactly once.  This catches the easy-to-miss state
     where a developer copies a file into ``host/`` but never creates the

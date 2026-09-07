@@ -281,7 +281,7 @@ A real leaf-component file like `envoy_toggle.tdxn` is ~1.3 KB — 38 readable l
 - `get_op` returns all 175-219 parameters per operator wrapped in `{value, mode, label}` triples — roughly 15-25 KB per operator.
 - `read_tdn` applies the same compaction as `.tdxn` export — default omission, `type_defaults`, `par_templates` — and returns the full subtree in one call.
 
-For a 24-operator COMP (`container_left.tdxn`), the TDXN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. A conservative 5× floor is verified in CI (`test_mcp_tdn_tools.py`); 20-90× is the typical real-world range. See the [Claude Code skills guide](../envoy/claude-code.md) for which Envoy skill to consult and when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
+For a 24-operator COMP (`container_left.tdxn`), the TDXN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. A conservative 5× floor is verified in CI (`test_mcp_tdxn_tools.py`); 20-90× is the typical real-world range. See the [Claude Code skills guide](../envoy/claude-code.md) for which Envoy skill to consult and when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
 
 ## Automatic Restoration
 

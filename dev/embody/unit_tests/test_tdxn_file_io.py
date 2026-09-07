@@ -1,8 +1,8 @@
 """
-Test suite: TDN file I/O, path resolution, and per-comp splitting.
+Test suite: TDXN file I/O, path resolution, and per-comp splitting.
 
-Tests _resolveOutputPath, _splitPerComp, _collectExistingTDNFiles,
-_cleanupStaleTDNFiles, file write integrity, and end-to-end file export.
+Tests _resolveOutputPath, _splitPerComp, _collectExistingTDXNFiles,
+_cleanupStaleTDXNFiles, file write integrity, and end-to-end file export.
 """
 
 import json
@@ -14,7 +14,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNFileIO(EmbodyTestCase):
+class TestTDXNFileIO(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
@@ -185,7 +185,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn(str(Path(self._temp_dir) / 'comp_b.tdn'), files)
 
 	# =================================================================
-	# _collectExistingTDNFiles (static method)
+	# _collectExistingTDXNFiles (static method)
 	# =================================================================
 
 	def test_collectExisting_finds_files_recursively(self):
@@ -193,14 +193,14 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(self._temp_dir, 'sub')
 		sub.mkdir()
 		Path(sub, 'b.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
 		self.assertLen(result, 2)
 
 	def test_collectExisting_ignores_non_tdn(self):
 		Path(self._temp_dir, 'a.tdn').write_text('{}')
 		Path(self._temp_dir, 'b.json').write_text('{}')
 		Path(self._temp_dir, 'c.py').write_text('')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
 		self.assertLen(result, 1)
 
 	def test_collectExisting_root_returns_all(self):
@@ -208,7 +208,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(self._temp_dir, 'embody')
 		sub.mkdir()
 		Path(sub, 'b.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(self._temp_dir, '/')
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir, '/')
 		self.assertLen(result, 2)
 
 	def test_collectExisting_scoped_to_prefix(self):
@@ -217,7 +217,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		embody.mkdir()
 		Path(embody, 'Embody.tdn').write_text('{}')
 		Path(self._temp_dir, 'other.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
@@ -229,7 +229,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(embody, 'Embody')
 		sub.mkdir()
 		Path(sub, 'help.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 2)
 
@@ -241,27 +241,27 @@ class TestTDNFileIO(EmbodyTestCase):
 		ctrl = Path(self._temp_dir, 'controller')
 		ctrl.mkdir()
 		Path(ctrl, 'main.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
 	def test_collectExisting_nonexistent_dir(self):
-		result = self.embody.ext.TDXN._collectExistingTDNFiles('/nonexistent_tdn_xyz')
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles('/nonexistent_tdn_xyz')
 		self.assertLen(result, 0)
 
 	def test_collectExisting_empty_dir(self):
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
 		self.assertLen(result, 0)
 
 	def test_collectExisting_exact_match_prefix(self):
 		"""File matching the exact prefix (embody.tdn for /embody) should be found."""
 		Path(self._temp_dir, 'embody.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDNFiles(
+		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
 	# =================================================================
-	# _cleanupStaleTDNFiles (static method)
+	# _cleanupStaleTDXNFiles (static method)
 	# =================================================================
 
 	def test_cleanup_deletes_stale(self):
@@ -270,7 +270,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		Path(stale).write_text('{}')
 		kept = str(Path(self._temp_dir, 'kept.tdn'))
 		Path(kept).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
 			{stale, kept}, [kept], self._temp_dir)
 		self.assertIn(stale, deleted)
 		self.assertFalse(Path(stale).exists())
@@ -279,7 +279,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_cleanup_keeps_written_files(self):
 		written = str(Path(self._temp_dir, 'new.tdn'))
 		Path(written).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
 			{written}, [written], self._temp_dir)
 		self.assertLen(deleted, 0)
 		self.assertTrue(Path(written).exists())
@@ -288,7 +288,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Should refuse to delete non-.tdn files."""
 		non_tdn = str(Path(self._temp_dir, 'data.json'))
 		Path(non_tdn).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
 			{non_tdn}, [], self._temp_dir)
 		self.assertLen(deleted, 0)
 		self.assertTrue(Path(non_tdn).exists())
@@ -299,7 +299,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		try:
 			outside = str(Path(other_dir, 'x.tdn'))
 			Path(outside).write_text('{}')
-			deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(
+			deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
 				{outside}, [], self._temp_dir)
 			self.assertLen(deleted, 0)
 			self.assertTrue(Path(outside).exists())
@@ -313,7 +313,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub.mkdir(parents=True)
 		stale = str(sub / 'old.tdn')
 		Path(stale).write_text('{}')
-		self.embody.ext.TDXN._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
+		self.embody.ext.TDXN._cleanupStaleTDXNFiles({stale}, [], self._temp_dir)
 		self.assertFalse(sub.exists())
 		self.assertFalse(sub.parent.exists())
 
@@ -324,13 +324,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		stale = str(sub / 'old.tdn')
 		Path(stale).write_text('{}')
 		Path(sub / 'keep.txt').write_text('data')
-		self.embody.ext.TDXN._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
+		self.embody.ext.TDXN._cleanupStaleTDXNFiles({stale}, [], self._temp_dir)
 		self.assertFalse(Path(stale).exists())
 		self.assertTrue(sub.exists())
 
 	def test_cleanup_empty_before_set(self):
 		"""No-op when before set is empty."""
-		deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(set(), [], self._temp_dir)
+		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(set(), [], self._temp_dir)
 		self.assertLen(deleted, 0)
 
 	def test_cleanup_multiple_stale_files(self):
@@ -340,7 +340,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			f = str(Path(self._temp_dir, f'stale_{i}.tdn'))
 			Path(f).write_text('{}')
 			stale_files.add(f)
-		deleted = self.embody.ext.TDXN._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
 			stale_files, [], self._temp_dir)
 		self.assertLen(deleted, 5)
 		for f in stale_files:
@@ -386,7 +386,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		stable_name = self.embody.ext.TDXN._stripBuildSuffix(raw_name)
 		# Suffix comes from what the root row already tracks (mint suffix
 		# when untracked) -- the root export must never silently migrate.
-		suffix = self.embody.ext.Embody._trackedTDNSuffix('/')
+		suffix = self.embody.ext.Embody._trackedTDXNSuffix('/')
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(f'{stable_name}{suffix}'),
 			f"Expected build-stripped name '{stable_name}{suffix}' in path, "
@@ -422,7 +422,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"TD path segment appears twice in '{normalized}'")
 
 	# =================================================================
-	# _stripBuildSuffix - stable project TDN filenames
+	# _stripBuildSuffix - stable project TDXN filenames
 	# =================================================================
 
 	def test_strip_build_suffix_dotted(self):
@@ -456,18 +456,18 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
 
 	# =================================================================
-	# SaveTDN root filename derivation - issue #6 regression
+	# SaveTDXN root filename derivation - issue #6 regression
 	# =================================================================
 
 	def test_savetdn_root_filename_strips_build_suffix(self):
-		"""SaveTDN at '/' must derive root filename with build suffix stripped.
+		"""SaveTDXN at '/' must derive root filename with build suffix stripped.
 
-		Regression for issue #6: prior to the fix, SaveTDN used
+		Regression for issue #6: prior to the fix, SaveTDXN used
 		project.name.removesuffix('.toe') directly, leaving the auto-
 		incrementing build suffix (e.g. '.362') in the .tdn filename.
 		This caused the file to churn on every save and break git history.
 
-		This test mirrors the exact derivation SaveTDN uses at opPath == '/'
+		This test mirrors the exact derivation SaveTDXN uses at opPath == '/'
 		to confirm _stripBuildSuffix is applied.
 		"""
 		# Simulated project names - build-suffixed and plain variants
@@ -482,31 +482,31 @@ class TestTDNFileIO(EmbodyTestCase):
 			safe_name = self.embody.ext.TDXN._stripBuildSuffix(raw_name)
 			self.assertEqual(
 				safe_name, expected,
-				f"Expected SaveTDN root filename '{expected}.tdn' for "
+				f"Expected SaveTDXN root filename '{expected}.tdn' for "
 				f"project '{project_name}', got '{safe_name}.tdn'")
 
 	def test_savetdn_root_filename_matches_resolve_output_path(self):
-		"""SaveTDN root filename derivation must agree with _resolveOutputPath.
+		"""SaveTDXN root filename derivation must agree with _resolveOutputPath.
 
 		Both paths compute the same thing for root exports; a drift between
-		them means the .tdn file SaveTDN writes won't match what
+		them means the .tdn file SaveTDXN writes won't match what
 		ExportNetwork auto-resolves, re-introducing issue #6.
 		"""
-		# Simulate SaveTDN derivation
+		# Simulate SaveTDXN derivation
 		raw_name = project.name.removesuffix('.toe')
 		savetdn_name = self.embody.ext.TDXN._stripBuildSuffix(raw_name)
 		# Compare against _resolveOutputPath, which is already authoritative
 		resolved = self.embody.ext.TDXN._resolveOutputPath('auto', op('/'))
-		suffix = self.embody.ext.Embody._trackedTDNSuffix('/')
+		suffix = self.embody.ext.Embody._trackedTDXNSuffix('/')
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(f'{savetdn_name}{suffix}'),
-			f"SaveTDN would write '{savetdn_name}{suffix}' but "
+			f"SaveTDXN would write '{savetdn_name}{suffix}' but "
 			f"_resolveOutputPath returned '{resolved}'")
 
 	def test_savetdn_root_branch_derives_its_suffix_from_the_table(self):
 		"""Pin the mechanism the root snapshot's survival depends on.
 
-		SaveTDN('/') re-derives the root filename and calls safeDeleteFile()
+		SaveTDXN('/') re-derives the root filename and calls safeDeleteFile()
 		on the stored one whenever the two differ. If that branch ever minted
 		the suffix instead of reading the tracked one, every legacy .tdn row
 		would differ from the derived .tdxn name and the first save after
@@ -525,7 +525,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		# assertions below would pass against an empty/irrelevant slice.
 		self.assertIn('safeDeleteFile', branch,
 					  'anchors drifted -- this no longer covers the delete')
-		self.assertIn('_trackedTDNSuffix', branch,
+		self.assertIn('_trackedTDXNSuffix', branch,
 					  'root resync must read the tracked suffix from the table')
 		for minted in ("FILE_SUFFIX", "'.tdxn'", '".tdxn"', "'.tdn'", '".tdn"'):
 			self.assertNotIn(
@@ -604,7 +604,7 @@ class TestTDNFileIO(EmbodyTestCase):
 							 'tags block changed between exports')
 
 	def test_export_file_includes_source_file(self):
-		"""Exported TDN should contain source_file with the .toe filename."""
+		"""Exported TDXN should contain source_file with the .toe filename."""
 		self.sandbox.create(baseCOMP, 'src_check')
 		fp = str(Path(self._temp_dir) / 'source.tdn')
 		result = self.embody.ext.TDXN.ExportNetwork(
@@ -1049,15 +1049,15 @@ class TestTDNFileIO(EmbodyTestCase):
 		return False
 
 	def test_tdn_ref_written_on_export(self):
-		"""Export of parent with TDN-tagged child should include tdn_ref."""
+		"""Export of parent with TDXN-tagged child should include tdn_ref."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
-		# Tag the child for TDN
+		# Tag the child for TDXN
 		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		# Export the child first so it's in the table
-		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
 		child_abs.parent.mkdir(parents=True, exist_ok=True)
 		self.embody.ext.TDXN.ExportNetwork(
@@ -1078,7 +1078,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertNotIn('children', child_entry)
 
 	def test_tdn_ref_absent_without_tag(self):
-		"""Export of parent with non-TDN child should not include tdn_ref."""
+		"""Export of parent with non-TDXN child should not include tdn_ref."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
@@ -1100,7 +1100,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
 		# Add child to table
-		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
 		child_abs.parent.mkdir(parents=True, exist_ok=True)
 		self.embody.ext.TDXN.ExportNetwork(
@@ -1120,7 +1120,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertNotIn('tdn_ref', child_entry)
 		self.assertIn('children', child_entry)
 
-	def test_validateTDNRefs_happy_path(self):
+	def test_validateTDXNRefs_happy_path(self):
 		"""Valid tdn_refs matching table entries and disk files produce no warnings."""
 		# Create child and add to table with a real file
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
@@ -1128,7 +1128,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		child.create(textDAT, 'leaf')
 		tdn_tag = self.embody.par.Tdxntag.val
 		child.tags.add(tdn_tag)
-		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
 		child_abs.parent.mkdir(parents=True, exist_ok=True)
 		self.embody.ext.TDXN.ExportNetwork(
@@ -1139,11 +1139,11 @@ class TestTDNFileIO(EmbodyTestCase):
 			False, 1, str(app.build), 'tdn')
 		# Build op_defs with tdn_ref
 		op_defs = [{'name': 'child_comp', 'tdn_ref': str(child_path)}]
-		warnings = self.embody.ext.TDXN._validateTDNRefs(
+		warnings = self.embody.ext.TDXN._validateTDXNRefs(
 			op_defs, parent.path)
 		self.assertLen(warnings, 0)
 
-	def test_validateTDNRefs_missing_table_entry(self):
+	def test_validateTDXNRefs_missing_table_entry(self):
 		"""tdn_ref for a COMP not in the table produces a warning."""
 		# Use a unique name that can't collide with other test entries
 		parent = self.sandbox.create(baseCOMP, 'orphan_ref_parent')
@@ -1152,12 +1152,12 @@ class TestTDNFileIO(EmbodyTestCase):
 		fake_file = Path(self._temp_dir) / 'orphan.tdn'
 		fake_file.write_text('{}')
 		op_defs = [{'name': 'orphan_ref_child', 'tdn_ref': str(fake_file)}]
-		warnings = self.embody.ext.TDXN._validateTDNRefs(
+		warnings = self.embody.ext.TDXN._validateTDXNRefs(
 			op_defs, parent.path)
 		has_table_warning = any('externalizations table' in w for w in warnings)
 		self.assertTrue(has_table_warning, f'Expected table warning, got: {warnings}')
 
-	def test_validateTDNRefs_missing_file(self):
+	def test_validateTDXNRefs_missing_file(self):
 		"""tdn_ref pointing to a non-existent file produces a warning."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
@@ -1169,7 +1169,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody_ext._addToTable(child, 'nonexistent/child.tdn',
 			timestamp, False, 1, str(app.build), 'tdn')
 		op_defs = [{'name': 'child_comp', 'tdn_ref': 'nonexistent/child.tdn'}]
-		warnings = self.embody.ext.TDXN._validateTDNRefs(
+		warnings = self.embody.ext.TDXN._validateTDXNRefs(
 			op_defs, parent.path)
 		has_file_warning = any('file not found' in w for w in warnings)
 		self.assertTrue(has_file_warning)
@@ -1309,7 +1309,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertLen(list(child.children), 0)
 
 	def test_cascade_tags_children(self):
-		"""_cascadeTDNTag should add TDN tag to direct child COMPs."""
+		"""_cascadeTDXNTag should add TDXN tag to direct child COMPs."""
 		parent = self.sandbox.create(baseCOMP, 'cascade_parent')
 		child1 = parent.create(baseCOMP, 'child1')
 		child2 = parent.create(baseCOMP, 'child2')
@@ -1321,7 +1321,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		orig_cascade = self.embody.par.Tdxncascade.eval()
 		self.embody.par.Tdxncascade = True
 		try:
-			self.embody_ext._cascadeTDNTag(parent)
+			self.embody_ext._cascadeTDXNTag(parent)
 			self.assertIn(tdn_tag, child1.tags)
 			self.assertIn(tdn_tag, child2.tags)
 			# DATs should NOT be tagged
@@ -1357,7 +1357,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.par.Tdxncascade = False
 		try:
 			log_id = self._get_log_id()
-			self.embody.ext.TDXN._warnLargeTDN(str(big_file), '/test')
+			self.embody.ext.TDXN._warnLargeTDXN(str(big_file), '/test')
 			# No dialog shown, no log about silencing
 			has_silence = self._has_log_message(log_id, 'warning silenced')
 			self.assertFalse(has_silence)
@@ -1375,9 +1375,9 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.par.Tdxncascade = False
 		# Seed auto-response: button 0 = OK (dismiss without silencing)
 		self.embody.store('_smoke_test_responses', {
-			'Large TDN File': 0})
+			'Large TDXN File': 0})
 		try:
-			self.embody.ext.TDXN._warnLargeTDN(str(big_file), '/test')
+			self.embody.ext.TDXN._warnLargeTDXN(str(big_file), '/test')
 			# Dialog was intercepted - warn pref should still be 'ask'
 			self.assertEqual(self.embody.par.Tdxncascadewarn.eval(), 'ask')
 		finally:

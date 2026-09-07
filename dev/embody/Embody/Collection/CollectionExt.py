@@ -1,6 +1,6 @@
 """CollectionExt -- embody.tools community/platform integration.
 
-Owns the untrusted-content layer for community TDN (source == "embody.tools"):
+Owns the untrusted-content layer for community TDXN (source == "embody.tools"):
 the capability scanner and the default-inert safe-import. Trusted own-network
 Copy/Paste lives in TDXNExt and never reaches here. The scan/inert logic lives in
 the self-contained `scanner` and `safe_import` DATs beside this extension, loaded
@@ -15,11 +15,11 @@ class CollectionExt:
         self.ownerComp = ownerComp
 
     def ScanTdn(self, tdn):
-        """Return the C2 capability report for a TDN dict."""
+        """Return the C2 capability report for a TDXN dict."""
         return self.ownerComp.op('scanner').module.scan_tdn(tdn if isinstance(tdn, dict) else {})
 
     def PlanCommunityPaste(self, tdn):
-        """Scan a community TDN dict and return the import plan (live or inert).
+        """Scan a community TDXN dict and return the import plan (live or inert).
 
         Reached only for source == "embody.tools" -- TDXNExt unwraps the envelope
         and hands over the inner tdn. Nothing here executes.

@@ -1,8 +1,8 @@
 """
-Test suite: MCP TDN network tools.
+Test suite: MCP TDXN network tools.
 
 Covers:
-  A. read_tdn returns a valid TDN dict for a representative COMP
+  A. read_tdn returns a valid TDXN dict for a representative COMP
   B. read_tdn include_dat_content toggle
   C. read_tdn succeeds in all three Tdxnmode values (off / export / full)
   D. Token-budget regression: read_tdn payload is materially smaller than
@@ -19,7 +19,7 @@ except (AttributeError, NameError):
     pass
 
 
-class TestMCPTDNTools(EmbodyTestCase):
+class TestMCPTDXNTools(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -37,8 +37,8 @@ class TestMCPTDNTools(EmbodyTestCase):
     # A. Basic shape
     # ------------------------------------------------------------------
 
-    def test_read_tdn_returns_tdn_dict(self):
-        result = self.envoy._read_tdn(comp_path=self.fixture.path)
+    def test_read_tdxn_returns_tdn_dict(self):
+        result = self.envoy._read_tdxn(comp_path=self.fixture.path)
         self.assertTrue(result.get('success'),
             f'read_tdn failed: {result.get("error")}')
         tdn = result.get('tdn')
@@ -49,8 +49,8 @@ class TestMCPTDNTools(EmbodyTestCase):
         self.assertIn('operators', tdn)
         self.assertIn('version', tdn)
 
-    def test_read_tdn_lists_fixture_children(self):
-        result = self.envoy._read_tdn(comp_path=self.fixture.path)
+    def test_read_tdxn_lists_fixture_children(self):
+        result = self.envoy._read_tdxn(comp_path=self.fixture.path)
         names = {o['name'] for o in result['tdn']['operators']}
         self.assertTrue({'noise', 'level', 'null', 'wave', 'notes'} <= names,
             f'Expected fixture children in tdn.operators, got: {names}')
@@ -59,7 +59,7 @@ class TestMCPTDNTools(EmbodyTestCase):
     # B. Options
     # ------------------------------------------------------------------
 
-    def test_read_tdn_include_dat_content_toggle(self):
+    def test_read_tdxn_include_dat_content_toggle(self):
         """The toggle suppresses content that a file on disk already holds.
 
         Reframed 2026-08-21: it used to assert the toggle drops an UNBACKED
@@ -77,20 +77,20 @@ class TestMCPTDNTools(EmbodyTestCase):
         dat.par.file = backing
         dat.text = 'MARKER_CONTENT_42'
 
-        with_content = self.envoy._read_tdn(
+        with_content = self.envoy._read_tdxn(
             comp_path=self.fixture.path, include_dat_content=True)
         serialized = json.dumps(with_content['tdn'])
         self.assertIn('MARKER_CONTENT_42', serialized,
             'DAT content missing when include_dat_content=True')
 
-        without = self.envoy._read_tdn(
+        without = self.envoy._read_tdxn(
             comp_path=self.fixture.path, include_dat_content=False)
         serialized = json.dumps(without['tdn'])
         self.assertNotIn('MARKER_CONTENT_42', serialized,
             'File-backed DAT content duplicated when '
             'include_dat_content=False')
 
-    def test_read_tdn_always_embeds_unbacked_dat(self):
+    def test_read_tdxn_always_embeds_unbacked_dat(self):
         """An unbacked DAT's code survives include_dat_content=False.
 
         The .tdn is the ONLY place that content can live, so the toggle must
@@ -102,7 +102,7 @@ class TestMCPTDNTools(EmbodyTestCase):
         self.assertFalse(dat.par.file.eval(),
             'Fixture DAT must be unbacked for this test to mean anything')
 
-        without = self.envoy._read_tdn(
+        without = self.envoy._read_tdxn(
             comp_path=self.fixture.path, include_dat_content=False)
         serialized = json.dumps(without['tdn'])
         self.assertIn('MARKER_UNBACKED_99', serialized,
@@ -113,7 +113,7 @@ class TestMCPTDNTools(EmbodyTestCase):
     # C. Mode-agnostic read
     # ------------------------------------------------------------------
 
-    def test_read_tdn_works_in_all_modes(self):
+    def test_read_tdxn_works_in_all_modes(self):
         parexec = self.embody.op('parexec')
         was_active = parexec.par.active.eval()
         mode_was = self.embody.par.Tdxnmode.eval()
@@ -121,7 +121,7 @@ class TestMCPTDNTools(EmbodyTestCase):
         try:
             for mode in ('off', 'export', 'full'):
                 self.embody.par.Tdxnmode.val = mode
-                result = self.envoy._read_tdn(comp_path=self.fixture.path)
+                result = self.envoy._read_tdxn(comp_path=self.fixture.path)
                 self.assertTrue(result.get('success'),
                     f'read_tdn failed in mode={mode}: {result.get("error")}')
                 self.assertIn('operators', result['tdn'])
@@ -134,14 +134,14 @@ class TestMCPTDNTools(EmbodyTestCase):
     # D. Token-budget regression
     # ------------------------------------------------------------------
 
-    def test_read_tdn_is_materially_smaller_than_get_op_walk(self):
+    def test_read_tdxn_is_materially_smaller_than_get_op_walk(self):
         """Lock in the claim: read_tdn uses materially fewer chars than
         walking the same subtree via get_op per operator.
 
         Floor: 5x reduction. Real-world networks hit 20-90x; keeping the
         floor conservative so this test doesn't flake on tiny fixtures.
         """
-        tdn_result = self.envoy._read_tdn(comp_path=self.fixture.path)
+        tdn_result = self.envoy._read_tdxn(comp_path=self.fixture.path)
         self.assertTrue(tdn_result.get('success'))
         tdn_chars = len(json.dumps(tdn_result['tdn']))
 
@@ -169,7 +169,7 @@ class TestMCPTDNTools(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_export_network_in_memory(self):
-        """_export_network with output_file=None returns a TDN dict (no disk)."""
+        """_export_network with output_file=None returns a TDXN dict (no disk)."""
         result = self.envoy._export_network(
             root_path=self.fixture.path, output_file=None)
         self.assertTrue(result.get('success'),

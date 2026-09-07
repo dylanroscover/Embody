@@ -1,12 +1,12 @@
 """
-Test suite: TDN master mode menu (`Tdxnmode`).
+Test suite: TDXN master mode menu (`Tdxnmode`).
 
 Verifies the three-mode menu (Off / Export-on-Save (MCP) / Full Import/Export
 (Experimental)) correctly gates:
   - Reconstruction on project open (off: skip; export: skip; full: run)
   - Pre-save strip (off: skip; export: skip; full: run)
-  - TDN export from Update() and SaveTDN (off: skip; export: run; full: run)
-  - UI gating on the TDN page (off: all greyed; export: strip/create greyed;
+  - TDXN export from Update() and SaveTDXN (off: skip; export: run; full: run)
+  - UI gating on the TDXN page (off: all greyed; export: strip/create greyed;
     full: all live)
 
 Tracked .tdn files on disk survive mode flips (non-destructive transitions).
@@ -21,7 +21,7 @@ except (AttributeError, NameError):
     pass
 
 
-class TestTdnMode(EmbodyTestCase):
+class TestTdxnMode(EmbodyTestCase):
 
     # ------------------------------------------------------------------
     # Lifecycle: snapshot the mode so each test can flip it safely.
@@ -47,7 +47,7 @@ class TestTdnMode(EmbodyTestCase):
         # Re-apply gating so par.enable state matches the restored mode.
         # Tests that flip mode leave enable state stale otherwise (e.g.
         # test_gating_off_greys_all_except_mode would leak enable=False
-        # across all TDN params into the next test / user session).
+        # across all TDXN params into the next test / user session).
         try:
             self.embody_ext._applyTdnModeGating()
         except Exception:
@@ -120,7 +120,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_reconstruct_skips_in_off(self):
         self._setMode('off')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.reconstructTDNComps()
+        self.embody_ext.reconstructTDXNComps()
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
@@ -129,7 +129,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_reconstruct_skips_in_export(self):
         self._setMode('export')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.reconstructTDNComps()
+        self.embody_ext.reconstructTDXNComps()
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
@@ -143,26 +143,26 @@ class TestTdnMode(EmbodyTestCase):
         saved = par.eval()
         ext = self.embody_ext
         calls = []
-        real = ext._recoverMissingTDNComps
-        ext._recoverMissingTDNComps = lambda: calls.append(1) or 0
+        real = ext._recoverMissingTDXNComps
+        ext._recoverMissingTDXNComps = lambda: calls.append(1) or 0
         try:
             par.val = False
-            ext.reconstructTDNComps()
+            ext.reconstructTDXNComps()
         finally:
-            if ext.__dict__.get('_recoverMissingTDNComps') is not None:
-                del ext.__dict__['_recoverMissingTDNComps']
+            if ext.__dict__.get('_recoverMissingTDXNComps') is not None:
+                del ext.__dict__['_recoverMissingTDXNComps']
             par.val = saved
         self.assertEqual(calls, [1],
                          'export-mode recovery must run regardless of the full-only par')
 
     # ------------------------------------------------------------------
-    # 4. SaveTDN gating
+    # 4. SaveTDXN gating
     # ------------------------------------------------------------------
 
     def test_savetdn_skips_when_off(self):
         self._setMode('off')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.saveTDN('/no_such_op')
+        self.embody_ext.saveTDXN('/no_such_op')
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
@@ -273,7 +273,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_gating_export_greys_strip_params_only(self):
         self._setMode('export')
         self.embody_ext._applyTdnModeGating()
-        full_only = self.embody_ext._TDN_FULL_ONLY_PARAMS
+        full_only = self.embody_ext._TDXN_FULL_ONLY_PARAMS
         page = self._getTdnPage()
         for p in page.pars:
             if p.name == 'Tdxnmode':

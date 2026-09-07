@@ -80,7 +80,7 @@ def onStart():
 	run(f"op('{parent.Embody}').ext.Embody._restoreSettings(kick_envoy=True)", delayFrames=5)
 	# Ensure op-type defaults + palette catalog are loaded (loads from
 	# .embody/catalog_<build>.json if present, otherwise async scan).
-	# Must run before ReconstructTDNComps (frame 60) for best results,
+	# Must run before ReconstructTDXNComps (frame 60) for best results,
 	# but the embedded tableDAT covers exports during the scan window.
 	# Skip entirely in Off mode -- catalogs exist for TDXN export compaction
 	# and palette-clone detection; both are dormant when Tdxnmode=off.
@@ -96,7 +96,7 @@ def onStart():
 	# Restore missing standalone DATs from externalized files on disk
 	run(f"op('{parent.Embody}').ext.Embody.restoreDATs()", delayFrames=50)
 	# Reconstruct TDXN-strategy COMPs from .tdn files
-	run(f"op('{parent.Embody}').ext.Embody.reconstructTDNComps()", delayFrames=60)
+	run(f"op('{parent.Embody}').ext.Embody.reconstructTDXNComps()", delayFrames=60)
 	# A project can open with a table link that resolves to nothing: one
 	# provisioned offline by embody_bootstrap (no onCreate ever fired), or
 	# one whose network was renamed. ensure* reconnects a sibling or builds
@@ -301,9 +301,9 @@ def _runPreSaveExternalization():
 		return
 
 	# TDXN content safety -- detect unprotected DATs and storage before strip/restore
-	parent.Embody.ext.Embody._checkTDNContentSafety()
+	parent.Embody.ext.Embody._checkTDXNContentSafety()
 
-	tdn_comps = parent.Embody.ext.Embody._getTDNStrategyComps()
+	tdn_comps = parent.Embody.ext.Embody._getTDXNStrategyComps()
 	if not tdn_comps:
 		return
 
@@ -343,11 +343,11 @@ def _runPreSaveExternalization():
 
 			# Content changed (or first export) - write to disk
 			scan_folder = str(project.folder)
-			before_tdn = parent.Embody.ext.TDXN._collectExistingTDNFiles(
+			before_tdn = parent.Embody.ext.TDXN._collectExistingTDXNFiles(
 				scan_folder, comp_path)
 			# Only files Embody tracks are deletion candidates -- never
 			# reclaim a stray the user placed themselves.
-			before_tdn = parent.Embody.ext.TDXN._restrictToTrackedTDN(
+			before_tdn = parent.Embody.ext.TDXN._restrictToTrackedTDXN(
 				before_tdn)
 			content = parent.Embody.ext.TDXN._compact_json_dumps(new_tdn)
 			# Same value as scan_folder, separate name on purpose:
@@ -372,19 +372,19 @@ def _runPreSaveExternalization():
 
 			# Stale file cleanup
 			protected = [abs_path]
-			other_protected = parent.Embody.ext.Embody._getAllTrackedTDNFiles(
+			other_protected = parent.Embody.ext.Embody._getAllTrackedTDXNFiles(
 				exclude_path=comp_path)
 			if other_protected:
 				protected.extend(other_protected)
-			parent.Embody.ext.TDXN._cleanupStaleTDNFiles(
+			parent.Embody.ext.TDXN._cleanupStaleTDXNFiles(
 				before_tdn, protected, scan_folder)
 
 			# Track export and update fingerprint
-			parent.Embody.ext.TDXN._trackTDNExport(
+			parent.Embody.ext.TDXN._trackTDXNExport(
 				comp_path, abs_path,
 				build_num=new_tdn.get('build'),
 				touch_build=f'{app.version}.{app.build}')
-			parent.Embody.ext.Embody._storeTDNFingerprint(comp)
+			parent.Embody.ext.Embody._storeTDXNFingerprint(comp)
 			exported.append((comp_path, rel_tdn_path))
 		except Exception as e:
 			parent.Embody.ext.Embody.Log(
@@ -436,7 +436,7 @@ def _runPreSaveExternalization():
 	# untouched in the live session because strip never ran on them).
 	# Without this pre-stage, a mid-strip crash destroyed children with no
 	# recovery list, leaving the live session broken until manual
-	# ReconstructTDNComps() or reopen (the .tdn files on disk are still the
+	# ReconstructTDXNComps() or reopen (the .tdn files on disk are still the
 	# source of truth, so saved data is never lost -- but session integrity is).
 	if exported_by_depth:
 		parent.Embody.store('_tdn_stripped_paths', list(exported_by_depth))

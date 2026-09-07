@@ -26,7 +26,7 @@ python); on any `import yaml` failure OR read/parse error it emits the raw
 file unchanged, so a malformed .tdn still diffs (unfiltered) rather than
 breaking git.
 
-The stripped key set is a deliberate SUPERSET of TDXNExt._TDN_VOLATILE_KEYS:
+The stripped key set is a deliberate SUPERSET of TDXNExt._TDXN_VOLATILE_KEYS:
 it also drops 'version' and 'source_file' so a v1.5-JSON-history blob and a
 v2.0-YAML-working-tree blob of the same network normalize identically. The
 driver list is local; it does NOT touch the on-disk version field.
@@ -42,12 +42,12 @@ except Exception:
     _HAVE_YAML = False
 
 # Header keys written into every .tdn on export that change without the
-# network changing. Deliberate SUPERSET of TDXNExt._TDN_VOLATILE_KEYS
+# network changing. Deliberate SUPERSET of TDXNExt._TDXN_VOLATILE_KEYS
 # ({'build','generator','td_build','exported_at','source_file'}): 'version'
 # is added so the v1.5->v2.0 format bump does not churn the diff. 'format' is added for the same reason: the
 # v6.1.0 tdn->tdxn identity bump would otherwise show as a one-line diff in
 # every tracked file. Do NOT 'sync' this to equality with
-# _TDN_VOLATILE_KEYS -- the broader set is correct by intent, and adding
+# _TDXN_VOLATILE_KEYS -- the broader set is correct by intent, and adding
 # 'format' THERE would make _tdn_content_equal treat the bump as "no change",
 # so existing files would never converge to the new key.
 VOLATILE_KEYS = ('build', 'generator', 'td_build', 'exported_at',
@@ -65,8 +65,8 @@ if _HAVE_YAML:
         _BaseDumper = yaml.SafeDumper
         _BaseLoader = yaml.SafeLoader
 
-    class _TDNYamlDumper(_BaseDumper):
-        """Private subclass so TDN representers never leak into SafeDumper."""
+    class _TDXNYamlDumper(_BaseDumper):
+        """Private subclass so TDXN representers never leak into SafeDumper."""
         pass
 
     def _tdn_str_representer(dumper, data):
@@ -81,8 +81,8 @@ if _HAVE_YAML:
         return dumper.represent_sequence('tag:yaml.org,2002:seq', data,
                                          flow_style=flow)
 
-    _TDNYamlDumper.add_representer(str, _tdn_str_representer)
-    _TDNYamlDumper.add_representer(list, _tdn_list_representer)
+    _TDXNYamlDumper.add_representer(str, _tdn_str_representer)
+    _TDXNYamlDumper.add_representer(list, _tdn_list_representer)
 
 
 def _parse(raw):
@@ -138,10 +138,10 @@ def normalize(raw):
             doc.pop(key, None)
         _normalize_dat_content(doc)
     # Deterministic, order-preserving dump with the SAME config as TDXNExt's
-    # _TDNYamlDumper (block scalars, short-numeric list flow, sort_keys=False).
+    # _TDXNYamlDumper (block scalars, short-numeric list flow, sort_keys=False).
     # Both sides of a diff pass through this identical normalization.
     try:
-        out = yaml.dump(doc, Dumper=_TDNYamlDumper, sort_keys=False,
+        out = yaml.dump(doc, Dumper=_TDXNYamlDumper, sort_keys=False,
                         width=4096, allow_unicode=True)
     except Exception:
         return raw

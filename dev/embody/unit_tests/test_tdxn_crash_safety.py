@@ -1,5 +1,5 @@
 """
-Test suite: TDN crash safety - atomic writes, backup rotation, validation,
+Test suite: TDXN crash safety - atomic writes, backup rotation, validation,
 and import rollback.
 
 Tests cover:
@@ -24,7 +24,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
 def _make_valid_tdn(op_count=1):
-	"""Build a minimal valid TDN document dict."""
+	"""Build a minimal valid TDXN document dict."""
 	operators = []
 	for i in range(op_count):
 		operators.append({'name': f'op_{i}', 'type': 'noiseTOP'})
@@ -36,11 +36,11 @@ def _make_valid_tdn(op_count=1):
 
 
 def _make_valid_tdn_json(op_count=1):
-	"""Build a minimal valid TDN JSON string."""
+	"""Build a minimal valid TDXN JSON string."""
 	return json.dumps(_make_valid_tdn(op_count))
 
 
-class TestTDNCrashSafety(EmbodyTestCase):
+class TestTDXNCrashSafety(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
@@ -378,7 +378,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 	# =================================================================
 
 	def test_C01_validate_valid_tdn(self):
-		"""Well-formed TDN JSON should pass validation."""
+		"""Well-formed TDXN JSON should pass validation."""
 		Path(self._tdn_path).write_text(
 			_make_valid_tdn_json(), encoding='utf-8')
 		result = self.tdn._validate_tdn_file(self._tdn_path)
@@ -458,7 +458,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			'No backup for first export')
 
 	def test_D03_safe_write_restores_on_validation_failure(self):
-		"""If written content is invalid TDN, backup should be restorable."""
+		"""If written content is invalid TDXN, backup should be restorable."""
 		# Write a valid v1 first
 		v1 = _make_valid_tdn_json(3)
 		Path(self._tdn_path).write_text(v1, encoding='utf-8')
@@ -547,7 +547,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		bak = self.tdn._get_backup_path(
 			self._tdn_path, self._proj_folder, '.bak')
 		self.assertTrue(bak.is_file())
-		# Backup can be parsed as valid TDN
+		# Backup can be parsed as valid TDXN
 		doc = self.tdn.tdn_load(bak.read_text(encoding='utf-8'))
 		self.assertEqual(doc.get('format'), 'tdn')
 
@@ -685,11 +685,11 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		validation = self.tdn._validate_tdn_file(tdn_file)
 		self.assertTrue(validation.get('valid'),
 			f'Validation failed: {validation}')
-		# Verify TDN JSON has correct operator count
+		# Verify TDXN JSON has correct operator count
 		tdn_doc = self.tdn.tdn_load(Path(tdn_file).read_text(encoding='utf-8'))
 		top_level_ops = len(tdn_doc.get('operators', []))
 		self.assertGreater(top_level_ops, 900,
-			f'Expected 900+ top-level ops in TDN, got {top_level_ops}')
+			f'Expected 900+ top-level ops in TDXN, got {top_level_ops}')
 		# Clear and reimport
 		for c in list(self.sandbox.children):
 			try:
@@ -756,7 +756,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 	def test_G01_skips_rewrite_when_network_is_unchanged(self):
 		"""Every .tdn write funnels through _safe_write_tdn, so this guard is
 		what stops an explicit save (manager Save, save_externalization,
-		dirty-driven SaveTDN) from rewriting a file whose network is
+		dirty-driven SaveTDXN) from rewriting a file whose network is
 		identical. Without it the file reads modified in `git status` while
 		`git diff` renders EMPTY -- textconv strips exactly these keys.
 		"""
@@ -890,7 +890,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			f'Full rollback should restore ~{expected} ops, got {full_created}')
 
 	def test_F05_deep_nesting_20_levels(self):
-		"""20 levels deep: export -> reimport -> verify structure in TDN JSON."""
+		"""20 levels deep: export -> reimport -> verify structure in TDXN JSON."""
 		# Build 20-level nesting
 		current = self.sandbox
 		for i in range(20):
@@ -902,7 +902,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(result.get('success'))
 		tdn = result['tdn']
-		# Verify depth in TDN JSON structure
+		# Verify depth in TDXN JSON structure
 		def max_depth(ops, d=0):
 			m = d
 			for o in ops:
@@ -910,7 +910,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			return m
 		depth = max_depth(tdn['operators'])
 		self.assertGreaterEqual(depth, 19,
-			f'Expected 19+ levels in TDN JSON, got {depth}')
+			f'Expected 19+ levels in TDXN JSON, got {depth}')
 		# Clear and reimport
 		for c in list(self.sandbox.children):
 			try:

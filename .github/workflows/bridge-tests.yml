@@ -60,7 +60,7 @@ on:
       - 'platform/packages/scanner-ts/fixtures/**'
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
-      - 'dev/embody/unit_tests/test_tdn_schema.py'
+      - 'dev/embody/unit_tests/test_tdxn_schema.py'
       - 'docs/tdn.schema.yaml'
       - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'
@@ -117,7 +117,7 @@ on:
       - 'platform/packages/scanner-ts/fixtures/**'
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
-      - 'dev/embody/unit_tests/test_tdn_schema.py'
+      - 'dev/embody/unit_tests/test_tdxn_schema.py'
       - 'docs/tdn.schema.yaml'
       - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'

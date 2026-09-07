@@ -1,7 +1,7 @@
 """
-Test suite: TDN writer/reader contract invariant.
+Test suite: TDXN writer/reader contract invariant.
 
-THE INVARIANT: anything the TDN exporter can emit, the TDN importer must
+THE INVARIANT: anything the TDXN exporter can emit, the TDXN importer must
 be able to apply. A writer that produces a document its own reader rejects
 is a data-fidelity bug regardless of which side you call wrong.
 
@@ -33,7 +33,7 @@ SEQ_OP_TYPES = [
 ]
 
 
-class TestTDNRoundtripInvariant(EmbodyTestCase):
+class TestTDXNRoundtripInvariant(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()

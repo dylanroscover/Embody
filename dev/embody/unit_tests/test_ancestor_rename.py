@@ -485,11 +485,11 @@ class TestAncestorRename(EmbodyTestCase):
                          'rel_file should not contain old segment')
 
     # =========================================================================
-    # _handleAncestorRename - TDN strategy
+    # _handleAncestorRename - TDXN strategy
     # =========================================================================
 
     def test_tdn_strategy_skips_param_update_but_updates_table(self):
-        """TDN-strategy ops should have table updated but skip externaltox changes."""
+        """TDXN-strategy ops should have table updated but skip externaltox changes."""
         ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/tdntest/parent'
         new_prefix = '/tdntest/newparent'
@@ -511,9 +511,9 @@ class TestAncestorRename(EmbodyTestCase):
         result = self.embody_ext._handleAncestorRename(
             old_prefix, new_prefix, rows, ext_folder)
 
-        self.assertTrue(result, 'Should succeed for TDN ops')
+        self.assertTrue(result, 'Should succeed for TDXN ops')
         self.assertTrue(self._table_has_path(new_prefix + '/tdn_comp'),
-                        'Table should have new path for TDN op')
+                        'Table should have new path for TDXN op')
 
     # =========================================================================
     # _handleAncestorRename - return value semantics

@@ -882,9 +882,9 @@ class TestReleaseAll(EmbodyTestCase):
 
 class TestTransientParScrub(EmbodyTestCase):
     """A-50 (Convoy plan): the declarative runtime-status par registry and
-    its consumers -- TDN custom-par export records RESTING values (never
+    its consumers -- TDXN custom-par export records RESTING values (never
     par.default: Status's default '' is a state the enable machinery
-    cannot leave), the TDN value-omit companion drops machine-stamp values
+    cannot leave), the TDXN value-omit companion drops machine-stamp values
     while definitions ship, and ExportPortableTox resets registered pars
     around the save in EVERY mode (the registry is the last word; hooks
     cannot ship a session value for a registered par).
@@ -904,13 +904,13 @@ class TestTransientParScrub(EmbodyTestCase):
         super().setUp()
         self._cls = type(self.embody_ext)
         self._orig_registry = self._cls._TRANSIENT_STATUS_PARS
-        self._orig_omit = self._cls._TDN_VALUE_OMIT_PARS
+        self._orig_omit = self._cls._TDXN_VALUE_OMIT_PARS
         self._orig_storage_shortcuts = self._cls._TRANSIENT_STORAGE_SHORTCUTS
         self._tmp_dirs = []
 
     def tearDown(self):
         self._cls._TRANSIENT_STATUS_PARS = self._orig_registry
-        self._cls._TDN_VALUE_OMIT_PARS = self._orig_omit
+        self._cls._TDXN_VALUE_OMIT_PARS = self._orig_omit
         self._cls._TRANSIENT_STORAGE_SHORTCUTS = self._orig_storage_shortcuts
         for d in self._tmp_dirs:
             shutil.rmtree(d, ignore_errors=True)
@@ -1003,7 +1003,7 @@ class TestTransientParScrub(EmbodyTestCase):
     def test_embody_about_page_names_are_consciously_registered(self):
         """Sync tripwire: adding a par to the Embody About page must be a
         conscious decision about churn -- either register it in
-        _TDN_VALUE_OMIT_PARS (machine-written, per-save churn) or accept
+        _TDXN_VALUE_OMIT_PARS (machine-written, per-save churn) or accept
         its value in version control. This assertion forces the look."""
         expected = {'Version', 'Touchbuild', 'Author', 'Build', 'Date',
                     'Github', 'Help', 'Autoupdate', 'Checkforupdate',
@@ -1015,7 +1015,7 @@ class TestTransientParScrub(EmbodyTestCase):
         self.assertEqual(
             live, expected,
             'The Embody About page changed. Decide churn-handling for the '
-            'new/renamed pars (EmbodyExt._TDN_VALUE_OMIT_PARS) and update '
+            'new/renamed pars (EmbodyExt._TDXN_VALUE_OMIT_PARS) and update '
             'this expected set.')
 
     def test_scoping_by_op_shortcut(self):
@@ -1108,7 +1108,7 @@ class TestTransientParScrub(EmbodyTestCase):
         self.assertEqual(before, after,
                          'live status readouts must survive the roundtrip')
 
-    # -- TDN export consumer -----------------------------------------
+    # -- TDXN export consumer -----------------------------------------
 
     def test_tdn_export_records_resting_definition_ships(self):
         comp = self._make_scrub_comp()
@@ -1133,7 +1133,7 @@ class TestTransientParScrub(EmbodyTestCase):
         value = defs['Teststatus'].get('value')
         self.assertTrue(
             isinstance(value, str) and value.startswith('='),
-            'an expression on a registered par must survive TDN export, '
+            'an expression on a registered par must survive TDXN export, '
             'got %r' % (value,))
         self.assertIn('live-', value)
 
@@ -1143,7 +1143,7 @@ class TestTransientParScrub(EmbodyTestCase):
         page.appendStr('Stampval')[0].val = '2026-07-30 09:45:00 UTC'
         patched = dict(self._orig_omit)
         patched[self._SHORTCUT] = frozenset({'Stampval'})
-        self._cls._TDN_VALUE_OMIT_PARS = patched
+        self._cls._TDXN_VALUE_OMIT_PARS = patched
 
         pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}

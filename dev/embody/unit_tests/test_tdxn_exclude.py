@@ -1,9 +1,9 @@
 """
 Test suite: tdn_exclude tag - making a COMP (and its whole subtree)
-invisible to the TDN system.
+invisible to the TDXN system.
 
 A COMP whose tags include the exclude tag (default 'tdn_exclude') is
-transparent to TDN: never exported (no inline entry, no tdn_ref/tox_ref),
+transparent to TDXN: never exported (no inline entry, no tdn_ref/tox_ref),
 not stripped on save, and not destroyed/recreated by reconstruction's
 clear_first pass. The owning application owns its lifecycle.
 
@@ -27,7 +27,7 @@ except (AttributeError, NameError):
     pass
 
 
-class TestTDNExclude(EmbodyTestCase):
+class TestTDXNExclude(EmbodyTestCase):
 
     @property
     def tdn_ext(self):
@@ -227,7 +227,7 @@ class TestTDNExclude(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_cascade_autotag_skips_excluded(self):
-        """The real cascade path (_cascadeTDNTag) must not tag an excluded
+        """The real cascade path (_cascadeTDXNTag) must not tag an excluded
         child. Stub applyTagToOperator to capture targets without the file/
         table side effects of a real externalization."""
         parent = self.sandbox.create(baseCOMP, 'casc_parent')
@@ -239,7 +239,7 @@ class TestTDNExclude(EmbodyTestCase):
         orig = ext.applyTagToOperator
         ext.applyTagToOperator = lambda o, t: calls.append(o.path)
         try:
-            ext._cascadeTDNTag(parent)
+            ext._cascadeTDXNTag(parent)
         finally:
             ext.applyTagToOperator = orig
         self.assertIn(keep.path, calls,
@@ -252,7 +252,7 @@ class TestTDNExclude(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_nested_excluded_under_normal_warns_and_is_preserved(self):
-        # Exclusion is honored only at a TDN boundary's DIRECT children,
+        # Exclusion is honored only at a TDXN boundary's DIRECT children,
         # because the strip/clear passes only preserve direct children. A
         # COMP tagged for exclusion but nested under a non-excluded child
         # cannot be preserved by those passes -- so if the export ALSO
@@ -316,15 +316,15 @@ class TestTDNExclude(EmbodyTestCase):
         drop = parent.create(baseCOMP, 'fp_drop')
         drop.tags.add(self.exclude_tag)
         try:
-            self.embody_ext._storeTDNFingerprint(parent)
+            self.embody_ext._storeTDXNFingerprint(parent)
             # Mutating the excluded child must NOT dirty the parent.
             drop.nodeX += 100
             drop.create(baseCOMP, 'fp_inside_new')
-            self.assertFalse(self.embody_ext._isTDNDirty(parent),
+            self.assertFalse(self.embody_ext._isTDXNDirty(parent),
                 'Changes inside an excluded child must not dirty the parent')
             # Control: mutating a normal child DOES dirty the parent.
             keep.nodeX += 100
-            self.assertTrue(self.embody_ext._isTDNDirty(parent),
+            self.assertTrue(self.embody_ext._isTDXNDirty(parent),
                 'Changes to a normal child must dirty the parent')
         finally:
             self.embody_ext._tdn_fingerprints.pop(parent.path, None)
@@ -354,7 +354,7 @@ class TestTDNExclude(EmbodyTestCase):
     @staticmethod
     def _collect_all_refs(doc):
         """Recursively gather operator names and every reference string
-        (tdn_ref/tox_ref/dock/inputs/connections) from a TDN doc."""
+        (tdn_ref/tox_ref/dock/inputs/connections) from a TDXN doc."""
         names, refs = set(), set()
 
         def walk(ops):

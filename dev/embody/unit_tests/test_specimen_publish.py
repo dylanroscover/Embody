@@ -24,8 +24,8 @@ These tests cover:
         _palette key                                              (headless)
 
 The _publish bucket tests run HEADLESS by patching the loaded module's
-namespace (op / project) and stubbing TDN.ExportNetwork, while delegating the
-real, pure TDN comparison statics (_read_existing_tdn, _tdn_content_equal,
+namespace (op / project) and stubbing TDXN.ExportNetwork, while delegating the
+real, pure TDXN comparison statics (_read_existing_tdn, _tdn_content_equal,
 _compact_json_dumps). No live save, no /specimen_lab dependency.
 
 NONE of these belong in the release smoke suite: specimen_publish is
@@ -61,9 +61,9 @@ class _FakeComp:
 		self.path = path
 
 
-class _FakeTDN:
-	"""Stub TDN ext. ExportNetwork is controllable; the comparison statics
-	delegate to the REAL TDN extension so the skip-unchanged logic is faithful.
+class _FakeTDXN:
+	"""Stub TDXN ext. ExportNetwork is controllable; the comparison statics
+	delegate to the REAL TDXN extension so the skip-unchanged logic is faithful.
 	"""
 	def __init__(self, real_tdn, export_result=None, export_fn=None):
 		self._real = real_tdn
@@ -166,9 +166,9 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 			json.dumps({'specimens': specimens}), encoding='utf-8')
 
 	def _install(self, present=None, export_result=None, export_fn=None):
-		"""Patch op/project in the module and return the fake TDN for asserts."""
+		"""Patch op/project in the module and return the fake TDXN for asserts."""
 		real_tdn = self.embody.ext.TDXN
-		fake_tdn = _FakeTDN(real_tdn, export_result=export_result,
+		fake_tdn = _FakeTDXN(real_tdn, export_result=export_result,
 							export_fn=export_fn)
 		fake_emb = _FakeEmbody(fake_tdn)
 		fake_op = _FakeOp(fake_emb, present or {})
@@ -247,7 +247,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 	def test_skip_unchanged_then_rewrite_on_change(self):
 		"""Identical export skips; a changed export writes again.
 
-		Uses the REAL TDN _read_existing_tdn / _tdn_content_equal /
+		Uses the REAL TDXN _read_existing_tdn / _tdn_content_equal /
 		_compact_json_dumps via the fake's delegation, so the
 		volatile-key-ignoring skip logic is exercised faithfully -- no live
 		/specimen_lab COMP and no save required.
@@ -352,26 +352,26 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 	def test_live_first_writes_second_skips(self):
 		"""First export to a fresh path writes a file; identical export to the
 		same path is content-equal and would skip."""
-		TDN = self.embody.ext.TDXN
+		TDXN = self.embody.ext.TDXN
 		out = Path(self._tmp_out, 'live.tdxn')
-		res = TDN.ExportNetwork(root_path=self._live.path,
+		res = TDXN.ExportNetwork(root_path=self._live.path,
 								include_dat_content=True, embed_all=True)
 		self.assertTrue(res.get('success'),
 						f'live export failed: {res.get("error")}')
 		new = res['tdn']
 		# First write: no existing file -> _read_existing_tdn is None.
-		self.assertIsNone(TDN._read_existing_tdn(str(out)))
-		out.write_text(TDN._compact_json_dumps(new), encoding='utf-8')
+		self.assertIsNone(TDXN._read_existing_tdn(str(out)))
+		out.write_text(TDXN._compact_json_dumps(new), encoding='utf-8')
 		self.assertTrue(out.exists())
 
 		# Re-export the same live COMP. Content (minus volatile header) must
 		# equal what's on disk -> the publish hook would land in 'skipped'.
-		res2 = TDN.ExportNetwork(root_path=self._live.path,
+		res2 = TDXN.ExportNetwork(root_path=self._live.path,
 								 include_dat_content=True, embed_all=True)
 		self.assertTrue(res2.get('success'))
-		old = TDN._read_existing_tdn(str(out))
+		old = TDXN._read_existing_tdn(str(out))
 		self.assertIsNotNone(old)
-		self.assertTrue(TDN._tdn_content_equal(res2['tdn'], old),
+		self.assertTrue(TDXN._tdn_content_equal(res2['tdn'], old),
 						'identical re-export should be content-equal -> skipped')
 
 

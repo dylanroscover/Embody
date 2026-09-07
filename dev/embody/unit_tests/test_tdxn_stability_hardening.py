@@ -1,7 +1,7 @@
 """
-Test suite: TDN stability hardening (2026-07-03 audit regressions).
+Test suite: TDXN stability hardening (2026-07-03 audit regressions).
 
-Pins the fixes from the TDN stability/data-resiliency audit:
+Pins the fixes from the TDXN stability/data-resiliency audit:
 
   A. _isDATEditable uses DAT.isEditable -- the old write-probe
      (dat.text = dat.text) corrupted live table cells containing
@@ -12,13 +12,13 @@ Pins the fixes from the TDN stability/data-resiliency audit:
   C. ImportNetwork validates document structure BEFORE clear_first --
      a malformed hand-edited .tdn could destroy children and then
      raise, leaving the COMP empty with no error result.
-  D. _trackTDNExport only APPENDS a table row for TDN-tagged COMPs --
+  D. _trackTDXNExport only APPENDS a table row for TDXN-tagged COMPs --
      an ad-hoc file export no longer silently enrolls an untagged COMP
      in the save-strip/reconstruction lifecycle.
   E. Stale-file cleanup deletion candidates are restricted to files the
      externalizations table tracks -- untracked strays are never
      Embody's to delete.
-  F. RecoverOrphanShells restores TDN-tagged empty COMPs whose table
+  F. RecoverOrphanShells restores TDXN-tagged empty COMPs whose table
      row was lost, via the _tdn_rel_path storage pointer or the
      mirror-path convention.
 """
@@ -27,7 +27,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNStabilityHardening(EmbodyTestCase):
+class TestTDXNStabilityHardening(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -40,7 +40,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         # tsv directly), keeping their files for our own unlink below.
         for path in self._temp_rows:
             try:
-                self.embody_ext._removeTDNStrategy(path, delete_file=False)
+                self.embody_ext._removeTDXNStrategy(path, delete_file=False)
             except Exception:
                 pass
         from pathlib import Path
@@ -58,7 +58,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
     # -----------------------------------------------------------------
 
     def _tagged_comp_with_child(self, name):
-        """Create a TDN-tagged COMP holding one child, inside the sandbox."""
+        """Create a TDXN-tagged COMP holding one child, inside the sandbox."""
         comp = self.sandbox.create(baseCOMP, name)
         comp.tags.add(self.embody.par.Tdxntag.val)
         comp.create(textDAT, 'payload').text = 'payload text'
@@ -177,9 +177,9 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         rebuilt = self.sandbox.op('geo_rt')
         self.assertIsNotNone(rebuilt)
         self.assertFalse(rebuilt.render,
-                         'render=False lost through TDN round-trip')
+                         'render=False lost through TDXN round-trip')
         self.assertFalse(rebuilt.display,
-                         'display=False lost through TDN round-trip')
+                         'display=False lost through TDXN round-trip')
 
     def test_B04_common_types_flag_export_unchanged(self):
         """noiseTOP/textDAT creation flags match DEFAULT_FLAGS -- viewer=True
@@ -301,11 +301,11 @@ class TestTDNStabilityHardening(EmbodyTestCase):
 
     def test_E01_restrict_to_tracked_drops_strays(self):
         from pathlib import Path
-        tracked_files = self.embody_ext._getAllTrackedTDNFiles()
+        tracked_files = self.embody_ext._getAllTrackedTDXNFiles()
         self.assertTrue(tracked_files, 'live project has no tracked .tdn')
         stray = str(Path(project.folder) / 'embody' / 'unit_tests'
                     / '_stray_never_tracked.tdn')
-        kept = self.tdn._restrictToTrackedTDN({tracked_files[0], stray})
+        kept = self.tdn._restrictToTrackedTDXN({tracked_files[0], stray})
         self.assertIn(tracked_files[0], kept)
         self.assertNotIn(stray, kept,
                          'untracked stray survived into deletion candidates')
@@ -340,7 +340,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
             root_path=comp.path, output_file=str(out))
         self.assertTrue(result.get('success'))
         # Simulate the tsv losing the row, then the shell opening empty.
-        self.embody_ext._removeTDNStrategy(comp.path, delete_file=False)
+        self.embody_ext._removeTDXNStrategy(comp.path, delete_file=False)
         for child in list(comp.children):
             child.destroy()
         self.assertEqual(len(comp.children), 0)
@@ -361,7 +361,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         result = self.tdn.ExportNetwork(
             root_path=comp.path, output_file=str(out))
         self.assertTrue(result.get('success'))
-        self.embody_ext._removeTDNStrategy(comp.path, delete_file=False)
+        self.embody_ext._removeTDXNStrategy(comp.path, delete_file=False)
         comp.unstore('_tdn_rel_path')  # force the convention-path fallback
         for child in list(comp.children):
             child.destroy()

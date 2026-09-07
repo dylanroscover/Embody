@@ -135,7 +135,7 @@ class EmbodyTestCase(TestCase):
             'this machine holds the clipboard open. Environment problem, not '
             'a product failure.' % (what, self.CLIPBOARD_ATTEMPTS))
 
-    def requireClipboardHolds(self, predicate, what='a TDN envelope',
+    def requireClipboardHolds(self, predicate, what='a TDXN envelope',
                               reseed=None):
         """Assert the clipboard satisfies `predicate`, retrying on contention.
 
@@ -470,7 +470,7 @@ class TestRunnerExt:
         """Re-export the emptied sandbox so the test_sandbox receipt holds no residue.
 
         Mid-run checkpoints export the populated sandbox; after teardown the
-        COMP is empty but `_refusesEmptyTDNOverwrite` (a data-loss guard)
+        COMP is empty but `_refusesEmptyTDXNOverwrite` (a data-loss guard)
         stops every automatic writer from emptying the file, so the residue
         went dirty in git after every run (TDXN review 2026-08-30). The
         explicit allow_empty path is the sanctioned one; the no-op guard
@@ -478,7 +478,7 @@ class TestRunnerExt:
         try:
             sandbox = self.ownerComp.op('test_sandbox')
             if sandbox is not None and not sandbox.children:
-                op.Embody.ext.Embody.saveTDN(sandbox.path, allow_empty=True)
+                op.Embody.ext.Embody.saveTDXN(sandbox.path, allow_empty=True)
         except Exception as e:
             op.Embody.Warn('Could not clear the sandbox receipt: %s' % e)
 
@@ -607,7 +607,7 @@ class TestRunnerExt:
             return {'error': msg}
         # The gate's real requirement is "a saved .toe exists on disk to
         # reopen afterward". project.modified is NOT a usable proxy for that:
-        # Embody's own post-save housekeeping (Refresh sweep, TDN re-export,
+        # Embody's own post-save housekeeping (Refresh sweep, TDXN re-export,
         # externalizations-table writes) re-dirties the project within
         # SECONDS, so this refused even immediately after project.save() --
         # measured 2026-07-26, True in 6/6 samples ~2 min after a successful

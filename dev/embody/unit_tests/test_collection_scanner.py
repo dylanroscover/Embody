@@ -1,11 +1,11 @@
 """
-Test suite: Community-safety TDN capability SCANNER (Collection/scanner).
+Test suite: Community-safety TDXN capability SCANNER (Collection/scanner).
 
 Exercises the LIVE scanner module wired into the Collection COMP -- resolved
 inline every test via op.Embody.op('Collection/scanner').module, never cached
 (TD may reinit the externalized scanner.py at any time).
 
-The scanner is pure Python (no TD imports): it accepts a parsed TDN dict and
+The scanner is pure Python (no TD imports): it accepts a parsed TDXN dict and
 returns the frozen C2 CapabilityJson shape:
 
     {
@@ -47,7 +47,7 @@ _SURFACES = (
 def make_tdn(operators=None, **overrides):
     """Mirror the standalone suite's make_tdn fixture.
 
-    Builds a minimal-but-valid TDN dict. Pass a list of operator dicts; extra
+    Builds a minimal-but-valid TDXN dict. Pass a list of operator dicts; extra
     top-level keys via **overrides (e.g. network_path, type)."""
     tdn = {
         "format": "tdn",
@@ -352,7 +352,7 @@ class CollectionScannerTests(EmbodyTestCase):
             {
                 "name": "text1",
                 "type": "textDAT",
-                "dat_content": "x" * (scanner.MAX_SERIALIZED_TDN_BYTES + 1),
+                "dat_content": "x" * (scanner.MAX_SERIALIZED_TDXN_BYTES + 1),
                 "dat_content_format": "text",
             }
         ])

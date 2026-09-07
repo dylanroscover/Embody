@@ -79,7 +79,7 @@ _VIZ_STAGE_MARGIN = 700.0   # network units past the viewport edge for the stagi
 _VIZ_ENTRANCE_DUR = 0.95    # seconds for the swoop-in from staging (vs _VIZ_JUMP_DUR hops)
 # Canonical resting coordinates for the TEMPLATE's parts (issue #86). The
 # staging trick above parks the SOURCE part off-view before copying it, and the
-# template lives inside the Embody COMP -- a TDN-strategy COMP -- so a staging
+# template lives inside the Embody COMP -- a TDXN-strategy COMP -- so a staging
 # coordinate left on the source is written straight into Embody.tdn on the next
 # export (verified: all nine template parts were committed at [1860, 251], a
 # leaked staging point). (0, 0) is deliberate: TDXNExt._exportAnnotations omits
@@ -288,7 +288,7 @@ def netRelocationOK(ext, netpath, queue, now) -> bool:
     have to persist across frames) but it deliberately does NOT stamp
     `_viz_home`: only commitRelocation does that, and trackActive calls it ONLY
     after the bot actually landed in the net. That ordering is load-bearing --
-    ensureBot can still refuse a spawn (botUnsafeNet on any TDN-strategy COMP,
+    ensureBot can still refuse a spawn (botUnsafeNet on any TDXN-strategy COMP,
     botWouldBeSeen with the follow off, a write suppression), and an eager commit
     would leave `_viz_home` naming a network Embot never entered. Every later hop
     to the net he IS standing in would then be charged the full gate for a
@@ -634,7 +634,7 @@ def trackActive(ext, now: float, follow: bool, show_bot: bool) -> None:
         pulseStart(ext, target, now)    # ping the node colour
         placeBot(ext, net, target, now) # bring the dancing bot to the op
         # Commit only if he ACTUALLY landed. ensureBot can still refuse
-        # (botUnsafeNet on a TDN-strategy COMP, botWouldBeSeen with the follow
+        # (botUnsafeNet on a TDXN-strategy COMP, botWouldBeSeen with the follow
         # off, a write suppression); committing anyway would point _viz_home at
         # a net he never entered and charge every later hop to the net he IS in
         # for a relocation that costs nothing. See netRelocationOK.
@@ -1010,8 +1010,8 @@ def ensureBot(ext, net: 'COMP') -> bool:
     # or inside the 6s takeover window). It sits AFTER the "already here" return,
     # so a bot that already exists keeps tracking normally when the user
     # navigates away -- only NEW spawns are suppressed. It MUST precede
-    # botUnsafeNet, which reaches EmbodyExt._getTDNPaths() ->
-    # _getTDNStrategyComps(): a full externalizations-table scan with a per-row
+    # botUnsafeNet, which reaches EmbodyExt._getTDXNPaths() ->
+    # _getTDXNStrategyComps(): a full externalizations-table scan with a per-row
     # op() plus an exclude-tag lookup. In the suppressed state ensureBot runs its
     # prefix EVERY frame, so the wrong order would add a per-frame table scan.
     #
@@ -1225,7 +1225,7 @@ def assembleStep(ext, net: 'COMP') -> None:
     # (_botDance then arranges the copies into the figure wherever the bot stands.)
     #
     # Issue #86: the source is the TEMPLATE part, which lives inside the Embody
-    # COMP -- a TDN-strategy COMP. A staging coordinate left on it is exported
+    # COMP -- a TDXN-strategy COMP. A staging coordinate left on it is exported
     # into Embody.tdn (all nine parts were committed at a leaked [1860, 251]), so
     # every on-screen assembly silently dirtied a tracked file. Snapshot the
     # source position and restore it in a finally that survives the except below.
@@ -1520,13 +1520,13 @@ def botDance(ext, now: float) -> None:
 def botUnsafeNet(ext, net: 'COMP') -> bool:
     """True if a bot must NOT be created in `net` -- it would risk being saved.
     Unsafe: under /local, under the Embody COMP (ExportPortableTox captures
-    Embody's descendants), or inside any TDN-strategy COMP (captured by .tdn
+    Embody's descendants), or inside any TDXN-strategy COMP (captured by .tdn
     export)."""
     try:
         if net.path.startswith('/local'):
             return True
         embody_path = ext.ownerComp.path
-        tdn = ext.ownerComp.ext.Embody._getTDNPaths()
+        tdn = ext.ownerComp.ext.Embody._getTDXNPaths()
         p = net
         while p is not None and p.path != '/':
             if p.path == embody_path or p.path in tdn:

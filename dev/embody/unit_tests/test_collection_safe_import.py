@@ -5,7 +5,7 @@ Runs inside the main Embody suite against the LIVE Collection modules:
     si  = op.Embody.op('Collection/safe_import').module   (make_inert, is_inert)
     coll = op.Embody.op('Collection').ext.Collection       (ScanTdn, PlanCommunityPaste)
 
-safe_import is the default-inert TDN import transform. It is PRESENCE-agnostic
+safe_import is the default-inert TDXN import transform. It is PRESENCE-agnostic
 and ARMED-STATE-based: it disarms every auto-run surface (execute DATs, expr/bind
 parameters, COMP extensions, IO ops, storage) while preserving structure and
 inert content. The standalone unit tests live beside the module at
@@ -21,7 +21,7 @@ import copy
 
 
 # ---------------------------------------------------------------------------
-# Adversarial / fixture TDN builders (kept local + deterministic)
+# Adversarial / fixture TDXN builders (kept local + deterministic)
 # ---------------------------------------------------------------------------
 
 def _base_tdn(operators=None, **extra):
@@ -39,7 +39,7 @@ def _base_tdn(operators=None, **extra):
 
 
 def _adversarial_tdn():
-    """A TDN that lights up every armed surface safe_import disarms."""
+    """A TDXN that lights up every armed surface safe_import disarms."""
     return {
         "format": "tdn",
         "version": "1.4",
@@ -501,7 +501,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
         self.assertTrue(self.si.is_inert(plan["tdn"]))
 
     def test_plan_community_paste_capability_is_flagged_for_adversarial(self):
-        """An armed adversarial TDN scans to a non-clean verdict in the plan."""
+        """An armed adversarial TDXN scans to a non-clean verdict in the plan."""
         plan = self.coll.PlanCommunityPaste(_adversarial_tdn())
         self.assertIn(plan["capability"]["verdict"], ("flagged", "blocked"))
 

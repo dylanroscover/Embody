@@ -162,7 +162,7 @@ class TestScanner(unittest.TestCase):
                 {
                     "name": "text1",
                     "type": "textDAT",
-                    "dat_content": "x" * (scanner.MAX_SERIALIZED_TDN_BYTES + 1),
+                    "dat_content": "x" * (scanner.MAX_SERIALIZED_TDXN_BYTES + 1),
                     "dat_content_format": "text",
                 }
             ]

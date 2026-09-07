@@ -225,11 +225,11 @@ class TestTagLifecycle(EmbodyTestCase):
         self.assertGreater(self.embody_ext.Externalizations.numRows, initial_rows)
 
     # =========================================================================
-    # TDN tag rollback on failed initial export (issue #46)
+    # TDXN tag rollback on failed initial export (issue #46)
     # =========================================================================
 
     def test_tdn_tag_rollback_on_failed_export(self):
-        """Failed initial TDN export rolls the tag back so retag can retry.
+        """Failed initial TDXN export rolls the tag back so retag can retry.
 
         Without rollback, a tagged-but-untracked COMP is a dead end:
         applyTagToOperator no-ops while the tag is present, so every retry

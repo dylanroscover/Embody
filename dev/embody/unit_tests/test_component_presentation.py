@@ -3,7 +3,7 @@ Test suite: shipped-component presentation invariants.
 
 Embody follows the POPX pattern for parameter dialogs: showCustomOnly=True
 on the shipped COMP so users see only Embody's custom pages (Embody, Tags,
-TDN, Envoy, Convoy, UI, Shortcuts, Adv, About), not those plus TD's
+TDXN, Envoy, Convoy, UI, Shortcuts, Adv, About), not those plus TD's
 Layout/Panel/Look/Children/Drag-Drop/Extensions/Common. The flag is a pure
 dialog filter -- built-in pages stay functional and reachable -- and is
 (re)applied in EmbodyExt.__init__ so every deployed copy converges on it

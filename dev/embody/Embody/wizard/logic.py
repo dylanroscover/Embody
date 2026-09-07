@@ -269,7 +269,7 @@ def _resetUI():
 	button captions/colours straight onto COMPs INSIDE Embody. Those are
 	ordinary parameters, so whatever the last wizard run left there is
 	captured by Embody's own .tdn export, committed, and shipped in the
-	release .tox -- the same leak the TDN export-progress dialog had.
+	release .tox -- the same leak the TDXN export-progress dialog had.
 	Resetting to par defaults means the wizard contributes nothing to the
 	exported document. Best-effort: never block closing the window.
 	"""

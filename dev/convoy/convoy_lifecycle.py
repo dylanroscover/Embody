@@ -1726,7 +1726,7 @@ class LifecycleManager:
     def _save_landed(self, toe_path, pre_save_identity):
         """Proof a save actually wrote the exact .toe on disk.
 
-        Embody's own post-save housekeeping (Refresh sweep, TDN re-export,
+        Embody's own post-save housekeeping (Refresh sweep, TDXN re-export,
         externalizations table write) re-dirties ``project.modified`` within
         seconds of a successful ``project.save()``, so ``project.modified``
         alone cannot prove a save failed. The file-identity delta -- the same

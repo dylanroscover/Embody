@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 19
-generator: Embody/6.2.10
+generator: Embody/6.2.24
 td_build: 099.2025.33070
-source_file: Embody-6.313.toe
-exported_at: '2026-09-04T20:29:07Z'
+source_file: Embody-6.327.toe
+exported_at: '2026-09-07T00:33:55Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
@@ -133,36 +133,6 @@ operators:
     bgalpha: 1
   position: [1400, 0]
   tdn_ref: embody/Embody/toolbar/container_left/save_comp.tdn
-- name: export_tdn
-  type: textCOMP
-  parameters:
-    text: "\U000F0207"
-    font: Material Design Icons
-    fontsize: 11
-    w: 36
-    alignorder: 1000
-    clickthrough: true
-    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgalpha: 1
-  position: [0, -200]
-  tdn_ref: embody/Embody/toolbar/container_left/export_tdn.tdn
-- name: import_tdn
-  type: textCOMP
-  parameters:
-    text: "\U000F02FA"
-    font: Material Design Icons
-    fontsize: 11
-    w: 36
-    alignorder: 925
-    clickthrough: true
-    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
-    bgalpha: 1
-  position: [400, -200]
-  tdn_ref: embody/Embody/toolbar/container_left/import_tdn.tdn
 - name: initialize
   type: textCOMP
   parameters:
@@ -178,12 +148,36 @@ operators:
     bgalpha: 1
   position: [600, 0]
   tdn_ref: embody/Embody/toolbar/container_left/initialize.tdn
-- name: spacer_tdn
-  type: containerCOMP
+- name: export_tdxn
+  type: textCOMP
   parameters:
-    alignorder: 800
-  position: [600, -200]
-  tdn_ref: embody/Embody/toolbar/container_left/spacer_tdn.tdn
+    text: "\U000F0207"
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 1000
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [0, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/export_tdxn.tdn
+- name: import_tdxn
+  type: textCOMP
+  parameters:
+    text: "\U000F02FA"
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 925
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [400, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/import_tdxn.tdn
 - name: save_folder
   type: textCOMP
   parameters:
@@ -200,6 +194,12 @@ operators:
     bgalpha: 1
   position: [400, 0]
   tdn_ref: embody/Embody/toolbar/container_left/save_folder.tdn
+- name: spacer_tdxn
+  type: containerCOMP
+  parameters:
+    alignorder: 800
+  position: [600, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/spacer_tdxn.tdn
 - name: envoy_toggle
   type: textCOMP
   parameters:
@@ -221,7 +221,7 @@ operators:
     alignorder: 1025
   position: [1200, 0]
   tdn_ref: embody/Embody/toolbar/container_left/spacer_envoy.tdn
-- name: export_comp_tdn
+- name: export_comp_tdxn
   type: textCOMP
   parameters:
     text: "\U000F021D"
@@ -235,7 +235,7 @@ operators:
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [200, -200]
-  tdn_ref: embody/Embody/toolbar/container_left/export_comp_tdn.tdn
+  tdn_ref: embody/Embody/toolbar/container_left/export_comp_tdxn.tdn
 - name: status_callbacks
   type: textDAT
   parameters:
@@ -266,24 +266,24 @@ operators:
     file: embody/Embody/toolbar/container_left/save_comp_callbacks.py
   position: [0, -160]
   dock: save_comp
-- name: export_tdn_callbacks
-  type: textDAT
-  parameters:
-    file: embody/Embody/toolbar/container_left/export_tdn_callbacks.py
-  position: [0, -160]
-  dock: export_tdn
-- name: import_tdn_callbacks
-  type: textDAT
-  parameters:
-    file: embody/Embody/toolbar/container_left/import_tdn_callbacks.py
-  position: [0, -160]
-  dock: import_tdn
 - name: initialize_callbacks
   type: textDAT
   parameters:
     file: embody/Embody/toolbar/container_left/initialize_callbacks.py
   position: [0, -160]
   dock: initialize
+- name: export_tdxn_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/export_tdxn_callbacks.py
+  position: [0, -160]
+  dock: export_tdxn
+- name: import_tdxn_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/import_tdxn_callbacks.py
+  position: [0, -160]
+  dock: import_tdxn
 - name: save_folder_callbacks
   type: textDAT
   parameters:
@@ -296,9 +296,9 @@ operators:
     file: embody/Embody/toolbar/container_left/envoy_toggle_callbacks.py
   position: [0, -160]
   dock: envoy_toggle
-- name: export_comp_tdn_callbacks
+- name: export_comp_tdxn_callbacks
   type: textDAT
   parameters:
-    file: embody/Embody/toolbar/container_left/export_comp_tdn_callbacks.py
+    file: embody/Embody/toolbar/container_left/export_comp_tdxn_callbacks.py
   position: [0, -160]
-  dock: export_comp_tdn
+  dock: export_comp_tdxn

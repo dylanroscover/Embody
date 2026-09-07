@@ -1,5 +1,5 @@
 """
-Test suite: TDN built-in parameter sequence round-trip (v1.3).
+Test suite: TDXN built-in parameter sequence round-trip (v1.3).
 
 Tests export, import, and round-trip fidelity for operators with
 built-in parameter sequences (constantCHOP const blocks, etc.).
@@ -13,7 +13,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 ParMode = type(op('/').par.clone.mode)
 
 
-class TestTDNSequences(EmbodyTestCase):
+class TestTDXNSequences(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -193,7 +193,7 @@ class TestTDNSequences(EmbodyTestCase):
         self.assertNotIn('sequences', td)
 
     def test_sequence_absent_key_preserves_defaults(self):
-        # Import a TDN without sequences key - existing blocks unaltered
+        # Import a TDXN without sequences key - existing blocks unaltered
         chop = self.sandbox.create(constantCHOP, 'nokey_chop')
         chop.seq.const[0].par.name = 'keep_me'
         chop.seq.const[0].par.value = 42.0

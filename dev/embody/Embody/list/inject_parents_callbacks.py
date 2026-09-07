@@ -258,15 +258,15 @@ def onCook(scriptOp):
 			strategy_state = ''
 		elif strategy == 'tdn':
 			if path == exporting_path:
-				strategy_state = 'TDN_Exporting'
+				strategy_state = 'TDXN_Exporting'
 			else:
 				dirty_val = row.get('dirty', '')
 				if dirty_val == 'Par':
 					strategy_state = 'TDN_ParChange'
 				elif dirty_val in ('True', 'true', '1'):
-					strategy_state = 'TDN_Dirty'
+					strategy_state = 'TDXN_Dirty'
 				else:
-					strategy_state = 'TDN_Saved'
+					strategy_state = 'TDXN_Saved'
 		elif strategy == 'tox':
 			dirty_val = row.get('dirty', '')
 			if dirty_val == 'Par':

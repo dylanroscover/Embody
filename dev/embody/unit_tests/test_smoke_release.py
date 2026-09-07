@@ -12,9 +12,9 @@ orchestration notes in the project memory.
 
 The v6 fresh-install checks at the bottom of this suite assert that the
 SHIPPED release .tox boots with all v6 features wired and live:
-clipboard TDN copy/paste, the Collection safety scanner, TDN v2.0 YAML
+clipboard TDXN copy/paste, the Collection safety scanner, TDXN v2.0 YAML
 round-trips, GLSL .glsl externalization, the Envoy liveness watchdog, and
-end-to-end TDN feature round-trips (POP chains, default-valued custom
+end-to-end TDXN feature round-trips (POP chains, default-valued custom
 parameters, and the tdn_exclude tag). They reach the installed extensions
 exactly the way the existing smoke tests do (self.embody.ext.TDXN /
 self.embody.ext.Envoy / self.embody.op('Collection').ext.Collection),
@@ -183,7 +183,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """
         ext = self.embody.ext.Embody
         for method_name in ['verify', 'reset', 'uninstallHandler',
-                            'updateHandler', 'saveTDN', 'dirtyCount']:
+                            'updateHandler', 'saveTDXN', 'dirtyCount']:
             method = getattr(ext, method_name, None)
             self.assertIsNotNone(
                 method, f'{method_name} unreachable on the extension')
@@ -192,7 +192,7 @@ class TestSmokeRelease(EmbodyTestCase):
     def test_demoted_wiring_is_not_on_the_comp(self):
         """The point of the demotion: these must NOT be promoted any more."""
         for method_name in ['Verify', 'Reset', 'UninstallHandler',
-                            'UpdateHandler', 'SaveTDN', 'DirtyCount']:
+                            'UpdateHandler', 'SaveTDXN', 'SaveTDXN', 'DirtyCount']:
             self.assertIsNone(
                 getattr(self.embody, method_name, None),
                 f'{method_name} is still promoted on the COMP -- the '
@@ -410,10 +410,10 @@ class TestSmokeRelease(EmbodyTestCase):
         return self.sandbox.create(baseCOMP, name)
 
     def _tdn(self):
-        """The shipped TDN extension (resolved live, never cached)."""
+        """The shipped TDXN extension (resolved live, never cached)."""
         ext = self.embody.ext.TDXN
         if ext is None:
-            raise SkipTest('TDN extension not loaded on the release .tox')
+            raise SkipTest('TDXN extension not loaded on the release .tox')
         return ext
 
     def _collection_ext(self):
@@ -427,7 +427,7 @@ class TestSmokeRelease(EmbodyTestCase):
         return ext
 
     # =========================================================================
-    # v6: TDN clipboard methods exist + are callable on the TDN ext
+    # v6: TDXN clipboard methods exist + are callable on the TDXN ext
     #
     # Introspection only -- getattr + callable. We never touch the OS
     # clipboard here (that would be flaky and machine-dependent); the actual
@@ -435,7 +435,7 @@ class TestSmokeRelease(EmbodyTestCase):
     # =========================================================================
 
     def test_v6_tdn_clipboard_methods_exist_and_callable(self):
-        """All five clipboard methods are present and callable on the TDN ext."""
+        """All five clipboard methods are present and callable on the TDXN ext."""
         tdn = self._tdn()
         for name in (
             'copyNetworkToClipboard',
@@ -446,12 +446,12 @@ class TestSmokeRelease(EmbodyTestCase):
         ):
             method = getattr(tdn, name, None)
             self.assertIsNotNone(method,
-                f'TDN clipboard method {name} is missing on the release .tox')
+                f'TDXN clipboard method {name} is missing on the release .tox')
             self.assertTrue(callable(method),
-                f'TDN clipboard method {name} is not callable')
+                f'TDXN clipboard method {name} is not callable')
 
     # =========================================================================
-    # v6: Collection scanner is wired + a trivially-clean TDN scans 'clean'
+    # v6: Collection scanner is wired + a trivially-clean TDXN scans 'clean'
     # =========================================================================
 
     def test_v6_collection_subcomp_and_scanner_present(self):
@@ -467,7 +467,7 @@ class TestSmokeRelease(EmbodyTestCase):
             'CollectionExt must be loaded on the Collection COMP')
 
     def test_v6_collection_scan_clean_tdn_returns_clean(self):
-        """A benign source -> null TDN scans 'clean' via CollectionExt.ScanTdn."""
+        """A benign source -> null TDXN scans 'clean' via CollectionExt.ScanTdn."""
         ext = self._collection_ext()
         clean_tdn = {
             'format': 'tdn',
@@ -484,10 +484,10 @@ class TestSmokeRelease(EmbodyTestCase):
         self.assertIn('verdict', result,
             'Capability report must carry a verdict key')
         self.assertEqual(result['verdict'], 'clean',
-            f"Trivial clean TDN should scan 'clean', got {result.get('verdict')}")
+            f"Trivial clean TDXN should scan 'clean', got {result.get('verdict')}")
 
     # =========================================================================
-    # v6: TDN v2.0 YAML round-trip through a real .tdn file on disk
+    # v6: TDXN v2.0 YAML round-trip through a real .tdn file on disk
     #
     # Build a tiny COMP with a multi-line-text DAT, ExportNetwork to a temp
     # .tdn (YAML v2.0), read it back, ImportNetwork into a CLEAN COMP, and
@@ -624,7 +624,7 @@ class TestSmokeRelease(EmbodyTestCase):
             'Envoy watchdog generation must be > 0 (no loop was armed)')
 
     # =========================================================================
-    # v6: TDN feature round-trips -- POP chain, default-valued custom Float,
+    # v6: TDXN feature round-trips -- POP chain, default-valued custom Float,
     # and a nested tdn_exclude-tagged COMP all survive export/import.
     #
     # The excluded COMP is placed NESTED (depth > 0 under the export root),
@@ -637,7 +637,7 @@ class TestSmokeRelease(EmbodyTestCase):
 
     def test_v6_tdn_feature_roundtrip_pop_float_exclude(self):
         """POP sequence + default-valued custom Float + nested tdn_exclude tag
-        all survive a TDN export/import round-trip."""
+        all survive a TDXN export/import round-trip."""
         tdn = self._tdn()
         exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 

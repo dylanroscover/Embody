@@ -1,9 +1,9 @@
 """
-Test suite: TDN content safety guards - DAT + storage loss detection,
+Test suite: TDXN content safety guards - DAT + storage loss detection,
 combined dialog, and the Skip Once / Always Skip preference buttons.
 
 Covers:
-  A. _findAtRiskStorage detects user storage keys on TDN COMPs
+  A. _findAtRiskStorage detects user storage keys on TDXN COMPs
   B. Control keys and runtime/skip keys are NOT flagged as at-risk
   C. Combined dialog surfaces both DATs and storage
   D. Dialog offers Skip Once + an explicit, reversible Always Skip
@@ -19,11 +19,11 @@ except (AttributeError, NameError):
     pass
 
 
-class TestTDNSafetyGuards(EmbodyTestCase):
+class TestTDXNSafetyGuards(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        # The sandbox lives inside a registered TDN-strategy COMP
+        # The sandbox lives inside a registered TDXN-strategy COMP
         # (test_sandbox in the unit_tests project), so storage we set on
         # self.sandbox is detected by _findAtRiskStorage under that parent.
         self._prev_embed_storage = self.embody.par.Embedstorageintdxns.eval()
@@ -103,9 +103,9 @@ class TestTDNSafetyGuards(EmbodyTestCase):
 
     def test_findAtRiskStorage_empty_when_per_comp_embed_on(self):
         # Per-COMP override of embed_storage_in_tdn=True excludes the
-        # enclosing TDN COMP from at-risk detection.
-        # (We store on the test_sandbox TDN COMP, which is self.sandbox's
-        # registered TDN parent.)
+        # enclosing TDXN COMP from at-risk detection.
+        # (We store on the test_sandbox TDXN COMP, which is self.sandbox's
+        # registered TDXN parent.)
         tdn_parent = self.sandbox.parent()
         tdn_parent.store('embed_storage_in_tdn', True)
         self.sandbox.store('my_key', 'value')
@@ -113,7 +113,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             flat = self._flatten(self.embody_ext._findAtRiskStorage())
             keys_on_sandbox = flat.get(self.sandbox.path, set())
             self.assertNotIn('my_key', keys_on_sandbox,
-                'embed_storage=True on the TDN parent must exclude descendants')
+                'embed_storage=True on the TDXN parent must exclude descendants')
         finally:
             self.sandbox.unstore('my_key')
             tdn_parent.unstore('embed_storage_in_tdn')
@@ -126,7 +126,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
     def test_prompt_offers_skip_once_and_always_skip(self):
         self.sandbox.store('risky', 'data')
         try:
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             self.assertEqual(len(self._captured), 1,
                 'Expected exactly one dialog for at-risk content')
             buttons = self._captured[0]['buttons']
@@ -145,7 +145,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         self.sandbox.store('risky', 'data')
         try:
             self._scripted_choice = 3  # Always Skip
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             self.assertEqual(self.embody.par.Tdxndatsafety.eval(), 'ignore',
                 'Always Skip must persist the ignore preference')
         finally:
@@ -156,7 +156,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         self.sandbox.store('risky', 'data')
         try:
             self._scripted_choice = 1  # Always Externalize
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             self.assertEqual(self.embody.par.Tdxndatsafety.eval(),
                              'externalize',
                 'Always Externalize must persist the externalize preference')
@@ -169,7 +169,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         self.embody.par.Tdxndatsafety.val = 'ignore'
         self.sandbox.store('risky', 'data')
         try:
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             self.assertEqual(len(self._captured), 0,
                 'ignore preference must suppress the dialog entirely')
         finally:
@@ -180,7 +180,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         dat.text = 'non-empty content'
         self.sandbox.store('my_storage_key', 'x')
         try:
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             self.assertEqual(len(self._captured), 1)
             msg = self._captured[0]['message']
             self.assertIn('DAT', msg)
@@ -198,7 +198,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         try:
             self._scripted_choice = 2  # Skip Once
             log_count_before = self.embody_ext._log_counter
-            self.embody_ext._checkTDNContentSafety()
+            self.embody_ext._checkTDXNContentSafety()
             new_logs = [e for e in self.embody_ext._log_buffer
                         if e['id'] > log_count_before]
             # Look for a SUCCESS-level entry that names the key.

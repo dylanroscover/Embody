@@ -122,7 +122,7 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_project_performance` | 14 | Project-level FPS, memory, hotspots |
 | `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
 | `test_mcp_top_capture` | 15 | TOP image capture (format, quality, resolution) + black/flat/transparent quality verdict |
-| `test_mcp_tdn_tools` | 10 | `read_tdn`, `export_network`/`import_network` round-trip |
+| `test_mcp_tdxn_tools` | 10 | `read_tdn`, `export_network`/`import_network` round-trip |
 | `test_mcp_batch` | 9 | Batched multi-operation requests |
 | `test_mcp_connections` | 8 | Wiring operators together |
 | `test_mcp_code_execution` | 7 | Executing Python in TD |

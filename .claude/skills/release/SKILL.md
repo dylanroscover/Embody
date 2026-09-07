@@ -118,7 +118,7 @@ Always cut:
 - a superseded version, beyond one short parenthetical
 - test counts, beyond `+N tests` folded into a bullet
 
-Then COUNT. Over 3 bullets or 80 words, cut before shipping -- never ship long
+Then COUNT. Over 5 bullets or ~160 words, cut before shipping -- never ship long
 and offer to trim after.
 
 ## 3. Update README.md

@@ -1,5 +1,5 @@
 """
-Test suite: TDN export/import round-trip.
+Test suite: TDXN export/import round-trip.
 
 Tests ExportNetwork, ImportNetwork, max_depth, DAT content,
 clear_first, format validation, and round-trip fidelity.
@@ -9,7 +9,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNExportImport(EmbodyTestCase):
+class TestTDXNExportImport(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -481,7 +481,7 @@ class TestTDNExportImport(EmbodyTestCase):
         existing = target.create(textDAT, 'text1')
         existing.nodeX = 100
         existing.nodeY = 100
-        # Import a TDN that also defines 'text1' at a different position
+        # Import a TDXN that also defines 'text1' at a different position
         tdn = {'operators': [
             {'name': 'text1', 'type': 'textDAT', 'position': [300, 400]}
         ]}
@@ -491,7 +491,7 @@ class TestTDNExportImport(EmbodyTestCase):
         # The pre-existing operator should keep its original position
         self.assertEqual(existing.nodeX, 100)
         self.assertEqual(existing.nodeY, 100)
-        # The imported op (auto-renamed) should be at the TDN position
+        # The imported op (auto-renamed) should be at the TDXN position
         created_path = result['created_paths'][0]
         imported_op = op(created_path)
         self.assertIsNotNone(imported_op)
@@ -512,7 +512,7 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertTrue(result.get('success'))
         # Pre-existing should keep its parameter
         self.assertEqual(existing.par.language.eval(), 'python')
-        # Imported should have the TDN parameter
+        # Imported should have the TDXN parameter
         created_path = result['created_paths'][0]
         imported_op = op(created_path)
         self.assertEqual(imported_op.par.language.eval(), 'glsl')
@@ -533,7 +533,7 @@ class TestTDNExportImport(EmbodyTestCase):
     # --- Import: position round-trip ---
 
     def test_import_preserves_positions(self):
-        """Positions from TDN should be applied correctly."""
+        """Positions from TDXN should be applied correctly."""
         target = self.sandbox.create(baseCOMP, 'posrt_target')
         tdn = {'operators': [
             {'name': 'pos_op', 'type': 'textDAT',
@@ -546,7 +546,7 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertEqual(imported.nodeY, 175)
 
     def test_import_preserves_size(self):
-        """Size from TDN should be applied correctly."""
+        """Size from TDXN should be applied correctly."""
         target = self.sandbox.create(baseCOMP, 'sizert_target')
         tdn = {'operators': [
             {'name': 'size_op', 'type': 'textDAT',
@@ -561,7 +561,7 @@ class TestTDNExportImport(EmbodyTestCase):
     # --- Storage export/import ---
 
     def test_export_includes_storage(self):
-        """Storage entries appear in exported TDN data."""
+        """Storage entries appear in exported TDXN data."""
         c = self.sandbox.create(baseCOMP, 'c')
         c.store('my_key', 'my_value')
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
@@ -582,7 +582,7 @@ class TestTDNExportImport(EmbodyTestCase):
             {'$type': 'tuple', '$value': [1, 2]})
 
     def test_import_restores_storage(self):
-        """Storage from TDN data is restored on import."""
+        """Storage from TDXN data is restored on import."""
         target = self.sandbox.create(baseCOMP, 'storage_target')
         tdn = {'operators': [
             {'name': 'stored_op', 'type': 'baseCOMP',
@@ -844,7 +844,7 @@ class TestTDXNReviewFixes(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'adhoc_victim')
         comp.create(noiseTOP, 'noise1')
         emb.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
-        emb._handleTDNAddition(comp)
+        emb._handleTDXNAddition(comp)
         rel = emb._getStrategyFilePath(comp.path, 'tdn')
         canonical = str(emb.buildAbsolutePath(rel))
         self.assertTrue(os.path.isfile(canonical), 'test setup: canonical file')
@@ -860,7 +860,7 @@ class TestTDXNReviewFixes(EmbodyTestCase):
             self.assertEqual(rel, emb._getStrategyFilePath(comp.path, 'tdn'),
                              'an ad-hoc export must not repoint the tracking row')
         finally:
-            emb.removeTDNEntry(comp.path, delete_file=True)
+            emb.removeTDXNEntry(comp.path, delete_file=True)
             shutil.rmtree(snap_dir, ignore_errors=True)
 
     def test_dat_whose_file_is_missing_is_embedded(self):

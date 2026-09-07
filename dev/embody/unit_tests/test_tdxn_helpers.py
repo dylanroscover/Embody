@@ -1,5 +1,5 @@
 """
-Test suite: TDN helper methods (pure Python logic).
+Test suite: TDXN helper methods (pure Python logic).
 
 Tests _serializeValue, _valuesDiffer, _colorsDiffer,
 _assembleHierarchy, _getGroupBaseName, _serializeStorageValue,
@@ -10,7 +10,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNHelpers(EmbodyTestCase):
+class TestTDXNHelpers(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
@@ -229,7 +229,7 @@ class TestTDNHelpers(EmbodyTestCase):
     # --- _tdn_content_equal ---
 
     def _make_tdn(self, **overrides):
-        """Build a minimal TDN dict with sensible defaults."""
+        """Build a minimal TDXN dict with sensible defaults."""
         base = {
             'format': 'tdn',
             'version': '1.0',
@@ -345,7 +345,7 @@ class TestTDNHelpers(EmbodyTestCase):
 
     def test_findLocked_under_tox_tagged_child_skipped(self):
         # A nested TOX-strategy COMP preserves locked content in its own
-        # .tox -- the parent's TDN export must not warn about it.
+        # .tox -- the parent's TDXN export must not warn about it.
         root = self.sandbox.create(baseCOMP, 'lk_root_tox')
         sub = root.create(baseCOMP, 'sub_tox')
         sub.tags.add(self.embody.par.Toxtag.val)
@@ -353,7 +353,7 @@ class TestTDNHelpers(EmbodyTestCase):
         self.assertEqual(self.tdn._findLockedNonDATs(root), [])
 
     def test_findLocked_under_tdn_tagged_child_skipped(self):
-        # A nested TDN boundary raises its own warning when IT exports.
+        # A nested TDXN boundary raises its own warning when IT exports.
         root = self.sandbox.create(baseCOMP, 'lk_root_tdn')
         sub = root.create(baseCOMP, 'sub_tdn')
         sub.tags.add(self.embody.par.Tdxntag.val)
@@ -361,7 +361,7 @@ class TestTDNHelpers(EmbodyTestCase):
         self.assertEqual(self.tdn._findLockedNonDATs(root), [])
 
     def test_findLocked_under_exclude_tagged_child_skipped(self):
-        # An exclude-tagged subtree is invisible to TDN entirely.
+        # An exclude-tagged subtree is invisible to TDXN entirely.
         root = self.sandbox.create(baseCOMP, 'lk_root_excl')
         sub = root.create(baseCOMP, 'sub_excl')
         sub.tags.add(self.embody.par.Tdxnexcludetag.val)

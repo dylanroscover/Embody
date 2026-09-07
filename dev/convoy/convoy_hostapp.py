@@ -515,7 +515,7 @@ PHASE1_OPERATIONS = {
         executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
 
-    # Embody externalization and TDN network operations.
+    # Embody externalization and TDXN network operations.
     "externalize_op": _operation(
         {"op_path": "string", "tag_type": "string?"}, mutating=True,
         executes_arbitrary_code=False, remote_exposed=True,
@@ -564,6 +564,19 @@ PHASE1_OPERATIONS = {
         executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
     "diff_tdn": _operation(
+        {"target": "string?", "max_changed_ops": "int?", "max_bytes": "int?"},
+        mutating=False, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    # read_tdxn/diff_tdxn are the current names; read_tdn/diff_tdn stay
+    # registered because they remain live deprecated aliases on Envoy, and
+    # this registry must know EVERY advertised tool or the drift test fails
+    # (and a remote call to an unregistered tool is refused).
+    "read_tdxn": _operation(
+        {"comp_path": "string?", "include_dat_content": "bool?",
+         "max_depth": "int?", "embed_all": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "diff_tdxn": _operation(
         {"target": "string?", "max_changed_ops": "int?", "max_bytes": "int?"},
         mutating=False, executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
@@ -1685,7 +1698,7 @@ class HostApp:
                 + (secrets.randbelow(1000) / 1000.0)
                 * realm_mod.DEFAULT_SETTLE_JITTER_S)
         self.token = platform_mod.ensure_ipc_token(directory_path)
-        # Safety authority is host-private and fail-closed.  Project/TDN
+        # Safety authority is host-private and fail-closed.  Project/TDXN
         # values are projections only; a corrupt or too-new policy file must
         # stop the daemon rather than silently restoring dangerous defaults.
         self.policy = policy_mod.PolicyStore(directory_path, now=now)

@@ -18,8 +18,8 @@ and the sweep concludes the operator VANISHED. It then either
 
   - appends to `missing_with_files` (EmbodyExt.py:4923) -> a per-sweep
     file-cleanup modal, or a SILENT unlink when Filecleanup='delete', or
-  - logs "Operator for TDN entry ... no longer exists" and calls
-    `_removeTDNStrategy(old_op_path)` (EmbodyExt.py:4926-4927), which
+  - logs "Operator for TDXN entry ... no longer exists" and calls
+    `_removeTDXNStrategy(old_op_path)` (EmbodyExt.py:4926-4927), which
     deletes the table row AND unlinks the .tdn.
 
 `checkOpsForContinuity` runs on every `Update()`, including the pre-save
@@ -28,11 +28,11 @@ and the sweep concludes the operator VANISHED. It then either
 Why the existing guards do not help
 -----------------------------------
 The annotate guards added for the 2026-07-21 report live in
-`_getTDNStrategyComps` (EmbodyExt.py:8340) and `applyTagToOperator`.
+`_getTDXNStrategyComps` (EmbodyExt.py:8340) and `applyTagToOperator`.
 `checkOpsForContinuity` builds `rows_to_check` straight from the
 externalizations table (EmbodyExt.py:4862-4868) and never consults them.
 The `stripped_tdn_paths` shield (EmbodyExt.py:4882-4886) does NOT apply
-either: it is only read at EmbodyExt.py:4943, inside the non-TDN branch,
+either: it is only read at EmbodyExt.py:4943, inside the non-TDXN branch,
 which the `if is_tdn:` branch at 4911 never reaches (it `continue`s at
 4928).
 
@@ -78,8 +78,8 @@ class TestAnnotateContinuity(EmbodyTestCase):
         ann.utility = True
         return ann, inner
 
-    def _addTDNRow(self, op_path, rel_file_path):
-        """Append a synthetic TDN row with the table's FULL column count.
+    def _addTDXNRow(self, op_path, rel_file_path):
+        """Append a synthetic TDXN row with the table's FULL column count.
 
         A short row leaves trailing cells unwritten, which reads as stale
         data from whatever occupied that memory and makes the fixture
@@ -152,9 +152,9 @@ class TestAnnotateContinuity(EmbodyTestCase):
         proceeds to the removal branch."""
         ann, inner = self._utility_annotate_interior()
         self.assertFalse(
-            self.embody_ext._findMovedTDNOp(
+            self.embody_ext._findMovedTDXNOp(
                 inner.path, 'embody/unit_tests/ann_cont_fake.tdn', set()),
-            'no untracked TDN-tagged candidate exists, so nothing rescues '
+            'no untracked TDXN-tagged candidate exists, so nothing rescues '
             'the row')
 
     # --- LINK 4: which branch the sweep takes ----------------------------
@@ -206,7 +206,7 @@ class TestAnnotateContinuity(EmbodyTestCase):
         is_tdn = (strategy == 'tdn')                       # L4910
         self.assertTrue(is_tdn)
 
-        rescued = self.embody_ext._findMovedTDNOp(         # L4915
+        rescued = self.embody_ext._findMovedTDXNOp(         # L4915
             path, 'embody/unit_tests/ann_cont_fake.tdn', set())
         self.assertFalse(rescued, 'nothing rescues the row')
 
@@ -231,13 +231,13 @@ class TestAnnotateContinuity(EmbodyTestCase):
         # With both True/False as above, control flow reaches L4919-4927:
         #   .tdn on disk  -> missing_with_files (modal, or silent unlink
         #                    when Filecleanup='delete')
-        #   no .tdn       -> WARNING + _removeTDNStrategy (row + file gone)
+        #   no .tdn       -> WARNING + _removeTDXNStrategy (row + file gone)
         # Both outcomes are wrong for a live operator.
 
     # --- LINK 5: the destructive tail really is destructive --------------
 
     def test_link5_removeTDNStrategy_drops_the_row(self):
-        """_removeTDNStrategy -- the call at EmbodyExt.py:4927 -- removes
+        """_removeTDXNStrategy -- the call at EmbodyExt.py:4927 -- removes
         the tracking row synchronously.
 
         Scoped to a synthetic sandbox row. The .tdn unlink it schedules is
@@ -247,13 +247,13 @@ class TestAnnotateContinuity(EmbodyTestCase):
         """
         ann, inner = self._utility_annotate_interior()
         rel = 'embody/unit_tests/ann_cont_row_probe.tdn'
-        self._addTDNRow(inner.path, rel)
+        self._addTDXNRow(inner.path, rel)
 
         paths = [self.embody_ext.Externalizations[i, 'path'].val
                  for i in range(1, self.embody_ext.Externalizations.numRows)]
         self.assertIn(inner.path, paths, 'precondition: row present')
 
-        self.embody_ext._removeTDNStrategy(inner.path, delete_file=False)
+        self.embody_ext._removeTDXNStrategy(inner.path, delete_file=False)
 
         paths = [self.embody_ext.Externalizations[i, 'path'].val
                  for i in range(1, self.embody_ext.Externalizations.numRows)]
@@ -278,8 +278,8 @@ class TestAnnotateContinuity(EmbodyTestCase):
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text('# synthetic probe\n', encoding='utf-8')
         try:
-            self._addTDNRow(inner.path, rel)
-            self.embody_ext._removeTDNStrategy(inner.path, delete_file=False)
+            self._addTDXNRow(inner.path, rel)
+            self.embody_ext._removeTDXNStrategy(inner.path, delete_file=False)
 
             rows = [self.embody_ext.Externalizations[i, 'path'].val
                     for i in range(

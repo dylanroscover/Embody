@@ -235,7 +235,7 @@ class TestDataReaders(EmbodyTestCase):
 
     def test_get_op_full_mode_keeps_flat_dump(self):
         """include_defaults=True must stay compatible: the read_tdn-vs-get_op
-        ratio test in test_mcp_tdn_tools measures exactly this mode."""
+        ratio test in test_mcp_tdxn_tools measures exactly this mode."""
         ch = self._const_chop()
         info = self.envoy._get_op(ch.path, True)
         fanned = [k for k in info['parameters'] if k.startswith('const')]

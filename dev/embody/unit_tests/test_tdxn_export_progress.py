@@ -1,5 +1,5 @@
 """
-Test suite: chunked TDN export progress + cancellation (TDXNExt).
+Test suite: chunked TDXN export progress + cancellation (TDXNExt).
 
 Covers the progress/cancel additions to the async export state machine
 (added 2026-07-24): the cancelExport request path, the progress-dialog
@@ -13,7 +13,7 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNExportProgress(EmbodyTestCase):
+class TestTDXNExportProgress(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()

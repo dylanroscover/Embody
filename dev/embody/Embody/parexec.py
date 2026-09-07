@@ -192,12 +192,12 @@ def onValueChange(par, prev):
 	elif par.name == 'Embeddatsintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDXN.reexportAllTDNs()
+			parent.Embody.ext.TDXN.reexportAllTDXNs()
 
 	elif par.name == 'Embedstorageintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDXN.reexportAllTDNs()
+			parent.Embody.ext.TDXN.reexportAllTDXNs()
 
 	elif par.name == 'Tdxncascade':
 		state = 'enabled' if par.eval() else 'disabled'

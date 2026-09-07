@@ -322,13 +322,13 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertEqual(self.embody_ext.Externalizations.numRows, initial_rows)
 
     # =========================================================================
-    # TDN rename - _findMovedTDNOp / _updateMovedTDNOp
+    # TDXN rename - _findMovedTDXNOp / _updateMovedTDXNOp
     # =========================================================================
 
     def _externalize_tdn_comp(self, parent, name):
-        """Create a COMP, tag with TDN, and externalize. Returns (comp, old_path, old_rel)."""
+        """Create a COMP, tag with TDXN, and externalize. Returns (comp, old_path, old_rel)."""
         comp = parent.create(baseCOMP, name)
-        # Put a child inside so TDN export has content
+        # Put a child inside so TDXN export has content
         comp.create(constantTOP, 'content')
         tdn_tag = self.embody.par.Tdxntag.val
         comp.tags.add(tdn_tag)
@@ -339,23 +339,23 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         )
         return comp, old_path, old_rel
 
-    def test_findMovedTDNOp_finds_renamed_comp(self):
-        """_findMovedTDNOp should find a TDN COMP that was renamed."""
+    def test_findMovedTDXNOp_finds_renamed_comp(self):
+        """_findMovedTDXNOp should find a TDXN COMP that was renamed."""
         comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_find')
         comp.name = 'tdn_found'
 
         processed = set()
-        found = self.embody_ext._findMovedTDNOp(old_path, old_rel, processed)
-        self.assertTrue(found, 'Should find the renamed TDN COMP')
+        found = self.embody_ext._findMovedTDXNOp(old_path, old_rel, processed)
+        self.assertTrue(found, 'Should find the renamed TDXN COMP')
 
-    def test_findMovedTDNOp_updates_table_path(self):
-        """After _findMovedTDNOp, the table row should have the new path."""
+    def test_findMovedTDXNOp_updates_table_path(self):
+        """After _findMovedTDXNOp, the table row should have the new path."""
         comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_path')
         comp.name = 'tdn_path_new'
         new_path = comp.path
 
         processed = set()
-        self.embody_ext._findMovedTDNOp(old_path, old_rel, processed)
+        self.embody_ext._findMovedTDXNOp(old_path, old_rel, processed)
 
         found_new = False
         for i in range(1, self.embody_ext.Externalizations.numRows):
@@ -364,13 +364,13 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
                 break
         self.assertTrue(found_new, f'Table should have new path {new_path}')
 
-    def test_findMovedTDNOp_updates_rel_file_path(self):
-        """After _findMovedTDNOp, the table rel_file_path should reflect the new name."""
+    def test_findMovedTDXNOp_updates_rel_file_path(self):
+        """After _findMovedTDXNOp, the table rel_file_path should reflect the new name."""
         comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_rel')
         comp.name = 'tdn_rel_new'
 
         processed = set()
-        self.embody_ext._findMovedTDNOp(old_path, old_rel, processed)
+        self.embody_ext._findMovedTDXNOp(old_path, old_rel, processed)
 
         new_rel = self.embody_ext.Externalizations[comp.path, 'rel_file_path'].val
         self.assertIn('tdn_rel_new', new_rel)
@@ -382,8 +382,8 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
     def test_rename_preserves_legacy_tdn_suffix(self):
         """A .tdn COMP must still be .tdn after a rename.
 
-        v6.1.0 mints .tdxn for NEW externalizations only. _updateMovedTDNOp
-        calls _buildTDNRelPath and then physically moves the file, so a
+        v6.1.0 mints .tdxn for NEW externalizations only. _updateMovedTDXNOp
+        calls _buildTDXNRelPath and then physically moves the file, so a
         mint there would silently convert every legacy COMP the first time
         it was renamed -- a migration the user never asked for, performed
         as a bare file move.
@@ -404,7 +404,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
             comp.path, {'rel_file_path': legacy_rel}, strategy='tdn')
 
         comp.name = 'legacy_rename_new'
-        self.embody_ext._findMovedTDNOp(old_path, legacy_rel, set())
+        self.embody_ext._findMovedTDXNOp(old_path, legacy_rel, set())
 
         new_rel = self.embody_ext.Externalizations[comp.path, 'rel_file_path'].val
         self.assertIn('legacy_rename_new', new_rel)
@@ -415,14 +415,14 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
             new_rel.endswith('.tdxn'),
             'rename silently migrated a legacy .tdn to .tdxn')
 
-    def test_trackedTDNSuffix_falls_back_to_mint_when_untracked(self):
-        """An operator with no TDN row mints the current suffix."""
+    def test_trackedTDXNSuffix_falls_back_to_mint_when_untracked(self):
+        """An operator with no TDXN row mints the current suffix."""
         self.assertEqual(
-            self.embody_ext._trackedTDNSuffix('/no/such/op/anywhere'),
+            self.embody_ext._trackedTDXNSuffix('/no/such/op/anywhere'),
             self.embody_ext.my.ext.TDXN._FILE_SUFFIX)
 
-    def test_findMovedTDNOp_renames_file_on_disk(self):
-        """After _findMovedTDNOp, the .tdn file should be renamed on disk."""
+    def test_findMovedTDXNOp_renames_file_on_disk(self):
+        """After _findMovedTDXNOp, the .tdn file should be renamed on disk."""
         from pathlib import Path as P
         comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_disk')
 
@@ -432,7 +432,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
 
         comp.name = 'tdn_disk_new'
         processed = set()
-        self.embody_ext._findMovedTDNOp(old_path, old_rel, processed)
+        self.embody_ext._findMovedTDXNOp(old_path, old_rel, processed)
 
         new_rel = self.embody_ext.Externalizations[comp.path, 'rel_file_path'].val
         new_abs = self.embody_ext.buildAbsolutePath(
@@ -441,16 +441,16 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertTrue(new_abs.is_file(), 'New .tdn file should exist')
         self.assertFalse(old_abs.is_file(), 'Old .tdn file should be gone')
 
-    def test_findMovedTDNOp_returns_false_when_truly_missing(self):
-        """_findMovedTDNOp should return False when no TDN COMP matches."""
+    def test_findMovedTDXNOp_returns_false_when_truly_missing(self):
+        """_findMovedTDXNOp should return False when no TDXN COMP matches."""
         processed = set()
-        found = self.embody_ext._findMovedTDNOp(
+        found = self.embody_ext._findMovedTDXNOp(
             '/nonexistent/tdn_comp', 'nonexistent/tdn_comp.tdn', processed
         )
-        self.assertFalse(found, 'Should return False for truly missing TDN COMP')
+        self.assertFalse(found, 'Should return False for truly missing TDXN COMP')
 
-    def test_findMovedTDNOp_does_not_match_already_tracked(self):
-        """_findMovedTDNOp should not match a TDN COMP that is already tracked."""
+    def test_findMovedTDXNOp_does_not_match_already_tracked(self):
+        """_findMovedTDXNOp should not match a TDXN COMP that is already tracked."""
         comp1, _, _ = self._externalize_tdn_comp(self.workspace, 'tdn_tracked')
         comp2, old_path2, old_rel2 = self._externalize_tdn_comp(self.workspace, 'tdn_missing')
 
@@ -461,11 +461,11 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         # comp1 is still tracked - should NOT be matched for comp2's entry.
         # The function requires exactly one same-parent untracked candidate.
         # comp1 is tracked so it's excluded, leaving zero candidates.
-        found = self.embody_ext._findMovedTDNOp(old_path2, old_rel2, processed)
-        self.assertFalse(found, 'Should not match an already-tracked TDN COMP')
+        found = self.embody_ext._findMovedTDXNOp(old_path2, old_rel2, processed)
+        self.assertFalse(found, 'Should not match an already-tracked TDXN COMP')
 
     def test_continuity_detects_tdn_rename_with_file_on_disk(self):
-        """checkOpsForContinuity should detect a TDN rename even when the old .tdn file exists."""
+        """checkOpsForContinuity should detect a TDXN rename even when the old .tdn file exists."""
         from pathlib import Path as P
         comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_cont')
 
@@ -496,8 +496,8 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
                 break
         self.assertFalse(found_old, f'Old path {old_path} should be removed from table')
 
-    def test_findMovedTDNOp_ambiguous_multiple_candidates(self):
-        """_findMovedTDNOp should not match when multiple untracked candidates exist."""
+    def test_findMovedTDXNOp_ambiguous_multiple_candidates(self):
+        """_findMovedTDXNOp should not match when multiple untracked candidates exist."""
         comp1, old_path1, old_rel1 = self._externalize_tdn_comp(self.workspace, 'tdn_amb1')
         comp2 = self.workspace.create(baseCOMP, 'tdn_amb2')
         comp2.create(constantTOP, 'content')
@@ -509,12 +509,12 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp1.destroy()
 
         processed = set()
-        # Two untracked TDN COMPs in same parent (comp2 + some other):
+        # Two untracked TDXN COMPs in same parent (comp2 + some other):
         # actually only comp2 is untracked, so there's exactly one candidate.
         # Let's create a third to make it ambiguous.
         comp3 = self.workspace.create(baseCOMP, 'tdn_amb3')
         comp3.create(constantTOP, 'content')
         comp3.tags.add(tdn_tag)
 
-        found = self.embody_ext._findMovedTDNOp(old_path1, old_rel1, processed)
+        found = self.embody_ext._findMovedTDXNOp(old_path1, old_rel1, processed)
         self.assertFalse(found, 'Should not match when multiple untracked candidates exist')
