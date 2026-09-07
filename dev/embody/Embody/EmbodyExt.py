@@ -4140,7 +4140,8 @@ class EmbodyExt:
         self.my.op('list/inject_parents').cook(force=True)
         self.lister.reset()
         self.checkOpsForContinuity(self.externalizationsFolder)
-        
+        self._restampNodeGeometry()
+
         if self.my.par.Detectduplicatepaths:
             self.checkForDuplicates()
         
@@ -7285,6 +7286,47 @@ class EmbodyExt:
             oper.save(save_path_str)
         except Exception as e:
             self.Log(f"Failed to save DAT {oper.path}", "ERROR", f"Path: {save_path_str}, Error: {e}")
+
+    def _restampNodeGeometry(self) -> int:
+        """Re-stamp node_x / node_y / node_color for every tracked operator.
+
+        Those three columns were written ONLY at track time by _addToTable,
+        so moving or recolouring an operator afterwards left them stale --
+        and _restorePositionFromTable replays them verbatim when it rebuilds
+        a missing op, which put the op back at its old spot in its old
+        colour (field 2026-09-07: a whole relaid-out network still carried
+        its pre-move coordinates, and 12 DATs their pre-tag grey).
+
+        Runs over ALL rows, Embody's own subtree included -- unlike
+        checkOpsForContinuity, which must skip it. Writes only rows that
+        actually differ, so the steady state costs no file sync.
+
+        Returns the number of rows restamped.
+        """
+        table = self.Externalizations
+        if table is None or table[0, 'node_color'] is None:
+            return 0
+        restamped = 0
+        for i in range(1, table.numRows):
+            path = self._cellVal(i, 'path', table=table)
+            if not path:
+                continue
+            oper = op(path)
+            if oper is None:
+                continue          # missing ops are the restore path's job
+            try:
+                c = oper.color
+                want = {'node_x': str(int(oper.nodeX)),
+                        'node_y': str(int(oper.nodeY)),
+                        'node_color': f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'}
+            except Exception:
+                continue
+            if all(self._cellVal(i, k, table=table) == v
+                   for k, v in want.items()):
+                continue
+            if self._updateRowCells(i, want):
+                restamped += 1
+        return restamped
 
     def _addToTable(self, oper, rel_file_path, timestamp, dirty,
                      build_num, touch_build, strategy: str = ''):

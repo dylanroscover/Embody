@@ -118,12 +118,12 @@ class TestDeferredDirtySweep(_SyntheticTable):
 
     def setUp(self):
         super().setUp()
-        self._orig_tdnmode = self.embody.par.Tdxnmode.eval()
+        self._orig_tdxnmode = self.embody.par.Tdxnmode.eval()
         self.embody.par.Tdxnmode = 'full'
         self._primed = []
 
     def tearDown(self):
-        self.embody.par.Tdxnmode = self._orig_tdnmode
+        self.embody.par.Tdxnmode = self._orig_tdxnmode
         for p in self._primed:
             self.embody_ext._tdn_fingerprints.pop(p, None)
         for attr in ('_DIRTY_SWEEP_BUDGET_MS',):
@@ -273,3 +273,63 @@ class TestDuplicateRowSemantics(_SyntheticTable):
              ('/y', '2030-01-01 00:00:00 UTC'),
              ('/z', '2030-01-01 00:00:00 UTC')],
             survivors)
+
+
+class TestRestampNodeGeometry(_SyntheticTable):
+    """node_x / node_y / node_color used to be written ONLY at track time.
+
+    _restorePositionFromTable replays those three columns verbatim when it
+    rebuilds a missing operator, so a stale row put the op back at its old
+    coordinates in its old colour. Field 2026-09-07: 145 rows in the dev
+    project were stale, 12 of them still carrying TD's default grey after
+    the operator had been tagged. Refresh now restamps them.
+    """
+
+    def _live(self, name):
+        """A real sandbox DAT at a known position and colour."""
+        d = self.sandbox.create(textDAT, name)
+        d.nodeX, d.nodeY = 1234, -567
+        d.color = (0.9, 0.3, 0.4)
+        return d
+
+    def test_restamps_a_row_whose_operator_has_moved(self):
+        d = self._live('restamp_moved')
+        t = self._table([self._mkrow(d.path, node_x='0', node_y='0',
+                                     node_color='0.6700,0.6700,0.6700')])
+        self.assertEqual(1, self.embody_ext._restampNodeGeometry())
+        self.assertEqual('1234', t[1, 'node_x'].val)
+        self.assertEqual('-567', t[1, 'node_y'].val)
+        self.assertEqual('0.9000,0.3000,0.4000', t[1, 'node_color'].val)
+
+    def test_is_idempotent_and_writes_nothing_when_already_current(self):
+        d = self._live('restamp_current')
+        self._table([self._mkrow(d.path, node_x='1234', node_y='-567',
+                                 node_color='0.9000,0.3000,0.4000')])
+        self.assertEqual(0, self.embody_ext._restampNodeGeometry(),
+                         'a current row must not be rewritten -- the table is '
+                         'syncfile-backed, so every write costs a file sync')
+
+    def test_a_missing_operator_is_left_alone(self):
+        """The restore path owns missing ops; clobbering their stored
+        geometry with nothing would lose the coordinates it restores from."""
+        t = self._table([self._mkrow('/no/such/op', node_x='42', node_y='7',
+                                     node_color='0.1000,0.2000,0.3000')])
+        self.assertEqual(0, self.embody_ext._restampNodeGeometry())
+        self.assertEqual('42', t[1, 'node_x'].val)
+        self.assertEqual('0.1000,0.2000,0.3000', t[1, 'node_color'].val)
+
+    def test_covers_embody_s_own_subtree(self):
+        """checkOpsForContinuity MUST skip Embody's own rows; this sweep must
+        NOT -- that subtree is exactly where the stale rows were found."""
+        t = self._table([self._mkrow(self.embody.path + '/templates',
+                                     node_x='0', node_y='0',
+                                     node_color='0.6700,0.6700,0.6700')])
+        self.assertEqual(1, self.embody_ext._restampNodeGeometry())
+        self.assertNotEqual('0.6700,0.6700,0.6700', t[1, 'node_color'].val)
+
+    def test_no_geometry_columns_is_a_no_op(self):
+        """A legacy table without the position columns must not raise."""
+        self._table([['/x', 'base', 'tox', 'x.tox', '', '', '', '']],
+                    cols=['path', 'type', 'strategy', 'rel_file_path',
+                          'timestamp', 'dirty', 'build', 'touch_build'])
+        self.assertEqual(0, self.embody_ext._restampNodeGeometry())
