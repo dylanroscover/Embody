@@ -73,7 +73,7 @@ on:
       - 'dev/embody/Embody/embody_git.py'
       - 'dev/embody/Embody/EnvoyExt.py'
       - 'dev/embody/Embody/startup_progress.py'
-      - 'dev/embody/Embody/wizard.tdn'
+      - 'dev/embody/Embody/wizard.tdxn'
       - 'dev/embody/Embody/wizard/**'
       - 'dev/embody/unit_tests/conftest.py'
       - 'dev/embody/Embody/convoy/**'
@@ -130,7 +130,7 @@ on:
       - 'dev/embody/Embody/embody_git.py'
       - 'dev/embody/Embody/EnvoyExt.py'
       - 'dev/embody/Embody/startup_progress.py'
-      - 'dev/embody/Embody/wizard.tdn'
+      - 'dev/embody/Embody/wizard.tdxn'
       - 'dev/embody/Embody/wizard/**'
       - 'dev/embody/unit_tests/conftest.py'
       - 'dev/embody/Embody/convoy/**'
@@ -171,7 +171,7 @@ jobs:
       # load_pem_private_key / Ed25519 X.509 surface used here.
       # PyYAML is the SECOND dependency, and it is a test-only one: the
       # release-gate contract (test_convoy_parameter_contract.py) reads
-      # Embody.tdn -- the tracked source every release .tox is built from --
+      # Embody.tdxn -- the tracked source every release .tox is built from --
       # to prove no hostname, address, host/convoy id or local path ships, and
       # that Convoy arrives disabled. That file is YAML. Without this the
       # module fails to IMPORT, which aborts collection for the whole run
