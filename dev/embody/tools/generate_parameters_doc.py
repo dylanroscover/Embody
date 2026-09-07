@@ -3,7 +3,7 @@
 
 The Embody COMP's custom parameters are the ground truth -- name, style, default,
 help text, and menu options all live in dev/embody/Embody.tdn (the externalized
-TDN of the Embody COMP itself). This script reads that file and emits a complete,
+TDXN of the Embody COMP itself). This script reads that file and emits a complete,
 page-grouped Parameter Reference so the docs never drift from the actual COMP.
 
 Regenerate after changing Embody's parameters (then commit the result):
@@ -23,7 +23,12 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-TDN_PATH = os.path.join(REPO, "dev", "embody", "Embody.tdn")
+_CANDIDATES = [os.path.join(REPO, "dev", "embody", "Embody" + ext)
+               for ext in (".tdxn", ".tdn")]
+# Prefer .tdxn; .tdn is still accepted so the tool keeps working
+# against a project that has not converted its receipts yet.
+TDN_PATH = next((c for c in _CANDIDATES if os.path.isfile(c)),
+                _CANDIDATES[0])
 OUT_PATH = os.path.join(REPO, "docs", "embody", "parameters.md")
 
 
@@ -135,11 +140,11 @@ def main():
     )
     lines.append("")
     lines.append(
-        "!!! info \"Auto-generated from `Embody.tdn`\""
+        "!!! info \"Auto-generated from `Embody.tdxn`\""
     )
     lines.append(
         "    This page is generated from the externalized Embody COMP "
-        "(`dev/embody/Embody.tdn`), the source of truth for its parameters, so it "
+        "(`dev/embody/Embody.tdxn`), the source of truth for its parameters, so it "
         "stays in sync with the actual component. **%d parameters** across %d pages."
         % (total, len(pages))
     )

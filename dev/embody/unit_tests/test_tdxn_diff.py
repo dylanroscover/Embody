@@ -120,7 +120,8 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         comp, child, rel = self._make_tdn_comp('diff_hint')
         try:
             status = op.Embody.ext.Envoy._get_externalization_status(comp.path)
-            self.assertEqual(status.get('strategy'), 'tdn')
+            # The reported strategy is the user-facing cell value.
+            self.assertEqual(status.get('strategy'), 'tdxn')
             self.assertEqual(status.get('recommended_tool'), 'diff_tdxn')
             self.assertIn('absolute_path', status)
         finally:

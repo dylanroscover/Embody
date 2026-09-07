@@ -2081,7 +2081,9 @@ def get_externalizations(ext) -> dict:
                 'build': table[row, 'build'].val,
                 # Hint so an agent seeing a dirty TDXN row knows the tool
                 # that explains exactly what changed (live vs on-disk).
-                'recommended_tool': 'diff_tdxn' if strategy == 'tdn' else None,
+                'recommended_tool': ('diff_tdxn'
+                                     if mod.TDXNExt.normalized_strategy(
+                                         strategy) == 'tdn' else None),
             })
 
         return {
@@ -2130,7 +2132,9 @@ def get_externalization_status(ext, op_path: str) -> dict:
                     'touch_build': table[row, 'touch_build'].val,
                     # Hint so an agent seeing a dirty TDXN row knows the
                     # tool that explains what changed (live vs on-disk).
-                    'recommended_tool': 'diff_tdxn' if strategy == 'tdn' else None,
+                    'recommended_tool': ('diff_tdxn'
+                                     if mod.TDXNExt.normalized_strategy(
+                                         strategy) == 'tdn' else None),
                 }
 
         return {
@@ -2243,7 +2247,9 @@ def resolve_diff_target(ext, target):
         return None, ('Ambiguous: %r matches multiple externalized files '
                       '(%s). Pass the COMP path instead.' % (target, comps))
     comp_path, strat = matches[0]
-    if strat != 'tdn':
+    # The cell reads 'tdxn'; comparing it raw rejected every TDXN COMP
+    # with "externalized as tdxn, not tdn".
+    if mod.TDXNExt.normalized_strategy(strat) != 'tdn':
         return None, ('%s is externalized as %s, not tdn -- diff_tdn only '
                       'applies to TDXN-strategy COMPs.' % (comp_path, strat))
     return comp_path, None

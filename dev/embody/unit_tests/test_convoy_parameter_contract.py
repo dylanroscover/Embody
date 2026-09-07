@@ -15,8 +15,13 @@ import yaml
 
 
 REPO = Path(__file__).resolve().parents[3]
-EMBODY_TDN = REPO / "dev" / "embody" / "Embody.tdn"
-ROOT_TDXN = REPO / "dev" / "embody.tdn"
+_EMBODY_CANDIDATES = [REPO / "dev" / "embody" / ("Embody" + ext)
+                      for ext in (".tdxn", ".tdn")]
+EMBODY_TDN = next((c for c in _EMBODY_CANDIDATES if c.is_file()),
+                  _EMBODY_CANDIDATES[0])
+ROOT_TDXN = next((c for c in (REPO / "dev" / ("embody" + e)
+                              for e in (".tdxn", ".tdn")) if c.is_file()),
+                 REPO / "dev" / "embody.tdxn")
 CONVOY_EXT = REPO / "dev" / "embody" / "Embody" / "convoy" / "ConvoyExt.py"
 EMBODY_EXT = REPO / "dev" / "embody" / "Embody" / "EmbodyExt.py"
 

@@ -1,0 +1,100 @@
+format: tdxn
+version: '2.1'
+build: 29
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:31:02Z'
+network_path: /embody/Embody/toolbar/container_right
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textCOMP:
+    parameters:
+      bgalpha: 1
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsizeunits: points
+      repocomp: =me
+      resizecomp: =me
+      vmode: fill
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+type: containerCOMP
+parameters:
+  w: 270
+  h: 26
+  leftanchor: 1
+  horigin: 1
+  resizecomp: =me
+  repocomp: =me
+  align: horizrl
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: pars
+  type: textCOMP
+  parameters:
+    text: Pars
+    font: Open Sans
+    fontsize: 9
+    w: 51
+    alignorder: 350
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+  position: [600, 0]
+  tdn_ref: embody/Embody/toolbar/container_right/pars.tdxn
+- name: close
+  type: textCOMP
+  parameters:
+    text: "\U000F05AD"
+    font: Material Design Icons
+    fontsize: 11
+    w: 26
+    alignorder: -200
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+  tdn_ref: embody/Embody/toolbar/container_right/close.tdxn
+- name: filter
+  type: textCOMP
+  parameters:
+    text: ''
+    editmode: editablecontinuous
+    placeholdertext: Filter...
+    font: Open Sans
+    fontsize: 9
+    textoffsetx: 8
+    alignx: left
+    w: 170
+    alignorder: 25
+    bgcolorr: 0.08
+    bgcolorg: 0.08
+    bgcolorb: 0.08
+  position: [200, 0]
+  tdn_ref: embody/Embody/toolbar/container_right/filter.tdxn
+- name: spacer_pars
+  type: containerCOMP
+  parameters:
+    w: 10
+    vmode: fill
+    alignorder: 100
+    clickthrough: true
+    resizecomp: =me
+    repocomp: =me
+  position: [400, 0]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/toolbar/container_right/spacer_pars.tdxn

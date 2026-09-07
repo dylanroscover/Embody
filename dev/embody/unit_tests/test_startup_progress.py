@@ -32,7 +32,13 @@ sp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sp)
 sys.modules[_spec.name] = sp
 
-_EMBODY_TDN = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody.tdn')
+# Prefer .tdxn, accept .tdn: the receipt's suffix follows whatever the
+# project has been converted to, and a hardcoded name breaks collection
+# outright (not just this test) the moment it changes.
+_EMBODY_TDN = next(
+    (c for c in (os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody' + e)
+                 for e in ('.tdxn', '.tdn')) if os.path.isfile(c)),
+    os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody.tdxn'))
 _EMBODY_EXT = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',
                            'EmbodyExt.py')
 _CATALOG_EXT = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',

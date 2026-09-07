@@ -1,0 +1,147 @@
+format: tdxn
+version: '2.1'
+build: 19
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:33:29Z'
+network_path: /embody/Embody/windowHeader
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textCOMP:
+    parameters:
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsizeunits: points
+      repocomp: =me
+      resizecomp: =me
+      vmode: fill
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+type: containerCOMP
+custom_pars:
+  Header:
+  - name: Headerlabel
+    style: Str
+    label: Label
+    value: =f'Embody v{parent.Embody.par.Version}'
+  Controls:
+  - name: Windowcomp
+    style: COMP
+    label: Window COMP
+    value: /embody/Embody/window_manager
+parameters:
+  h: 26
+  hmode: fill
+  alignorder: -1
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Backgroundcolorr
+  bgcolorg: =parent.Embody.par.Backgroundcolorg
+  bgcolorb: =parent.Embody.par.Backgroundcolorb
+  bgalpha: =parent.Embody.par.Backgroundcolora
+  align: horizlr
+  marginl: 8
+  justifyh: left
+  justifyv: top
+sequences:
+  ext:
+  - object: op('./WindowHeaderExt').module.WindowHeaderExt(me)
+    promote: true
+  - {}
+  - {}
+  - {}
+  - {}
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: title
+  type: textCOMP
+  parameters:
+    text: =str(parent().par.Headerlabel) + '  ·  Envoy ' + str(parent.Embody.par.Envoystatus)
+    font: Open Sans
+    fontsize: 9
+    alignx: left
+    hmode: fill
+    reposition: window
+    offsetx: 10
+  tdn_ref: embody/Embody/windowHeader/title.tdxn
+- name: button_max
+  type: textCOMP
+  parameters:
+    text: "\U000F05AF"
+    font: Material Design Icons
+    fontsize: 10
+    w: 32
+    alignorder: 2
+    clickthrough: true
+    bgcolorr: =1.0
+    bgcolorg: =1.0
+    bgcolorb: =1.0
+    bgalpha: =0.1 if me.fetch('hover', False) else 0
+  position: [600, 0]
+  tdn_ref: embody/Embody/windowHeader/button_max.tdxn
+- name: button_min
+  type: textCOMP
+  parameters:
+    text: "\U000F05B0"
+    font: Material Design Icons
+    fontsize: 10
+    w: 32
+    alignorder: 1
+    clickthrough: true
+    bgcolorr: =1.0
+    bgcolorg: =1.0
+    bgcolorb: =1.0
+    bgalpha: =0.1 if me.fetch('hover', False) else 0
+  position: [300, 0]
+  tdn_ref: embody/Embody/windowHeader/button_min.tdxn
+- name: panelexec1
+  type: panelexecuteDAT
+  parameters:
+    fromop: =parent()
+    panels: ..
+    panelvalue: '*'
+    ontooff: true
+    valuechange: true
+    file: embody/Embody/windowHeader/panelexec1.py
+    syncfile: true
+    loadonstart: true
+  position: [300, -200]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: button_close
+  type: textCOMP
+  parameters:
+    text: "\U000F05AD"
+    font: Material Design Icons
+    fontsize: 10
+    w: 32
+    alignorder: 3
+    clickthrough: true
+    bgcolorr: =1.0
+    bgcolorg: =1.0
+    bgcolorb: =1.0
+    bgalpha: =0.1 if me.fetch('hover', False) else 0
+  position: [900, 0]
+  tdn_ref: embody/Embody/windowHeader/button_close.tdxn
+- name: WindowHeaderExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/windowHeader/WindowHeaderExt.py
+    syncfile: true
+    loadonstart: true
+    language: python
+  position: [0, -200]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py

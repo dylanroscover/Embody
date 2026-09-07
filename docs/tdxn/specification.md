@@ -37,7 +37,7 @@ parameters: { ... }
 sequences: { ... }
 flags: [ ... ]
 color: [0.3, 0.5, 0.9]
-tags: [tdn]
+tags: [tdxn]
 comment: Main UI container
 storage: { ... }
 operators: [ ... ]
@@ -1096,7 +1096,7 @@ Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup recons
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
-1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
+1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdxn'` and a matching `rel_file_path`.
 2. **Disk**: The referenced `.tdxn` file must exist at the resolved absolute path.
 
 Mismatches produce warnings, not errors — the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.

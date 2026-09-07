@@ -7092,7 +7092,7 @@ class EmbodyExt:
         if self._refusesEmptyTDXNOverwrite(oper, str(abs_path)):
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
             self._addToTable(oper, str(rel_path), timestamp, False, 1,
-                             app.build, 'tdn')
+                             app.build, self._TDXN_STRATEGY_CELL)
             self.Log(f"Adopted existing {rel_path} for empty '{oper.path}' "
                      f"without overwriting it -- reconstruct from the file, or "
                      f"Save from the manager to replace it", "WARNING")
@@ -7127,7 +7127,8 @@ class EmbodyExt:
             touch_build = str(oper.par.Touchbuild.eval()) if hasattr(oper.par, 'Touchbuild') else app.build
             self.param_tracker.updateParamStore(oper)
             self._addToTable(oper, str(rel_path), timestamp, False,
-                             build_num, touch_build, 'tdn')
+                             build_num, touch_build,
+                             self._TDXN_STRATEGY_CELL)
             # Prime the dirty-detection baseline now, on the just-exported
             # (clean) network, so the dirty indicator is correct immediately
             # instead of being set lazily by the first _isTDXNDirty scan. Without
@@ -7434,7 +7435,12 @@ class EmbodyExt:
                         continue
                     rel_file_path = self.normalizePath(self._cellVal(i, 'rel_file_path'))
                     row_type = self._cellVal(i, 'type')
-                    strategy = self._cellVal(i, 'strategy') if has_strategy else ''
+                    # Normalized: the cell reads 'tdxn', the wire value
+                    # is 'tdn'. A raw compare here made is_tdn False for
+                    # every TDXN row, so continuity skipped the rename
+                    # branch and deleted the row as a dead entry.
+                    strategy = (self._rowStrategy(i) if has_strategy
+                                else '')
                     rows_to_check.append((row_path, rel_file_path, row_type, strategy))
                     # Collect TDXN COMP paths so we can skip their children
                     is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
@@ -9126,7 +9132,8 @@ class EmbodyExt:
 
         # Show Open file button with platform-specific label
         btn_openfile = self.tagger.op('btn_openfile')
-        strategy = 'tdn' if strategy_state.startswith('TDXN') else 'tox'
+        strategy = (self._TDXN_STRATEGY_CELL
+                    if strategy_state.startswith('TDXN') else 'tox')
         rel_fp = self._getStrategyFilePath(oper.path, strategy) or ''
         self.tagger.store('manage_file_path', rel_fp)
         if btn_openfile:
@@ -10161,7 +10168,7 @@ class EmbodyExt:
 
         # Determine strategy from tags, falling back to table for untagged COMPs
         if tdn_tag in oper.tags:
-            strategy = 'tdn'
+            strategy = self._TDXN_STRATEGY_CELL
         elif tox_tag in oper.tags:
             strategy = 'tox'
         else:
@@ -10433,7 +10440,7 @@ class EmbodyExt:
         if is_tox:
             strategy = 'tox'
         elif is_tdn:
-            strategy = 'tdn'
+            strategy = self._TDXN_STRATEGY_CELL
         else:
             # DAT strategy is the tag value itself (py, json, xml, etc.)
             dat_tags = self.getTags('DAT')

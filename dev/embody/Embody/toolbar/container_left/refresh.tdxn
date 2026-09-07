@@ -1,0 +1,35 @@
+format: tdxn
+version: '2.1'
+build: 12
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:30:32Z'
+network_path: /embody/Embody/toolbar/container_left/refresh
+options:
+  include_dat_content: false
+  include_storage: true
+type: textCOMP
+parameters:
+  text: "\U000F0450"
+  font: Material Design Icons
+  fontsize: 11
+  fontsizeunits: points
+  fontcolorr: =parent.Embody.par.Textcolorr
+  fontcolorg: =parent.Embody.par.Textcolorg
+  fontcolorb: =parent.Embody.par.Textcolorb
+  w: 36
+  vmode: fill
+  alignorder: 400
+  display: =1 if parent.Embody.par.Status == 'Enabled' else 0
+  clickthrough: true
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgalpha: 1
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

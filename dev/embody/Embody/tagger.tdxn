@@ -1,0 +1,845 @@
+format: tdxn
+version: '2.1'
+build: 36
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:33:34Z'
+network_path: /embody/Embody/tagger
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  buttonCOMP:
+    parameters:
+      buttontype: momentary
+      clone: =op.TDTox.op('defaultCOMPs/button')
+      fontsize: 12
+      h: 28
+      hmode: fill
+      repocomp: =me
+      resizecomp: =me
+      scaletofit: onlyshrink
+  outCHOP:
+    parameters:
+      autoexportroot: =parent()
+      label: =me.name
+    flags:
+    - viewer
+    size: [130, 90]
+  panelexecuteDAT:
+    parameters:
+      defaultreadencoding: cp1252
+      fromop: =parent()
+      offtoon: false
+      panels: =parent()
+      panelvalue: state
+      valuechange: true
+    flags:
+    - viewer
+    size: [126, 62]
+  parameterCHOP:
+    parameters:
+      autoexportroot: =parent()
+      builtin: true
+      custom: false
+      parameters: value0
+      renameto: v1
+    flags:
+    - viewer
+    size: [130, 90]
+  parameterexecuteDAT:
+    parameters:
+      defaultreadencoding: cp1252
+      fromop: =parent()
+      onpulse: false
+      pars: value0
+    flags:
+    - viewer
+    size: [128, 66]
+  selectDAT:
+    parameters:
+      colexpr: =re.match('.*',me.inputCell.val) != None
+      colindexend: =me.inputTable.numCols - 1
+      extractrows: bynames
+      firstrow: true
+      rowexpr: =re.match('.*',me.inputCell.val) != None
+      rowindexend: =me.inputTable.numRows - 1
+    flags:
+    - viewer
+    size: [130, 90]
+  textCOMP:
+    parameters:
+      alignx: left
+      bgalpha: 1
+      bgcolorb: =parent.Embody.par.Listrowselectcolorb if parent().panel.rollover else parent.Embody.par.Listrowcolorb
+      bgcolorg: =parent.Embody.par.Listrowselectcolorg if parent().panel.rollover else parent.Embody.par.Listrowcolorg
+      bgcolorr: =parent.Embody.par.Listrowselectcolorr if parent().panel.rollover else parent.Embody.par.Listrowcolorr
+      borderover: false
+      clickthrough: true
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsize: 12
+      hmode: fill
+      legacyfontselection: true
+      repocomp: =me
+      resizecomp: =me
+      text: =parent().par.label
+      textpaddingl: 12
+      type: multiline
+      vmode: fill
+    flags:
+    - viewer
+type: containerCOMP
+parameters:
+  w: 180
+  h: =28 * (me.fetch('visible_count', op('./tags').numRows) + (2 if (op('./btn_copy_tdxn') and op('./btn_copy_tdxn').par.display.eval()) else 0)) + 2
+  display: false
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Listrowcolorr
+  bgcolorg: =parent.Embody.par.Listrowcolorg
+  bgcolorb: =parent.Embody.par.Listrowcolorb
+  bgalpha: 1
+  borderar: 0.26426
+  borderag: 0.298469
+  borderab: 0.362
+  align: verttb
+  parentshortcut: menu
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: tags
+  type: nullDAT
+  flags:
+  - viewer
+  position: [-400, 0]
+  size: [130, 90]
+  inputs:
+  - switch_family
+  dat_read_only: true
+- name: header
+  type: containerCOMP
+  parameters:
+    h: 28
+    hmode: fill
+    resizecomp: =me
+    repocomp: =me
+    bgcolorr: =parent.Embody.par.Listheadercolorr
+    bgcolorg: =parent.Embody.par.Listheadercolorg
+    bgcolorb: =parent.Embody.par.Listheadercolorb
+    bgalpha: =parent.Embody.par.Listheadercolora
+    borderover: false
+    reloadbuiltin: false
+  flags:
+  - viewer
+  position: [0, 275]
+  size: [160, 76]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/tagger/header.tdxn
+- name: button0
+  type: buttonCOMP
+  parameters:
+    label: =op('tags')[me.digits, 'label']
+    colorr: =parent.Embody.par.Taggingmenucolorr
+    colorg: =parent.Embody.par.Taggingmenucolorg
+    colorb: =parent.Embody.par.Taggingmenucolorb
+    alignorder: 1
+    display: false
+    topsmoothness: mipmap
+    reloadbuiltin: false
+    relpath: inherit
+  position: [-225, 175]
+  size: [160, 76]
+  storage:
+    _tdn_palette_handling: blackbox
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: onlyshrink
+      fontalpha: =parent.Embody.par.Textcolora
+      textpaddingr: 3
+      textpaddingb: 3
+      textpaddingt: 3
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2
+      reloadbuiltin: false
+    position: [74, 26]
+    size: [113, 64]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: button1
+  type: buttonCOMP
+  parameters:
+    label: ⇄  Convert to tox
+    colorr: 0.2
+    colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
+    colorb: 0.2
+    alignorder: 1.1
+    topsmoothness: mipmap
+    reloadbuiltin: false
+    relpath: inherit
+  position: [-225, -276]
+  size: [160, 76]
+  storage:
+    _tdn_palette_handling: blackbox
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: onlyshrink
+      fontalpha: =parent.Embody.par.Textcolora
+      textpaddingr: 3
+      textpaddingb: 3
+      textpaddingt: 3
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2
+      reloadbuiltin: false
+    position: [74, 26]
+    size: [113, 64]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: button2
+  type: buttonCOMP
+  parameters:
+    label: =op('tags')[me.digits, 'label']
+    colorr: =parent.Embody.par.Taggingmenucolorr
+    colorg: =parent.Embody.par.Taggingmenucolorg
+    colorb: =parent.Embody.par.Taggingmenucolorb
+    alignorder: 1
+    topsmoothness: mipmap
+    reloadbuiltin: false
+    relpath: inherit
+  position: [25, -276]
+  size: [160, 76]
+  storage:
+    _tdn_palette_handling: blackbox
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: onlyshrink
+      fontalpha: =parent.Embody.par.Textcolora
+      textpaddingr: 3
+      textpaddingb: 3
+      textpaddingt: 3
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2
+      reloadbuiltin: false
+    position: [74, 26]
+    size: [113, 64]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_omit
+  type: buttonCOMP
+  parameters:
+    label: ◇  Exclude from tdxn
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 1.5
+  position: [980, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.openOmitPanel(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_save
+  type: buttonCOMP
+  parameters:
+    label: ↓  Save tdxn
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.5
+  position: [25, 100]
+  size: [160, 134]
+  storage:
+    _tdn_palette_handling: blackbox
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleStrategySave(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_embed
+  type: buttonCOMP
+  parameters:
+    label: ⊞  Embed DATs in tdxn
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.2
+  position: [260, 275]
+  size: [160, 134]
+  storage:
+    _tdn_palette_handling: blackbox
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: /embody/Embody/tagger/btn_embed
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleEmbed(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_reload
+  type: buttonCOMP
+  parameters:
+    label: ↻  Reload tdxn
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.6
+  position: [-280, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleReload(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_remove
+  type: buttonCOMP
+  parameters:
+    label: Remove externalization
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 11
+    display: false
+  position: [-1000, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\t# Defer to allow window to close before showing confirmation dialog\n\t\t\trun(lambda o=oper: parent.Embody.ext.Embody.handleStrategyRemove(o),\n\t\t\t\tdelayFrames=2)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: parameter1
+  type: parameterDAT
+  parameters:
+    ops: =parent.Embody
+    parameters: '*tag'
+    label: true
+  flags:
+  - viewer
+  position: [-1000, 0]
+  size: [130, 90]
+  dat_read_only: true
+- name: replicator1
+  type: replicatorCOMP
+  parameters:
+    template: tags
+    opprefix: button
+    master: button0
+    destination: =parent()
+    callbacks: replicator1_callbacks
+    layoutorigin1: =me.nodeX
+    layoutorigin2: =me.nodeY - 200
+    reloadbuiltin: false
+  flags:
+  - viewer
+  position: [-225, 0]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/tagger/replicator1.tdxn
+- name: select_dats
+  type: selectDAT
+  parameters:
+    rownames: ^Toxtag ^Toxexternalchildrentag
+  position: [-800, -75]
+  inputs:
+  - parameter1
+  dat_read_only: true
+- name: btn_openfile
+  type: buttonCOMP
+  parameters:
+    label: ◎  Reveal in Explorer
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.1
+  position: [-820, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\trel_fp = parent.Embody.op('tagger').fetch('manage_file_path', '')\n\t\t\tif rel_fp:\n\t\t\t\tparent.Embody.ext.Embody.openSaveFile(rel_fp)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_portable
+  type: buttonCOMP
+  parameters:
+    label: ↗  Export portable tox
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.8
+  position: [-460, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handlePortableExport(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: select_comps
+  type: selectDAT
+  parameters:
+    rownames: Toxtag Tdxntag Toxexternalchildrentag
+  position: [-800, -175]
+  inputs:
+  - parameter1
+  dat_read_only: true
+- name: btn_copy_tdxn
+  type: buttonCOMP
+  parameters:
+    label: =chr(10697) + '  Copy tdxn'
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.3
+    display: =op('btn_portable').par.display.eval()
+  position: [620, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.copyNetworkToClipboard(oper)\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: switch_family
+  type: switchDAT
+  parameters:
+    index: 2
+  flags:
+  - viewer
+  position: [-600, 0]
+  size: [130, 90]
+  inputs:
+  - parameter1
+  - select_dats
+  - select_comps
+  dat_read_only: true
+- name: btn_paste_tdxn
+  type: buttonCOMP
+  parameters:
+    label: =chr(10515) + '  Paste tdxn'
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.4
+    display: =op('btn_portable').par.display.eval()
+  position: [800, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.pasteNetworkFromClipboard(oper)\n\treturn\n"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_embed_storage
+  type: buttonCOMP
+  parameters:
+    label: ⊞  Embed storage in tdxn  ✓
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 0.25
+  position: [440, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: /embody/Embody/tagger/btn_embed
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleEmbedStorage(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: replicator1_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/tagger/replicator1_callbacks.py
+    syncfile: true
+    language: python
+  flags:
+  - viewer
+  position: [-225, -160]
+  size: [160, 130]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+  dock: replicator1

@@ -143,6 +143,18 @@ TDXN_ACCEPTED_FORMATS = frozenset({'tdxn', 'tdn'})
 TDXN_STRATEGY_CELL = 'tdxn'
 
 
+def normalized_strategy(value) -> str:
+    """A stored `strategy` cell mapped onto the internal wire value.
+
+    The cell is user-facing and reads 'tdxn'; the code passes 'tdn'.
+    Compare through this, never against the raw cell, or a row written by
+    the current build stops matching and its COMP drops out of the
+    lifecycle silently.
+    """
+    v = str(value or '').strip().lower()
+    return 'tdn' if v == TDXN_STRATEGY_CELL else v
+
+
 def is_tdn_network_file(path) -> bool:
 	"""True when `path` names a TDXN network file -- either suffix."""
 	return Path(path).suffix.lower() in TDXN_FILE_SUFFIXES
@@ -1409,7 +1421,9 @@ class TDXNExt:
 			for row in range(1, table.numRows):
 				strat = (table[row, 'strategy'].val if has_strategy
 						 else table[row, 'type'].val) or 'tox'
-				if strat == 'tdn':
+				# Cell reads 'tdxn'; a raw compare collected nothing, so the
+				# project-wide diff summary came back empty.
+				if normalized_strategy(strat) == 'tdn':
 					tdn_paths.append(table[row, 'path'].val)
 		except Exception as e:
 			return {'error': 'Failed to read externalizations: %s' % e}
@@ -2316,7 +2330,7 @@ class TDXNExt:
 			for i in range(1, table.numRows):
 				is_tdn = False
 				if has_strategy:
-					is_tdn = table[i, 'strategy'].val == 'tdn'
+					is_tdn = normalized_strategy(table[i, 'strategy'].val) == 'tdn'
 				else:
 					is_tdn = table[i, 'type'].val == 'tdn'
 				if is_tdn:
@@ -5960,7 +5974,7 @@ class TDXNExt:
 			# Skip COMP entries (TOX/TDXN strategies)
 			row_type = table[i, 'type'].val
 			if has_strategy:
-				strategy = table[i, 'strategy'].val
+				strategy = normalized_strategy(table[i, 'strategy'].val)
 				if strategy in ('tox', 'tdn'):
 					continue
 			else:
@@ -6750,7 +6764,7 @@ class TDXNExt:
 			return set()
 		paths = set()
 		for i in range(1, table.numRows):
-			if table[i, 'strategy'].val == 'tdn':
+			if normalized_strategy(table[i, 'strategy'].val) == 'tdn':
 				paths.add(table[i, 'path'].val)
 		return paths
 
@@ -7041,7 +7055,7 @@ class TDXNExt:
 				return None
 			for i in range(1, table.numRows):
 				if (table[i, 'path'].val == target.path
-						and table[i, 'strategy'].val == 'tdn'):
+						and normalized_strategy(table[i, 'strategy'].val) == 'tdn'):
 					return table[i, 'rel_file_path'].val
 		except Exception:
 			pass
@@ -7575,7 +7589,7 @@ class TDXNExt:
 						continue
 					is_tdn = False
 					if has_strategy:
-						is_tdn = table[i, 'strategy'].val == 'tdn'
+						is_tdn = normalized_strategy(table[i, 'strategy'].val) == 'tdn'
 					else:
 						is_tdn = table[i, 'type'].val == 'tdn'
 					if is_tdn:
@@ -7732,7 +7746,8 @@ class TDXNExt:
 				if row_path != root_path:
 					continue
 				is_tdn_row = False
-				if has_strategy and table[i, 'strategy'].val == 'tdn':
+				if has_strategy and normalized_strategy(
+						table[i, 'strategy'].val) == 'tdn':
 					is_tdn_row = True
 				elif table[i, 'type'].val == 'tdn':
 					is_tdn_row = True
@@ -7772,10 +7787,10 @@ class TDXNExt:
 			# Add new row (schema-aware)
 			if has_strategy:
 				comp_type = target.type if target else 'base'
-				table.appendRow([root_path, comp_type, 'tdn', rel_path,
+				table.appendRow([root_path, comp_type, TDXN_STRATEGY_CELL, rel_path,
 								 timestamp, '', build_str, tb_str])
 			else:
-				table.appendRow([root_path, 'tdn', rel_path, timestamp,
+				table.appendRow([root_path, TDXN_STRATEGY_CELL, rel_path, timestamp,
 								 '', build_str, tb_str])
 			_stamp_recovery_pointer()
 		except Exception as e:

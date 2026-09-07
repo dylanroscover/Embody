@@ -107,7 +107,11 @@ def test_convoy_tdn_carries_one_text_dat_asset_for_every_daemon_module():
     where a developer copies a file into ``host/`` but never creates the
     corresponding TouchDesigner text DAT.
     """
-    tdn = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody', 'convoy.tdn')
+    tdn = next(
+        (c for c in (os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',
+                                  'convoy' + e) for e in ('.tdxn', '.tdn'))
+         if os.path.isfile(c)),
+        os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody', 'convoy.tdxn'))
     with open(tdn, 'r', encoding='utf-8') as f:
         text = f.read()
     refs = re.findall(

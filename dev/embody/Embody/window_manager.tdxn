@@ -1,0 +1,27 @@
+format: tdxn
+version: '2.1'
+build: 13
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:33:28Z'
+network_path: /embody/Embody/window_manager
+options:
+  include_dat_content: false
+  include_storage: true
+type: windowCOMP
+parameters:
+  winop: manager
+  title: =me
+  ignoretaskbar: false
+  justifyh: center
+  justifyv: center
+  winoffsetx: -12
+  borders: false
+  cursorvisible: alwaysvisible
+  includedialog: false
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

@@ -1,0 +1,25 @@
+format: tdxn
+version: '2.1'
+build: 24
+generator: Embody/6.2.26
+td_build: 099.2025.33070
+source_file: Embody-6.329.toe
+exported_at: '2026-09-07T02:33:27Z'
+network_path: /embody/Embody/window_tagging_menu
+options:
+  include_dat_content: false
+  include_storage: true
+type: windowCOMP
+parameters:
+  winop: tagger
+  title: =me
+  justifyh: mouse
+  justifyv: mouse
+  winoffsetx: 110
+  borders: false
+  includedialog: false
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

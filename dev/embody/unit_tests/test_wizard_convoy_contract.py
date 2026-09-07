@@ -13,7 +13,9 @@ from pathlib import Path
 LOGIC = (Path(__file__).resolve().parents[1]
          / "Embody" / "wizard" / "logic.py")
 ENVOY_EXT = LOGIC.parents[1] / "EnvoyExt.py"
-WIZARD_TDXN = LOGIC.parents[1] / "wizard.tdn"
+WIZARD_TDXN = next((c for c in (LOGIC.parents[1] / ("wizard" + e)
+                                for e in (".tdxn", ".tdn")) if c.is_file()),
+                   LOGIC.parents[1] / "wizard.tdxn")
 
 
 def _load_logic():
