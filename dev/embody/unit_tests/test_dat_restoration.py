@@ -191,11 +191,11 @@ class TestDATRestoration(EmbodyTestCase):
         self.assertNotIn(dat_path, paths,
                          'DATs inside TOX COMPs should be excluded')
 
-    def test_restore_skips_dat_inside_tdn_comp(self):
+    def test_restore_skips_dat_inside_tdxn_comp(self):
         """DATs inside a TDXN-strategy COMP should be excluded."""
-        comp_path = self._root_sandbox.path + '/tdn_parent'
+        comp_path = self._root_sandbox.path + '/tdxn_parent'
         self._add_table_entry(comp_path, 'container', 'tdn',
-                              'embody/unit_tests/_test_temp/tdn_parent.tdn')
+                              'embody/unit_tests/_test_temp/tdxn_parent.tdn')
 
         dat_path = comp_path + '/child_dat'
         rel_path = 'embody/unit_tests/_test_temp/child_dat2.py'

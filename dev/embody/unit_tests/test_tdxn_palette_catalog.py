@@ -635,7 +635,7 @@ class TestTDXNPaletteCatalog(EmbodyTestCase):
 	# Helpers
 	# =================================================================
 
-	def _findOpInExport(self, tdn_doc, name):
+	def _findOpInExport(self, tdxn_doc, name):
 		"""Find an operator entry by name anywhere in the TDXN export tree."""
 		def walk(entries):
 			for e in entries or []:
@@ -645,7 +645,7 @@ class TestTDXNPaletteCatalog(EmbodyTestCase):
 				if found:
 					return found
 			return None
-		return walk(tdn_doc.get('operators'))
+		return walk(tdxn_doc.get('operators'))
 
 
 	def test_an_aborted_scan_publishes_a_terminal_status(self):

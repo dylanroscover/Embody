@@ -1110,7 +1110,7 @@ class TestTransientParScrub(EmbodyTestCase):
 
     # -- TDXN export consumer -----------------------------------------
 
-    def test_tdn_export_records_resting_definition_ships(self):
+    def test_tdxn_export_records_resting_definition_ships(self):
         comp = self._make_scrub_comp()
         pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}
@@ -1122,7 +1122,7 @@ class TestTransientParScrub(EmbodyTestCase):
             'value and not an omitted key')
         self.assertEqual(defs['Authored'].get('value'), 'keep-me')
 
-    def test_tdn_export_preserves_expression_on_registered_par(self):
+    def test_tdxn_export_preserves_expression_on_registered_par(self):
         """The '='/'~' shorthand encodes the MODE into the value key --
         replacing it would destroy the reference (the scrub half refuses
         the same; the two consumers must agree)."""
@@ -1137,7 +1137,7 @@ class TestTransientParScrub(EmbodyTestCase):
             'got %r' % (value,))
         self.assertIn('live-', value)
 
-    def test_tdn_export_omit_names_drop_value_definition_ships(self):
+    def test_tdxn_export_omit_names_drop_value_definition_ships(self):
         comp = self._make_scrub_comp('rht_omit_target')
         page = comp.customPages[0]
         page.appendStr('Stampval')[0].val = '2026-07-30 09:45:00 UTC'
@@ -1153,7 +1153,7 @@ class TestTransientParScrub(EmbodyTestCase):
             'value', defs['Stampval'],
             'an omit-name value must never reach the .tdn')
 
-    def test_tdn_export_keeps_same_named_par_on_user_comp(self):
+    def test_tdxn_export_keeps_same_named_par_on_user_comp(self):
         comp = self.sandbox.create(baseCOMP, 'rht_user_status')
         page = comp.appendCustomPage('Info')
         page.appendStr('Status')[0].val = 'user-authored'
@@ -1164,7 +1164,7 @@ class TestTransientParScrub(EmbodyTestCase):
             'a user par named Status must keep its value -- the registry '
             'is scoped by OP shortcut, never bare names')
 
-    def test_tdn_export_user_about_page_survives(self):
+    def test_tdxn_export_user_about_page_survives(self):
         comp = self.sandbox.create(baseCOMP, 'rht_user_about')
         page = comp.appendCustomPage('About')
         page.appendStr('Version')[0].val = '1.0'

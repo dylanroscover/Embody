@@ -81,12 +81,12 @@ class TestVersionSync(EmbodyTestCase):
     # The .tdn version lag (fixed 2026-08-08)
     # ------------------------------------------------------------------
 
-    def _tdn_head(self, rel):
+    def _tdxn_head(self, rel):
         path = Path(project.folder) / rel
         with open(path, 'r', encoding='utf-8') as handle:
             return ''.join(handle.readline() for _ in range(14))
 
-    def test_tdn_files_carry_the_current_version(self):
+    def test_tdxn_files_carry_the_current_version(self):
         """Both Embody-covering .tdn files must stamp the version that is
         actually shipping.
 
@@ -102,7 +102,7 @@ class TestVersionSync(EmbodyTestCase):
         """
         version = str(self.embody.par.Version.eval())
         for rel in ('embody/Embody.tdxn', 'embody.tdxn'):
-            head = self._tdn_head(rel)
+            head = self._tdxn_head(rel)
             self.assertIn(
                 'generator: Embody/%s' % version, head,
                 '%s is stamped with a stale version (the pre-save export '
@@ -119,7 +119,7 @@ class TestVersionSync(EmbodyTestCase):
             'projectpostsave is off, so syncVersionIntoTDXN never fires')
         self.assertTrue(hasattr(dat.module, 'syncVersionIntoTDXN'))
 
-    def test_the_version_sync_selects_only_embody_covering_tdn_rows(self):
+    def test_the_version_sync_selects_only_embody_covering_tdxn_rows(self):
         """It must re-export the rows that CONTAIN the Embody COMP, and
         never '/' -- re-exporting the whole project root on every save
         would be a far larger write than this warrants.
@@ -172,7 +172,7 @@ class TestVersionSync(EmbodyTestCase):
             self.assertIs(bump, False,
                           f'{path} was re-exported with the Build bump on')
 
-    def test_save_tdn_honours_bump_build_on_a_comp_that_has_one(self):
+    def test_save_tdxn_honours_bump_build_on_a_comp_that_has_one(self):
         """The flag has to reach par.Build, not merely exist in the signature.
 
         A sandbox COMP with its own Build par is the only way to observe
@@ -186,7 +186,7 @@ class TestVersionSync(EmbodyTestCase):
         ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
         ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
-        abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
+        abs_tdxn = str(ext.buildAbsolutePath(rel)) if rel else None
         try:
             # Baseline AFTER externalization: the first export writes the file
             # and advances the counter itself, so the starting value is
@@ -203,9 +203,9 @@ class TestVersionSync(EmbodyTestCase):
                 ext._removeTDXNStrategy(comp.path, delete_file=True)
             except Exception:
                 pass
-            if abs_tdn and os.path.isfile(abs_tdn):
+            if abs_tdxn and os.path.isfile(abs_tdxn):
                 try:
-                    os.remove(abs_tdn)
+                    os.remove(abs_tdxn)
                 except OSError:
                     pass
 

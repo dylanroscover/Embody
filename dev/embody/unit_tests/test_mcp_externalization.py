@@ -96,7 +96,7 @@ class TestMCPExternalization(EmbodyTestCase):
         except Exception:
             pass
 
-    def test_externalize_op_tdn_reports_tdn_file(self):
+    def test_externalize_op_tdxn_reports_tdxn_file(self):
         """REGRESSION: tag_type='tdn' must report the .tdn file.
 
         The old handler read par.externaltox for every COMP, reporting a
@@ -117,7 +117,7 @@ class TestMCPExternalization(EmbodyTestCase):
         self.envoy._remove_externalization_tag(op_path=comp.path)
         self._deleteExportedFile(reported)
 
-    def test_remove_externalization_tag_tdn_prunes_row(self):
+    def test_remove_externalization_tag_tdxn_prunes_row(self):
         """REGRESSION: TDXN untag must remove the table row + breadcrumb.
 
         The Update sweep deliberately excludes TDXN comps from subtraction
@@ -130,15 +130,15 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path=comp.path, tag_type='tdn')
         self.assertTrue(ext_result.get('success'),
             f"externalize failed: {ext_result.get('error')}")
-        tdn_tag = self.embody.par.Tdxntag.eval()
-        self.assertIn(tdn_tag, comp.tags, 'Precondition: comp tagged tdn')
+        tdxn_tag = self.embody.par.Tdxntag.eval()
+        self.assertIn(tdxn_tag, comp.tags, 'Precondition: comp tagged tdn')
 
         result = self.envoy._remove_externalization_tag(op_path=comp.path)
         self.assertTrue(result.get('success'),
             f"untag failed: {result.get('error')}")
-        self.assertIn(tdn_tag, result.get('removed_tags', []))
+        self.assertIn(tdxn_tag, result.get('removed_tags', []))
 
-        self.assertNotIn(tdn_tag, comp.tags,
+        self.assertNotIn(tdxn_tag, comp.tags,
             'TDXN untag must strip the tag')
         rows = [self.embody_ext.Externalizations[i, 'path'].val
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
@@ -262,11 +262,11 @@ class TestMCPExternalization(EmbodyTestCase):
     # so the sequential case below has the batch's timing and is the
     # minimal regression.
 
-    def _tdnRow(self, comp_path):
+    def _tdxnRow(self, comp_path):
         """The rel_file_path this COMP's TDXN row currently tracks."""
         return self.embody_ext._getStrategyFilePath(comp_path, 'tdn') or ''
 
-    def _tdnTwins(self, rel):
+    def _tdxnTwins(self, rel):
         """(.tdxn, .tdn) absolute paths for one tracked TDXN rel path."""
         stem = rel[:rel.rfind('.')]
         return tuple(
@@ -278,11 +278,11 @@ class TestMCPExternalization(EmbodyTestCase):
         """Row, reported file and disk must all say .tdxn -- and only .tdxn."""
         self.assertTrue(str(reported).endswith('.tdxn'),
             '%s: re-externalization reported %r' % (how, reported))
-        rel = self._tdnRow(comp.path)
+        rel = self._tdxnRow(comp.path)
         self.assertTrue(rel.endswith('.tdxn'),
             '%s: the row tracks %r -- a removed row must MINT the current '
             'suffix, never fall back to legacy .tdn' % (how, rel))
-        modern, legacy = self._tdnTwins(rel)
+        modern, legacy = self._tdxnTwins(rel)
         self.assertTrue(modern.is_file(),
             '%s: nothing on disk at the tracked path %s' % (how, modern))
         # The legacy twin may still be on disk: its unlink is deferred 5
@@ -315,7 +315,7 @@ class TestMCPExternalization(EmbodyTestCase):
         # for. A freshly externalized COMP has no .tdn at all, so without
         # this the tests pass whether the guard exists or not (verified
         # 2026-09-06 by removing the guard and watching them stay green).
-        rel = self._tdnRow(comp.path)
+        rel = self._tdxnRow(comp.path)
         legacy = rel[:-len('.tdxn')] + '.tdn'
         modern_abs = self.embody_ext.buildAbsolutePath(
             self.embody_ext.normalizePath(rel))
@@ -336,7 +336,7 @@ class TestMCPExternalization(EmbodyTestCase):
         removed = self.envoy._remove_externalization_tag(
             op_path=comp.path, delete_file=True)
         self.assertTrue(removed.get('success'), repr(removed.get('error')))
-        self.assertEqual(self._tdnRow(comp.path), '',
+        self.assertEqual(self._tdxnRow(comp.path), '',
                          'precondition: the removal must drop the row')
 
         again = self.envoy._externalize_op(op_path=comp.path, tag_type='tdn')

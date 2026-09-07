@@ -14,7 +14,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 class TestDiffTdxnHandler(EmbodyTestCase):
 
-    def _make_tdn_comp(self, name):
+    def _make_tdxn_comp(self, name):
         """Create a sandbox baseCOMP with a child + custom par, externalize it
         as TDXN, and return (comp, rel_path). Caller must _cleanup()."""
         comp = self.sandbox.create(baseCOMP, name)
@@ -51,7 +51,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         except Exception:
             pass
 
-    def test_error_when_not_tdn_externalized(self):
+    def test_error_when_not_tdxn_externalized(self):
         comp = self.sandbox.create(baseCOMP, 'not_tdn')
         res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
         self.assertIn('error', res)
@@ -62,7 +62,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         self.assertIn('error', res)
 
     def test_clean_right_after_externalize(self):
-        comp, child, rel = self._make_tdn_comp('diff_clean')
+        comp, child, rel = self._make_tdxn_comp('diff_clean')
         try:
             self.assertIsNotNone(rel, 'COMP should be TDXN-externalized')
             res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
@@ -76,7 +76,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
             self._cleanup(comp, rel)
 
     def test_detects_child_param_change(self):
-        comp, child, rel = self._make_tdn_comp('diff_param')
+        comp, child, rel = self._make_tdxn_comp('diff_param')
         try:
             self.assertIsNotNone(rel)
             # Mutate live state away from the on-disk .tdn.
@@ -92,7 +92,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
             self._cleanup(comp, rel)
 
     def test_detects_root_param_change(self):
-        comp, child, rel = self._make_tdn_comp('diff_root')
+        comp, child, rel = self._make_tdxn_comp('diff_root')
         try:
             self.assertIsNotNone(rel)
             comp.par.Testval = 5.0  # root COMP's own custom par
@@ -105,7 +105,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
             self._cleanup(comp, rel)
 
     def test_envelope_shape(self):
-        comp, child, rel = self._make_tdn_comp('diff_shape')
+        comp, child, rel = self._make_tdxn_comp('diff_shape')
         try:
             res = op.Embody.ext.Envoy._diff_tdxn(comp.path)
             for key in ('schema_version', 'baseline', 'comp_path', 'file',
@@ -117,7 +117,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
             self._cleanup(comp, rel)
 
     def test_status_recommends_diff_tdxn(self):
-        comp, child, rel = self._make_tdn_comp('diff_hint')
+        comp, child, rel = self._make_tdxn_comp('diff_hint')
         try:
             status = op.Embody.ext.Envoy._get_externalization_status(comp.path)
             # The reported strategy is the user-facing cell value.
@@ -127,9 +127,9 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         finally:
             self._cleanup(comp, rel)
 
-    def test_resolves_tdn_filename_to_comp(self):
+    def test_resolves_tdxn_filename_to_comp(self):
         # diff_tdn must accept a .tdn filename, not just a COMP path.
-        comp, child, rel = self._make_tdn_comp('diff_byname')
+        comp, child, rel = self._make_tdxn_comp('diff_byname')
         try:
             self.assertIsNotNone(rel)
             fname = rel.replace('\\', '/').rsplit('/', 1)[-1]  # bare filename
@@ -139,8 +139,8 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         finally:
             self._cleanup(comp, rel)
 
-    def test_resolves_tdn_relpath_to_comp(self):
-        comp, child, rel = self._make_tdn_comp('diff_byrel')
+    def test_resolves_tdxn_relpath_to_comp(self):
+        comp, child, rel = self._make_tdxn_comp('diff_byrel')
         try:
             self.assertIsNotNone(rel)
             res = op.Embody.ext.Envoy._diff_tdxn(rel)  # full repo-relative path
@@ -154,7 +154,7 @@ class TestDiffTdxnHandler(EmbodyTestCase):
         # the freshly-added probe is always examined regardless of how many
         # other TDXN COMPs the project already has (the default cap could
         # otherwise truncate before reaching it).
-        comp, child, rel = self._make_tdn_comp('diff_proj')
+        comp, child, rel = self._make_tdxn_comp('diff_proj')
         try:
             self.assertIsNotNone(rel)
             child.par.value0 = 9.0  # make it unsaved-dirty vs disk

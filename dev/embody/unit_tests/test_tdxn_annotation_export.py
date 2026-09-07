@@ -26,7 +26,7 @@ except (AttributeError, NameError):
 class TestTDXNAnnotationExport(EmbodyTestCase):
 
     @property
-    def tdn_ext(self):
+    def tdxn_ext(self):
         """Resolve TDXNExt live on every access (never cache - reinit-safe)."""
         return self.embody.ext.TDXN
 
@@ -35,7 +35,7 @@ class TestTDXNAnnotationExport(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def _export(self, root):
-        result = self.tdn_ext.ExportNetwork(
+        result = self.tdxn_ext.ExportNetwork(
             root.path, output_file=None, embed_all=True)
         return result.get('tdn', result)
 
@@ -108,7 +108,7 @@ class TestTDXNAnnotationExport(EmbodyTestCase):
         doc = self._export(parent)
 
         target = self.sandbox.create(baseCOMP, 'anno_import_target')
-        result = self.tdn_ext.ImportNetwork(
+        result = self.tdxn_ext.ImportNetwork(
             target.path, doc, clear_first=True)
         self.assertTrue(result.get('success'),
             f'import failed: {result.get("error")}')
@@ -152,7 +152,7 @@ class TestTDXNAnnotationExport(EmbodyTestCase):
         self._export(parent)
         note.destroy()
         doc = self._export(parent)
-        result = self.tdn_ext.ImportNetwork(parent.path, doc, clear_first=True)
+        result = self.tdxn_ext.ImportNetwork(parent.path, doc, clear_first=True)
         self.assertTrue(result.get('success'),
                         f'import failed: {result.get("error")}')
         anns = parent.findChildren(type=annotateCOMP, includeUtility=True)
@@ -170,7 +170,7 @@ class TestTDXNAnnotationExport(EmbodyTestCase):
         parent, note = self._build_with_annotation('anno_additive')
         note.utility = True  # every annotation is utility now
         doc = self._export(parent)
-        result = self.tdn_ext.ImportNetwork(parent.path, doc,
+        result = self.tdxn_ext.ImportNetwork(parent.path, doc,
                                             clear_first=False)
         self.assertTrue(result.get('success'),
                         f'import failed: {result.get("error")}')

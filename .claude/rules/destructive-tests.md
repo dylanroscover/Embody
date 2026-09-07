@@ -15,7 +15,7 @@ the Embody test harness -- it has no shipped template counterpart.
 ## The incident this prevents (2026-07-01)
 
 A full `RunTests()` run included `test_custom_parameters`, whose
-`Disable(removeTags=True)` + `_externalize_project_silent(use_tdn=False)` ran
+`Disable(removeTags=True)` + `_externalize_project_silent(use_tdxn=False)` ran
 against the live project. It deleted **18 crown-jewel specimen `.tdxn` files**
 project-wide and re-tagged every COMP to TOX. The root cause was NOT the
 continuity sweep -- it was a destructive suite running against `ext.root` during

@@ -37,7 +37,7 @@ class TestMCPTDXNTools(EmbodyTestCase):
     # A. Basic shape
     # ------------------------------------------------------------------
 
-    def test_read_tdxn_returns_tdn_dict(self):
+    def test_read_tdxn_returns_tdxn_dict(self):
         result = self.envoy._read_tdxn(comp_path=self.fixture.path)
         self.assertTrue(result.get('success'),
             f'read_tdn failed: {result.get("error")}')
@@ -141,9 +141,9 @@ class TestMCPTDXNTools(EmbodyTestCase):
         Floor: 5x reduction. Real-world networks hit 20-90x; keeping the
         floor conservative so this test doesn't flake on tiny fixtures.
         """
-        tdn_result = self.envoy._read_tdxn(comp_path=self.fixture.path)
-        self.assertTrue(tdn_result.get('success'))
-        tdn_chars = len(json.dumps(tdn_result['tdn']))
+        tdxn_result = self.envoy._read_tdxn(comp_path=self.fixture.path)
+        self.assertTrue(tdxn_result.get('success'))
+        tdxn_chars = len(json.dumps(tdxn_result['tdn']))
 
         # Walk fixture children via _get_op and sum the payload sizes.
         # include_defaults=True: the 20-90x claim is about FULL operator
@@ -158,10 +158,10 @@ class TestMCPTDXNTools(EmbodyTestCase):
 
         self.assertGreater(get_op_chars, 0,
             'get_op walk produced no payload -- test is broken')
-        ratio = get_op_chars / max(1, tdn_chars)
+        ratio = get_op_chars / max(1, tdxn_chars)
         self.assertGreater(ratio, 5,
             f'Expected read_tdn to be >5x smaller than get_op walk. '
-            f'tdn={tdn_chars} chars, get_op_sum={get_op_chars} chars, '
+            f'tdn={tdxn_chars} chars, get_op_sum={get_op_chars} chars, '
             f'ratio={ratio:.2f}x')
 
     # ------------------------------------------------------------------
@@ -199,7 +199,7 @@ class TestMCPTDXNTools(EmbodyTestCase):
         self.assertTrue({'noise', 'level', 'null', 'wave', 'notes'} <= names,
             f'Imported children missing from target: {names}')
 
-    def test_import_network_invalid_tdn(self):
+    def test_import_network_invalid_tdxn(self):
         target = self.sandbox.create(baseCOMP, 'import_bad')
         result = self.envoy._import_network(
             target_path=target.path, tdn={'not_operators': 1})

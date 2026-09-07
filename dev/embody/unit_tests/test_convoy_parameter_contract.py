@@ -17,7 +17,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[3]
 _EMBODY_CANDIDATES = [REPO / "dev" / "embody" / ("Embody" + ext)
                       for ext in (".tdxn", ".tdn")]
-EMBODY_TDN = next((c for c in _EMBODY_CANDIDATES if c.is_file()),
+EMBODY_TDXN = next((c for c in _EMBODY_CANDIDATES if c.is_file()),
                   _EMBODY_CANDIDATES[0])
 ROOT_TDXN = next((c for c in (REPO / "dev" / ("embody" + e)
                               for e in (".tdxn", ".tdn")) if c.is_file()),
@@ -110,7 +110,7 @@ def test_forget_offline_nodes_pulse_is_present_and_honest():
     whose help states the enumerating confirmation and the consequence
     (new identity, TD Python approval reset) -- the informed-consent
     contract the button was designed around."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     par = rows["Convoyforgetoffline"]
     assert par["style"] == "Pulse"
     assert par["label"] == "Forget Offline Nodes..."
@@ -133,20 +133,20 @@ def test_the_convoy_comp_carries_its_global_shortcut():
     """External call sites address the extension as op.Convoy.ext.ConvoyExt
     -- the shortcut is the API surface, so losing it breaks every example
     in the docs (and the wizard's node-name fill)."""
-    document = _load_yaml(EMBODY_TDN)
+    document = _load_yaml(EMBODY_TDXN)
     convoy = next(row for row in document["operators"]
                   if row.get("name") == "convoy")
     assert convoy["parameters"].get("opshortcut") == "Convoy"
 
 
 def test_source_and_nested_convoy_parameter_pages_match():
-    source = _convoy_page(_load_yaml(EMBODY_TDN))
+    source = _convoy_page(_load_yaml(EMBODY_TDXN))
     nested = _convoy_page(_load_yaml(ROOT_TDXN), nested=True)
     assert nested == source
 
 
 def test_agreed_controls_have_safe_defaults_and_detailed_help():
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
 
     enable_help = rows["Convoyenable"]["help"]
     assert "trusted LAN" in enable_help
@@ -182,7 +182,7 @@ def test_agreed_controls_have_safe_defaults_and_detailed_help():
 
 
 def test_status_sequence_has_the_agreed_read_only_columns():
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     sequence = rows["Convoynodes"]
     assert sequence["style"] == "Sequence"
     # Labelled "Convoy Nodes": it lists NODES, and every other
@@ -202,7 +202,7 @@ def test_the_single_status_readout_replaces_the_host_field():
     """Convoyid and Convoyhoststatus were removed: a truncated convoy hash, a
     truncated host hash and a process id are not actionable. One Status line
     carries both the node state and any blocking host-app state."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     assert "Convoyhoststatus" not in rows
     assert "Convoyid" not in rows
     assert rows["Convoystatus"]["readOnly"] is True
@@ -522,7 +522,7 @@ _MACHINE_MARKERS = ("192.168.", "10.0.", "TEC-", "cv_", "cvfp1-",
 
 
 def test_release_source_carries_no_machine_identity():
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     for name, row in rows.items():
         value = row.get("value")
         if not isinstance(value, str):
@@ -537,7 +537,7 @@ def test_release_source_ships_convoy_disabled():
     """Consent, not state. A released .tox that arrives with Convoy ON opens
     a trusted-LAN listener on a stranger's machine before they have agreed to
     anything. Absent (TD omits its own default) or an explicit off both pass."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     enable = rows["Convoyenable"]
     assert enable.get("value") in (None, False, 0),         "Convoyenable must ship OFF"
     assert enable.get("default") in (None, False, 0)
@@ -546,7 +546,7 @@ def test_release_source_ships_convoy_disabled():
 def test_release_source_ships_an_empty_node_name_and_status():
     """Node Name auto-fills per machine at load; a baked value ships one
     developer's computer name. Status is a live readout, not a shipped fact."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     assert rows["Convoynodename"].get("value") in (None, "")
     assert rows["Convoystatus"].get("value") in (None, "Disabled")
 
@@ -554,14 +554,14 @@ def test_release_source_ships_an_empty_node_name_and_status():
 def test_release_source_ships_no_node_rows():
     """The Convoy Nodes sequence is a runtime projection. Shipping rows would
     leak another machine's names, addresses and presence."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     for name in ("Nodename", "Ipaddress", "Nodestatus", "Lastseen"):
         assert rows[name].get("value") in (None, ""),             "%s must ship empty" % name
 
 
 def test_release_source_keeps_the_danger_gates_off():
     """A stale On in a saved project or a clone must never grant these."""
-    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
         assert rows[name].get("value") in (None, False, 0)
         assert rows[name].get("default", False) in (None, False, 0)

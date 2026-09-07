@@ -138,7 +138,7 @@ class TestTdxnMigration(EmbodyTestCase):
     # The fixture itself must be a real legacy project
     # ------------------------------------------------------------------
 
-    def test_fixture_starts_fully_tdn(self):
+    def test_fixture_starts_fully_tdxn(self):
         """Guard the guard: if the fixture is not .tdn, nothing below means
         anything."""
         paths = self._buildLegacyProject()

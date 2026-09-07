@@ -72,20 +72,20 @@ class TestTdxnMode(EmbodyTestCase):
     # 1. Parameter shape
     # ------------------------------------------------------------------
 
-    def test_tdnmode_parameter_exists_as_menu(self):
+    def test_tdxnmode_parameter_exists_as_menu(self):
         par = getattr(self.embody.par, 'Tdxnmode', None)
         self.assertIsNotNone(par, 'Tdxnmode parameter must exist')
         self.assertEqual(par.style, 'Menu')
 
-    def test_tdnmode_menu_has_three_values(self):
+    def test_tdxnmode_menu_has_three_values(self):
         par = self.embody.par.Tdxnmode
         names = list(par.menuNames)
         self.assertEqual(sorted(names), ['export', 'full', 'off'])
 
-    def test_tdnmode_default_is_export(self):
+    def test_tdxnmode_default_is_export(self):
         self.assertEqual(self.embody.par.Tdxnmode.default, 'export')
 
-    def test_tdnmode_lives_on_tdn_page(self):
+    def test_tdxnmode_lives_on_tdxn_page(self):
         found_page = None
         for page in self.embody.customPages:
             for p in page.pars:
@@ -100,12 +100,12 @@ class TestTdxnMode(EmbodyTestCase):
     # 2. Helper short-circuits
     # ------------------------------------------------------------------
 
-    def test_tdnMode_helper_returns_menu_value(self):
+    def test_tdxnMode_helper_returns_menu_value(self):
         for mode in ('off', 'export', 'full'):
             self._setMode(mode)
             self.assertEqual(self.embody_ext._tdnMode(), mode)
 
-    def test_tdnEnabled_false_only_when_off(self):
+    def test_tdxnEnabled_false_only_when_off(self):
         self._setMode('off')
         self.assertFalse(self.embody_ext._tdnEnabled())
         self._setMode('export')
@@ -159,7 +159,7 @@ class TestTdxnMode(EmbodyTestCase):
     # 4. SaveTDXN gating
     # ------------------------------------------------------------------
 
-    def test_savetdn_skips_when_off(self):
+    def test_savetdxn_skips_when_off(self):
         self._setMode('off')
         log_before = self.embody_ext._log_counter
         self.embody_ext.saveTDXN('/no_such_op')
@@ -214,7 +214,7 @@ class TestTdxnMode(EmbodyTestCase):
     # 5. Disk-side non-destructive mode flips
     # ------------------------------------------------------------------
 
-    def test_existing_tdn_entries_preserved_across_mode_flips(self):
+    def test_existing_tdxn_entries_preserved_across_mode_flips(self):
         table = self.embody_ext.Externalizations
         ext_folder = self.embody_ext.getProjectFolder()
 
@@ -249,7 +249,7 @@ class TestTdxnMode(EmbodyTestCase):
     # 6. UI gating per mode
     # ------------------------------------------------------------------
 
-    def _getTdnPage(self):
+    def _getTdxnPage(self):
         # v6.1.0 renamed the page to TDXN; an install that self-updated
         # keeps its existing 'TDN' page, so both must resolve -- this
         # mirrors the same dual match in _applyTdnModeGating.
@@ -261,7 +261,7 @@ class TestTdxnMode(EmbodyTestCase):
     def test_gating_off_greys_all_except_mode(self):
         self._setMode('off')
         self.embody_ext._applyTdnModeGating()
-        page = self._getTdnPage()
+        page = self._getTdxnPage()
         self.assertIsNotNone(page)
         for p in page.pars:
             if p.name == 'Tdxnmode':
@@ -274,7 +274,7 @@ class TestTdxnMode(EmbodyTestCase):
         self._setMode('export')
         self.embody_ext._applyTdnModeGating()
         full_only = self.embody_ext._TDXN_FULL_ONLY_PARAMS
-        page = self._getTdnPage()
+        page = self._getTdxnPage()
         for p in page.pars:
             if p.name == 'Tdxnmode':
                 self.assertTrue(p.enable)
@@ -288,7 +288,7 @@ class TestTdxnMode(EmbodyTestCase):
     def test_gating_full_enables_all(self):
         self._setMode('full')
         self.embody_ext._applyTdnModeGating()
-        page = self._getTdnPage()
+        page = self._getTdxnPage()
         for p in page.pars:
             self.assertTrue(p.enable,
                 f'{p.name} should be live in Full mode')

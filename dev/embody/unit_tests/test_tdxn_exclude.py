@@ -30,7 +30,7 @@ except (AttributeError, NameError):
 class TestTDXNExclude(EmbodyTestCase):
 
     @property
-    def tdn_ext(self):
+    def tdxn_ext(self):
         """Resolve TDXNExt live on every access (never cache - reinit-safe)."""
         return self.embody.ext.TDXN
 
@@ -51,7 +51,7 @@ class TestTDXNExclude(EmbodyTestCase):
         return parent, keep, drop, inside
 
     def _export_doc(self, parent, embed_all=False):
-        result = self.tdn_ext.ExportNetwork(
+        result = self.tdxn_ext.ExportNetwork(
             parent.path, output_file=None, embed_all=embed_all)
         return result.get('tdn', result)
 
@@ -66,16 +66,16 @@ class TestTDXNExclude(EmbodyTestCase):
     def test_hasExcludeTag_true_for_tagged_comp(self):
         c = self.sandbox.create(baseCOMP, 'tagged')
         c.tags.add(self.exclude_tag)
-        self.assertTrue(self.tdn_ext._hasExcludeTag(c))
+        self.assertTrue(self.tdxn_ext._hasExcludeTag(c))
 
     def test_hasExcludeTag_false_for_untagged_comp(self):
         c = self.sandbox.create(baseCOMP, 'plain')
-        self.assertFalse(self.tdn_ext._hasExcludeTag(c))
+        self.assertFalse(self.tdxn_ext._hasExcludeTag(c))
 
     def test_hasExcludeTag_false_for_non_comp(self):
         d = self.sandbox.create(textDAT, 'plain_dat')
         d.tags.add(self.exclude_tag)
-        self.assertFalse(self.tdn_ext._hasExcludeTag(d),
+        self.assertFalse(self.tdxn_ext._hasExcludeTag(d),
             'Only COMPs can be excluded; a DAT must return False')
 
     def test_hasExcludeTag_guards_empty_tag_name(self):
@@ -85,7 +85,7 @@ class TestTDXNExclude(EmbodyTestCase):
         prev = self.embody.par.Tdxnexcludetag.val
         self.embody.par.Tdxnexcludetag.val = ''
         try:
-            self.assertFalse(self.tdn_ext._hasExcludeTag(c),
+            self.assertFalse(self.tdxn_ext._hasExcludeTag(c),
                 'Empty exclude-tag name must not exclude operators')
         finally:
             self.embody.par.Tdxnexcludetag.val = prev
@@ -135,7 +135,7 @@ class TestTDXNExclude(EmbodyTestCase):
 
     def test_collectAllPaths_skips_excluded_subtree(self):
         parent, keep, drop, inside = self._build()
-        paths = self.tdn_ext._collectAllPaths(parent)
+        paths = self.tdxn_ext._collectAllPaths(parent)
         self.assertIn(keep.path, paths)
         self.assertNotIn(drop.path, paths,
             'Excluded COMP must not be collected')
@@ -152,7 +152,7 @@ class TestTDXNExclude(EmbodyTestCase):
         # Reconstruct with clear_first=True - the destroy pass must NOT
         # touch the excluded COMP (it isn't in the doc, so destroying it
         # would be permanent loss).
-        self.tdn_ext.ImportNetwork(
+        self.tdxn_ext.ImportNetwork(
             target_path=parent.path, tdn=doc, clear_first=True)
         self.assertIsNotNone(op(parent.path + '/drop'),
             'Excluded COMP must survive clear_first reconstruction')
@@ -165,7 +165,7 @@ class TestTDXNExclude(EmbodyTestCase):
         """The preserved COMP must not also be recreated (no duplicate)."""
         parent, keep, drop, inside = self._build()
         doc = self._export_doc(parent)
-        self.tdn_ext.ImportNetwork(
+        self.tdxn_ext.ImportNetwork(
             target_path=parent.path, tdn=doc, clear_first=True)
         drops = [c for c in parent.children if c.name == 'drop']
         self.assertEqual(len(drops), 1,
@@ -288,7 +288,7 @@ class TestTDXNExclude(EmbodyTestCase):
     def test_hasExcludeTag_false_for_annotation_comp(self):
         note = self.sandbox.create(annotateCOMP, 'note_excl')
         note.tags.add(self.exclude_tag)
-        self.assertFalse(self.tdn_ext._hasExcludeTag(note),
+        self.assertFalse(self.tdxn_ext._hasExcludeTag(note),
             'Annotation COMPs must never be eligible for exclusion')
 
     # ------------------------------------------------------------------
@@ -338,7 +338,7 @@ class TestTDXNExclude(EmbodyTestCase):
         drop.store('app_state', {'k': 1})
         drop.nodeX = 1234
         doc = self._export_doc(parent)
-        self.tdn_ext.ImportNetwork(
+        self.tdxn_ext.ImportNetwork(
             target_path=parent.path, tdn=doc, clear_first=True)
         d2 = op(parent.path + '/drop')
         self.assertIsNotNone(d2, 'excluded COMP must survive')
@@ -414,7 +414,7 @@ class TestTDXNExclude(EmbodyTestCase):
         (an unbacked table is the whole use case)."""
         d = self._table('dc_unbacked', [['a']], excluded=True)
         self.assertFalse(
-            self.tdn_ext._isDATContentSavedOnDisk(d),
+            self.tdxn_ext._isDATContentSavedOnDisk(d),
             'fixture: this DAT must be unbacked or the test proves nothing')
         ops = {o.get('name'): o for o in self._export_doc(
             self.sandbox).get('operators', [])}
@@ -434,7 +434,7 @@ class TestTDXNExclude(EmbodyTestCase):
         """It shares the tdn_exclude:<par> prefix, so the par reader must
         treat 'dat_content' as reserved rather than warning about a typo."""
         d = self._table('dc_noparwarn', [['y']], excluded=True)
-        self.assertEqual(self.tdn_ext._tagOmittedParNames(d), set(),
+        self.assertEqual(self.tdxn_ext._tagOmittedParNames(d), set(),
                          'reserved name leaked into the par-omission set')
 
     def test_dat_content_exclude_silences_the_at_risk_warning(self):
@@ -450,7 +450,7 @@ class TestTDXNExclude(EmbodyTestCase):
     def test_untagged_dat_is_unaffected(self):
         """Guard the guard: the mechanism must be opt-in."""
         d = self._table('dc_untagged', [['still', 'here']])
-        self.assertFalse(self.tdn_ext._datContentExcluded(d))
+        self.assertFalse(self.tdxn_ext._datContentExcluded(d))
         ops = {o.get('name'): o for o in self._export_doc(
             self.sandbox).get('operators', [])}
         self.assertIn('dat_content', ops['dc_untagged'])

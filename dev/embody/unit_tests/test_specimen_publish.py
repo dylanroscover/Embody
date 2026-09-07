@@ -65,8 +65,8 @@ class _FakeTDXN:
 	"""Stub TDXN ext. ExportNetwork is controllable; the comparison statics
 	delegate to the REAL TDXN extension so the skip-unchanged logic is faithful.
 	"""
-	def __init__(self, real_tdn, export_result=None, export_fn=None):
-		self._real = real_tdn
+	def __init__(self, real_tdxn, export_result=None, export_fn=None):
+		self._real = real_tdxn
 		self._export_result = export_result
 		self._export_fn = export_fn
 		self.export_calls = []
@@ -167,14 +167,14 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 
 	def _install(self, present=None, export_result=None, export_fn=None):
 		"""Patch op/project in the module and return the fake TDXN for asserts."""
-		real_tdn = self.embody.ext.TDXN
-		fake_tdn = _FakeTDXN(real_tdn, export_result=export_result,
+		real_tdxn = self.embody.ext.TDXN
+		fake_tdxn = _FakeTDXN(real_tdxn, export_result=export_result,
 							export_fn=export_fn)
-		fake_emb = _FakeEmbody(fake_tdn)
+		fake_emb = _FakeEmbody(fake_tdxn)
 		fake_op = _FakeOp(fake_emb, present or {})
 		self.mod.__dict__['op'] = fake_op
 		self.mod.__dict__['project'] = _FakeProject(self._dev)
-		return fake_tdn, fake_emb
+		return fake_tdxn, fake_emb
 
 	# --- missing manifest --------------------------------------------------
 
@@ -230,14 +230,14 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		])
 		comp_path = '/specimen_lab/reaction_diffusion'
 		present = {comp_path: _FakeComp(comp_path)}
-		fake_tdn, _ = self._install(
+		fake_tdxn, _ = self._install(
 			present=present,
 			export_result={'success': True,
 						   'tdn': {'format': 'tdn', 'operators': []}})
 		result = self.mod._publish()
 		# No prior .tdn on disk -> first export writes.
 		self.assertIn('reaction-diffusion', result['written'])
-		self.assertListEqual(fake_tdn.export_calls, [comp_path])
+		self.assertListEqual(fake_tdxn.export_calls, [comp_path])
 		# The written file landed at <root>/specimens/generative/reaction-diffusion.tdn
 		out = Path(self._spec_dir, 'generative', 'reaction-diffusion.tdxn')
 		self.assertTrue(out.exists())
@@ -258,19 +258,19 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		comp_path = '/specimen_lab/noise_terrain'
 		present = {comp_path: _FakeComp(comp_path)}
 
-		tdn_a = {'format': 'tdn', 'version': 1, 'td_build': 'A',
+		tdxn_a = {'format': 'tdn', 'version': 1, 'td_build': 'A',
 				 'operators': [{'name': 'x', 'type': 'noiseTOP'}]}
 		# Same content, only a volatile key (td_build) differs -> should skip.
-		tdn_a_volatile = dict(tdn_a)
-		tdn_a_volatile['td_build'] = 'B'
+		tdxn_a_volatile = dict(tdxn_a)
+		tdxn_a_volatile['td_build'] = 'B'
 		# Genuinely different operators -> should write.
-		tdn_b = {'format': 'tdn', 'version': 1, 'td_build': 'A',
+		tdxn_b = {'format': 'tdn', 'version': 1, 'td_build': 'A',
 				 'operators': [{'name': 'y', 'type': 'levelTOP'}]}
 
 		exports = [
-			{'success': True, 'tdn': tdn_a},
-			{'success': True, 'tdn': tdn_a_volatile},
-			{'success': True, 'tdn': tdn_b},
+			{'success': True, 'tdn': tdxn_a},
+			{'success': True, 'tdn': tdxn_a_volatile},
+			{'success': True, 'tdn': tdxn_b},
 		]
 		state = {'i': 0}
 
@@ -296,7 +296,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		r3 = self.mod._publish()
 		self.assertIn('noise-terrain', r3['written'])
 
-	def test_written_file_is_valid_tdn_roundtrip(self):
+	def test_written_file_is_valid_tdxn_roundtrip(self):
 		"""The file _publish writes must re-read via the real _read_existing_tdn
 		into a content-equal dict (compact_json_dumps + read are inverse)."""
 		self._write_manifest([

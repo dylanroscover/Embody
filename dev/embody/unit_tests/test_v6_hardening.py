@@ -112,7 +112,7 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         self.assertEqual(loaded.get('format'), 'tdn')
         self.assertEqual(loaded.get('version'), '1.5')
 
-    def test_export_stamps_literal_tdn_version(self):
+    def test_export_stamps_literal_tdxn_version(self):
         """ExportNetwork must stamp the LITERAL current TDXN_VERSION, verified
         against the module constant -- not merely "a version key is present".
         Read in-memory and from a written file.
@@ -123,23 +123,23 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         2026-09-04, when per-component definition fields widened).
         """
         # Resolve the module-level TDXN_VERSION constant from the TDXNExt source.
-        tdn_version = self.embody.op('TDXNExt').module.TDXN_VERSION
-        self.assertEqual(tdn_version, '2.1',
+        tdxn_version = self.embody.op('TDXNExt').module.TDXN_VERSION
+        self.assertEqual(tdxn_version, '2.1',
             'precondition: TDXNExt.TDXN_VERSION should be the v2.1 format')
 
         self.sandbox.create(baseCOMP, 'ver_check')
         # In-memory result.
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
         self.assertTrue(result.get('success'))
-        self.assertEqual(result['tdn']['version'], tdn_version)
+        self.assertEqual(result['tdn']['version'], tdxn_version)
 
         # On-disk doc.
         fp = str(Path(self._temp_dir) / 'ver.tdn')
         self.tdn.ExportNetwork(root_path=self.sandbox.path, output_file=fp)
         with open(fp, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        self.assertEqual(data['version'], tdn_version,
-            f"on-disk doc['version'] must equal TDXN_VERSION {tdn_version!r}")
+        self.assertEqual(data['version'], tdxn_version,
+            f"on-disk doc['version'] must equal TDXN_VERSION {tdxn_version!r}")
 
 
 # =============================================================================

@@ -221,7 +221,7 @@ class TestEveryParameterItReadsExists(EmbodyTestCase):
             source = handle.read()
         return sorted(set(re.findall(r'\bpar\("(\w+)"\)', source)))
 
-    def test_the_tdn_actually_parsed(self):
+    def test_the_tdxn_actually_parsed(self):
         """Sanity: an empty par set would make the guard below vacuous."""
         self.assertGreater(len(REAL_PARS), 50)
         for known in ('Status', 'Envoystatus', 'Convoystatus', 'Version'):

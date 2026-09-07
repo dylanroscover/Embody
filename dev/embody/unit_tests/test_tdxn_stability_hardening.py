@@ -64,7 +64,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
         comp.create(textDAT, 'payload').text = 'payload text'
         return comp
 
-    def _mirror_tdn_path(self, comp):
+    def _mirror_tdxn_path(self, comp):
         """The convention path <project>/<comp path>.tdn as a Path."""
         from pathlib import Path
         return Path(project.folder) / (comp.path.lstrip('/') + '.tdn')
@@ -260,7 +260,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
     def test_D01_untagged_export_writes_file_but_no_row(self):
         comp = self.sandbox.create(baseCOMP, 'adhoc_untagged')
         comp.create(textDAT, 'x')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         result = self.tdn.ExportNetwork(
             root_path=comp.path, output_file=str(out))
@@ -274,7 +274,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
 
     def test_D02_tagged_export_appends_row_and_pointer(self):
         comp = self._tagged_comp_with_child('adhoc_tagged')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         self._temp_rows.append(comp.path)
         result = self.tdn.ExportNetwork(
@@ -313,7 +313,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
     def test_E02_export_does_not_delete_untracked_stray(self):
         from pathlib import Path
         comp = self._tagged_comp_with_child('stray_guard')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         self._temp_rows.append(comp.path)
         # Plant an untracked stray INSIDE the export root's mirror subtree --
@@ -334,7 +334,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
 
     def test_F01_orphan_recovered_via_storage_pointer(self):
         comp = self._tagged_comp_with_child('orphan_ptr')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         result = self.tdn.ExportNetwork(
             root_path=comp.path, output_file=str(out))
@@ -356,7 +356,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
 
     def test_F02_orphan_recovered_via_convention_path(self):
         comp = self._tagged_comp_with_child('orphan_conv')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         result = self.tdn.ExportNetwork(
             root_path=comp.path, output_file=str(out))
@@ -375,7 +375,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
         """A rowed COMP that is merely empty (e.g. mid save-strip) must be
         left to normal reconstruction, never claimed by orphan recovery."""
         comp = self._tagged_comp_with_child('not_orphan')
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         self._temp_files.append(str(out))
         self._temp_rows.append(comp.path)
         result = self.tdn.ExportNetwork(
@@ -391,7 +391,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
         comp = self._tagged_comp_with_child('busy_comp')
         # No row (untagged exports don't enroll; this comp IS tagged but was
         # never exported) and a matching convention file on disk:
-        out = self._mirror_tdn_path(comp)
+        out = self._mirror_tdxn_path(comp)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text('format: tdn\noperators: []\n', encoding='utf-8')
         self._temp_files.append(str(out))

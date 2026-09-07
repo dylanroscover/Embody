@@ -68,7 +68,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Round-trip + determinism on the real gallery specimens
     # =================================================================
 
-    def test_tdn_yaml_roundtrip(self):
+    def test_tdxn_yaml_roundtrip(self):
         """Each of the 3 specimens (after v1.5 array->string revert) dumps,
         loads back equal, and re-dumps byte-identical (determinism)."""
         root = _specimen_root()
@@ -101,7 +101,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Block-scalar losslessness (headless, no TD)
     # =================================================================
 
-    def test_tdn_block_scalar_lossless(self):
+    def test_tdxn_block_scalar_lossless(self):
         """Multi-line strings with 0/1/2 trailing newlines map to |- / | / |+
         and round-trip byte-identical; tabs/trailing-space/CRLF fall back to
         double-quoted but stay lossless."""
@@ -133,7 +133,7 @@ class TestTDXNYaml(EmbodyTestCase):
             self.assertEqual(back['dat_content'], s,
                 f'{label}: tricky string not byte-identical')
 
-    def test_tdn_tab_shader_lossless(self):
+    def test_tdxn_tab_shader_lossless(self):
         """A TAB-indented GLSL compute string round-trips byte-identical and
         serializes as a DOUBLE-QUOTED scalar (not a broken tab block) --
         guards against re-introducing the CSafe-unreadable tab-block override.
@@ -156,7 +156,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # YAML typing safety
     # =================================================================
 
-    def test_tdn_typing_safety(self):
+    def test_tdxn_typing_safety(self):
         """Ambiguous YAML scalars survive as str; expression/bind shorthand
         ('=expr' / '~bind') emit UNQUOTED and survive as str."""
         ambiguous = [
@@ -197,7 +197,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # JSON back-compat (legacy tab-indented + BOM)
     # =================================================================
 
-    def test_tdn_backcompat_legacy_json(self):
+    def test_tdxn_backcompat_legacy_json(self):
         """A legacy v1.5 tab-indented JSON .tdn (dat_content as a list of
         lines) imports, the multi-line DAT is rejoined, and the json-first
         fallback parses it even under a forced pure-python SafeLoader."""
@@ -234,7 +234,7 @@ class TestTDXNYaml(EmbodyTestCase):
             yaml.load, legacy_text, Loader=yaml.SafeLoader)
         self.assertEqual(self.tdn.tdn_load(legacy_text), doc)
 
-    def test_tdn_backcompat_bom_legacy_json(self):
+    def test_tdxn_backcompat_bom_legacy_json(self):
         """A UTF-8 BOM-prefixed legacy tab-indented JSON .tdn loads via the
         json-first path (which strips the BOM before json.loads). Without the
         strip, json.loads raises and the pure-python YAML fallback would
@@ -262,7 +262,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Determinism, trailing newline, anchors, isolation
     # =================================================================
 
-    def test_tdn_determinism(self):
+    def test_tdxn_determinism(self):
         """Dumping the same document N times is byte-identical (no key
         reorder, no anchor renumbering)."""
         doc = {
@@ -278,7 +278,7 @@ class TestTDXNYaml(EmbodyTestCase):
             self.assertEqual(self.tdn.tdn_dump(doc), first,
                 'tdn_dump is not deterministic')
 
-    def test_tdn_trailing_newline(self):
+    def test_tdxn_trailing_newline(self):
         """tdn_dump output always ends with a single trailing newline --
         locks the contract test_export_file_not_truncated depends on now that
         the explicit `raw + '\\n'` serializer is gone."""
@@ -289,7 +289,7 @@ class TestTDXNYaml(EmbodyTestCase):
         self.assertTrue(out.endswith('\n'))
         self.assertFalse(out.endswith('\n\n'))
 
-    def test_tdn_no_anchors(self):
+    def test_tdxn_no_anchors(self):
         """A document with two identical subtrees emits NO '&'/'*' anchor or
         alias tokens (locks the no-anchors decision; keeps block scalars)."""
         shared = {
@@ -304,7 +304,7 @@ class TestTDXNYaml(EmbodyTestCase):
         self.assertNotIn('&', dumped, 'unexpected YAML anchor token')
         self.assertNotIn('*', dumped, 'unexpected YAML alias token')
 
-    def test_tdn_dumper_isolation(self):
+    def test_tdxn_dumper_isolation(self):
         """Representers are scoped to the private dumper subclass: the global
         yaml.dump does NOT block-style a multi-line string, while tdn_dump
         DOES."""
@@ -319,7 +319,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Post-write validation (YAML + legacy JSON)
     # =================================================================
 
-    def test_tdn_validate_yaml_file(self):
+    def test_tdxn_validate_yaml_file(self):
         """_validate_tdn_file accepts a freshly-written v2.0 YAML .tdn AND a
         legacy JSON .tdn (guards the post-write read-back)."""
         import tempfile
@@ -463,7 +463,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Save-path serializer emits YAML (guards the third caller)
     # =================================================================
 
-    def test_tdn_save_path_writes_yaml(self):
+    def test_tdxn_save_path_writes_yaml(self):
         """_compact_json_dumps (the save-path serializer, called from
         execute.py onProjectPreSave) returns YAML v2.0, not JSON: block
         scalars + space indentation, re-parseable to the same document."""
@@ -491,7 +491,7 @@ class TestTDXNYaml(EmbodyTestCase):
     # Boilerplate omission: default docked compute DAT
     # =================================================================
 
-    def test_tdn_boilerplate_omission(self):
+    def test_tdxn_boilerplate_omission(self):
         """A glslTOP's default docked <name>_compute DAT exports with NO
         dat_content (TD recreates it); a CUSTOM compute text IS exported; and
         re-import yields the default present."""

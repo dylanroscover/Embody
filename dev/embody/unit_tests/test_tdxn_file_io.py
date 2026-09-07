@@ -196,7 +196,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
 		self.assertLen(result, 2)
 
-	def test_collectExisting_ignores_non_tdn(self):
+	def test_collectExisting_ignores_non_tdxn(self):
 		Path(self._temp_dir, 'a.tdn').write_text('{}')
 		Path(self._temp_dir, 'b.json').write_text('{}')
 		Path(self._temp_dir, 'c.py').write_text('')
@@ -284,14 +284,14 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertLen(deleted, 0)
 		self.assertTrue(Path(written).exists())
 
-	def test_cleanup_rejects_non_tdn(self):
+	def test_cleanup_rejects_non_tdxn(self):
 		"""Should refuse to delete non-.tdn files."""
-		non_tdn = str(Path(self._temp_dir, 'data.json'))
-		Path(non_tdn).write_text('{}')
+		non_tdxn = str(Path(self._temp_dir, 'data.json'))
+		Path(non_tdxn).write_text('{}')
 		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-			{non_tdn}, [], self._temp_dir)
+			{non_tdxn}, [], self._temp_dir)
 		self.assertLen(deleted, 0)
-		self.assertTrue(Path(non_tdn).exists())
+		self.assertTrue(Path(non_tdxn).exists())
 
 	def test_cleanup_rejects_outside_base(self):
 		"""Should refuse to delete files outside base_folder."""
@@ -459,7 +459,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 	# SaveTDXN root filename derivation - issue #6 regression
 	# =================================================================
 
-	def test_savetdn_root_filename_strips_build_suffix(self):
+	def test_savetdxn_root_filename_strips_build_suffix(self):
 		"""SaveTDXN at '/' must derive root filename with build suffix stripped.
 
 		Regression for issue #6: prior to the fix, SaveTDXN used
@@ -485,7 +485,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 				f"Expected SaveTDXN root filename '{expected}.tdn' for "
 				f"project '{project_name}', got '{safe_name}.tdn'")
 
-	def test_savetdn_root_filename_matches_resolve_output_path(self):
+	def test_savetdxn_root_filename_matches_resolve_output_path(self):
 		"""SaveTDXN root filename derivation must agree with _resolveOutputPath.
 
 		Both paths compute the same thing for root exports; a drift between
@@ -494,16 +494,16 @@ class TestTDXNFileIO(EmbodyTestCase):
 		"""
 		# Simulate SaveTDXN derivation
 		raw_name = project.name.removesuffix('.toe')
-		savetdn_name = self.embody.ext.TDXN._stripBuildSuffix(raw_name)
+		savetdxn_name = self.embody.ext.TDXN._stripBuildSuffix(raw_name)
 		# Compare against _resolveOutputPath, which is already authoritative
 		resolved = self.embody.ext.TDXN._resolveOutputPath('auto', op('/'))
 		suffix = self.embody.ext.Embody._trackedTDXNSuffix('/')
 		self.assertTrue(
-			resolved.replace('\\', '/').endswith(f'{savetdn_name}{suffix}'),
-			f"SaveTDXN would write '{savetdn_name}{suffix}' but "
+			resolved.replace('\\', '/').endswith(f'{savetdxn_name}{suffix}'),
+			f"SaveTDXN would write '{savetdxn_name}{suffix}' but "
 			f"_resolveOutputPath returned '{resolved}'")
 
-	def test_savetdn_root_branch_derives_its_suffix_from_the_table(self):
+	def test_savetdxn_root_branch_derives_its_suffix_from_the_table(self):
 		"""Pin the mechanism the root snapshot's survival depends on.
 
 		SaveTDXN('/') re-derives the root filename and calls safeDeleteFile()
@@ -685,10 +685,10 @@ class TestTDXNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			tdn_data = yaml.safe_load(f)
+			tdxn_data = yaml.safe_load(f)
 		target = self.sandbox.create(baseCOMP, 'rt_target')
 		result = self.embody.ext.TDXN.ImportNetwork(
-			target_path=target.path, tdn=tdn_data)
+			target_path=target.path, tdn=tdxn_data)
 		self.assertTrue(result.get('success'))
 		names = [c.name for c in target.children]
 		self.assertIn('rt_a', names)
@@ -850,7 +850,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertIn('error', result)
 		self.assertIn('not found', result['error'])
 
-	def test_importFromFile_invalid_tdn(self):
+	def test_importFromFile_invalid_tdxn(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
 		result = self.embody.ext.TDXN.importNetworkFromFile(
@@ -1054,8 +1054,8 @@ class TestTDXNFileIO(EmbodyTestCase):
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
 		# Tag the child for TDXN
-		tdn_tag = self.embody.par.Tdxntag.val
-		child.tags.add(tdn_tag)
+		tdxn_tag = self.embody.par.Tdxntag.val
+		child.tags.add(tdxn_tag)
 		# Export the child first so it's in the table
 		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
@@ -1097,8 +1097,8 @@ class TestTDXNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
-		tdn_tag = self.embody.par.Tdxntag.val
-		child.tags.add(tdn_tag)
+		tdxn_tag = self.embody.par.Tdxntag.val
+		child.tags.add(tdxn_tag)
 		# Add child to table
 		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
@@ -1126,8 +1126,8 @@ class TestTDXNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		child.create(textDAT, 'leaf')
-		tdn_tag = self.embody.par.Tdxntag.val
-		child.tags.add(tdn_tag)
+		tdxn_tag = self.embody.par.Tdxntag.val
+		child.tags.add(tdxn_tag)
 		child_path = self.embody_ext._buildTDXNRelPath(child)
 		child_abs = self.embody_ext.buildAbsolutePath(child_path)
 		child_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -1162,8 +1162,8 @@ class TestTDXNFileIO(EmbodyTestCase):
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
 		# Add to table but no file on disk
-		tdn_tag = self.embody.par.Tdxntag.val
-		child.tags.add(tdn_tag)
+		tdxn_tag = self.embody.par.Tdxntag.val
+		child.tags.add(tdxn_tag)
 		from datetime import datetime
 		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 		self.embody_ext._addToTable(child, 'nonexistent/child.tdn',
@@ -1314,39 +1314,39 @@ class TestTDXNFileIO(EmbodyTestCase):
 		child1 = parent.create(baseCOMP, 'child1')
 		child2 = parent.create(baseCOMP, 'child2')
 		parent.create(textDAT, 'leaf_dat')  # DATs should not be tagged
-		tdn_tag = self.embody.par.Tdxntag.val
+		tdxn_tag = self.embody.par.Tdxntag.val
 		# Directly add tag to parent (skip full externalization pipeline
 		# to avoid file writes that reinitialize the extension)
-		parent.tags.add(tdn_tag)
+		parent.tags.add(tdxn_tag)
 		orig_cascade = self.embody.par.Tdxncascade.eval()
 		self.embody.par.Tdxncascade = True
 		try:
 			self.embody_ext._cascadeTDXNTag(parent)
-			self.assertIn(tdn_tag, child1.tags)
-			self.assertIn(tdn_tag, child2.tags)
+			self.assertIn(tdxn_tag, child1.tags)
+			self.assertIn(tdxn_tag, child2.tags)
 			# DATs should NOT be tagged
 			leaf = parent.op('leaf_dat')
-			self.assertNotIn(tdn_tag, leaf.tags)
+			self.assertNotIn(tdxn_tag, leaf.tags)
 		finally:
 			self.embody.par.Tdxncascade = orig_cascade
-			parent.tags.discard(tdn_tag)
-			child1.tags.discard(tdn_tag)
-			child2.tags.discard(tdn_tag)
+			parent.tags.discard(tdxn_tag)
+			child1.tags.discard(tdxn_tag)
+			child2.tags.discard(tdxn_tag)
 
 	def test_cascade_off_no_children_tagged(self):
 		"""With cascade OFF, tagging a parent should not tag children."""
 		parent = self.sandbox.create(baseCOMP, 'nocascade_parent')
 		child = parent.create(baseCOMP, 'child')
-		tdn_tag = self.embody.par.Tdxntag.val
+		tdxn_tag = self.embody.par.Tdxntag.val
 		orig_cascade = self.embody.par.Tdxncascade.eval()
 		self.embody.par.Tdxncascade = False
 		try:
-			self.embody_ext.applyTagToOperator(parent, tdn_tag)
-			self.assertNotIn(tdn_tag, child.tags)
+			self.embody_ext.applyTagToOperator(parent, tdxn_tag)
+			self.assertNotIn(tdxn_tag, child.tags)
 		finally:
 			self.embody.par.Tdxncascade = orig_cascade
 
-	def test_large_tdn_warning_suppressed(self):
+	def test_large_tdxn_warning_suppressed(self):
 		"""Tdxncascadewarn='quiet' should prevent the dialog from showing."""
 		# Create a file over threshold
 		big_file = Path(self._temp_dir) / 'big.tdn'
@@ -1365,7 +1365,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 			self.embody.par.Tdxncascadewarn = orig_warn
 			self.embody.par.Tdxncascade = orig_cascade
 
-	def test_large_tdn_warning_shown(self):
+	def test_large_tdxn_warning_shown(self):
 		"""Tdxncascadewarn='ask' with large file should show dialog."""
 		big_file = Path(self._temp_dir) / 'big.tdn'
 		big_file.write_text('x' * 5_100_000)  # > 5 MB

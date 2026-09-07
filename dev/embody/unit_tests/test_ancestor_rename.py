@@ -67,7 +67,7 @@ class TestAncestorRename(EmbodyTestCase):
         # Clean up filesystem
         import shutil
         # 1. Any new top-level dirs under dev/embody/ that the test created
-        #    (retval/, tblupd/, cancel_test/, conflict/, phaseA/, tdntest/, ...)
+        #    (retval/, tblupd/, cancel_test/, conflict/, phaseA/, tdxntest/, ...)
         #    Includes renamed-to subdirs since they live inside the same prefix.
         embody_root = Path(project.folder) / 'embody'
         if embody_root.exists():
@@ -488,31 +488,31 @@ class TestAncestorRename(EmbodyTestCase):
     # _handleAncestorRename - TDXN strategy
     # =========================================================================
 
-    def test_tdn_strategy_skips_param_update_but_updates_table(self):
+    def test_tdxn_strategy_skips_param_update_but_updates_table(self):
         """TDXN-strategy ops should have table updated but skip externaltox changes."""
         ext_folder = self.embody_ext.externalizationsFolder or 'embody'
-        old_prefix = '/tdntest/parent'
-        new_prefix = '/tdntest/newparent'
+        old_prefix = '/tdxntest/parent'
+        new_prefix = '/tdxntest/newparent'
 
-        old_rel = ext_folder + '/tdntest/parent/tdn_comp.tdn'
+        old_rel = ext_folder + '/tdxntest/parent/tdxn_comp.tdn'
 
-        self._create_dir(ext_folder + '/tdntest/parent')
-        self._create_file(ext_folder + '/tdntest/parent/tdn_comp.tdn', '{}')
+        self._create_dir(ext_folder + '/tdxntest/parent')
+        self._create_file(ext_folder + '/tdxntest/parent/tdxn_comp.tdn', '{}')
 
         # Create op at new path
-        tdntest = self.workspace.create(baseCOMP, 'tdntest')
-        newparent = tdntest.create(baseCOMP, 'newparent')
-        tdn_comp = newparent.create(baseCOMP, 'tdn_comp')
+        tdxntest = self.workspace.create(baseCOMP, 'tdxntest')
+        newparent = tdxntest.create(baseCOMP, 'newparent')
+        tdxn_comp = newparent.create(baseCOMP, 'tdxn_comp')
 
-        self._add_table_entry(old_prefix + '/tdn_comp', 'baseCOMP', 'tdn', old_rel)
+        self._add_table_entry(old_prefix + '/tdxn_comp', 'baseCOMP', 'tdn', old_rel)
 
-        rows = [(old_prefix + '/tdn_comp', old_rel, 'baseCOMP', 'tdn')]
+        rows = [(old_prefix + '/tdxn_comp', old_rel, 'baseCOMP', 'tdn')]
 
         result = self.embody_ext._handleAncestorRename(
             old_prefix, new_prefix, rows, ext_folder)
 
         self.assertTrue(result, 'Should succeed for TDXN ops')
-        self.assertTrue(self._table_has_path(new_prefix + '/tdn_comp'),
+        self.assertTrue(self._table_has_path(new_prefix + '/tdxn_comp'),
                         'Table should have new path for TDXN op')
 
     # =========================================================================

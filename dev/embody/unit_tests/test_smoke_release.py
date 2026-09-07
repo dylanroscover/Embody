@@ -126,7 +126,7 @@ class TestSmokeRelease(EmbodyTestCase):
         ext = self.embody.ext.Envoy
         self.assertIsNotNone(ext, 'EnvoyExt should be loaded')
 
-    def test_tdn_extension_loaded(self):
+    def test_tdxn_extension_loaded(self):
         """TDXNExt is accessible on the Embody COMP."""
         ext = self.embody.ext.TDXN
         self.assertIsNotNone(ext, 'TDXNExt should be loaded')
@@ -409,7 +409,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """
         return self.sandbox.create(baseCOMP, name)
 
-    def _tdn(self):
+    def _tdxn(self):
         """The shipped TDXN extension (resolved live, never cached)."""
         ext = self.embody.ext.TDXN
         if ext is None:
@@ -434,9 +434,9 @@ class TestSmokeRelease(EmbodyTestCase):
     # copy/paste behavior is covered by the dedicated clipboard suite.
     # =========================================================================
 
-    def test_v6_tdn_clipboard_methods_exist_and_callable(self):
+    def test_v6_tdxn_clipboard_methods_exist_and_callable(self):
         """All five clipboard methods are present and callable on the TDXN ext."""
-        tdn = self._tdn()
+        tdn = self._tdxn()
         for name in (
             'copyNetworkToClipboard',
             'copySelectedToClipboard',
@@ -466,10 +466,10 @@ class TestSmokeRelease(EmbodyTestCase):
         self.assertIsNotNone(collection.ext.Collection,
             'CollectionExt must be loaded on the Collection COMP')
 
-    def test_v6_collection_scan_clean_tdn_returns_clean(self):
+    def test_v6_collection_scan_clean_tdxn_returns_clean(self):
         """A benign source -> null TDXN scans 'clean' via CollectionExt.ScanTdn."""
         ext = self._collection_ext()
-        clean_tdn = {
+        clean_tdxn = {
             'format': 'tdn',
             'version': '2.0',
             'network_path': '/smoke',
@@ -479,7 +479,7 @@ class TestSmokeRelease(EmbodyTestCase):
                 {'name': 'null1', 'type': 'nullTOP', 'inputs': ['source1']},
             ],
         }
-        result = ext.ScanTdn(clean_tdn)
+        result = ext.ScanTdn(clean_tdxn)
         self.assertIsInstance(result, dict)
         self.assertIn('verdict', result,
             'Capability report must carry a verdict key')
@@ -497,10 +497,10 @@ class TestSmokeRelease(EmbodyTestCase):
     # project folder never pollutes externalizations.tsv.
     # =========================================================================
 
-    def test_v6_tdn_v2_yaml_roundtrip_dat_byte_identical(self):
+    def test_v6_tdxn_v2_yaml_roundtrip_dat_byte_identical(self):
         """Multi-line DAT text survives a YAML v2.0 .tdn file round-trip intact."""
         import yaml
-        tdn = self._tdn()
+        tdn = self._tdxn()
 
         src = self._make_sandbox_comp('v6_yaml_src')
         dat = src.create(textDAT, 'multiline')
@@ -635,10 +635,10 @@ class TestSmokeRelease(EmbodyTestCase):
     # behavior under test here.
     # =========================================================================
 
-    def test_v6_tdn_feature_roundtrip_pop_float_exclude(self):
+    def test_v6_tdxn_feature_roundtrip_pop_float_exclude(self):
         """POP sequence + default-valued custom Float + nested tdn_exclude tag
         all survive a TDXN export/import round-trip."""
-        tdn = self._tdn()
+        tdn = self._tdxn()
         exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 
         src = self._make_sandbox_comp('v6_feature_src')

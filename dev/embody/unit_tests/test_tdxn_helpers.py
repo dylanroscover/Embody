@@ -228,7 +228,7 @@ class TestTDXNHelpers(EmbodyTestCase):
 
     # --- _tdn_content_equal ---
 
-    def _make_tdn(self, **overrides):
+    def _make_tdxn(self, **overrides):
         """Build a minimal TDXN dict with sensible defaults."""
         base = {
             'format': 'tdn',
@@ -246,15 +246,15 @@ class TestTDXNHelpers(EmbodyTestCase):
         base.update(overrides)
         return base
 
-    def test_tdn_content_equal_identical(self):
+    def test_tdxn_content_equal_identical(self):
         """Identical dicts (same volatile fields) returns True."""
-        tdn = self._make_tdn()
+        tdn = self._make_tdxn()
         self.assertTrue(self.tdn._tdn_content_equal(tdn, tdn.copy()))
 
-    def test_tdn_content_equal_only_volatile_diff(self):
+    def test_tdxn_content_equal_only_volatile_diff(self):
         """Dicts differing only in volatile header fields returns True."""
-        a = self._make_tdn()
-        b = self._make_tdn(
+        a = self._make_tdxn()
+        b = self._make_tdxn(
             build=99,
             generator='Embody/9.9.999',
             td_build='100.2030.99999',
@@ -262,45 +262,45 @@ class TestTDXNHelpers(EmbodyTestCase):
         )
         self.assertTrue(self.tdn._tdn_content_equal(a, b))
 
-    def test_tdn_content_equal_different_operators(self):
-        a = self._make_tdn()
-        b = self._make_tdn(operators=[
+    def test_tdxn_content_equal_different_operators(self):
+        a = self._make_tdxn()
+        b = self._make_tdxn(operators=[
             {'name': 'noise1', 'type': 'noiseTOP'},
             {'name': 'null1', 'type': 'nullTOP'},
         ])
         self.assertFalse(self.tdn._tdn_content_equal(a, b))
 
-    def test_tdn_content_equal_different_options(self):
-        a = self._make_tdn()
-        b = self._make_tdn(options={'include_dat_content': False})
+    def test_tdxn_content_equal_different_options(self):
+        a = self._make_tdxn()
+        b = self._make_tdxn(options={'include_dat_content': False})
         self.assertFalse(self.tdn._tdn_content_equal(a, b))
 
-    def test_tdn_content_equal_extra_key_in_existing(self):
+    def test_tdxn_content_equal_extra_key_in_existing(self):
         """Key present in existing but not in new is detected."""
-        a = self._make_tdn()
-        b = self._make_tdn(annotations=[{'name': 'ann1'}])
+        a = self._make_tdxn()
+        b = self._make_tdxn(annotations=[{'name': 'ann1'}])
         self.assertFalse(self.tdn._tdn_content_equal(a, b))
 
-    def test_tdn_content_equal_extra_key_in_new(self):
+    def test_tdxn_content_equal_extra_key_in_new(self):
         """Key present in new but not in existing is detected."""
-        a = self._make_tdn(custom_pars=[{'name': 'Speed'}])
-        b = self._make_tdn()
+        a = self._make_tdxn(custom_pars=[{'name': 'Speed'}])
+        b = self._make_tdxn()
         self.assertFalse(self.tdn._tdn_content_equal(a, b))
 
-    def test_tdn_content_equal_different_version(self):
+    def test_tdxn_content_equal_different_version(self):
         """Non-volatile header field 'version' difference is detected."""
-        a = self._make_tdn()
-        b = self._make_tdn(version='2.0')
+        a = self._make_tdxn()
+        b = self._make_tdxn(version='2.0')
         self.assertFalse(self.tdn._tdn_content_equal(a, b))
 
     # --- _read_existing_tdn ---
 
-    def test_read_existing_tdn_missing_file(self):
+    def test_read_existing_tdxn_missing_file(self):
         import os, tempfile
         path = os.path.join(tempfile.gettempdir(), 'nonexistent_abc123.tdn')
         self.assertIsNone(self.tdn._read_existing_tdn(path))
 
-    def test_read_existing_tdn_corrupt_file(self):
+    def test_read_existing_tdxn_corrupt_file(self):
         import os, tempfile
         path = os.path.join(tempfile.gettempdir(), 'corrupt_test.tdn')
         try:
@@ -311,7 +311,7 @@ class TestTDXNHelpers(EmbodyTestCase):
             if os.path.exists(path):
                 os.unlink(path)
 
-    def test_read_existing_tdn_valid_file(self):
+    def test_read_existing_tdxn_valid_file(self):
         import os, json, tempfile
         path = os.path.join(tempfile.gettempdir(), 'valid_test.tdn')
         data = {'format': 'tdn', 'operators': []}
@@ -352,7 +352,7 @@ class TestTDXNHelpers(EmbodyTestCase):
         self._lockedTop(sub, 'locked_nested')
         self.assertEqual(self.tdn._findLockedNonDATs(root), [])
 
-    def test_findLocked_under_tdn_tagged_child_skipped(self):
+    def test_findLocked_under_tdxn_tagged_child_skipped(self):
         # A nested TDXN boundary raises its own warning when IT exports.
         root = self.sandbox.create(baseCOMP, 'lk_root_tdn')
         sub = root.create(baseCOMP, 'sub_tdn')

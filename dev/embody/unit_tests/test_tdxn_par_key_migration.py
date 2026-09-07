@@ -135,7 +135,7 @@ class TestTdxnParKeyMigration(EmbodyTestCase):
         noop = [k for k, v in RENAMES.items() if k == v]
         self.assertEqual(noop, [], 'identity entries neuter the migration')
 
-    def test_tdnenable_is_never_renamed(self):
+    def test_tdxnenable_is_never_renamed(self):
         """Pre-6.1 key the mode-migration nudge still reads."""
         self.assertNotIn('Tdnenable', RENAMES)
         out = _normalize({'Tdnenable': {'val': True}}, RENAMES)

@@ -77,47 +77,47 @@ class TestRemoveExternalization(EmbodyTestCase):
         close = all(abs(a - b) < 0.02 for a, b in zip(comp.color, default_color))
         self.assertTrue(close, f'Color should reset, got {comp.color}')
 
-    def test_remove_tox_does_not_add_tdn_tag(self):
+    def test_remove_tox_does_not_add_tdxn_tag(self):
         """REGRESSION: _removeExternalization must NOT add the other strategy tag."""
         comp = self.workspace.create(baseCOMP, 'rem_no_convert')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdxntag.val
+        tdxn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
         self.embody_ext.handleAddition(comp)
 
         self.embody_ext._removeExternalization(comp)
         self.assertNotIn(tox_tag, comp.tags)
-        self.assertNotIn(tdn_tag, comp.tags)
+        self.assertNotIn(tdxn_tag, comp.tags)
 
     # =========================================================================
     # _removeExternalization - TDXN
     # =========================================================================
 
-    def test_remove_tdn_removes_tag(self):
+    def test_remove_tdxn_removes_tag(self):
         """_removeExternalization should remove the tdn tag from a COMP."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_tag')
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.embody_ext.applyTagToOperator(comp, tdn_tag)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.embody_ext.applyTagToOperator(comp, tdxn_tag)
 
         self.embody_ext._removeExternalization(comp)
-        self.assertNotIn(tdn_tag, comp.tags)
+        self.assertNotIn(tdxn_tag, comp.tags)
 
-    def test_remove_tdn_does_not_add_tox_tag(self):
+    def test_remove_tdxn_does_not_add_tox_tag(self):
         """REGRESSION: _removeExternalization must NOT add tox tag when removing TDXN."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_no_tox')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.embody_ext.applyTagToOperator(comp, tdn_tag)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.embody_ext.applyTagToOperator(comp, tdxn_tag)
 
         self.embody_ext._removeExternalization(comp)
-        self.assertNotIn(tdn_tag, comp.tags)
+        self.assertNotIn(tdxn_tag, comp.tags)
         self.assertNotIn(tox_tag, comp.tags)
 
-    def test_remove_tdn_resets_color(self):
+    def test_remove_tdxn_resets_color(self):
         """_removeExternalization should reset color after TDXN removal."""
         comp = self.workspace.create(baseCOMP, 'rem_tdn_color')
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.embody_ext.applyTagToOperator(comp, tdn_tag)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.embody_ext.applyTagToOperator(comp, tdxn_tag)
 
         self.embody_ext._removeExternalization(comp)
         default_color = (0.55, 0.55, 0.55)
@@ -147,20 +147,20 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
     def _externalizedTDXN(self, name):
         """Create a TDXN-externalized COMP with a live table row."""
         comp = self.workspace.create(baseCOMP, name)
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.embody_ext.applyTagToOperator(comp, tdn_tag)
-        self.assertIn(tdn_tag, comp.tags, 'Precondition: comp must be tagged')
-        return comp, tdn_tag
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.embody_ext.applyTagToOperator(comp, tdxn_tag)
+        self.assertIn(tdxn_tag, comp.tags, 'Precondition: comp must be tagged')
+        return comp, tdxn_tag
 
-    def test_remove_tdn_entry_strips_tag(self):
+    def test_remove_tdxn_entry_strips_tag(self):
         """REGRESSION (issue #48): RemoveTDXNEntry must strip the tdn tag."""
-        comp, tdn_tag = self._externalizedTDXN('x_strip_tag')
+        comp, tdxn_tag = self._externalizedTDXN('x_strip_tag')
         self.embody_ext.removeTDXNEntry(comp.path)
-        self.assertNotIn(tdn_tag, comp.tags,
+        self.assertNotIn(tdxn_tag, comp.tags,
             'RemoveTDXNEntry must strip the tdn tag or the next Update '
             'sweep resurrects the externalization')
 
-    def test_remove_tdn_entry_removes_row(self):
+    def test_remove_tdxn_entry_removes_row(self):
         """RemoveTDXNEntry must delete the tracking row."""
         comp, _ = self._externalizedTDXN('x_remove_row')
         self.embody_ext.removeTDXNEntry(comp.path)
@@ -168,7 +168,7 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
         self.assertNotIn(comp.path, rows)
 
-    def test_remove_tdn_entry_resets_color(self):
+    def test_remove_tdxn_entry_resets_color(self):
         """RemoveTDXNEntry must reset the operator color to default."""
         comp, _ = self._externalizedTDXN('x_reset_color')
         self.embody_ext.removeTDXNEntry(comp.path)
@@ -177,7 +177,7 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
                     for a, b in zip(comp.color, default_color))
         self.assertTrue(close, f'Color should reset, got {comp.color}')
 
-    def test_remove_tdn_entry_stops_resurrection(self):
+    def test_remove_tdxn_entry_stops_resurrection(self):
         """REGRESSION (issue #48): the save-time sweep must not re-add.
 
         The Update additions sweep re-externalizes any op returned by
@@ -195,7 +195,7 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
             'A removed COMP must not be re-externalized by the next '
             'Update sweep (issue #48)')
 
-    def test_remove_tdn_entry_missing_op_safe(self):
+    def test_remove_tdxn_entry_missing_op_safe(self):
         """RemoveTDXNEntry must tolerate a path with no live operator.
 
         Full Project entries track paths (e.g. '/') that carry no tag, and
@@ -203,7 +203,7 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
         """
         self.embody_ext.removeTDXNEntry('/nonexistent_issue48_probe')
 
-    def test_remove_tdn_entry_clears_breadcrumb(self):
+    def test_remove_tdxn_entry_clears_breadcrumb(self):
         """REGRESSION (2026-07-24): must unstore the _tdn_rel_path breadcrumb.
 
         A leftover breadcrumb lets ReconcileMetadata / RecoverOrphanShells
@@ -215,15 +215,15 @@ class TestRemoveTDXNEntry(EmbodyTestCase):
         self.assertIsNone(comp.fetch('_tdn_rel_path', None, search=False),
             'RemoveTDXNEntry must clear the _tdn_rel_path breadcrumb')
 
-    def test_remove_tdn_entry_keep_file(self):
+    def test_remove_tdxn_entry_keep_file(self):
         """delete_file=False removes tracking but skips file deletion.
 
         This is the MCP remove_externalization_tag default: agents untag
         non-destructively; only the lister X button deletes by default.
         """
-        comp, tdn_tag = self._externalizedTDXN('x_keep_file')
+        comp, tdxn_tag = self._externalizedTDXN('x_keep_file')
         self.embody_ext.removeTDXNEntry(comp.path, delete_file=False)
-        self.assertNotIn(tdn_tag, comp.tags)
+        self.assertNotIn(tdxn_tag, comp.tags)
         rows = [self.embody_ext.Externalizations[i, 'path'].val
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
         self.assertNotIn(comp.path, rows,
@@ -242,26 +242,26 @@ class TestHandleStrategySwitch(EmbodyTestCase):
                 self.embody_ext.Externalizations.deleteRow(i)
         super().tearDown()
 
-    def test_switch_tox_to_tdn(self):
+    def test_switch_tox_to_tdxn(self):
         """HandleStrategySwitch should convert a TOX COMP to TDXN."""
         comp = self.workspace.create(baseCOMP, 'switch_to_tdn')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdxntag.val
+        tdxn_tag = self.embody.par.Tdxntag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
 
         self.embody_ext.handleStrategySwitch(comp)
         self.assertNotIn(tox_tag, comp.tags)
-        self.assertIn(tdn_tag, comp.tags)
+        self.assertIn(tdxn_tag, comp.tags)
 
-    def test_switch_tdn_to_tox(self):
+    def test_switch_tdxn_to_tox(self):
         """HandleStrategySwitch should convert a TDXN COMP to TOX."""
         comp = self.workspace.create(baseCOMP, 'switch_to_tox')
         tox_tag = self.embody.par.Toxtag.val
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.embody_ext.applyTagToOperator(comp, tdn_tag)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.embody_ext.applyTagToOperator(comp, tdxn_tag)
 
         self.embody_ext.handleStrategySwitch(comp)
-        self.assertNotIn(tdn_tag, comp.tags)
+        self.assertNotIn(tdxn_tag, comp.tags)
         self.assertIn(tox_tag, comp.tags)
 
 
@@ -308,7 +308,7 @@ class TestDispatchTaggerButton(EmbodyTestCase):
         self.embody_ext._dispatchTaggerButton(comp, 'tox', '\u00d7  Remove tox')
         self.assertEqual(self._called, 'remove')
 
-    def test_dispatch_remove_tdn_label(self):
+    def test_dispatch_remove_tdxn_label(self):
         """Label 'x  Remove tdxn' should route to HandleStrategyRemove."""
         self._mock_handlers()
         comp = self.workspace.create(baseCOMP, 'disp_rem_tdn')

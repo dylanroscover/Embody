@@ -90,17 +90,17 @@ class TestAnnotationGuards(EmbodyTestCase):
 
     def test_applyTag_refuses_annotate(self):
         ann = self._annotate()
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.assertFalse(self.embody_ext.applyTagToOperator(ann, tdn_tag))
-        self.assertNotIn(tdn_tag, ann.tags)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.assertFalse(self.embody_ext.applyTagToOperator(ann, tdxn_tag))
+        self.assertNotIn(tdxn_tag, ann.tags)
         self.assertNotIn(ann.path, self._table_paths())
 
     def test_applyTag_refuses_annotate_interior_comp(self):
         ann = self._annotate()
         inner = ann.create(baseCOMP, 'guard_tag_comp')
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.assertFalse(self.embody_ext.applyTagToOperator(inner, tdn_tag))
-        self.assertNotIn(tdn_tag, inner.tags)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.assertFalse(self.embody_ext.applyTagToOperator(inner, tdxn_tag))
+        self.assertNotIn(tdxn_tag, inner.tags)
         self.assertNotIn(inner.path, self._table_paths())
 
     def test_applyTag_refuses_annotate_interior_dat(self):
@@ -128,8 +128,8 @@ class TestAnnotationGuards(EmbodyTestCase):
         parent = self.workspace.create(baseCOMP, 'cascade_parent')
         ann = self._annotate(parent)
         self.embody_ext._cascadeTDXNTag(parent)
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.assertNotIn(tdn_tag, ann.tags)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.assertNotIn(tdxn_tag, ann.tags)
         self.assertNotIn(ann.path, self._table_paths())
 
     def test_autoExternalizeTagFor_skips_annotate_interior(self):
@@ -234,15 +234,15 @@ class TestAnnotationGuards(EmbodyTestCase):
         open for legacy cleanup."""
         ann = self._annotate()
         inner = ann.create(baseCOMP, 'tagsetter_inner')
-        tdn_tag = self.embody.par.Tdxntag.val
-        self.assertFalse(self.embody_ext.tagSetter(ann, tdn_tag))
-        self.assertNotIn(tdn_tag, ann.tags)
-        self.assertFalse(self.embody_ext.tagSetter(inner, tdn_tag))
-        self.assertNotIn(tdn_tag, inner.tags)
+        tdxn_tag = self.embody.par.Tdxntag.val
+        self.assertFalse(self.embody_ext.tagSetter(ann, tdxn_tag))
+        self.assertNotIn(tdxn_tag, ann.tags)
+        self.assertFalse(self.embody_ext.tagSetter(inner, tdxn_tag))
+        self.assertNotIn(tdxn_tag, inner.tags)
         # REMOVE branch: a legacy-tagged annotate must still untag.
-        ann.tags.add(tdn_tag)
-        self.assertTrue(self.embody_ext.tagSetter(ann, tdn_tag))
-        self.assertNotIn(tdn_tag, ann.tags)
+        ann.tags.add(tdxn_tag)
+        self.assertTrue(self.embody_ext.tagSetter(ann, tdxn_tag))
+        self.assertNotIn(tdxn_tag, ann.tags)
 
     def test_warning_dedup_never_lands_in_persisted_storage(self):
         """The per-annotation warning dedup must NOT live in COMP storage.

@@ -278,24 +278,24 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
 
         embody = self.embody
         ext_class = type(self.embody_ext)
-        tdn_class = type(self.embody.ext.TDXN)
+        tdxn_class = type(self.embody.ext.TDXN)
 
         # Capture originals. _read_existing_tdn and _tdn_content_equal are
         # @staticmethod - must capture/restore via __dict__ to preserve the
         # descriptor; assigning via cls.attr would silently strip the
         # staticmethod and turn it into a regular method, breaking every
         # other caller that does TDXNExt._read_existing_tdn(path).
-        orig_tdnmode = embody.par.Tdxnmode.eval()
+        orig_tdxnmode = embody.par.Tdxnmode.eval()
         orig_strip_on_save = bool(embody.par.Tdxnstriponsave.eval())
         orig_update = ext_class.Update
-        orig_get_tdn = ext_class._getTDXNStrategyComps
+        orig_get_tdxn = ext_class._getTDXNStrategyComps
         orig_safety = ext_class._checkTDXNContentSafety
-        orig_export = tdn_class.ExportNetwork
-        orig_read = tdn_class.__dict__['_read_existing_tdn']  # staticmethod descriptor
+        orig_export = tdxn_class.ExportNetwork
+        orig_read = tdxn_class.__dict__['_read_existing_tdn']  # staticmethod descriptor
         orig_strip = ext_class.stripCompChildren
 
         # Fake fixtures: pretend 3 TDXN COMPs exist and were exported
-        fake_tdn_comps = [
+        fake_tdxn_comps = [
             ('/__test_issue21_pre_stage/c0', 'fake/c0.tdn'),
             ('/__test_issue21_pre_stage/c1', 'fake/c1.tdn'),
             ('/__test_issue21_pre_stage/c2', 'fake/c2.tdn'),
@@ -317,7 +317,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         embody.par.Tdxnmode = 'full'
         embody.par.Tdxnstriponsave = True
         ext_class.Update = lambda self_, suppress_refresh=False: None
-        ext_class._getTDXNStrategyComps = lambda self_: list(fake_tdn_comps)
+        ext_class._getTDXNStrategyComps = lambda self_: list(fake_tdxn_comps)
         ext_class._checkTDXNContentSafety = lambda self_: None
         ext_class.stripCompChildren = crashing_strip
         # Make every "comp exists" check return a stub object that has a path
@@ -326,13 +326,13 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         # the "skip if unchanged" branch fires. But we still need op(comp_path)
         # to return something. Build a sandbox COMP with the fake names.
         sandbox = self.sandbox.create(baseCOMP, '__test_issue21_pre_stage')
-        for path, _ in fake_tdn_comps:
+        for path, _ in fake_tdxn_comps:
             name = path.rsplit('/', 1)[-1]
             comp = sandbox.create(baseCOMP, name)
             # Give it a child so has_children is True (Phase 1 skips empty COMPs)
             comp.create(baseCOMP, 'placeholder')
         # Re-point our fake paths to the sandbox COMPs
-        fake_tdn_comps[:] = [
+        fake_tdxn_comps[:] = [
             (sandbox.op('c0').path, 'fake/c0.tdn'),
             (sandbox.op('c1').path, 'fake/c1.tdn'),
             (sandbox.op('c2').path, 'fake/c2.tdn'),
@@ -341,15 +341,15 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         # path fires (skips actual file write)
         def fake_export(self_, root_path=None, output_file=None, **kwargs):
             return {'success': True, 'tdn': {'version': '1.4', 'root': root_path}}
-        tdn_class.ExportNetwork = fake_export
+        tdxn_class.ExportNetwork = fake_export
         # Fake read-existing - wrap in staticmethod() to preserve the
         # descriptor (otherwise other tests calling _read_existing_tdn via
         # an instance break with "takes 1 positional argument but 2 given").
-        tdn_class._read_existing_tdn = staticmethod(lambda path: {'version': '1.4'})
+        tdxn_class._read_existing_tdn = staticmethod(lambda path: {'version': '1.4'})
         # Force content-equal to True so the write path is skipped - every
         # fake export takes the unchanged-skip branch and appends to `exported`
-        orig_equal = tdn_class.__dict__['_tdn_content_equal']  # staticmethod descriptor
-        tdn_class._tdn_content_equal = staticmethod(lambda a, b: True)
+        orig_equal = tdxn_class.__dict__['_tdn_content_equal']  # staticmethod descriptor
+        tdxn_class._tdn_content_equal = staticmethod(lambda a, b: True)
 
         execute_mod = op('/embody/Embody/execute').module
 
@@ -364,7 +364,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
                 "Post-save would have nothing to restore.")
             # Compare paths only (rel_file_path was synthetic)
             stored_paths = [entry[0] for entry in stored]
-            expected_paths = [p for p, _ in fake_tdn_comps]
+            expected_paths = [p for p, _ in fake_tdxn_comps]
             self.assertEqual(set(stored_paths), set(expected_paths),
                 f"Expected all {len(expected_paths)} paths pre-staged, got: {stored_paths}")
 
@@ -374,13 +374,13 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         finally:
             # Restore everything
             ext_class.Update = orig_update
-            ext_class._getTDXNStrategyComps = orig_get_tdn
+            ext_class._getTDXNStrategyComps = orig_get_tdxn
             ext_class._checkTDXNContentSafety = orig_safety
             ext_class.stripCompChildren = orig_strip
-            tdn_class.ExportNetwork = orig_export
-            tdn_class._read_existing_tdn = orig_read
-            tdn_class._tdn_content_equal = orig_equal
-            embody.par.Tdxnmode = orig_tdnmode
+            tdxn_class.ExportNetwork = orig_export
+            tdxn_class._read_existing_tdn = orig_read
+            tdxn_class._tdn_content_equal = orig_equal
+            embody.par.Tdxnmode = orig_tdxnmode
             embody.par.Tdxnstriponsave = orig_strip_on_save
             embody.unstore('_tdn_stripped_paths')
             embody.unstore('_tdn_pane_restore')

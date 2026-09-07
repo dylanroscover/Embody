@@ -98,7 +98,7 @@ def _first_difference(left, right):
 DAEMON_MODULES = _python_modules(DAEMON_DIR)
 
 
-def test_convoy_tdn_carries_one_text_dat_asset_for_every_daemon_module():
+def test_convoy_tdxn_carries_one_text_dat_asset_for_every_daemon_module():
     """Parity on disk is insufficient if the .tox has no DAT to carry it.
 
     ConvoyExt reads children of ``convoy/host`` at install time.  The TDXN is

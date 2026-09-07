@@ -345,7 +345,7 @@ class CollectionScannerTests(EmbodyTestCase):
     # BLOCKED: hard resource bounds.
     # -----------------------------------------------------------------
 
-    def test_oversized_serialized_tdn_is_blocked(self):
+    def test_oversized_serialized_tdxn_is_blocked(self):
         scanner = self._scanner()
         # One DAT whose content alone exceeds the serialized-size bound.
         tdn = make_tdn([

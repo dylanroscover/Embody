@@ -33,7 +33,7 @@ The annotate guards added for the 2026-07-21 report live in
 externalizations table (EmbodyExt.py:4862-4868) and never consults them.
 The `stripped_tdn_paths` shield (EmbodyExt.py:4882-4886) does NOT apply
 either: it is only read at EmbodyExt.py:4943, inside the non-TDXN branch,
-which the `if is_tdn:` branch at 4911 never reaches (it `continue`s at
+which the `if is_tdxn:` branch at 4911 never reaches (it `continue`s at
 4928).
 
 Embody already knows how to answer this correctly --
@@ -147,7 +147,7 @@ class TestAnnotateContinuity(EmbodyTestCase):
 
     # --- LINK 3: no rename rescue ----------------------------------------
 
-    def test_link3_findMovedTDNOp_does_not_rescue_the_row(self):
+    def test_link3_findMovedTDXNOp_does_not_rescue_the_row(self):
         """The rename-detection fallback finds no candidate, so the sweep
         proceeds to the removal branch."""
         ann, inner = self._utility_annotate_interior()
@@ -203,8 +203,8 @@ class TestAnnotateContinuity(EmbodyTestCase):
         path = inner.path
         strategy = 'tdn'
 
-        is_tdn = (strategy == 'tdn')                       # L4910
-        self.assertTrue(is_tdn)
+        is_tdxn = (strategy == 'tdn')                       # L4910
+        self.assertTrue(is_tdxn)
 
         rescued = self.embody_ext._findMovedTDXNOp(         # L4915
             path, 'embody/unit_tests/ann_cont_fake.tdn', set())
@@ -236,7 +236,7 @@ class TestAnnotateContinuity(EmbodyTestCase):
 
     # --- LINK 5: the destructive tail really is destructive --------------
 
-    def test_link5_removeTDNStrategy_drops_the_row(self):
+    def test_link5_removeTDXNStrategy_drops_the_row(self):
         """_removeTDXNStrategy -- the call at EmbodyExt.py:4927 -- removes
         the tracking row synchronously.
 
@@ -262,7 +262,7 @@ class TestAnnotateContinuity(EmbodyTestCase):
             'the row for a LIVE operator is dropped -- this is the data '
             'loss the sweep causes on every save')
 
-    def test_link6_removeTDNStrategy_keeps_the_file_when_asked(self):
+    def test_link6_removeTDXNStrategy_keeps_the_file_when_asked(self):
         """delete_file=False must leave the .tdn on disk.
 
         (The delete_file=True unlink is scheduled via run(delayFrames=5),

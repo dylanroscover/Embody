@@ -106,8 +106,8 @@ class TestTDXNSafetyGuards(EmbodyTestCase):
         # enclosing TDXN COMP from at-risk detection.
         # (We store on the test_sandbox TDXN COMP, which is self.sandbox's
         # registered TDXN parent.)
-        tdn_parent = self.sandbox.parent()
-        tdn_parent.store('embed_storage_in_tdn', True)
+        tdxn_parent = self.sandbox.parent()
+        tdxn_parent.store('embed_storage_in_tdn', True)
         self.sandbox.store('my_key', 'value')
         try:
             flat = self._flatten(self.embody_ext._findAtRiskStorage())
@@ -116,7 +116,7 @@ class TestTDXNSafetyGuards(EmbodyTestCase):
                 'embed_storage=True on the TDXN parent must exclude descendants')
         finally:
             self.sandbox.unstore('my_key')
-            tdn_parent.unstore('embed_storage_in_tdn')
+            tdxn_parent.unstore('embed_storage_in_tdn')
 
     # ------------------------------------------------------------------
     # B. Dialog - Skip Once + explicit reversible Always Skip; both

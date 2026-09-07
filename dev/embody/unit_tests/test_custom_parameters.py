@@ -84,7 +84,7 @@ class TestCustomParameters(EmbodyTestCase):
                 return True
         return False
 
-    def _externalize_project_silent(self, use_tdn=False):
+    def _externalize_project_silent(self, use_tdxn=False):
         """Replicate ExternalizeProject() without the ui.messageBox prompt.
 
         Tags all eligible COMPs and DATs, then calls UpdateHandler + Update.
@@ -114,7 +114,7 @@ class TestCustomParameters(EmbodyTestCase):
                 ext.applyTagToOperator(oper, tag_value)
 
         # Tag eligible COMPs
-        if use_tdn:
+        if use_tdxn:
             comp_tag = ext.my.par.Tdxntag.val
             for oper in root.findChildren(type=COMP):
                 if ext._shouldSkipOp(oper, paths_to_exclude):
@@ -230,7 +230,7 @@ class TestCustomParameters(EmbodyTestCase):
         parexec = self.embody.op('parexec')
         parexec.par.active = False
         try:
-            self._externalize_project_silent(use_tdn=False)
+            self._externalize_project_silent(use_tdxn=False)
         finally:
             parexec.par.active = True
 
@@ -262,7 +262,7 @@ class TestCustomParameters(EmbodyTestCase):
         finally:
             parexec.par.active = True
 
-    def test_disable_z03_restore_tdn(self):
+    def test_disable_z03_restore_tdxn(self):
         """Externalize full project (TDXN mode), verify table is populated.
 
         Only checks that the table has rows - file existence and TDXN/py counts
@@ -272,7 +272,7 @@ class TestCustomParameters(EmbodyTestCase):
         parexec = self.embody.op('parexec')
         parexec.par.active = False
         try:
-            self._externalize_project_silent(use_tdn=True)
+            self._externalize_project_silent(use_tdxn=True)
         finally:
             parexec.par.active = True
 
@@ -304,7 +304,7 @@ class TestCustomParameters(EmbodyTestCase):
         parexec = self.embody.op('parexec')
         parexec.par.active = False
         try:
-            self._externalize_project_silent(use_tdn=True)
+            self._externalize_project_silent(use_tdxn=True)
         finally:
             parexec.par.active = True
 
@@ -314,7 +314,7 @@ class TestCustomParameters(EmbodyTestCase):
         # Check all table rows have valid operators and files on disk
         missing_ops = []
         missing_files = []
-        tdn_count = 0
+        tdxn_count = 0
         py_count = 0
         for i in range(1, table.numRows):
             op_path = table[i, 'path'].val
@@ -326,7 +326,7 @@ class TestCustomParameters(EmbodyTestCase):
             if not os.path.isfile(full_path):
                 missing_files.append(rel_path)
             if rel_path.endswith(('.tdxn', '.tdn')):
-                tdn_count += 1
+                tdxn_count += 1
             elif rel_path.endswith('.py'):
                 py_count += 1
 
@@ -355,7 +355,7 @@ class TestCustomParameters(EmbodyTestCase):
                            f'Externalizations table must not be empty -- the '
                            f'two checks above pass vacuously when it is. '
                            f'{shape}')
-        self.assertGreater(tdn_count, 0,
+        self.assertGreater(tdxn_count, 0,
                            f'Should have at least one TDXN file -- {shape}')
         self.assertGreater(py_count, 0,
                            f'Should have at least one .py file -- {shape}')
@@ -389,7 +389,7 @@ class TestCustomParameters(EmbodyTestCase):
     # B. TDXN PAGE
     # ==================================================================
 
-    def test_embeddatsintdns_toggle_triggers_reexport(self):
+    def test_embeddatsintdxns_toggle_triggers_reexport(self):
         """Toggle Embeddatsintdxns, verify reexport is triggered via logs."""
         log_id = self._get_log_id()
         original = self.embody.par.Embeddatsintdxns.eval()
@@ -399,11 +399,11 @@ class TestCustomParameters(EmbodyTestCase):
         self.embody.ext.TDXN.reexportAllTDXNs()
         # Check logs for reexport message
         has_reexport = self._has_log_message(log_id, 'Re-exporting')
-        has_no_tdn = self._has_log_message(log_id, 'No TDXN exports')
-        self.assertTrue(has_reexport or has_no_tdn,
+        has_no_tdxn = self._has_log_message(log_id, 'No TDXN exports')
+        self.assertTrue(has_reexport or has_no_tdxn,
                         'Expected reexport log message after toggling Embeddatsintdxns')
 
-    def test_tdncreateonstart_toggle(self):
+    def test_tdxncreateonstart_toggle(self):
         """Toggle Tdxncreateonstart off and on."""
         original = self.embody.par.Tdxncreateonstart.eval()
         new_val = 0 if original else 1
@@ -411,7 +411,7 @@ class TestCustomParameters(EmbodyTestCase):
         expected = bool(new_val)
         self.assertEqual(bool(self.embody.par.Tdxncreateonstart.eval()), expected)
 
-    def test_tdnfile_accepts_path(self):
+    def test_tdxnfile_accepts_path(self):
         """Set Tdxnfile to a path, verify accepted."""
         self._set_and_track('Tdxnfile', '/tmp/test_file.tdn')
         self.assertEqual(self.embody.par.Tdxnfile.eval(), '/tmp/test_file.tdn')
@@ -421,7 +421,7 @@ class TestCustomParameters(EmbodyTestCase):
         self._set_and_track('Networkpath', '/project1/test_comp')
         self.assertEqual(self.embody.par.Networkpath.val, '/project1/test_comp')
 
-    def test_importtdn_with_invalid_file_logs_error(self):
+    def test_importtdxn_with_invalid_file_logs_error(self):
         """Import with nonexistent file returns error without crashing."""
         parexec = self.embody.op('parexec')
         parexec.par.active = False

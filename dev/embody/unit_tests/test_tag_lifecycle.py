@@ -228,7 +228,7 @@ class TestTagLifecycle(EmbodyTestCase):
     # TDXN tag rollback on failed initial export (issue #46)
     # =========================================================================
 
-    def test_tdn_tag_rollback_on_failed_export(self):
+    def test_tdxn_tag_rollback_on_failed_export(self):
         """Failed initial TDXN export rolls the tag back so retag can retry.
 
         Without rollback, a tagged-but-untracked COMP is a dead end:
@@ -236,22 +236,22 @@ class TestTagLifecycle(EmbodyTestCase):
         silently does nothing until the tag is stripped by hand.
         """
         comp = self.workspace.create(containerCOMP, 'rollback_victim')
-        tdn_tag = self.embody.par.Tdxntag.val
+        tdxn_tag = self.embody.par.Tdxntag.val
         initial_rows = self.embody_ext.Externalizations.numRows
 
         cls = type(self.embody.ext.TDXN)
         orig_export = cls.ExportNetwork
         attempts = []
 
-        def failing_export(tdn_self, *args, **kwargs):
+        def failing_export(tdxn_self, *args, **kwargs):
             attempts.append(1)
             return {'error': 'forced failure (test)'}
 
         cls.ExportNetwork = failing_export
         try:
-            self.embody_ext.applyTagToOperator(comp, tdn_tag)
+            self.embody_ext.applyTagToOperator(comp, tdxn_tag)
             self.assertLen(attempts, 1, 'First tag must attempt an export')
-            self.assertNotIn(tdn_tag, comp.tags,
+            self.assertNotIn(tdxn_tag, comp.tags,
                 'Tag must be rolled back after a failed export')
             self.assertEqual(
                 self.embody_ext.Externalizations.numRows, initial_rows,
@@ -259,10 +259,10 @@ class TestTagLifecycle(EmbodyTestCase):
 
             # The rollback is what makes a retry possible: a second tag
             # attempt must re-run the export instead of no-oping.
-            self.embody_ext.applyTagToOperator(comp, tdn_tag)
+            self.embody_ext.applyTagToOperator(comp, tdxn_tag)
             self.assertLen(attempts, 2,
                 'Retag after rollback must re-attempt the export')
-            self.assertNotIn(tdn_tag, comp.tags,
+            self.assertNotIn(tdxn_tag, comp.tags,
                 'Second failed export must roll back again')
         finally:
             cls.ExportNetwork = orig_export

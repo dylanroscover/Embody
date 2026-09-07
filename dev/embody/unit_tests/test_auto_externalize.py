@@ -90,7 +90,7 @@ class TestAutoExternalize(EmbodyTestCase):
 
     # --- boundary: op already captured by an externalized ancestor ---
 
-    def test_skips_op_inside_tdn_ancestor(self):
+    def test_skips_op_inside_tdxn_ancestor(self):
         self.embody.par.Autoexternalize = 'both'
         parent = self._box.create('baseCOMP', 'ae_tdn_parent')
         # Raw tag add (no export) to simulate an already-externalized ancestor.

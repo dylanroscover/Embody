@@ -151,17 +151,17 @@ class TestTDXNDirtyState(EmbodyTestCase):
         super().setUp()
         self._orig_table = self.embody.par.Externalizations.eval()
         self._orig_link = self.embody.par.Externalizations.val  # restore the VALUE: .path is absolute
-        self._orig_tdnmode = self.embody.par.Tdxnmode.eval()
+        self._orig_tdxnmode = self.embody.par.Tdxnmode.eval()
         self._primed = None
 
     def tearDown(self):
         self.embody.par.Externalizations = self._orig_link
-        self.embody.par.Tdxnmode = self._orig_tdnmode
+        self.embody.par.Tdxnmode = self._orig_tdxnmode
         if self._primed is not None:
             self.embody_ext._tdn_fingerprints.pop(self._primed, None)
         super().tearDown()
 
-    def _tdn_table(self, comp_path, dirty=''):
+    def _tdxn_table(self, comp_path, dirty=''):
         """Build a synthetic table with one TDXN-strategy row and swap it in."""
         t = self.sandbox.create(tableDAT, 'synthetic_externalizations')
         t.clear()
@@ -175,7 +175,7 @@ class TestTDXNDirtyState(EmbodyTestCase):
     def test_dirtyHandler_clears_stale_dirty_when_clean(self):
         comp = self.sandbox.create(baseCOMP, 'revert_comp')
         comp.create(constantCHOP, 'c')
-        t = self._tdn_table(comp.path)
+        t = self._tdxn_table(comp.path)
         # Stale runtime flag from a prior scan (dirty is runtime-only
         # since 2026-08-20; the tsv column stays blank by contract).
         self.embody_ext._setDirtyState(comp.path, 'True')
@@ -196,7 +196,7 @@ class TestTDXNDirtyState(EmbodyTestCase):
     def test_dirtyHandler_marks_dirty_when_changed(self):
         comp = self.sandbox.create(baseCOMP, 'change_comp')
         comp.create(constantCHOP, 'c')
-        t = self._tdn_table(comp.path, dirty='')
+        t = self._tdxn_table(comp.path, dirty='')
         self.embody.par.Tdxnmode = 'full'
         self.embody_ext._storeTDXNFingerprint(comp)
         self._primed = comp.path
@@ -213,16 +213,16 @@ class TestTDXNDirtyState(EmbodyTestCase):
     # --- Fix #4: DirtyCount trusts the runtime state for TDXN COMPs, not
     # oper.dirty (state moved from the tsv to DirtyState, 2026-08-20) ---
 
-    def test_DirtyCount_clean_tdn_comp_not_counted(self):
+    def test_DirtyCount_clean_tdxn_comp_not_counted(self):
         comp = self.sandbox.create(baseCOMP, 'count_clean')
         comp.create(constantCHOP, 'c')
-        self._tdn_table(comp.path)
+        self._tdxn_table(comp.path)
         self.embody_ext._setDirtyState(comp.path, '')
         self.assertEqual(
             self.embody_ext.dirtyCount(), 0,
             'A clean TDXN COMP (DirtyState "") must NOT be counted')
 
-    def test_DirtyCount_counts_dirty_tdn_comp_from_runtime(self):
+    def test_DirtyCount_counts_dirty_tdxn_comp_from_runtime(self):
         # The decisive case: the runtime state says 'True' while live
         # oper.dirty is False. DirtyCount must read DirtyState for TDXN
         # COMPs regardless of oper.dirty (which is always True for real
@@ -232,7 +232,7 @@ class TestTDXNDirtyState(EmbodyTestCase):
         self.assertFalse(comp.dirty,
             'precondition: synthetic sandbox COMP reads oper.dirty=False, so '
             'only the runtime-driven branch can produce a nonzero count here')
-        self._tdn_table(comp.path)
+        self._tdxn_table(comp.path)
         self.embody_ext._setDirtyState(comp.path, 'True')
         try:
             self.assertEqual(
@@ -308,9 +308,9 @@ class TestTDXNFingerprintPersistence(EmbodyTestCase):
         finally:
             self.embody_ext._tdn_fingerprints.pop(key, None)
 
-    def test_runtime_keys_excluded_from_tdn_export(self):
+    def test_runtime_keys_excluded_from_tdxn_export(self):
         # Storage-backed runtime state must never serialize into a .tdn.
-        tdn_mod = self.embody.op('TDXNExt').module
+        tdxn_mod = self.embody.op('TDXNExt').module
         # _suppress_dialogs: project.save() stores it True for the save
         # window and the TDXN export runs INSIDE that window -- without the
         # exclusion every save bakes it into Embody.tdn and a later TDXN
@@ -328,7 +328,7 @@ class TestTDXNFingerprintPersistence(EmbodyTestCase):
                     # modals (the Uninstall confirm included) on load.
                     '_test_saved_status', '_smoke_test_responses'):
             self.assertIn(
-                key, tdn_mod.SKIP_STORAGE_KEYS,
+                key, tdxn_mod.SKIP_STORAGE_KEYS,
                 f'runtime storage key {key!r} must be skipped by TDXN export')
 
     def test_no_live_embody_storage_key_escapes_the_skip_list(self):
@@ -345,9 +345,9 @@ class TestTDXNFingerprintPersistence(EmbodyTestCase):
         to Embody storage fails here until someone decides deliberately
         whether it may reach disk.
         """
-        tdn_mod = self.embody.op('TDXNExt').module
+        tdxn_mod = self.embody.op('TDXNExt').module
         live = set(self.embody.storage.keys())
-        escaping = sorted(live - set(tdn_mod.SKIP_STORAGE_KEYS))
+        escaping = sorted(live - set(tdxn_mod.SKIP_STORAGE_KEYS))
         self.assertEqual(
             escaping, [],
             'these live Embody storage keys would serialize into a .tdn: '

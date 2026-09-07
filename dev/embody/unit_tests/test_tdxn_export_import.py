@@ -21,12 +21,12 @@ class TestTDXNExportImport(EmbodyTestCase):
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
         self.assertTrue(result.get('success'))
 
-    def test_export_returns_tdn_dict(self):
+    def test_export_returns_tdxn_dict(self):
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
         self.assertDictHasKey(result, 'tdn')
         self.assertIsInstance(result['tdn'], dict)
 
-    def test_export_tdn_has_format_fields(self):
+    def test_export_tdxn_has_format_fields(self):
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
         tdn = result['tdn']
         self.assertDictHasKey(tdn, 'format')
@@ -269,7 +269,7 @@ class TestTDXNExportImport(EmbodyTestCase):
             target_path='/nonexistent_imp', tdn={'operators': []})
         self.assertDictHasKey(result, 'error')
 
-    def test_import_invalid_tdn(self):
+    def test_import_invalid_tdxn(self):
         target = self.sandbox.create(baseCOMP, 'invalid_target')
         result = self.tdn.ImportNetwork(
             target_path=target.path, tdn='not a dict')
@@ -740,7 +740,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         prefix = str(self.embody.par.Tdxnexcludetag.eval()).strip()
         return f'{prefix}:{name}'
 
-    def test_tdn_omit_drops_constant_value(self):
+    def test_tdxn_omit_drops_constant_value(self):
         t = self.sandbox.create(transformTOP, 'omit_xform')
         t.par.tx = 5.0
         t.par.ty = 7.0
@@ -755,7 +755,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         # omission and must appear in the exported document.
         self.assertIn(self._omit_tag('tx'), t_def.get('tags', []))
 
-    def test_tdn_omit_preserves_expression(self):
+    def test_tdxn_omit_preserves_expression(self):
         # An expression is a reference, not leaked session state --
         # same doctrine as the A-50 scrub.
         t = self.sandbox.create(transformTOP, 'omit_expr')
@@ -767,7 +767,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         self.assertEqual(
             t_def.get('parameters', {}).get('tx'), '=absTime.seconds')
 
-    def test_tdn_omit_unknown_name_omits_nothing(self):
+    def test_tdxn_omit_unknown_name_omits_nothing(self):
         t = self.sandbox.create(transformTOP, 'omit_bogus')
         t.par.tx = 3.0
         t.tags.add(self._omit_tag('notapar'))
@@ -777,7 +777,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         # Bad name -> WARNING (manually verified) and no effect.
         self.assertEqual(t_def.get('parameters', {}).get('tx'), 3.0)
 
-    def test_tdn_omit_custom_par_ships_definition_without_value(self):
+    def test_tdxn_omit_custom_par_ships_definition_without_value(self):
         src = self.sandbox.create(containerCOMP, 'omit_custom')
         page = src.appendCustomPage('Look')
         p = page.appendFloat('Speed')[0]
@@ -793,7 +793,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         self.assertEqual(len(speed_defs), 1)
         self.assertNotIn('value', speed_defs[0])
 
-    def test_tdn_omit_roundtrip_keeps_tag_and_default(self):
+    def test_tdxn_omit_roundtrip_keeps_tag_and_default(self):
         t = self.sandbox.create(transformTOP, 'omit_rt')
         t.par.tx = 9.0
         t.tags.add(self._omit_tag('tx'))
@@ -806,7 +806,7 @@ class TestTDXNExportImport(EmbodyTestCase):
         self.assertEqual(rebuilt.par.tx.eval(), 0.0)
         self.assertIn(self._omit_tag('tx'), rebuilt.tags)
 
-    def test_tdn_omit_empty_prefix_disables(self):
+    def test_tdxn_omit_empty_prefix_disables(self):
         par = self.embody.par.Tdxnexcludetag
         old = par.eval()
         par.val = ''

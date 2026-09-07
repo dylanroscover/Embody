@@ -876,7 +876,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
                           'and so is one further down')
         self.assertEqual(removed, 2, 'exactly the two annotations')
 
-    def test_viz_bot_constants_match_the_tdn_exporter(self):
+    def test_viz_bot_constants_match_the_tdxn_exporter(self):
         """TDXNExt mirrors these two literals rather than importing the viz
         module DAT (Envoy is optional; .tdn export must work without it). Drift
         is SILENT -- the export filter simply stops matching and live bot parts
@@ -884,10 +884,10 @@ class TestEnvoyVizGates(EmbodyTestCase):
         # Read the LIVE extension's own module namespace (via the function
         # object actually doing the filtering) rather than re-compiling the DAT
         # with .module -- this asserts against the code that is running.
-        tdn_globals = type(op.Embody.ext.TDXN)._exportAnnotations.__globals__
-        self.assertEqual(tdn_globals['VIZ_BOT_ANNOTATION_PREFIX'],
+        tdxn_globals = type(op.Embody.ext.TDXN)._exportAnnotations.__globals__
+        self.assertEqual(tdxn_globals['VIZ_BOT_ANNOTATION_PREFIX'],
                          viz._VIZ_BOT_PREFIX)
-        self.assertEqual(tdn_globals['VIZ_BOT_TEMPLATE_COMP'],
+        self.assertEqual(tdxn_globals['VIZ_BOT_TEMPLATE_COMP'],
                          viz._VIZ_TEMPLATE_COMP)
 
     def test_export_annotations_omits_loose_bot_parts(self):

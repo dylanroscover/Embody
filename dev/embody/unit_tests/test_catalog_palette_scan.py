@@ -244,7 +244,7 @@ class TestCatalogScanResume(EmbodyTestCase):
 		self._tmpdir = tempfile.mkdtemp(prefix='embody_catalog_test_')
 		self._catalog_path = os.path.join(self._tmpdir, 'catalog_test.json')
 		self._orig_status = str(self.embody.par.Status)
-		self._tdn_saved = (
+		self._tdxn_saved = (
 			self.tdn._divergent_loaded,
 			self.tdn._divergent_defaults,
 			self.tdn._palette_catalog,
@@ -276,7 +276,7 @@ class TestCatalogScanResume(EmbodyTestCase):
 			setattr(self.cat, key, val)
 		(self.tdn._divergent_loaded,
 		 self.tdn._divergent_defaults,
-		 self.tdn._palette_catalog) = self._tdn_saved
+		 self.tdn._palette_catalog) = self._tdxn_saved
 		self.embody.par.Status = self._orig_status
 		for fname in list(os.listdir(self._tmpdir)):
 			try:
@@ -500,7 +500,7 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 			'_workspace': self.cat._workspace,
 			'_palette_workspace': self.cat._palette_workspace,
 		}
-		self._tdn_saved = (
+		self._tdxn_saved = (
 			self.tdn._divergent_loaded,
 			self.tdn._divergent_defaults,
 			self.tdn._palette_catalog,
@@ -519,7 +519,7 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 			setattr(self.cat, key, val)
 		(self.tdn._divergent_loaded,
 		 self.tdn._divergent_defaults,
-		 self.tdn._palette_catalog) = self._tdn_saved
+		 self.tdn._palette_catalog) = self._tdxn_saved
 		self.embody.par.Status = self._orig_status
 		for fname in list(os.listdir(self._tmpdir)):
 			try:
@@ -694,7 +694,7 @@ class TestCatalogToeexpandScan(EmbodyTestCase):
 			'_tox_scan_total': self.cat._tox_scan_total,
 			'_tox_scan_fail_count': self.cat._tox_scan_fail_count,
 		}
-		self._tdn_saved = (
+		self._tdxn_saved = (
 			self.tdn._divergent_loaded,
 			self.tdn._divergent_defaults,
 			self.tdn._palette_catalog,
@@ -712,7 +712,7 @@ class TestCatalogToeexpandScan(EmbodyTestCase):
 			setattr(self.cat, key, val)
 		(self.tdn._divergent_loaded,
 		 self.tdn._divergent_defaults,
-		 self.tdn._palette_catalog) = self._tdn_saved
+		 self.tdn._palette_catalog) = self._tdxn_saved
 		self.embody.par.Status = self._orig_status
 		shutil.rmtree(self._tmpdir, ignore_errors=True)
 		super().tearDown()

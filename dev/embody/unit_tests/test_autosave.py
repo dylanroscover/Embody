@@ -24,7 +24,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 class TestAutosave(EmbodyTestCase):
 
     def setUp(self):
-        self._tdn_cleanup = []  # (comp_path, abs_tdn)
+        self._tdxn_cleanup = []  # (comp_path, abs_tdxn)
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
         ext._autosave_armed = False
@@ -44,14 +44,14 @@ class TestAutosave(EmbodyTestCase):
     def tearDown(self):
         ext = self.embody_ext
         tdxn = self.embody.ext.TDXN
-        for comp_path, abs_tdn in self._tdn_cleanup:
+        for comp_path, abs_tdxn in self._tdxn_cleanup:
             try:
                 ext._removeTDXNStrategy(comp_path, delete_file=True)
             except Exception:
                 pass
             try:
-                if abs_tdn and os.path.isfile(abs_tdn):
-                    os.remove(abs_tdn)
+                if abs_tdxn and os.path.isfile(abs_tdxn):
+                    os.remove(abs_tdxn)
             except OSError:
                 pass
             try:
@@ -62,7 +62,7 @@ class TestAutosave(EmbodyTestCase):
                 # _backup_candidates covers both dirs, both generations,
                 # and both network suffixes.
                 for bak in tdxn._backup_candidates(
-                        abs_tdn, str(project.folder)):
+                        abs_tdxn, str(project.folder)):
                     if bak.is_file():
                         bak.unlink()
             except Exception:
@@ -87,7 +87,7 @@ class TestAutosave(EmbodyTestCase):
                 par.val = self._autosave_par_was
         super().tearDown()
 
-    def _make_tdn(self, name):
+    def _make_tdxn(self, name):
         """Create + externalize a small TDXN COMP in the sandbox; track for cleanup."""
         ext = self.embody_ext
         comp = self.sandbox.create(baseCOMP, name)
@@ -95,11 +95,11 @@ class TestAutosave(EmbodyTestCase):
         ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
         ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
-        abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
-        self._tdn_cleanup.append((comp.path, abs_tdn))
-        return comp, abs_tdn
+        abs_tdxn = str(ext.buildAbsolutePath(rel)) if rel else None
+        self._tdxn_cleanup.append((comp.path, abs_tdxn))
+        return comp, abs_tdxn
 
-    def _make_nested_tdn(self, parent_name, child_name):
+    def _make_nested_tdxn(self, parent_name, child_name):
         """A TDXN COMP holding a child that is SEPARATELY TDXN-externalized.
 
         The parent's .tdn carries only a tdn_ref for that child, so the child's
@@ -114,7 +114,7 @@ class TestAutosave(EmbodyTestCase):
             ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
             ext.externalizeImmediate(comp)
             rel = ext._getStrategyFilePath(comp.path, 'tdn')
-            self._tdn_cleanup.append(
+            self._tdxn_cleanup.append(
                 (comp.path, str(ext.buildAbsolutePath(rel)) if rel else None))
         return parent, child
 
@@ -128,20 +128,20 @@ class TestAutosave(EmbodyTestCase):
     # --- Core: Checkpoint ---
 
     def test_checkpoint_writes_and_marks_clean(self):
-        comp, abs_tdn = self._make_tdn('cp_writes')
+        comp, abs_tdxn = self._make_tdxn('cp_writes')
         ok = self.embody_ext.checkpoint(comp.path)
         self.assertTrue(ok)
-        self.assertTrue(os.path.isfile(abs_tdn))
+        self.assertTrue(os.path.isfile(abs_tdxn))
         self.assertEqual(self.embody_ext.Externalizations[comp.path, 'dirty'].val, '',
                          'tsv dirty cell stays blank (runtime-only, 2026-08-20)')
         self.assertEqual(self.embody_ext.dirtyState(comp.path), '',
                          'checkpoint clears the runtime dirty flag')
 
     def test_checkpoint_captures_current_state(self):
-        comp, abs_tdn = self._make_tdn('cp_state')
+        comp, abs_tdxn = self._make_tdxn('cp_state')
         comp.op('n1').par.period = 12.5
         self.embody_ext.checkpoint(comp.path)
-        doc = self.embody.ext.TDXN.tdn_load(open(abs_tdn).read())
+        doc = self.embody.ext.TDXN.tdn_load(open(abs_tdxn).read())
         period = None
         for o in doc.get('operators', []):
             if o.get('name') == 'n1':
@@ -155,7 +155,7 @@ class TestAutosave(EmbodyTestCase):
     # --- Stage 2: touched-boundary recorder ---
 
     def test_note_touch_resolves_child_to_boundary(self):
-        comp, _ = self._make_tdn('touch_res')
+        comp, _ = self._make_tdxn('touch_res')
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
         ext.noteCheckpointTouch(comp.path + '/n1')
@@ -186,7 +186,7 @@ class TestAutosave(EmbodyTestCase):
     def test_coarse_expansion_queues_only_dirty_roots(self):
         """The sweep must not enqueue every tracked root: writing a .tdn per
         agent call is the churn this design exists to avoid."""
-        comp, _ = self._make_tdn('coarse_dirty')
+        comp, _ = self._make_tdxn('coarse_dirty')
         ext = self.embody_ext
         # Scoped to OUR sandbox root, never a project-wide count: the live
         # project legitimately carries dirty roots from other work, and an
@@ -210,8 +210,8 @@ class TestAutosave(EmbodyTestCase):
         drop the slice and both are queued.
         """
         ext = self.embody_ext
-        a, _ = self._make_tdn('cap_a')
-        b, _ = self._make_tdn('cap_b')
+        a, _ = self._make_tdxn('cap_a')
+        b, _ = self._make_tdxn('cap_b')
         a.op('n1').par.period = 4.0
         b.op('n1').par.period = 5.0
         ext._pending_checkpoint_roots.clear()
@@ -252,7 +252,7 @@ class TestAutosave(EmbodyTestCase):
         the entire Embody subtree: 188ms in one frame, and a byte-identical
         re-export every burst). The TAG is the authority.
         """
-        parent, child = self._make_nested_tdn('fp_tagonly', 'fp_tagchild')
+        parent, child = self._make_nested_tdxn('fp_tagonly', 'fp_tagchild')
         ext = self.embody_ext
         tags = ext._extBoundaryTags()
         # An EMPTY path set stands in for the excluded region: the child is
@@ -277,7 +277,7 @@ class TestAutosave(EmbodyTestCase):
     def test_fingerprint_still_walks_an_untagged_child(self):
         """Guard against over-fixing: a child with no file of its own IS
         embedded in the parent's .tdn, so its edits must still dirty it."""
-        comp, _ = self._make_tdn('fp_embedded')
+        comp, _ = self._make_tdxn('fp_embedded')
         inner = comp.create(baseCOMP, 'plain')
         inner.create(noiseTOP, 'deep')
         ext = self.embody_ext
@@ -295,7 +295,7 @@ class TestAutosave(EmbodyTestCase):
         long one frame spends: a single big root fingerprints in ~62ms, so the
         cap alone still left a 188ms frame. A budgeted call must leave the rest
         on the cursor, and resuming must not lose a dirty root."""
-        comp, _ = self._make_tdn('chunk_resume')
+        comp, _ = self._make_tdxn('chunk_resume')
         comp.op('n1').par.period = 11.0          # genuinely dirty
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
@@ -365,7 +365,7 @@ class TestAutosave(EmbodyTestCase):
     def test_a_typed_op_still_arms_by_path_not_coarsely(self):
         """The coarse arm must not swallow the path-resolving branch: a tool
         that CAN name its root still queues that root and sweeps nothing."""
-        comp, _ = self._make_tdn('wired_typed')
+        comp, _ = self._make_tdxn('wired_typed')
         ext = self.embody_ext
         ext._coarse_checkpoint_due = False
         ext._pending_checkpoint_roots.clear()
@@ -396,7 +396,7 @@ class TestAutosave(EmbodyTestCase):
     def test_flush_writes_queued_roots_and_clears_them(self):
         """A root queued by an earlier tool sits unwritten for up to the settle
         window; execute_python can crash TD inside it. Flush first."""
-        comp, abs_tdn = self._make_tdn('flush_q')
+        comp, abs_tdxn = self._make_tdxn('flush_q')
         ext = self.embody_ext
         comp.op('n1').par.period = 3.0
         ext._pending_checkpoint_roots.clear()
@@ -417,7 +417,7 @@ class TestAutosave(EmbodyTestCase):
     # --- Stage 6: export-mode missing-only recovery ---
 
     def test_recover_missing_rebuilds_crash_lost_comp(self):
-        comp, abs_tdn = self._make_tdn('recov')
+        comp, abs_tdxn = self._make_tdxn('recov')
         comp.op('n1').par.period = 4.0
         self.embody_ext.checkpoint(comp.path)
         comp_path = comp.path
@@ -432,7 +432,7 @@ class TestAutosave(EmbodyTestCase):
         # Deleting a tracked TDXN COMP must purge its row so recovery can't
         # resurrect it (the delete-undo guard). _delete_op calls
         # _purgeExternalizationTracking.
-        comp, abs_tdn = self._make_tdn('del_undo')
+        comp, abs_tdxn = self._make_tdxn('del_undo')
         self.embody_ext.checkpoint(comp.path)
         comp_path = comp.path
         self.embody_ext._purgeExternalizationTracking(comp_path)
@@ -468,7 +468,7 @@ class TestAutosave(EmbodyTestCase):
 
     def test_save_window_gates_checkpoint(self):
         # Table mutation during the save window is fatal -- Checkpoint must bail.
-        comp, abs_tdn = self._make_tdn('savewin')
+        comp, abs_tdxn = self._make_tdxn('savewin')
         self.embody.store('_suppress_dialogs', True)
         try:
             ok = self.embody_ext.checkpoint(comp.path)
@@ -477,7 +477,7 @@ class TestAutosave(EmbodyTestCase):
             self.embody.unstore('_suppress_dialogs')
 
     def test_perform_mode_bypasses_engine(self):
-        comp, _ = self._make_tdn('perf')
+        comp, _ = self._make_tdxn('perf')
         ext = self.embody_ext
         par = self.embody.par.Performmode  # _performMode reads this par
         old = par.eval()
@@ -494,14 +494,14 @@ class TestAutosave(EmbodyTestCase):
     # --- delete-undo prefix-sibling safety ---
 
     def test_purge_does_not_over_purge_prefix_sibling(self):
-        comp, _ = self._make_tdn('cp')
-        sib, _ = self._make_tdn('cp2')   # shares the 'cp' prefix
+        comp, _ = self._make_tdxn('cp')
+        sib, _ = self._make_tdxn('cp2')   # shares the 'cp' prefix
         self.embody_ext._purgeExternalizationTracking(comp.path)
         tracked = [p for p, _ in self.embody_ext._getTDXNStrategyComps()]
         self.assertNotIn(comp.path, tracked)
         self.assertIn(sib.path, tracked)  # sibling must survive
 
-    def test_purge_removes_non_tdn_rows(self):
+    def test_purge_removes_non_tdxn_rows(self):
         # delete_op on an externalized DAT must remove its table row --
         # previously only TDXN rows were purged, leaving an orphan row + file
         # behind until a Refresh sweep (issue #57 follow-up, 2026-07-16).
@@ -546,7 +546,7 @@ class TestAutosave(EmbodyTestCase):
     # --- recorder end-to-end (through _noteCheckpointActivity) ---
 
     def test_recorder_endtoend_resolves_and_queues(self):
-        comp, _ = self._make_tdn('rec_e2e')
+        comp, _ = self._make_tdxn('rec_e2e')
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
         # drive the EnvoyExt chokepoint recorder for a real op shape
@@ -555,7 +555,7 @@ class TestAutosave(EmbodyTestCase):
         self.assertIn(comp.path, ext._pending_checkpoint_roots)
 
     def test_recorder_ignores_readonly_ops(self):
-        comp, _ = self._make_tdn('rec_ro')
+        comp, _ = self._make_tdxn('rec_ro')
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
         self.embody.ext.Envoy._noteCheckpointActivity(
@@ -566,7 +566,7 @@ class TestAutosave(EmbodyTestCase):
 
     def test_drain_stale_gen_is_noop(self):
         ext = self.embody_ext
-        comp, _ = self._make_tdn('gen')
+        comp, _ = self._make_tdxn('gen')
         ext._pending_checkpoint_roots.clear()
         ext._pending_checkpoint_roots.add(comp.path)
         ext._autosave_gen = 5
@@ -576,7 +576,7 @@ class TestAutosave(EmbodyTestCase):
 
     # --- nested TDXN child recovery (the missing-at-start fix) ---
 
-    def test_recover_nested_tdn_child(self):
+    def test_recover_nested_tdxn_child(self):
         ext = self.embody_ext
         parent = self.sandbox.create(baseCOMP, 'np')
         parent.create(noiseTOP, 'pn')
@@ -586,7 +586,7 @@ class TestAutosave(EmbodyTestCase):
             ext.applyTagToOperator(c, self.embody.par.Tdxntag.val)
             ext.externalizeImmediate(c)
             rel = ext._getStrategyFilePath(c.path, 'tdn')
-            self._tdn_cleanup.append((c.path, str(ext.buildAbsolutePath(rel)) if rel else None))
+            self._tdxn_cleanup.append((c.path, str(ext.buildAbsolutePath(rel)) if rel else None))
         ext.checkpoint(parent.path)
         ext.checkpoint(child.path)
         ppath, cpath = parent.path, child.path
@@ -605,8 +605,8 @@ class TestAutosave(EmbodyTestCase):
         more roots than the cap every /specimen_lab root was never examined.
         Consecutive sweeps must rotate through the whole ring."""
         ext = self.embody_ext
-        a, _ = self._make_tdn('rot_a')
-        b, _ = self._make_tdn('rot_b')
+        a, _ = self._make_tdxn('rot_a')
+        b, _ = self._make_tdxn('rot_b')
         a.op('n1').par.period = 4.0
         b.op('n1').par.period = 5.0
         ext._pending_checkpoint_roots.clear()

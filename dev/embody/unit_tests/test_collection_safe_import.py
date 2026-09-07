@@ -24,7 +24,7 @@ import copy
 # Adversarial / fixture TDXN builders (kept local + deterministic)
 # ---------------------------------------------------------------------------
 
-def _base_tdn(operators=None, **extra):
+def _base_tdxn(operators=None, **extra):
     tdn = {
         "format": "tdn",
         "version": "1.4",
@@ -38,7 +38,7 @@ def _base_tdn(operators=None, **extra):
     return tdn
 
 
-def _adversarial_tdn():
+def _adversarial_tdxn():
     """A TDXN that lights up every armed surface safe_import disarms."""
     return {
         "format": "tdn",
@@ -146,7 +146,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_execute_dat_deactivated_content_kept(self):
         """active -> False, but dat_content is preserved verbatim."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "exec1",
                 "type": "executeDAT",
@@ -169,7 +169,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     def test_expr_and_bind_become_safe_constants(self):
         """=expr and ~bind values collapse to type/style-appropriate constants;
         literal ==/~~ values are left intact; custom_pars are covered too."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "exprs",
                 "type": "constantCHOP",
@@ -224,7 +224,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_literal_eq_and_tilde_not_neutralized(self):
         """== and ~~ prefixes are literal escapes, not expr/bind -- left alone."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "lit",
                 "type": "textDAT",
@@ -243,7 +243,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_comp_extensions_disabled_children_kept(self):
         """Enabled ext blocks become empty {}; the child DAT survives."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "owner",
                 "type": "baseCOMP",
@@ -281,7 +281,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_io_operator_bypassed_other_flags_kept(self):
         """An IO op gains 'bypass' while its existing 'viewer' flag is preserved."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "client1",
                 "type": "webclientDAT",
@@ -302,7 +302,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_storage_startup_and_root_storage_stripped(self):
         """storage + startup_storage on a node AND root storage are all removed."""
-        tdn = _base_tdn(
+        tdn = _base_tdxn(
             [
                 {
                     "name": "stored",
@@ -330,7 +330,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     def test_input_not_mutated_idempotent_structure_preserved(self):
         """make_inert deep-copies (input untouched), is idempotent on a second
         pass, and preserves the operator tree + connections."""
-        tdn = _base_tdn([
+        tdn = _base_tdxn([
             {
                 "name": "container1",
                 "type": "baseCOMP",
@@ -379,7 +379,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     # =======================================================================
 
     def test_type_defaults_par_templates_and_root_neutralized(self):
-        tdn = _base_tdn(
+        tdn = _base_tdxn(
             [
                 {
                     "name": "movie1",
@@ -434,7 +434,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     # =======================================================================
 
     def test_is_inert_true_after_inert_false_on_armed(self):
-        armed = _adversarial_tdn()
+        armed = _adversarial_tdxn()
         self.assertFalse(self.si.is_inert(armed))
         inert, _ = self.si.make_inert(armed)
         self.assertTrue(self.si.is_inert(inert))
@@ -453,7 +453,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     # =======================================================================
 
     def test_scanner_detects_every_armed_surface(self):
-        counts = self.scanner.scan_tdn(_adversarial_tdn())["counts"]
+        counts = self.scanner.scan_tdn(_adversarial_tdxn())["counts"]
         self.assertGreaterEqual(counts["execute_dats"], 1)
         self.assertGreaterEqual(counts["file_read_exprs"], 1)
         self.assertGreaterEqual(counts["extensions"], 1)
@@ -465,7 +465,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
         """The surfaces safe_import REMOVES/neutralizes drop to 0 on a re-scan;
         presence-only surfaces (web_ops type, traversal path) may legitimately
         remain since the bypassed op is still in the inventory."""
-        inert, _ = self.si.make_inert(_adversarial_tdn())
+        inert, _ = self.si.make_inert(_adversarial_tdxn())
         counts = self.scanner.scan_tdn(inert)["counts"]
         self.assertEqual(counts["file_read_exprs"], 0)
         self.assertEqual(counts["extensions"], 0)
@@ -473,7 +473,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_make_inert_does_not_change_original_scan(self):
         """make_inert mutates nothing, so the ORIGINAL re-scans identically."""
-        original = _adversarial_tdn()
+        original = _adversarial_tdxn()
         before = self.scanner.scan_tdn(original)["counts"]
         self.si.make_inert(original)
         after = self.scanner.scan_tdn(original)["counts"]
@@ -486,7 +486,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     def test_plan_community_paste_returns_inert_plan(self):
         """PlanCommunityPaste returns mode=='inert', a capability report, a
         summary, and a plan['tdn'] that passes is_inert."""
-        plan = self.coll.PlanCommunityPaste(_adversarial_tdn())
+        plan = self.coll.PlanCommunityPaste(_adversarial_tdxn())
         self.assertEqual(plan["mode"], "inert")
         self.assertDictHasKey(plan, "capability")
         self.assertDictHasKey(plan, "summary")
@@ -502,16 +502,16 @@ class TestCollectionSafeImport(EmbodyTestCase):
 
     def test_plan_community_paste_capability_is_flagged_for_adversarial(self):
         """An armed adversarial TDXN scans to a non-clean verdict in the plan."""
-        plan = self.coll.PlanCommunityPaste(_adversarial_tdn())
+        plan = self.coll.PlanCommunityPaste(_adversarial_tdxn())
         self.assertIn(plan["capability"]["verdict"], ("flagged", "blocked"))
 
-    def test_scan_tdn_empty_is_clean(self):
+    def test_scan_tdxn_empty_is_clean(self):
         """ScanTdn({}) -- no surfaces present -> 'clean' verdict."""
         report = self.coll.ScanTdn({})
         self.assertEqual(report["verdict"], "clean")
         self.assertDictHasKey(report, "counts")
 
-    def test_scan_tdn_non_dict_coerced(self):
+    def test_scan_tdxn_non_dict_coerced(self):
         """ScanTdn defends against a non-dict argument (coerced to {})."""
         report = self.coll.ScanTdn(None)
         self.assertEqual(report["verdict"], "clean")

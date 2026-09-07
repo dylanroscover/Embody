@@ -16,7 +16,7 @@ ASCII punctuation only; tests are independent and deterministic.
 """
 
 
-def _tdn(operators=None, **extra):
+def _tdxn(operators=None, **extra):
     t = {
         "format": "tdn", "version": "2.0", "generator": "unit-test",
         "td_build": "099.2025.32820", "network_path": "/p", "type": "baseCOMP",
@@ -71,7 +71,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_make_inert_preserves_pure_sequence_exprs(self):
         si, sc = self._modules()
-        tdn = _tdn([{
+        tdn = _tdxn([{
             "name": "g", "type": "glslTOP",
             "sequences": {"vec": [{"name": "u",
                 "valuex": "=parent().par.Power.eval()",
@@ -85,7 +85,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_make_inert_without_predicate_neutralizes_all(self):
         si, _sc = self._modules()
-        tdn = _tdn([{"name": "l", "type": "levelTOP",
+        tdn = _tdxn([{"name": "l", "type": "levelTOP",
                      "parameters": {"opacity": "=parent().par.X.eval()"}}])
         inert, summary = si.make_inert(tdn)
         self.assertEqual(inert["operators"][0]["parameters"]["opacity"], 0)
@@ -95,20 +95,20 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_par_eval_idiom_scans_clean(self):
         _si, sc = self._modules()
-        res = sc.scan_tdn(_tdn([{"name": "g", "type": "glslTOP",
+        res = sc.scan_tdn(_tdxn([{"name": "g", "type": "glslTOP",
             "sequences": {"vec": [{"name": "u", "valuex": "=parent().par.Power.eval()"}]}}]))
         self.assertEqual(res["verdict"], "clean", res["findings"])
 
     def test_dangerous_expr_scans_flagged(self):
         _si, sc = self._modules()
-        res = sc.scan_tdn(_tdn([{"name": "l", "type": "levelTOP",
+        res = sc.scan_tdn(_tdxn([{"name": "l", "type": "levelTOP",
             "parameters": {"opacity": "=op('v').destroy()"}}]))
         self.assertGreaterEqual(res["counts"]["file_read_exprs"], 1)
 
     def test_glsl_shader_dat_not_flagged_as_python(self):
         _si, sc = self._modules()
         for params in ({"language": "glsl"}, {"extension": "frag"}):
-            res = sc.scan_tdn(_tdn([{"name": "px", "type": "textDAT",
+            res = sc.scan_tdn(_tdxn([{"name": "px", "type": "textDAT",
                 "parameters": params, "dat_content": "uniform vec4 u; void main(){}"}]))
             self.assertEqual(res["counts"]["execute_dats"], 0, params)
 
@@ -116,7 +116,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_script_op_flagged_and_bypassed(self):
         si, sc = self._modules()
-        tdn = _tdn([{"name": "s", "type": "scriptTOP"}])
+        tdn = _tdxn([{"name": "s", "type": "scriptTOP"}])
         self.assertGreaterEqual(sc.scan_tdn(tdn)["counts"]["execute_dats"], 1)
         inert, summary = si.make_inert(tdn, is_pure_expr=sc.is_pure_value_expression)
         self.assertIn("bypass", inert["operators"][0].get("flags", []))
@@ -124,7 +124,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_tox_ref_flagged_and_stripped(self):
         si, sc = self._modules()
-        tdn = _tdn([{"name": "c", "type": "baseCOMP", "tox_ref": "x.tox"}])
+        tdn = _tdxn([{"name": "c", "type": "baseCOMP", "tox_ref": "x.tox"}])
         self.assertGreaterEqual(sc.scan_tdn(tdn)["counts"]["external_refs"], 1)
         inert, summary = si.make_inert(tdn, is_pure_expr=sc.is_pure_value_expression)
         self.assertNotIn("tox_ref", inert["operators"][0])
@@ -134,9 +134,9 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_palette_extension_trusted_foreign_disabled(self):
         si, sc = self._modules()
-        palette = _tdn([{"name": "a", "type": "annotateCOMP", "sequences": {"ext": [
+        palette = _tdxn([{"name": "a", "type": "annotateCOMP", "sequences": {"ext": [
             {"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)", "name": "E"}]}}])
-        foreign = _tdn([{"name": "b", "type": "baseCOMP", "sequences": {"ext": [
+        foreign = _tdxn([{"name": "b", "type": "baseCOMP", "sequences": {"ext": [
             {"object": "op('./Evil').module.Evil(me)", "name": "E"}]}}])
         self.assertEqual(sc.scan_tdn(palette)["verdict"], "clean")
         self.assertEqual(sc.scan_tdn(foreign)["verdict"], "flagged")
@@ -147,7 +147,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_opshortcut_hijack_stripped(self):
         si, sc = self._modules()
-        hijack = _tdn([{"name": "evil", "type": "baseCOMP",
+        hijack = _tdxn([{"name": "evil", "type": "baseCOMP",
                         "parameters": {"opshortcut": "TDAnnotate"},
                         "sequences": {"ext": [
                             {"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)", "name": "x"}]}}])
@@ -165,7 +165,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
             raise SkipTest('CollectionExt not initialized')
         # A specimen whose only "extension" is a standard palette Annotate scans
         # clean and pastes LIVE -- no false "untrusted" flag.
-        spec = _tdn([
+        spec = _tdxn([
             {"name": "a", "type": "annotateCOMP", "sequences": {"ext": [
                 {"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)", "name": "E"}]}},
             {"name": "n", "type": "noiseTOP"},
@@ -178,7 +178,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_is_inert_is_purity_aware(self):
         si, sc = self._modules()
-        net = _tdn([{"name": "l", "type": "levelTOP",
+        net = _tdxn([{"name": "l", "type": "levelTOP",
                      "parameters": {"opacity": "=parent().par.X.eval()"}}])
         self.assertTrue(si.is_inert(net, is_pure_expr=sc.is_pure_value_expression))
         self.assertFalse(si.is_inert(net))
@@ -193,7 +193,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
             coll = collection.ext.Collection
         except Exception:
             raise SkipTest('CollectionExt not initialized')
-        clean = _tdn([
+        clean = _tdxn([
             {"name": "noise1", "type": "noiseTOP"},
             {"name": "l", "type": "levelTOP", "inputs": ["noise1"],
              "parameters": {"opacity": "=parent().par.X.eval()"}},
@@ -213,7 +213,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
             coll = collection.ext.Collection
         except Exception:
             raise SkipTest('CollectionExt not initialized')
-        flagged = _tdn([
+        flagged = _tdxn([
             {"name": "s", "type": "scriptTOP",
              "parameters": {"opacity": "=parent().par.X.eval()"}},
         ])
