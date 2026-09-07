@@ -198,11 +198,35 @@ _live_log_size_at_start = None
 
 
 def _cage_bridge_runtime():
-    """Neutralize file logging in every imported bridge copy."""
-    for name in ('envoy_bridge', 'text_envoy_bridge'):
-        mod = sys.modules.get(name)
-        if mod is None:
+    """Neutralize file logging in every imported bridge copy.
+
+    Matched by CAPABILITY, not by module name. A name list silently missed
+    any copy loaded under a different one: test_envoy_sessions loads the
+    bridge via spec_from_file_location as 'envoy_bridge_sessions', so it
+    escaped the cage entirely and wrote 19 lines to the live
+    dev/logs/envoy-bridge.log -- which is exactly what the sessionfinish
+    tripwire below was reporting. Anything exposing _init_file_logging is
+    a bridge copy and gets caged, including copies added later.
+    """
+    targets = [m for m in list(sys.modules.values())
+               if m is not None and hasattr(m, '_init_file_logging')]
+    # A bridge copy loaded with module_from_spec + exec_module and never
+    # registered in sys.modules is invisible to the scan above -- it lives
+    # only as an attribute of the test module that built it
+    # (test_envoy_bridge_instance_arg.bridge). Those four tests wrote 2070
+    # bytes to the live log past BOTH the old name list and a sys.modules
+    # capability scan. Reach them through the test modules that hold them.
+    seen = {id(m) for m in targets}
+    for mod in list(sys.modules.values()):
+        if mod is None or not getattr(mod, '__name__', '').startswith('test_'):
             continue
+        for attr in list(vars(mod).values()):
+            if (isinstance(attr, types.ModuleType)
+                    and hasattr(attr, '_init_file_logging')
+                    and id(attr) not in seen):
+                seen.add(id(attr))
+                targets.append(attr)
+    for mod in targets:
         handle = getattr(mod, '_log_file', None)
         if handle is not None:
             try:
@@ -211,6 +235,7 @@ def _cage_bridge_runtime():
                 pass
         mod._log_file = None
         mod._init_file_logging = lambda *a, **k: None
+    return len(targets)
 
 
 def pytest_configure(config):
