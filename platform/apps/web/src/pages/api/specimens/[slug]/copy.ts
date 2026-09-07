@@ -2,8 +2,8 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { getSpecimenBySlug } from "../../../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
-import { getParsedTdnForSlug } from "../../../../server/tdn";
-import { buildEmbodyEnvelope } from "../../../../lib/tdnEnvelope";
+import { getParsedTdxnForSlug } from "../../../../server/tdxn";
+import { buildEmbodyEnvelope } from "../../../../lib/tdxnEnvelope";
 import { checkRateLimit, rateLimitDisabled } from "../../../../server/rateLimit";
 
 export const prerender = false;
@@ -48,12 +48,12 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(404, "specimen_not_found", "No specimen exists for that slug.");
     }
 
-    const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, slug);
+    const parsed = await getParsedTdxnForSlug(env.DB, env.BLOBS, slug);
     if (!parsed) {
-      return errorResponse(404, "tdn_not_found", "The TDXN blob is missing or unparseable.");
+      return errorResponse(404, "tdxn_not_found", "The TDXN blob is missing or unparseable.");
     }
 
-    const envelope = await buildEmbodyEnvelope(parsed.tdn, {
+    const envelope = await buildEmbodyEnvelope(parsed.tdxn, {
       slug,
       version: specimen.current_version
     });

@@ -6,7 +6,7 @@ import SpecimenCover from "../../components/SpecimenCover.astro";
 import { fixtureSummaries } from "../../lib/specimenFallback";
 import { reactionsClusterHtml } from "../../lib/reactions";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
-import { sampleTdn } from "../../fixtures/sample-tdn";
+import { sampleTdxn } from "../../fixtures/sample-tdxn";
 import {
   getCollectionFacets,
   listSpecimensForCollection,
@@ -328,7 +328,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                 category={specimen.category}
                 thumbnailKey={specimen.thumbnail_key}
                 videoKey={specimen.video_key}
-                tdn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdn) : specimenGraph(specimen.slug)}
+                tdxn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdxn) : specimenGraph(specimen.slug)}
               />
             </div>
 
@@ -511,7 +511,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
     // ---- React cover roots: mount SpecimenCoverGraph into appended cards ----
     // SSR cards already carry a client:visible island; appended cards get the
-    // SAME component mounted here (no SSR tdn prop, so it lazy-fetches its graph).
+    // SAME component mounted here (no SSR tdxn prop, so it lazy-fetches its graph).
     // We lazy-mount with an IntersectionObserver to mirror client:visible -- a
     // card's viewer only spawns when it scrolls near the viewport.
     const coverRoots = new WeakMap<Element, Root>();
@@ -1878,7 +1878,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     min-height: 132px;
   }
 
-  /* List rows are compact -- hide the TdnViewer's react-flow zoom/fit controls
+  /* List rows are compact -- hide the TdxnViewer's react-flow zoom/fit controls
      in list view only (they stay in gallery, where covers are larger). */
   .collection-shell[data-view="list"] .specimen-card__cover :global(.react-flow__controls) {
     display: none;

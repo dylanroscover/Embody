@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect, type CSSProperties, type ReactNode } from "react";
-import { tokenize, leadingSpaces, type Seg } from "../lib/tdnTokenize";
+import { tokenize, leadingSpaces, type Seg } from "../lib/tdxnTokenize";
 
 // Read-only, TDXN-aware YAML viewer for the specimen "raw TDXN" block:
 // syntax highlighting (with the TDXN =expression shorthand in the brand accent),
@@ -8,14 +8,14 @@ import { tokenize, leadingSpaces, type Seg } from "../lib/tdnTokenize";
 // the highlighted lines so the colored YAML shows before hydration; the controls
 // come alive on the client.
 
-export type TdnYamlSummary = {
+export type TdxnYamlSummary = {
   operators: number;
   connections: number;
   annotations: number;
   lines: number;
 };
 
-type Props = { raw: string; summary: TdnYamlSummary };
+type Props = { raw: string; summary: TdxnYamlSummary };
 
 type Line = {
   n: number; // 1-based line number
@@ -149,7 +149,7 @@ function buildJumps(lines: Line[]): Jump[] {
 
 // Render one segment, wrapping any case-insensitive query matches in <mark>.
 function renderSeg(seg: Seg, key: number, q: string): ReactNode {
-  const cls = seg.c ? `tdn-yaml__${seg.c}` : undefined;
+  const cls = seg.c ? `tdxn-yaml__${seg.c}` : undefined;
   if (!q) return <span key={key} className={cls}>{seg.t}</span>;
   const lower = seg.t.toLowerCase();
   const ql = q.toLowerCase();
@@ -160,7 +160,7 @@ function renderSeg(seg: Seg, key: number, q: string): ReactNode {
   let pk = 0;
   while (at >= 0) {
     if (at > from) parts.push(seg.t.slice(from, at));
-    parts.push(<mark key={pk++} className="tdn-yaml__hit">{seg.t.slice(at, at + ql.length)}</mark>);
+    parts.push(<mark key={pk++} className="tdxn-yaml__hit">{seg.t.slice(at, at + ql.length)}</mark>);
     from = at + ql.length;
     at = lower.indexOf(ql, from);
   }
@@ -172,7 +172,7 @@ function renderSeg(seg: Seg, key: number, q: string): ReactNode {
 
 const EMPTY: ReadonlySet<number> = new Set();
 
-export default function TdnYamlViewer({ raw, summary }: Props) {
+export default function TdxnYamlViewer({ raw, summary }: Props) {
   const { lines, truncated, totalLines } = useMemo(() => parse(raw), [raw]);
   const jumps = useMemo(() => buildJumps(lines), [lines]);
   const tokens = useMemo(() => lines.map((l) => (l.blank ? [] : tokenize(l.text))), [lines]);
@@ -286,44 +286,44 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
   const lnDigits = Math.max(3, String(lines.length).length);
 
   return (
-    <div className="tdn-yaml" style={{ "--tdn-ln-digits": lnDigits } as CSSProperties}>
-      <div className="tdn-yaml__summary">{summaryBits.join("  ·  ")}</div>
+    <div className="tdxn-yaml" style={{ "--tdxn-ln-digits": lnDigits } as CSSProperties}>
+      <div className="tdxn-yaml__summary">{summaryBits.join("  ·  ")}</div>
 
       {truncated && (
         <div
-          className="tdn-yaml__truncated"
+          className="tdxn-yaml__truncated"
           role="status"
           style={{ padding: "0.4rem 0.7rem", fontSize: "0.8rem", opacity: 0.85 }}
         >
           Showing the first {MAX_RENDER_LINES.toLocaleString()} of {totalLines.toLocaleString()} lines.
-          Use the copy button or download the .tdn to get the whole network.
+          Use the copy button or download the .tdxn to get the whole network.
         </div>
       )}
 
-      <div className="tdn-yaml__toolbar">
-        <div className="tdn-yaml__search">
+      <div className="tdxn-yaml__toolbar">
+        <div className="tdxn-yaml__search">
           <input
             type="search"
-            className="tdn-yaml__search-input"
+            className="tdxn-yaml__search-input"
             placeholder="search..."
             aria-label="Search the TDXN YAML"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           {q && (
-            <span className="tdn-yaml__search-nav">
-              <span className="tdn-yaml__count">{matches.length ? `${active + 1}/${matches.length}` : "0"}</span>
+            <span className="tdxn-yaml__search-nav">
+              <span className="tdxn-yaml__count">{matches.length ? `${active + 1}/${matches.length}` : "0"}</span>
               <button type="button" aria-label="Previous match" disabled={!matches.length} onClick={() => gotoMatch(-1)}>&#8593;</button>
               <button type="button" aria-label="Next match" disabled={!matches.length} onClick={() => gotoMatch(1)}>&#8595;</button>
             </span>
           )}
         </div>
-        <div className="tdn-yaml__tools">
+        <div className="tdxn-yaml__tools">
           {jumps.length > 1 && (
-            <div className="tdn-yaml__jump" ref={jumpRef}>
+            <div className="tdxn-yaml__jump" ref={jumpRef}>
               <button
                 type="button"
-                className="tdn-yaml__jump-btn"
+                className="tdxn-yaml__jump-btn"
                 aria-haspopup="listbox"
                 aria-expanded={jumpOpen}
                 onClick={() => { setJumpActive(0); setJumpOpen((o) => !o); }}
@@ -336,21 +336,21 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                 }}
               >
                 <span>jump to...</span>
-                <svg className="tdn-yaml__chev" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.4" /></svg>
+                <svg className="tdxn-yaml__chev" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.4" /></svg>
               </button>
               {jumpOpen && (
                 <ul
-                  className="tdn-yaml__jump-menu"
+                  className="tdxn-yaml__jump-menu"
                   role="listbox"
                   aria-label="Jump to section"
-                  aria-activedescendant={`tdn-jump-${jumpActive}`}
+                  aria-activedescendant={`tdxn-jump-${jumpActive}`}
                   tabIndex={-1}
                   ref={(el) => el?.focus()}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       e.preventDefault();
                       setJumpOpen(false);
-                      (jumpRef.current?.querySelector(".tdn-yaml__jump-btn") as HTMLElement | null)?.focus();
+                      (jumpRef.current?.querySelector(".tdxn-yaml__jump-btn") as HTMLElement | null)?.focus();
                     } else if (e.key === "ArrowDown") {
                       e.preventDefault();
                       setJumpActive((a) => Math.min(a + 1, jumps.length - 1));
@@ -374,38 +374,38 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                   {jumps.map((k, i) => (
                     <li
                       key={k.idx}
-                      id={`tdn-jump-${i}`}
+                      id={`tdxn-jump-${i}`}
                       role="option"
                       aria-selected={i === jumpActive}
-                      className={`tdn-yaml__jump-opt${i === jumpActive ? " is-active" : ""}`}
+                      className={`tdxn-yaml__jump-opt${i === jumpActive ? " is-active" : ""}`}
                       onMouseEnter={() => setJumpActive(i)}
                       onClick={() => { jumpTo(k.idx); setJumpOpen(false); }}
                     >
-                      <span className="tdn-yaml__jump-name">{k.name}</span>
-                      <span className="tdn-yaml__jump-kind">{k.kind === "anno" ? "annotation" : (k.type || "")}</span>
+                      <span className="tdxn-yaml__jump-name">{k.name}</span>
+                      <span className="tdxn-yaml__jump-kind">{k.kind === "anno" ? "annotation" : (k.type || "")}</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
           )}
-          <button type="button" className="tdn-yaml__btn" onClick={collapseAll}>
-            <svg className="tdn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          <button type="button" className="tdxn-yaml__btn" onClick={collapseAll}>
+            <svg className="tdxn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
             collapse all
           </button>
-          <button type="button" className="tdn-yaml__btn" onClick={expandAll}>
-            <svg className="tdn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 2.5v5M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          <button type="button" className="tdxn-yaml__btn" onClick={expandAll}>
+            <svg className="tdxn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 2.5v5M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
             expand all
           </button>
           <button
             type="button"
-            className={`tdn-yaml__btn${wrap ? " is-on" : ""}`}
+            className={`tdxn-yaml__btn${wrap ? " is-on" : ""}`}
             aria-pressed={wrap}
             title="Toggle word wrap"
             aria-label="Toggle word wrap"
             onClick={() => setWrap((w) => !w)}
           >
-            <svg className="tdn-yaml__btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg className="tdxn-yaml__btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="3" y1="6" x2="21" y2="6" />
               <path d="M3 12h15a3 3 0 1 1 0 6h-4" />
               <polyline points="16 16 14 18 16 20" />
@@ -415,7 +415,7 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
         </div>
       </div>
 
-      <div ref={codeRef} className={`tdn-yaml__code${wrap ? " is-wrap" : ""}`}>
+      <div ref={codeRef} className={`tdxn-yaml__code${wrap ? " is-wrap" : ""}`}>
         {visible.map((i) => {
           const l = lines[i];
           if (!l) return null;
@@ -424,13 +424,13 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
             <div
               key={i}
               data-i={i}
-              className={`tdn-yaml__line${matches[active] === i && q ? " is-active" : ""}`}
+              className={`tdxn-yaml__line${matches[active] === i && q ? " is-active" : ""}`}
             >
-              <span className="tdn-yaml__gutter">
+              <span className="tdxn-yaml__gutter">
                 {l.foldable ? (
                   <button
                     type="button"
-                    className="tdn-yaml__fold"
+                    className="tdxn-yaml__fold"
                     aria-label={isFolded ? "Expand section" : "Collapse section"}
                     aria-expanded={!isFolded}
                     onClick={() => toggleFold(i)}
@@ -438,13 +438,13 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                     {isFolded ? "▸" : "▾"}
                   </button>
                 ) : (
-                  <span className="tdn-yaml__fold tdn-yaml__fold--none" />
+                  <span className="tdxn-yaml__fold tdxn-yaml__fold--none" />
                 )}
-                <span className="tdn-yaml__ln">{l.n}</span>
+                <span className="tdxn-yaml__ln">{l.n}</span>
               </span>
-              <code className="tdn-yaml__text">
+              <code className="tdxn-yaml__text">
                 {l.blank ? " " : (tokens[i] ?? []).map((s, k) => renderSeg(s, k, q))}
-                {isFolded && <span className="tdn-yaml__ellipsis"> &#8943;</span>}
+                {isFolded && <span className="tdxn-yaml__ellipsis"> &#8943;</span>}
               </code>
             </div>
           );

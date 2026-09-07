@@ -5,7 +5,7 @@ export interface BlobWrite {
 
 const encoder = new TextEncoder();
 
-export async function putTdn(blobs: R2Bucket, jsonString: string): Promise<BlobWrite> {
+export async function putTdxn(blobs: R2Bucket, jsonString: string): Promise<BlobWrite> {
   const bytes = encoder.encode(jsonString);
   const sha256 = await sha256Hex(bytes);
   const key = sha256;
@@ -22,7 +22,7 @@ export async function putTdn(blobs: R2Bucket, jsonString: string): Promise<BlobW
   return { key, sha256 };
 }
 
-export async function getTdn(blobs: R2Bucket, key: string): Promise<string | null> {
+export async function getTdxn(blobs: R2Bucket, key: string): Promise<string | null> {
   if (!key) return null;
 
   const object = await blobs.get(key);

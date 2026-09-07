@@ -10,7 +10,7 @@
 // that have no picture follow as plain rows.
 import { Picture } from "astro:assets";
 import { parse } from "yaml";
-import CopyTdnEnvelopeButton from "../CopyTdnEnvelopeButton";
+import CopyTdxnEnvelopeButton from "../CopyTdxnEnvelopeButton";
 import frameA from "../../assets/practice/kandinsky-a.jpg";
 import frameB from "../../assets/practice/kandinsky-b.jpg";
 import frameC from "../../assets/practice/kandinsky-c.jpg";
@@ -21,21 +21,21 @@ import tdxn03 from "../../assets/practice/kandinsky-03.tdxn?raw";
 const frames = [
   {
     img: frameA,
-    tdn: parse(tdxn01) as Record<string, unknown>,
+    tdxn: parse(tdxn01) as Record<string, unknown>,
     what: "Build entire networks from a sentence",
     say: "Build me a Kandinsky-style composition. Circles, a few sharp wedges, thin black lines on paper.",
     alt: "A Kandinsky-style composition rendered in TouchDesigner: a large dark circle with a yellow rim, translucent colored discs, red wedges and thin black lines on pale paper."
   },
   {
     img: frameB,
-    tdn: parse(tdxn02) as Record<string, unknown>,
+    tdxn: parse(tdxn02) as Record<string, unknown>,
     what: "Try a different approach in seconds",
     say: "Actually, make it warmer. Squares instead of circles, and push the whole cluster off-center.",
     alt: "The same composition rebuilt from rotated squares in a warm palette on ochre paper, with the cluster shifted to the right."
   },
   {
     img: frameC,
-    tdn: parse(tdxn03) as Record<string, unknown>,
+    tdxn: parse(tdxn03) as Record<string, unknown>,
     what: "Set any parameter",
     say: "Set the seed to 42.",
     alt: "The same warm square style re-scattered by a new seed: a large nested square upper-left, a fan of thin lines, red wedges and small squares on ochre paper."
@@ -68,8 +68,8 @@ const sizes = "(max-width: 720px) calc(100vw - 3rem), min(530px, calc(50vw - 3re
               decoding="async"
               class="practice-turn__img"
             />
-            <CopyTdnEnvelopeButton
-              tdn={f.tdn}
+            <CopyTdxnEnvelopeButton
+              tdxn={f.tdxn}
               className="copy-button--corner practice-turn__copy"
               client:visible
             />

@@ -6,7 +6,7 @@ import type {
   RGB
 } from "@embody/contracts";
 
-type TdnDict = Record<string, unknown>;
+type TdxnDict = Record<string, unknown>;
 
 const FAMILIES = ["TOP", "CHOP", "SOP", "DAT", "MAT", "POP", "COMP"] as const;
 
@@ -14,7 +14,7 @@ const FAMILIES = ["TOP", "CHOP", "SOP", "DAT", "MAT", "POP", "COMP"] as const;
 // and `children` inside a nested COMP -- accept either (and both, defensively),
 // so the same walk works at any depth. Order (children before operators) matches
 // the original flatten recursion so the dense view stays byte-identical.
-function networkOperators(dict: TdnDict): TdnDict[] {
+function networkOperators(dict: TdxnDict): TdxnDict[] {
   return [...asRecords(dict.children), ...asRecords(dict.operators)];
 }
 
@@ -22,10 +22,10 @@ function networkOperators(dict: TdnDict): TdnDict[] {
  * Descend the raw TDXN tree to the sub-network at `path` (each segment a COMP
  * name); the empty path is the document root. Returns null if a segment names no
  * operator at its level. The returned dict is the network whose operators the
- * viewer should draw -- feed it straight to parseTDNLevel via the path.
+ * viewer should draw -- feed it straight to parseTDXNLevel via the path.
  */
-export function getNetworkAtPath(tdn: TdnDict, path: string[]): TdnDict | null {
-  let net: TdnDict = tdn;
+export function getNetworkAtPath(tdxn: TdxnDict, path: string[]): TdxnDict | null {
+  let net: TdxnDict = tdxn;
   for (const segment of path) {
     const match = networkOperators(net).find((op) => readString(op.name) === segment);
     if (!match) return null;
@@ -37,11 +37,11 @@ export function getNetworkAtPath(tdn: TdnDict, path: string[]): TdnDict | null {
 /**
  * The raw operator records at a single network level (the sub-network at `path`,
  * or the root when empty). Same level the navigable viewer draws via
- * parseTDNLevel -- use it to look up a selected node's raw fields (parameters,
+ * parseTDXNLevel -- use it to look up a selected node's raw fields (parameters,
  * custom_pars, comment, tags) without re-walking the whole tree.
  */
-export function operatorsAtLevel(tdn: TdnDict, path: string[]): TdnDict[] {
-  const net = getNetworkAtPath(tdn, path);
+export function operatorsAtLevel(tdxn: TdxnDict, path: string[]): TdxnDict[] {
+  const net = getNetworkAtPath(tdxn, path);
   return net ? networkOperators(net) : [];
 }
 
@@ -49,19 +49,19 @@ export function operatorsAtLevel(tdn: TdnDict, path: string[]): TdnDict[] {
  * Parse the WHOLE network into one flat graph, recursing into every nested COMP
  * so all descendants are drawn at once. This is the dense, all-in-one-plane view
  * (homepage hero, card-cover thumbnails). For the navigable, TD-faithful
- * one-level-at-a-time view, use parseTDNLevel instead.
+ * one-level-at-a-time view, use parseTDXNLevel instead.
  */
-export function parseTDN(tdn: TdnDict): NormalizedGraph {
-  return buildGraph(networkOperators(tdn), asRecords(tdn.annotations), true, typeDefaultSizes(tdn));
+export function parseTDXN(tdxn: TdxnDict): NormalizedGraph {
+  return buildGraph(networkOperators(tdxn), asRecords(tdxn.annotations), true, typeDefaultSizes(tdxn));
 }
 
 // Per-type default node sizes from the document's `type_defaults`. An operator
 // that omits its own `size` inherits the default for its type (the TDXN exporter
 // writes size per-op only when it differs), so we resolve it here for a faithful
 // 1:1 layout instead of falling back to a guessed tile size.
-function typeDefaultSizes(tdn: TdnDict): Map<string, [number, number]> {
+function typeDefaultSizes(tdxn: TdxnDict): Map<string, [number, number]> {
   const map = new Map<string, [number, number]>();
-  const defs = isRecord(tdn.type_defaults) ? tdn.type_defaults : null;
+  const defs = isRecord(tdxn.type_defaults) ? tdxn.type_defaults : null;
   if (!defs) return map;
   for (const [type, def] of Object.entries(defs)) {
     if (!isRecord(def)) continue;
@@ -78,19 +78,19 @@ function typeDefaultSizes(tdn: TdnDict): Map<string, [number, number]> {
  * representation of a TD network, navigated like TD's own editor (enter a COMP,
  * climb back out). Returns an empty graph if the path doesn't resolve.
  */
-export function parseTDNLevel(tdn: TdnDict, path: string[]): NormalizedGraph {
-  const net = getNetworkAtPath(tdn, path);
+export function parseTDXNLevel(tdxn: TdxnDict, path: string[]): NormalizedGraph {
+  const net = getNetworkAtPath(tdxn, path);
   if (!net) return { nodes: [], edges: [], annotations: [] };
   // type_defaults live at the document root, not inside nested COMPs.
-  return buildGraph(networkOperators(net), asRecords(net.annotations), false, typeDefaultSizes(tdn));
+  return buildGraph(networkOperators(net), asRecords(net.annotations), false, typeDefaultSizes(tdxn));
 }
 
 // Shared engine for both parses. `recurse` decides whether a COMP's children are
 // walked into the same graph (flatten) or summarized as a `childCount` on the
 // COMP's own node (single level).
 function buildGraph(
-  rootOperators: TdnDict[],
-  rootAnnotations: TdnDict[],
+  rootOperators: TdxnDict[],
+  rootAnnotations: TdxnDict[],
   recurse: boolean,
   typeSizes: Map<string, [number, number]>
 ): NormalizedGraph {
@@ -111,7 +111,7 @@ function buildGraph(
   // Render TOP's camera/geometry, etc.) is a real dependency the wires don't
   // draw. Collect plain-string param values; resolveParamRefs() keeps only those
   // that name an actual node and emits a dotted `ref` edge for each.
-  function collectParamRefs(op: TdnDict, parentPath: string, opId: string): void {
+  function collectParamRefs(op: TdxnDict, parentPath: string, opId: string): void {
     const params = isRecord(op.parameters)
       ? op.parameters
       : isRecord(op.pars)
@@ -149,7 +149,7 @@ function buildGraph(
     }
   }
 
-  function walkOperators(operators: TdnDict[], parentPath: string): void {
+  function walkOperators(operators: TdxnDict[], parentPath: string): void {
     for (const op of operators) {
       const name = readString(op.name);
       if (!name) continue;
@@ -241,7 +241,7 @@ function collectEdges(
   });
 }
 
-function collectAnnotations(items: TdnDict[], annotations: GraphAnnotation[]): void {
+function collectAnnotations(items: TdxnDict[], annotations: GraphAnnotation[]): void {
   for (const item of items) {
     const position = readPair(item.position);
     const size = readPair(item.size);
@@ -304,7 +304,7 @@ function joinPath(parentPath: string, name: string): string {
   return parentPath ? `${parentPath}/${name}` : name;
 }
 
-function asRecords(value: unknown): TdnDict[] {
+function asRecords(value: unknown): TdxnDict[] {
   if (!Array.isArray(value)) return [];
   return value.filter(isRecord);
 }
@@ -344,6 +344,6 @@ function readRGB(value: unknown): RGB | undefined {
   return [r, g, b];
 }
 
-function isRecord(value: unknown): value is TdnDict {
+function isRecord(value: unknown): value is TdxnDict {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

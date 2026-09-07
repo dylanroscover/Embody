@@ -1,22 +1,22 @@
 import { env } from "cloudflare:workers";
 import { DEFAULT_LICENSE, MAX_CATEGORIES, SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_LICENSE_VALUES, SUBMIT_REQUIRES } from "@embody/contracts";
-import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
+import { detectObviousMalware, scanTdxn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import type { APIRoute } from "astro";
 import {
   addSpecimenVersion,
   deleteSpecimenById,
-  getCurrentTdnBlobForSlug,
+  getCurrentTdxnBlobForSlug,
   getSpecimenBySlug,
   getSpecimenForEdit,
   setSpecimenVisibility,
   updateSpecimenMetadata,
   type SpecimenEditData
 } from "../../../server/db";
-import { getParsedTdnForSlug, MAX_TDN_TEXT_CHARS } from "../../../server/tdn";
+import { getParsedTdxnForSlug, MAX_TDXN_TEXT_CHARS } from "../../../server/tdxn";
 import { requireUser } from "../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
-import { byteLength, getTdn, putThumbnail, putTdn } from "../../../server/r2";
+import { byteLength, getTdxn, putThumbnail, putTdxn } from "../../../server/r2";
 
 export const prerender = false;
 
@@ -43,7 +43,7 @@ export const GET: APIRoute = async ({ params }) => {
 };
 
 // Owner-only edit. Metadata (title/description/tags/license/level/category/
-// requires) always updates. If a NEW tdn is supplied AND differs from the current
+// requires) always updates. If a NEW tdxn is supplied AND differs from the current
 // network, it re-runs the SAME safety gates as submit (parse -> capability scan ->
 // obvious-malware block) and, only if it clears them, stores the blob + appends a
 // new specimen_versions row (addSpecimenVersion).
@@ -66,11 +66,11 @@ export const PUT: APIRoute = async ({ params, request }) => {
 
     // Current parsed TDXN -- the FTS mirror's dat_text source (syncSpecimensFts
     // replaces the whole row). Overwritten with the new network below if it changes.
-    let parsedTdn: Record<string, unknown> | null = null;
+    let parsedTdxn: Record<string, unknown> | null = null;
     try {
-      parsedTdn = (await getParsedTdnForSlug(env.DB, env.BLOBS, slug, auth.specimen.authorId))?.tdn ?? null;
+      parsedTdxn = (await getParsedTdxnForSlug(env.DB, env.BLOBS, slug, auth.specimen.authorId))?.tdxn ?? null;
     } catch {
-      parsedTdn = null;
+      parsedTdxn = null;
     }
 
     // ---- Network (TDXN) change -----------------------------------------------
@@ -78,22 +78,22 @@ export const PUT: APIRoute = async ({ params, request }) => {
     // authenticated + ownership-checked above, so no turnstile here.
     let newVersion: number | undefined;
     if (typeof body.value.tdn === "string") {
-      const newTdn = body.value.tdn.trim();
+      const newTdxn = body.value.tdn.trim();
       let currentText: string | null = null;
       try {
-        const blob = await getCurrentTdnBlobForSlug(env.DB, slug, auth.specimen.authorId);
-        currentText = blob ? await getTdn(env.BLOBS, blob.key) : null;
+        const blob = await getCurrentTdxnBlobForSlug(env.DB, slug, auth.specimen.authorId);
+        currentText = blob ? await getTdxn(env.BLOBS, blob.key) : null;
       } catch {
         currentText = null;
       }
 
-      if (newTdn && newTdn !== (currentText?.trim() ?? "")) {
-        const parsed = parseTdn(newTdn);
+      if (newTdxn && newTdxn !== (currentText?.trim() ?? "")) {
+        const parsed = parseTdxn(newTdxn);
         if (!parsed.ok) {
-          return errorResponse(400, "invalid_tdn", parsed.detail);
+          return errorResponse(400, "invalid_tdxn", parsed.detail);
         }
 
-        const scan = scanTdn(parsed.tdn);
+        const scan = scanTdxn(parsed.tdxn);
         if (scan.verdict === "blocked") {
           return jsonResponse(
             {
@@ -105,7 +105,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
           );
         }
 
-        const malware = detectObviousMalware(parsed.tdn);
+        const malware = detectObviousMalware(parsed.tdxn);
         if (malware.malicious) {
           return jsonResponse(
             {
@@ -118,7 +118,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
           );
         }
 
-        const stored = await putTdn(env.BLOBS, newTdn);
+        const stored = await putTdxn(env.BLOBS, newTdxn);
         const result = await addSpecimenVersion(env.DB, {
           specimenId: auth.specimen.id,
           slug: auth.specimen.slug,
@@ -126,14 +126,14 @@ export const PUT: APIRoute = async ({ params, request }) => {
           title: body.value.title,
           description: body.value.description,
           tags: body.value.tags,
-          tdnR2Key: stored.key,
-          tdnSha256: stored.sha256,
-          sizeBytes: byteLength(newTdn),
+          tdxnR2Key: stored.key,
+          tdxnSha256: stored.sha256,
+          sizeBytes: byteLength(newTdxn),
           scan,
-          parsedTdn: parsed.tdn
+          parsedTdxn: parsed.tdxn
         });
         newVersion = result.versionNum;
-        parsedTdn = parsed.tdn; // metadata FTS below mirrors the new network
+        parsedTdxn = parsed.tdxn; // metadata FTS below mirrors the new network
       }
     }
 
@@ -158,7 +158,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
       categories: body.value.categories,
       requires: body.value.requires,
       thumbnailKey,
-      parsedTdn
+      parsedTdxn
     });
 
     return jsonResponse({ updated: true, slug: auth.specimen.slug, version: newVersion });
@@ -206,24 +206,24 @@ export const PATCH: APIRoute = async ({ params, request }) => {
 };
 
 // TDXN is YAML v2.0 (a strict JSON superset). Mirrors the submit endpoint's gate.
-function parseTdn(
+function parseTdxn(
   value: string
-): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
+): { ok: true; tdxn: Record<string, unknown> } | { ok: false; detail: string } {
   // Bound the synchronous parse on the edit path (DoS guard), same cap the read
-  // path enforces in parseTdnYaml.
-  if (value.length > MAX_TDN_TEXT_CHARS) {
-    return { ok: false, detail: "tdn is too large." };
+  // path enforces in parseTdxnYaml.
+  if (value.length > MAX_TDXN_TEXT_CHARS) {
+    return { ok: false, detail: "tdxn is too large." };
   }
   let parsed: unknown;
   try {
     parsed = parseYaml(value) as unknown;
   } catch {
-    return { ok: false, detail: "tdn must be valid YAML or JSON." };
+    return { ok: false, detail: "tdxn must be valid YAML or JSON." };
   }
   if (!isRecord(parsed)) {
-    return { ok: false, detail: "tdn must parse to a mapping (object)." };
+    return { ok: false, detail: "tdxn must parse to a mapping (object)." };
   }
-  return { ok: true, tdn: parsed };
+  return { ok: true, tdxn: parsed };
 }
 
 // Owner-only hard delete of a specimen and all of its dependent rows.
@@ -296,7 +296,7 @@ interface EditValue {
 }
 
 // Validate the edit payload. Mirrors readSubmitRequest's whitelist rules for the
-// frozen vocabularies, minus turnstile. tdn + thumbnail are optional -- supplied
+// frozen vocabularies, minus turnstile. tdxn + thumbnail are optional -- supplied
 // only when the owner actually changed the network or the cover image.
 async function readEditRequest(
   request: Request,
@@ -390,7 +390,7 @@ async function readEditRequest(
 
   // Optional new network body; only present when the owner edited the TDXN. Full
   // validation (parse + scan) happens in the PUT handler when it actually changed.
-  const tdn = typeof raw.tdn === "string" ? raw.tdn : undefined;
+  const tdxn = typeof raw.tdn === "string" ? raw.tdn : undefined;
 
   // Optional replacement thumbnail (a client-resized data URL). putThumbnail
   // re-validates the content type + byte cap and ignores anything malformed.
@@ -406,7 +406,7 @@ async function readEditRequest(
       level,
       categories,
       requires,
-      tdn,
+      tdn: tdxn,
       thumbnail
     }
   };

@@ -7,7 +7,7 @@ import {
   SUBMIT_REQUIRE_GROUPS
 } from "@embody/contracts";
 import Base from "../layouts/Base.astro";
-import TdnYamlEditor from "../components/TdnYamlEditor";
+import TdxnYamlEditor from "../components/TdxnYamlEditor";
 
 export const prerender = false;
 
@@ -191,13 +191,13 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       </div>
       </div>
 
-      <div class="submit-col submit-col--tdn">
+      <div class="submit-col submit-col--tdxn">
       <div class="submit-field submit-field--editor">
         <span>TDXN (YAML)</span>
         <small class="submit-hint">
           quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDXN envelope &mdash; paste it here.
         </small>
-        <TdnYamlEditor
+        <TdxnYamlEditor
           client:load
           name="tdn"
           placeholder={'format: tdxn\nversion: \'2.1\'\nname: my_network\ntype: baseCOMP\noperators: []'}
@@ -262,7 +262,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
   // the TDXN parses to a mapping. It stays clickable on purpose: a truly
   // `disabled` button fires no click, so we could never explain WHY it isn't
   // ready. The TDXN editor (a React island) validates on every edit and
-  // broadcasts a bubbling `tdn:change` event carrying its validity -- so the
+  // broadcasts a bubbling `tdxn:change` event carrying its validity -- so the
   // button never lights up on unparseable YAML and re-checks after any edit.
   function titleEl() {
     return form?.querySelector('[name="title"]');
@@ -272,14 +272,14 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     return !el || !String(el.value || "").trim();
   }
 
-  let tdnValid = false;
-  form?.addEventListener("tdn:change", (event) => {
-    tdnValid = Boolean(event.detail && event.detail.valid);
+  let tdxnValid = false;
+  form?.addEventListener("tdxn:change", (event) => {
+    tdxnValid = Boolean(event.detail && event.detail.valid);
     refreshReady();
   });
 
   function isReady() {
-    return !titleMissing() && tdnValid;
+    return !titleMissing() && tdxnValid;
   }
 
   function refreshReady() {
@@ -439,14 +439,14 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     const data = new FormData(form);
 
     const title = String(data.get("title") || "").trim();
-    const tdnRaw = String(data.get("tdn") || "").trim();
+    const tdxnRaw = String(data.get("tdn") || "").trim();
     if (!isReady()) {
       // Summarize what's missing near the button, inline the title error under
       // the title field, and land focus on the first problem. The TDXN editor
       // shows its own format error live, so we don't duplicate it here.
       const probs = [];
       if (titleMissing()) probs.push("a title");
-      if (!tdnValid) probs.push("a valid TDXN network");
+      if (!tdxnValid) probs.push("a valid TDXN network");
       setFieldError("title", titleMissing() ? "add a title." : "");
       const list =
         probs.length === 1
@@ -460,8 +460,8 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       }
       return;
     }
-    // The client gates submit on valid-YAML-that-is-a-mapping (see TdnYamlEditor
-    // validateTdn). The server re-validates and runs the capability scan.
+    // The client gates submit on valid-YAML-that-is-a-mapping (see TdxnYamlEditor
+    // validateTdxn). The server re-validates and runs the capability scan.
 
     const tags = String(data.get("tags") || "")
       .split(",")
@@ -558,7 +558,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       level: String(data.get("level") || "intermediate"),
       categories: categoriesSel,
       requires: data.getAll("requires").map(String),
-      tdn: tdnRaw,
+      tdxn: tdxnRaw,
       thumbnail,
       visibility: data.get("visibility") === "public" ? "public" : "private",
       turnstileToken
@@ -1076,7 +1076,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
      centered submit button below ends up further from the editor's bottom than
      from the card's bottom edge. The editor field (flex: 1) fills the stretch.
      align-self works against an auto grid row where min-height: 100% does not. */
-  .submit-col--tdn {
+  .submit-col--tdxn {
     align-self: stretch;
   }
 

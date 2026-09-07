@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
-import { buildEmbodyEnvelope } from "../lib/tdnEnvelope";
+import { buildEmbodyEnvelope } from "../lib/tdxnEnvelope";
 
 const COPY_RESET_MS = 1500;
 const LABEL = "copy TDXN for TouchDesigner";
 
 interface Props {
-  tdn: Record<string, unknown>;
+  tdxn: Record<string, unknown>;
   slug?: string;
   version?: number;
   className?: string;
@@ -13,8 +13,8 @@ interface Props {
   label?: string;
 }
 
-export default function CopyTdnEnvelopeButton({
-  tdn,
+export default function CopyTdxnEnvelopeButton({
+  tdxn,
   slug,
   version,
   className = "",
@@ -33,7 +33,7 @@ export default function CopyTdnEnvelopeButton({
     // the PENDING build to a ClipboardItem created synchronously inside the
     // gesture (the WebKit-sanctioned pattern); engines without ClipboardItem
     // keep the plain writeText path.
-    const textPromise = buildEmbodyEnvelope(tdn, { slug, version }).then(
+    const textPromise = buildEmbodyEnvelope(tdxn, { slug, version }).then(
       (envelope) => JSON.stringify(envelope)
     );
 

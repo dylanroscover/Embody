@@ -2,11 +2,11 @@ import { emptyCapabilityCounts } from "@embody/contracts";
 import type { CapabilityCounts } from "@embody/contracts";
 import { describe, expect, it } from "vitest";
 
-import { scanTdn } from "./scanner";
+import { scanTdxn } from "./scanner";
 
-type TdnRecord = Record<string, unknown>;
+type TdxnRecord = Record<string, unknown>;
 
-function makeTdn(operators: TdnRecord[] = [], overrides: TdnRecord = {}): TdnRecord {
+function makeTdxn(operators: TdxnRecord[] = [], overrides: TdxnRecord = {}): TdxnRecord {
   return {
     format: "tdn",
     version: "1.4",
@@ -31,20 +31,20 @@ function counts(overrides: Partial<CapabilityCounts> = {}): CapabilityCounts {
   };
 }
 
-function expectEvidenceBounded(result: ReturnType<typeof scanTdn>): void {
+function expectEvidenceBounded(result: ReturnType<typeof scanTdxn>): void {
   for (const finding of result.findings) {
     expect(finding.evidence.length).toBeLessThanOrEqual(200);
   }
 }
 
-describe("scanTdn", () => {
+describe("scanTdxn", () => {
   it("returns clean for a source to null network", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       { name: "source1", type: "constantTOP" },
       { name: "null1", type: "nullTOP", inputs: ["source1"] }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("clean");
     expect(result.counts).toEqual(counts());
@@ -52,7 +52,7 @@ describe("scanTdn", () => {
   });
 
   it("flags execute DAT content and denylisted execute type", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "execute1",
         type: "executeDAT",
@@ -61,7 +61,7 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(
@@ -71,7 +71,7 @@ describe("scanTdn", () => {
   });
 
   it("flags expression parameters that read files", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "level1",
         type: "levelTOP",
@@ -81,14 +81,14 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ file_read_exprs: 1 }));
   });
 
   it("treats escaped expression prefixes as literals", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "level1",
         type: "levelTOP",
@@ -99,23 +99,23 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("clean");
     expect(result.counts).toEqual(counts());
   });
 
   it("counts webclient DAT as web_ops and denylisted_types", () => {
-    const tdn = makeTdn([{ name: "web1", type: "webclientDAT" }]);
+    const tdxn = makeTdxn([{ name: "web1", type: "webclientDAT" }]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ denylisted_types: 1, web_ops: 1 }));
   });
 
   it("counts COMP extension declarations", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "base1",
         type: "baseCOMP",
@@ -139,14 +139,14 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ extensions: 1 }));
   });
 
   it("counts non-empty storage payloads", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "base1",
         type: "baseCOMP",
@@ -154,14 +154,14 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ storage_payloads: 1 }));
   });
 
   it("counts traversal file parameters", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "text1",
         type: "textDAT",
@@ -171,14 +171,14 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ traversal_paths: 1 }));
   });
 
   it("blocks oversized input before scanning surfaces", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "text1",
         type: "textDAT",
@@ -187,7 +187,7 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("blocked");
     expect(result.counts).toEqual(counts());
@@ -196,7 +196,7 @@ describe("scanTdn", () => {
   });
 
   it("scans nested COMP children for evasion", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "outer",
         type: "baseCOMP",
@@ -217,7 +217,7 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(
@@ -226,7 +226,7 @@ describe("scanTdn", () => {
   });
 
   it("flags dynamic import expressions", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "math1",
         type: "mathCHOP",
@@ -236,14 +236,14 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ file_read_exprs: 1 }));
   });
 
   it("counts storage payload evasion", () => {
-    const tdn = makeTdn([
+    const tdxn = makeTdxn([
       {
         name: "base1",
         type: "baseCOMP",
@@ -253,7 +253,7 @@ describe("scanTdn", () => {
       }
     ]);
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ storage_payloads: 1 }));
@@ -261,8 +261,8 @@ describe("scanTdn", () => {
 
   it("counts external refs for tdn_ref and tox_ref", () => {
     for (const key of ["tdn_ref", "tox_ref"] as const) {
-      const tdn = makeTdn([{ name: "child1", type: "baseCOMP", [key]: "child1.tdn" }]);
-      const result = scanTdn(tdn);
+      const tdxn = makeTdxn([{ name: "child1", type: "baseCOMP", [key]: "child1.tdn" }]);
+      const result = scanTdxn(tdxn);
 
       expect(result.verdict).toBe("flagged");
       expect(result.counts).toEqual(counts({ external_refs: 1 }));
@@ -271,7 +271,7 @@ describe("scanTdn", () => {
   });
 
   it("merges type defaults into effective parameters", () => {
-    const tdn = makeTdn(
+    const tdxn = makeTdxn(
       [{ name: "level1", type: "levelTOP" }],
       {
         type_defaults: {
@@ -284,14 +284,14 @@ describe("scanTdn", () => {
       }
     );
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(counts({ file_read_exprs: 1 }));
   });
 
   it("detects every scanner surface in the adversarial integration fixture", () => {
-    const tdn = {
+    const tdxn = {
       format: "tdn",
       version: "1.4",
       network_path: "/test",
@@ -324,7 +324,7 @@ describe("scanTdn", () => {
       ]
     };
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("flagged");
     expect(result.counts).toEqual(
@@ -341,15 +341,15 @@ describe("scanTdn", () => {
   });
 
   it("fails closed on internal scan errors", () => {
-    const tdn = makeTdn([{ name: "null1", type: "nullTOP" }]);
-    Object.defineProperty(tdn, "type_defaults", {
+    const tdxn = makeTdxn([{ name: "null1", type: "nullTOP" }]);
+    Object.defineProperty(tdxn, "type_defaults", {
       enumerable: false,
       get() {
         throw new Error("boom");
       }
     });
 
-    const result = scanTdn(tdn);
+    const result = scanTdxn(tdxn);
 
     expect(result.verdict).toBe("blocked");
     expect(result.counts).toEqual(counts());

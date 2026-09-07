@@ -1,5 +1,5 @@
 import "@xyflow/react/dist/style.css";
-import "./tdnViewer.css";
+import "./tdxnViewer.css";
 
 import {
   Background,
@@ -23,16 +23,16 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
-import { operatorsAtLevel, parseTDN, parseTDNLevel } from "./parseTDN";
+import { operatorsAtLevel, parseTDXN, parseTDXNLevel } from "./parseTDXN";
 
 /**
  * The operator a viewer click selected, with the raw TDXN fields a properties
  * panel needs. Carried both to the optional `onSelect` callback and on a
- * `tdnviewer:select` DOM CustomEvent (detail) so a non-React host (an Astro
+ * `tdxnviewer:select` DOM CustomEvent (detail) so a non-React host (an Astro
  * page) can render the panel without a serialized callback prop. `null` = the
  * selection was cleared (a click on empty canvas).
  */
-export interface TdnSelection {
+export interface TdxnSelection {
   /** Drill path to the current level (COMP names, deepest last); empty at root. */
   path: string[];
   /** Node id at this level (the operator name). */
@@ -67,13 +67,13 @@ type PaddingObject = {
   y?: PaddingValue;
 };
 
-export interface TdnViewerProps {
-  tdn: Record<string, unknown>;
+export interface TdxnViewerProps {
+  tdxn: Record<string, unknown>;
   className?: string;
   height?: number | string;
   /**
    * Enable COMP drill-down + operator selection: a single click selects any
-   * operator (highlighted, and surfaced via onSelect / the tdnviewer:select
+   * operator (highlighted, and surfaced via onSelect / the tdxnviewer:select
    * event for a properties panel), and a double click on a COMP enters its
    * sub-network, with a breadcrumb "address bar" to climb back out -- a 1:1,
    * TD-faithful walk of the network. When false (the default), the whole network
@@ -83,11 +83,11 @@ export interface TdnViewerProps {
   /** Label for the root crumb in the breadcrumb bar (e.g. the specimen name). */
   rootLabel?: string;
   /**
-   * Selection callback (navigable only). Also dispatched as a `tdnviewer:select`
+   * Selection callback (navigable only). Also dispatched as a `tdxnviewer:select`
    * DOM CustomEvent on document, so an Astro page can subscribe without passing a
    * (non-serializable) function prop into the island.
    */
-  onSelect?: (selection: TdnSelection | null) => void;
+  onSelect?: (selection: TdxnSelection | null) => void;
   /**
    * fitView padding -- a number (all sides, fraction of the viewport) or per-side
    * values with units, e.g. { left: '27%', right: '27%' }. The app shell passes
@@ -143,7 +143,7 @@ type AnnotationNodeData = {
 };
 
 type AnnotationNode = Node<AnnotationNodeData, "annotation">;
-type TdnFlowNode = OperatorNode | AnnotationNode;
+type TdxnFlowNode = OperatorNode | AnnotationNode;
 
 // Operator-family colors follow TouchDesigner's own family palette so each node
 // reads with its correct family identity (TOPs purple, CHOPs green, SOPs blue,
@@ -223,8 +223,8 @@ function fitViewDuration(duration: number): number {
   return duration;
 }
 
-export function TdnViewer({
-  tdn,
+export function TdxnViewer({
+  tdxn,
   className,
   height = 520,
   navigable = false,
@@ -232,7 +232,7 @@ export function TdnViewer({
   onSelect,
   fitPadding = 0.24,
   showAnnotations = true
-}: TdnViewerProps) {
+}: TdxnViewerProps) {
   // Drill-down path: each segment a COMP name, deepest last. Empty = root. Only
   // meaningful when `navigable`; the flatten view ignores it.
   const [path, setPath] = useState<string[]>([]);
@@ -245,11 +245,11 @@ export function TdnViewer({
   useEffect(() => {
     setPath([]);
     setSelectedId(null);
-  }, [tdn]);
+  }, [tdxn]);
 
   const graph = useMemo(
-    () => (navigable ? parseTDNLevel(tdn, path) : parseTDN(tdn)),
-    [tdn, path, navigable]
+    () => (navigable ? parseTDXNLevel(tdxn, path) : parseTDXN(tdxn)),
+    [tdxn, path, navigable]
   );
   const { nodes, edges } = useMemo(
     () => toFlowElements(graph, showAnnotations),
@@ -262,21 +262,21 @@ export function TdnViewer({
   const opRecords = useMemo(() => {
     const map = new Map<string, Record<string, unknown>>();
     if (!navigable) return map;
-    for (const op of operatorsAtLevel(tdn, path)) {
+    for (const op of operatorsAtLevel(tdxn, path)) {
       const name = typeof op.name === "string" ? op.name : null;
       if (name) map.set(name, op);
     }
     return map;
-  }, [tdn, path, navigable]);
+  }, [tdxn, path, navigable]);
 
   // Emit a selection to the optional callback AND as a document CustomEvent, so
   // an Astro page (which can't pass a function prop into the island) can render
-  // the properties panel by subscribing to `tdnviewer:select`.
+  // the properties panel by subscribing to `tdxnviewer:select`.
   const emitSelect = useCallback(
-    (selection: TdnSelection | null) => {
+    (selection: TdxnSelection | null) => {
       onSelect?.(selection);
       if (typeof document !== "undefined") {
-        document.dispatchEvent(new CustomEvent("tdnviewer:select", { detail: selection }));
+        document.dispatchEvent(new CustomEvent("tdxnviewer:select", { detail: selection }));
       }
     },
     [onSelect]
@@ -291,7 +291,7 @@ export function TdnViewer({
   }, [graph]);
 
   const buildSelection = useCallback(
-    (id: string): TdnSelection | null => {
+    (id: string): TdxnSelection | null => {
       const gn = nodeById.get(id);
       if (!gn) return null;
       const raw = opRecords.get(id);
@@ -366,7 +366,7 @@ export function TdnViewer({
   // instead of React Flow's default zoom-IN (zoomOnDoubleClick is disabled
   // below). A double-click on a node is handled separately (enter a COMP), so
   // bail when the gesture started on a node -- otherwise entering would also fit.
-  const rfRef = useRef<ReactFlowInstance<TdnFlowNode, Edge> | null>(null);
+  const rfRef = useRef<ReactFlowInstance<TdxnFlowNode, Edge> | null>(null);
   const handleDoubleClick = useCallback((event: ReactMouseEvent) => {
     const target = event.target as HTMLElement | null;
     if (target?.closest?.(".react-flow__node")) return;
@@ -377,7 +377,7 @@ export function TdnViewer({
   // gates out the 2nd click of a double-click so the selection doesn't fight the
   // enter gesture below.
   const handleNodeClick = useCallback(
-    (event: ReactMouseEvent, node: TdnFlowNode) => {
+    (event: ReactMouseEvent, node: TdxnFlowNode) => {
       if (!navigable || event.detail > 1) return;
       if (node.type !== "operator") return;
       applySelection(node.id);
@@ -387,7 +387,7 @@ export function TdnViewer({
 
   // Double click a COMP-with-children to descend into its sub-network.
   const handleNodeDoubleClick = useCallback(
-    (_event: ReactMouseEvent, node: TdnFlowNode) => {
+    (_event: ReactMouseEvent, node: TdxnFlowNode) => {
       if (!navigable || node.type !== "operator" || !node.data.canEnter) return;
       setPath((prev) => [...prev, node.id]);
     },
@@ -513,19 +513,19 @@ export function TdnViewer({
 
   return (
     <div
-      className={["tdn-viewer", fullscreen ? "is-fullscreen" : "", className].filter(Boolean).join(" ")}
+      className={["tdxn-viewer", fullscreen ? "is-fullscreen" : "", className].filter(Boolean).join(" ")}
       style={style}
       onDoubleClick={handleDoubleClick}
     >
       {navigable && (
         <nav
-          className="tdn-viewer__breadcrumb"
+          className="tdxn-viewer__breadcrumb"
           aria-label="network path"
           title="Network path - where you are in the network. Double-click a COMP to enter it; click a level here to climb back out."
         >
           <button
             type="button"
-            className="tdn-crumb"
+            className="tdxn-crumb"
             onClick={() => setPath([])}
             disabled={path.length === 0}
             title={path.length === 0 ? "Network root" : "Back to root"}
@@ -533,11 +533,11 @@ export function TdnViewer({
             {rootLabel || "root"}
           </button>
           {path.map((segment, index) => (
-            <span className="tdn-crumb-group" key={`${segment}-${index}`}>
-              <span className="tdn-crumb__sep" aria-hidden="true">/</span>
+            <span className="tdxn-crumb-group" key={`${segment}-${index}`}>
+              <span className="tdxn-crumb__sep" aria-hidden="true">/</span>
               <button
                 type="button"
-                className="tdn-crumb"
+                className="tdxn-crumb"
                 aria-current={index === path.length - 1 ? "page" : undefined}
                 onClick={() => setPath(path.slice(0, index + 1))}
               >
@@ -594,7 +594,7 @@ export function TdnViewer({
       {fullscreen && (
         <button
           type="button"
-          className="tdn-viewer__close"
+          className="tdxn-viewer__close"
           onClick={() => setFullscreen(false)}
           aria-label="Close fullscreen"
         >
@@ -610,9 +610,9 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
   const compHandles = Array.from({ length: data.compInputCount }, (_, index) => index);
 
   const className = [
-    "tdn-operator",
-    data.canEnter ? "tdn-operator--enterable" : "",
-    data.selected ? "tdn-operator--selected" : ""
+    "tdxn-operator",
+    data.canEnter ? "tdxn-operator--enterable" : "",
+    data.selected ? "tdxn-operator--selected" : ""
   ]
     .filter(Boolean)
     .join(" ");
@@ -621,7 +621,7 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
     <div className={className} style={{ "--family-color": data.familyColor } as CSSProperties}>
       {inputHandles.map((index) => (
         <Handle
-          className="tdn-handle tdn-handle--target"
+          className="tdxn-handle tdxn-handle--target"
           id={`in-${index}`}
           key={`in-${index}`}
           position={Position.Left}
@@ -631,7 +631,7 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
       ))}
       {compHandles.map((index) => (
         <Handle
-          className="tdn-handle tdn-handle--target tdn-handle--comp"
+          className="tdxn-handle tdxn-handle--target tdxn-handle--comp"
           id={`comp-in-${index}`}
           key={`comp-in-${index}`}
           position={Position.Bottom}
@@ -640,14 +640,14 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
         />
       ))}
       <Handle
-        className="tdn-handle tdn-handle--source"
+        className="tdxn-handle tdxn-handle--source"
         id="out"
         position={Position.Right}
         type="source"
       />
       {data.isDockHost && (
         <Handle
-          className="tdn-handle tdn-handle--dock"
+          className="tdxn-handle tdxn-handle--dock"
           id="dock-out"
           position={Position.Bottom}
           style={{ left: "50%" }}
@@ -656,7 +656,7 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
       )}
       {data.isDocked && (
         <Handle
-          className="tdn-handle tdn-handle--dock"
+          className="tdxn-handle tdxn-handle--dock"
           id="dock-in"
           position={Position.Top}
           style={{ left: "50%" }}
@@ -665,7 +665,7 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
       )}
       {data.isRefSource && (
         <Handle
-          className="tdn-handle tdn-handle--ref"
+          className="tdxn-handle tdxn-handle--ref"
           id="ref-out"
           position={Position.Top}
           style={{ left: "62%" }}
@@ -674,19 +674,19 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
       )}
       {data.isRefTarget && (
         <Handle
-          className="tdn-handle tdn-handle--ref"
+          className="tdxn-handle tdxn-handle--ref"
           id="ref-in"
           position={Position.Top}
           style={{ left: "38%" }}
           type="target"
         />
       )}
-      <div className="tdn-operator__head" />
-      <div className="tdn-operator__body">
-        <div className="tdn-operator__name" title={data.name}>
+      <div className="tdxn-operator__head" />
+      <div className="tdxn-operator__body">
+        <div className="tdxn-operator__name" title={data.name}>
           {data.name}
         </div>
-        <div className="tdn-operator__meta">
+        <div className="tdxn-operator__meta">
           {/* Family is conveyed by the head-bar colour, so the type alone is
               enough here -- no redundant family chip. */}
           <span>{data.type}</span>
@@ -699,7 +699,7 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
 function AnnotationBox({ data }: NodeProps<AnnotationNode>) {
   return (
     <div
-      className="tdn-annotation"
+      className="tdxn-annotation"
       style={
         {
           "--annotation-color": data.color,
@@ -717,7 +717,7 @@ function AnnotationBox({ data }: NodeProps<AnnotationNode>) {
 function toFlowElements(
   graph: NormalizedGraph,
   showAnnotations: boolean
-): { nodes: TdnFlowNode[]; edges: Edge[] } {
+): { nodes: TdxnFlowNode[]; edges: Edge[] } {
   const inputCounts = new Map<string, number>();
   const compInputCounts = new Map<string, number>();
   const refSources = new Set<string>();
@@ -756,7 +756,7 @@ function toFlowElements(
   // top-left Y is -(y + height). Annotations convert the same way (see
   // annotationToNode), so operators land exactly inside their annotation COMP --
   // the 1:1 layout TD itself shows.
-  const nodes: TdnFlowNode[] = graph.nodes.map((node) => {
+  const nodes: TdxnFlowNode[] = graph.nodes.map((node) => {
     const w = node.w ?? DEFAULT_W;
     const h = node.h ?? DEFAULT_H;
     return {
@@ -778,7 +778,7 @@ function toFlowElements(
         // childCount is only set by the single-level parse, so canEnter is
         // naturally false in the flattened (non-navigable) view.
         canEnter: (node.childCount ?? 0) > 0,
-        // Set per-render by the selectedNodes memo in TdnViewer.
+        // Set per-render by the selectedNodes memo in TdxnViewer.
         selected: false
       },
       draggable: false,

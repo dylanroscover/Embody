@@ -15,14 +15,14 @@ import {
   search, searchKeymap, highlightSelectionMatches, SearchQuery, setSearchQuery, findNext, findPrevious
 } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
-import { EMBODY_TDN_MARKER, EMBODY_TDN_VERSION } from "@embody/contracts";
+import { EMBODY_TDXN_MARKER, EMBODY_TDXN_VERSION } from "@embody/contracts";
 
 // Editable TDXN/YAML editor for the contribute + edit forms, built on CodeMirror 6:
 // native virtualization (smooth at 10k+ lines), indentation folding (the +/- toolbar
 // buttons collapse/expand all sections), search, a wrap toggle, line numbers, and the
-// same token palette as the read-only TdnYamlViewer. The CM doc is mirrored to a
+// same token palette as the read-only TdxnYamlViewer. The CM doc is mirrored to a
 // hidden <textarea name=...> so the form's FormData contract is unchanged, and a
-// debounced `tdn:change` CustomEvent drives the form's submit gate. A full _embody_tdn
+// debounced `tdxn:change` CustomEvent drives the form's submit gate. A full _embody_tdn
 // JSON envelope pasted in is unwrapped to its bare YAML network.
 
 type Props = {
@@ -31,19 +31,19 @@ type Props = {
   placeholder?: string;
 };
 
-export type TdnValidity = { valid: boolean; message: string };
+export type TdxnValidity = { valid: boolean; message: string };
 
-export function validateTdn(text: string): TdnValidity {
+export function validateTdxn(text: string): TdxnValidity {
   const s = text.trim();
   if (!s) return { valid: false, message: "" };
   let doc: unknown;
   try {
     doc = parseYaml(s);
   } catch {
-    return { valid: false, message: "tdn must be valid YAML or JSON." };
+    return { valid: false, message: "tdxn must be valid YAML or JSON." };
   }
   if (doc === null || typeof doc !== "object" || Array.isArray(doc)) {
-    return { valid: false, message: "tdn must parse to a mapping (object)." };
+    return { valid: false, message: "tdxn must parse to a mapping (object)." };
   }
   return { valid: true, message: "" };
 }
@@ -70,12 +70,12 @@ const indentFold = foldService.of((state, lineStart) => {
   return { from: line.to, to: end };
 });
 
-// Syntax colors mapped to the .tdn-yaml viewer palette (CSS vars resolve on .tdn-editor).
-const tdnHighlight = HighlightStyle.define([
-  { tag: [t.definition(t.propertyName), t.propertyName, t.atom], color: "var(--tdn-key)" },
-  { tag: t.string, color: "var(--tdn-str)" },
-  { tag: [t.number, t.integer, t.float], color: "var(--tdn-num)" },
-  { tag: [t.bool, t.null, t.keyword], color: "var(--tdn-kw)" },
+// Syntax colors mapped to the .tdxn-yaml viewer palette (CSS vars resolve on .tdxn-editor).
+const tdxnHighlight = HighlightStyle.define([
+  { tag: [t.definition(t.propertyName), t.propertyName, t.atom], color: "var(--tdxn-key)" },
+  { tag: t.string, color: "var(--tdxn-str)" },
+  { tag: [t.number, t.integer, t.float], color: "var(--tdxn-num)" },
+  { tag: [t.bool, t.null, t.keyword], color: "var(--tdxn-kw)" },
   { tag: t.comment, color: "var(--text-faint)", fontStyle: "italic" },
   { tag: [t.punctuation, t.separator, t.meta], color: "var(--text-muted)" },
 ]);
@@ -91,7 +91,7 @@ const searchTermField = StateField.define<string>({
     return value;
   },
 });
-const searchMark = Decoration.mark({ class: "cm-tdnMatch" });
+const searchMark = Decoration.mark({ class: "cm-tdxnMatch" });
 function buildMatches(view: EditorView): DecorationSet {
   const term = view.state.field(searchTermField);
   const builder = new RangeSetBuilder<Decoration>();
@@ -121,19 +121,19 @@ const searchHighlighter = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations }
 );
 
-const tdnTheme = EditorView.theme({
+const tdxnTheme = EditorView.theme({
   "&": {
     height: "100%",
     color: "var(--text)",
     backgroundColor: "transparent",
-    fontSize: "var(--tdn-fs)",
+    fontSize: "var(--tdxn-fs)",
   },
   ".cm-scroller": {
     fontFamily: "var(--font-mono)",
-    lineHeight: "var(--tdn-lh)",
+    lineHeight: "var(--tdxn-lh)",
     overflow: "auto",
   },
-  ".cm-content": { caretColor: "var(--text)", padding: "var(--tdn-pad-y) 0" },
+  ".cm-content": { caretColor: "var(--text)", padding: "var(--tdxn-pad-y) 0" },
   ".cm-gutters": {
     backgroundColor: "var(--bg-code)",
     color: "var(--text-faint)",
@@ -149,7 +149,7 @@ const tdnTheme = EditorView.theme({
   "&.cm-focused .cm-selectionBackground, ::selection": { backgroundColor: "rgba(110, 230, 104, 0.22)" },
   ".cm-searchMatch": { backgroundColor: "rgba(110, 230, 104, 0.22)", borderRadius: "2px" },
   ".cm-searchMatch-selected": { backgroundColor: "rgba(110, 230, 104, 0.42)" },
-  ".cm-tdnMatch": { backgroundColor: "rgba(110, 230, 104, 0.28)", borderRadius: "2px" },
+  ".cm-tdxnMatch": { backgroundColor: "rgba(110, 230, 104, 0.28)", borderRadius: "2px" },
   ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.02)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" },
   ".cm-foldPlaceholder": {
@@ -163,23 +163,23 @@ const tdnTheme = EditorView.theme({
 // If `text` is a full _embody_tdn JSON/YAML envelope, return its bare TDXN body
 // as YAML; otherwise null. Shared by the editor's paste DOM handler and the
 // toolbar "paste" button so both unwrap envelopes identically.
-function unwrapTdnEnvelope(text: string): string | null {
+function unwrapTdxnEnvelope(text: string): string | null {
   let parsed: unknown;
   try { parsed = parseYaml(text.trim()); } catch { return null; }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const env = parsed as Record<string, unknown>;
-  if (env[EMBODY_TDN_MARKER] !== EMBODY_TDN_VERSION || !env.tdn || typeof env.tdn !== "object") return null;
+  if (env[EMBODY_TDXN_MARKER] !== EMBODY_TDXN_VERSION || !env.tdn || typeof env.tdn !== "object") return null;
   return stringifyYaml(env.tdn, { lineWidth: 0 }).replace(/\n$/, "");
 }
 
-export default function TdnYamlEditor({ name, initialValue = "", placeholder = "" }: Props) {
+export default function TdxnYamlEditor({ name, initialValue = "", placeholder = "" }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const wrapComp = useRef(new Compartment());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const [validity, setValidity] = useState(() => validateTdn(initialValue));
+  const [validity, setValidity] = useState(() => validateTdxn(initialValue));
   const [wrap, setWrap] = useState(false);
   const [query, setQuery] = useState("");
   // Search match position: which occurrence is selected (1-based) of how many.
@@ -192,10 +192,10 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
   const [gotoValue, setGotoValue] = useState("");
   const gotoInputRef = useRef<HTMLInputElement>(null);
 
-  const announce = (v: TdnValidity, doc: string) => {
+  const announce = (v: TdxnValidity, doc: string) => {
     setValidity(v);
     taRef.current?.dispatchEvent(
-      new CustomEvent("tdn:change", { bubbles: true, detail: { valid: v.valid, value: doc } })
+      new CustomEvent("tdxn:change", { bubbles: true, detail: { valid: v.valid, value: doc } })
     );
   };
 
@@ -207,7 +207,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
       const doc = u.state.doc.toString();
       if (taRef.current) taRef.current.value = doc;          // keep the form field current (immediate)
       clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => announce(validateTdn(doc), doc), 150);  // validate off the keystroke path
+      debounceRef.current = setTimeout(() => announce(validateTdxn(doc), doc), 150);  // validate off the keystroke path
       // Keep the "current / total" search counter fresh when the doc changes
       // (e.g. a fresh paste) while a search is active.
       if (queryRef.current) {
@@ -229,7 +229,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
       paste(e, view) {
         const text = e.clipboardData?.getData("text");
         if (!text) return false;
-        const yamlText = unwrapTdnEnvelope(text);
+        const yamlText = unwrapTdxnEnvelope(text);
         if (yamlText === null) return false;
         e.preventDefault();
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: yamlText } });
@@ -250,7 +250,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
         indentOnInput(),
         bracketMatching(),
         yaml(),
-        syntaxHighlighting(tdnHighlight),
+        syntaxHighlighting(tdxnHighlight),
         search({ top: true }),
         highlightSelectionMatches(),
         searchTermField,
@@ -259,14 +259,14 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
         cmPlaceholder(placeholder),
         wrapComp.current.of([]),
         EditorState.tabSize.of(2),
-        tdnTheme,
+        tdxnTheme,
         onUpdate,
         pasteUnwrap,
       ],
     });
     viewRef.current = view;
     if (taRef.current) taRef.current.value = initialValue;
-    announce(validateTdn(initialValue), initialValue);   // initial submit-gate state
+    announce(validateTdxn(initialValue), initialValue);   // initial submit-gate state
 
     return () => { view.destroy(); viewRef.current = null; clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,7 +283,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
     if (!gotoOpen) return;
     gotoInputRef.current?.focus();
     const onDoc = (e: MouseEvent) => {
-      const pop = gotoInputRef.current?.closest(".tdn-editor__goto");
+      const pop = gotoInputRef.current?.closest(".tdxn-editor__goto");
       if (pop && !pop.contains(e.target as Node)) setGotoOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
@@ -365,21 +365,21 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
     let text = "";
     try { text = await navigator.clipboard.readText(); } catch { return; }
     if (!text) return;
-    const insert = unwrapTdnEnvelope(text) ?? text;
+    const insert = unwrapTdxnEnvelope(text) ?? text;
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert } });
     view.focus();
   };
 
   return (
-    <div className="tdn-editor" data-valid={validity.valid ? "true" : "false"}>
-      <div className="tdn-editor__toolbar">
-        <div className="tdn-editor__searchbox">
-          <svg className="tdn-editor__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+    <div className="tdxn-editor" data-valid={validity.valid ? "true" : "false"}>
+      <div className="tdxn-editor__toolbar">
+        <div className="tdxn-editor__searchbox">
+          <svg className="tdxn-editor__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.3-4.3" />
           </svg>
           <input
-            className="tdn-editor__search"
+            className="tdxn-editor__search"
             type="text"
             placeholder=""
             aria-label="Search the TDXN"
@@ -391,32 +391,32 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
             }}
           />
           {query && (
-            <div className="tdn-editor__search-nav">
-              <span className="tdn-editor__search-count" aria-live="polite">{matchTotal ? `${matchPos}/${matchTotal}` : "0/0"}</span>
-              <button type="button" className="tdn-editor__search-navbtn" title="Previous match (Shift+Enter)" aria-label="Previous match" onClick={prevMatch} disabled={!matchTotal}>
+            <div className="tdxn-editor__search-nav">
+              <span className="tdxn-editor__search-count" aria-live="polite">{matchTotal ? `${matchPos}/${matchTotal}` : "0/0"}</span>
+              <button type="button" className="tdxn-editor__search-navbtn" title="Previous match (Shift+Enter)" aria-label="Previous match" onClick={prevMatch} disabled={!matchTotal}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 14 12 8 18 14" /></svg>
               </button>
-              <button type="button" className="tdn-editor__search-navbtn" title="Next match (Enter)" aria-label="Next match" onClick={nextMatch} disabled={!matchTotal}>
+              <button type="button" className="tdxn-editor__search-navbtn" title="Next match (Enter)" aria-label="Next match" onClick={nextMatch} disabled={!matchTotal}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 10 12 16 18 10" /></svg>
               </button>
-              <button type="button" className="tdn-editor__search-navbtn tdn-editor__search-navbtn--clear" title="Clear search" aria-label="Clear search" onClick={clearSearch}>
+              <button type="button" className="tdxn-editor__search-navbtn tdxn-editor__search-navbtn--clear" title="Clear search" aria-label="Clear search" onClick={clearSearch}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
               </button>
             </div>
           )}
         </div>
-        <div className="tdn-editor__tools">
-          <button type="button" className="tdn-editor__btn" title="Paste TDXN from clipboard" aria-label="Paste TDXN from clipboard" onClick={doPasteFromClipboard}>
+        <div className="tdxn-editor__tools">
+          <button type="button" className="tdxn-editor__btn" title="Paste TDXN from clipboard" aria-label="Paste TDXN from clipboard" onClick={doPasteFromClipboard}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
             </svg>
           </button>
-          <button type="button" className="tdn-editor__btn" title="Collapse all sections" onClick={doFoldAll}>&minus;</button>
-          <button type="button" className="tdn-editor__btn" title="Expand all sections" onClick={doUnfoldAll}>+</button>
+          <button type="button" className="tdxn-editor__btn" title="Collapse all sections" onClick={doFoldAll}>&minus;</button>
+          <button type="button" className="tdxn-editor__btn" title="Expand all sections" onClick={doUnfoldAll}>+</button>
           <button
             type="button"
-            className={`tdn-editor__btn${wrap ? " is-on" : ""}`}
+            className={`tdxn-editor__btn${wrap ? " is-on" : ""}`}
             aria-pressed={wrap}
             title="Toggle word wrap"
             aria-label="Toggle word wrap"
@@ -429,10 +429,10 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
               <line x1="3" y1="18" x2="10" y2="18" />
             </svg>
           </button>
-          <div className="tdn-editor__goto">
+          <div className="tdxn-editor__goto">
             <button
               type="button"
-              className={`tdn-editor__btn${gotoOpen ? " is-on" : ""}`}
+              className={`tdxn-editor__btn${gotoOpen ? " is-on" : ""}`}
               title="Go to line"
               aria-label="Go to line"
               aria-expanded={gotoOpen}
@@ -446,10 +446,10 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
               </svg>
             </button>
             {gotoOpen && (
-              <div className="tdn-editor__goto-pop">
+              <div className="tdxn-editor__goto-pop">
                 <input
                   ref={gotoInputRef}
-                  className="tdn-editor__goto-input"
+                  className="tdxn-editor__goto-input"
                   type="number"
                   min="1"
                   inputMode="numeric"
@@ -462,13 +462,13 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
                     else if (e.key === "Escape") { e.preventDefault(); setGotoOpen(false); }
                   }}
                 />
-                <button type="button" className="tdn-editor__goto-go" onClick={doGoToLine}>go</button>
+                <button type="button" className="tdxn-editor__goto-go" onClick={doGoToLine}>go</button>
               </div>
             )}
           </div>
         </div>
       </div>
-      <div className="tdn-editor__cm" ref={hostRef} />
+      <div className="tdxn-editor__cm" ref={hostRef} />
       <textarea
         ref={taRef}
         name={name}
@@ -478,8 +478,8 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
         aria-hidden="true"
       />
       <small
-        id="tdn-editor-error"
-        className="tdn-editor__error"
+        id="tdxn-editor-error"
+        className="tdxn-editor__error"
         role="alert"
         hidden={!validity.message}
       >

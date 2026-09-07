@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-// The specimen-page TdnViewer is `navigable`: a single click selects an operator
+// The specimen-page TdxnViewer is `navigable`: a single click selects an operator
 // (surfacing its parameters); a COMP tile is DOUBLE-clicked to enter (drilling
 // into its sub-network), with a breadcrumb "address bar" to climb back out.
 // noise-terrain is the seeded specimen with
@@ -11,11 +11,11 @@ import { test, expect } from "@playwright/test";
 test("specimen viewer drills into a COMP and climbs back out", async ({ page }) => {
   await page.goto("/c/noise-terrain");
 
-  const viewer = page.locator(".tdn-viewer");
-  const breadcrumb = viewer.locator(".tdn-viewer__breadcrumb");
-  const crumbs = breadcrumb.locator(".tdn-crumb");
+  const viewer = page.locator(".tdxn-viewer");
+  const breadcrumb = viewer.locator(".tdxn-viewer__breadcrumb");
+  const crumbs = breadcrumb.locator(".tdxn-crumb");
   const opNames = () =>
-    viewer.locator(".tdn-operator__name").evaluateAll((els) =>
+    viewer.locator(".tdxn-operator__name").evaluateAll((els) =>
       els.map((e) => (e.textContent || "").trim())
     );
 
@@ -23,10 +23,10 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   // least one COMP advertises that it can be entered.
   await expect(breadcrumb).toBeVisible();
   await expect(crumbs).toHaveCount(1);
-  const enterable = viewer.locator(".tdn-operator--enterable").first();
+  const enterable = viewer.locator(".tdxn-operator--enterable").first();
   await expect(enterable).toBeVisible();
 
-  const compName = (await enterable.locator(".tdn-operator__name").textContent())?.trim();
+  const compName = (await enterable.locator(".tdxn-operator__name").textContent())?.trim();
   expect(compName, "an enterable COMP must have a name").toBeTruthy();
   const rootOps = await opNames();
 
@@ -37,7 +37,7 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   // operator set is now that COMP's children (different from the root level).
   await expect(crumbs).toHaveCount(2);
   await expect(crumbs.nth(1)).toHaveText(compName!);
-  await expect(viewer.locator(".tdn-operator__name").first()).toBeVisible();
+  await expect(viewer.locator(".tdxn-operator__name").first()).toBeVisible();
   const childOps = await opNames();
   expect(childOps).not.toEqual(rootOps);
 

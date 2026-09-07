@@ -1323,7 +1323,7 @@ h3 {
   z-index: 1;
 }
 
-/* In the "show/hide tdn yaml" disclosure summary: pinned to the right of the row
+/* In the "show/hide tdxn yaml" disclosure summary: pinned to the right of the row
    so the copy button is visible whether the disclosure is collapsed or expanded.
    (A script on the summary stops a click here from toggling the disclosure.) */
 .copy-button--summary {
@@ -1332,7 +1332,7 @@ h3 {
 }
 
 /* Branded "Embody" call-to-action -- the copy button, labelled and prominent so
-   the action teaches itself (copy this specimen's TDN for your agent). */
+   the action teaches itself (copy this specimen's TDXN for your agent). */
 .copy-button--cta {
   gap: 8px;
   padding: 8px 14px;
@@ -1526,7 +1526,7 @@ pre {
    embody.tools unify migration. Brand tokens already lived in this
    file; these are the section + component classes the landing markup
    uses. The hero LAYOUT lives scoped in src/pages/index.astro (it
-   reuses the TdnViewer node-graph motif instead of a radial glow).
+   reuses the TdxnViewer node-graph motif instead of a radial glow).
    ============================================================ */
 
 .container--narrow { max-width: var(--content-narrow); }
@@ -1875,8 +1875,8 @@ pre {
   .practice-diff { aspect-ratio: auto; }
 }
 
-/* --- TDN section --- */
-.tdn__grid {
+/* --- TDXN section --- */
+.tdxn__grid {
   display: grid;
   /* minmax(0, ...) instead of bare fr so a long unbroken line in the code
      sample can't blow out the column's min-content width and force the page
@@ -1886,10 +1886,10 @@ pre {
   align-items: start;
   margin-bottom: 3rem;
 }
-.tdn__grid > * { min-width: 0; }
-/* TDN sample needs the scrollable code-box look; scoped so the app's
+.tdxn__grid > * { min-width: 0; }
+/* TDXN sample needs the scrollable code-box look; scoped so the app's
    minimal .code shell elsewhere is untouched. */
-.section--tdn .code {
+.section--tdxn .code {
   padding: 1.6rem 1.8rem;
   overflow-x: auto;
   white-space: pre;
@@ -1907,7 +1907,7 @@ pre {
 .c-p { color: var(--text-faint); }
 .c-e { color: #c7b6f0; }
 .c-c { color: var(--text-muted); }
-.tdn__callout {
+.tdxn__callout {
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   color: var(--text);
   text-align: left;
@@ -1917,16 +1917,16 @@ pre {
   line-height: 1.45;
   letter-spacing: -0.005em;
 }
-.tdn__callout-lead { color: var(--accent); font-weight: 600; }
-.tdn__bullets { display: flex; flex-direction: column; gap: 1.1rem; }
-.tdn__bullets li {
+.tdxn__callout-lead { color: var(--accent); font-weight: 600; }
+.tdxn__bullets { display: flex; flex-direction: column; gap: 1.1rem; }
+.tdxn__bullets li {
   position: relative;
   padding-left: 1.4rem;
   color: var(--text-muted);
   font-size: 0.97rem;
   line-height: 1.55;
 }
-.tdn__bullets li::before {
+.tdxn__bullets li::before {
   content: '';
   position: absolute;
   left: 0;
@@ -1936,22 +1936,22 @@ pre {
   border-radius: 999px;
   background: var(--accent);
 }
-.tdn__bullets strong { color: var(--text); font-weight: 600; }
-.tdn__bullets code {
+.tdxn__bullets strong { color: var(--text); font-weight: 600; }
+.tdxn__bullets code {
   background: var(--bg-code);
   border: 1px solid var(--border-faint);
   padding: 0.05em 0.4em;
   border-radius: 4px;
   color: var(--text);
 }
-.tdn__closer {
+.tdxn__closer {
   font-size: clamp(1.05rem, 1.6vw, 1.2rem);
   color: var(--text-muted);
   max-width: 60ch;
   margin: 3rem 0 1.5rem;
   line-height: 1.55;
 }
-.tdn__link { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; letter-spacing: 0.005em; }
+.tdxn__link { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; letter-spacing: 0.005em; }
 
 /* --- Steps (get started) --- */
 .steps { display: flex; flex-direction: column; gap: 1.25rem; max-width: 760px; }
@@ -2107,11 +2107,11 @@ body.is-app-shell .footer {
     gap: 1.25rem;
   }
   .section--pillars .pillar:last-child { grid-column: 1 / -1; }
-  .tdn__grid { gap: 2rem; }
+  .tdxn__grid { gap: 2rem; }
 }
 /* Landing tablet reflow, aligned to the nav hamburger boundary (was 820). */
 @media (max-width: 860px) {
-  .tdn__grid { grid-template-columns: 1fr; gap: 2rem; }
+  .tdxn__grid { grid-template-columns: 1fr; gap: 2rem; }
   .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 1.25rem; }
   .footer__inner { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
   .footer__col--brand { grid-column: 1 / -1; }
@@ -2122,7 +2122,7 @@ body.is-app-shell .footer {
   .section--pillars .pillar:last-child { grid-column: auto; }
   .section--pillars .pillar__text { padding: 1.4rem 1.5rem 1.6rem; }
   .step { padding: 1.25rem 1.4rem; gap: 1rem; }
-  .section--tdn .code { padding: 1.25rem 1.35rem; font-size: 0.76rem; }
+  .section--tdxn .code { padding: 1.25rem 1.35rem; font-size: 0.76rem; }
   .footer__inner { grid-template-columns: 1fr; gap: 2.25rem; margin-bottom: 3rem; }
   .footer__col--brand { grid-column: auto; }
   .footer__bottom { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
@@ -2160,7 +2160,7 @@ body.is-app-shell .footer {
   .reaction-add { min-height: 44px !important; min-width: 44px; padding-inline: 0.7rem; }
   .reaction-popover__emoji { width: 44px; height: 44px; }
   .footer__col a,
-  .tdn__link a,
+  .tdxn__link a,
   .manifesto__link a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 
@@ -2194,7 +2194,7 @@ body.is-app-shell .footer {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .tdn-viewer .react-flow__edge.animated .react-flow__edge-path {
+  .tdxn-viewer .react-flow__edge.animated .react-flow__edge-path {
     animation: none !important;
     stroke-dasharray: none !important;
   }
@@ -2283,28 +2283,28 @@ body.is-app-shell .footer {
 .legal-sign a { color: var(--accent); }
 
 /* ============================================================
-   TDN YAML viewer (specimen "raw TDN" block, TdnYamlViewer.tsx)
+   TDXN YAML viewer (specimen "raw TDXN" block, TdxnYamlViewer.tsx)
    ============================================================ */
-.tdn-yaml {
-  /* Syntax palette tuned to the dark-green theme. TDN =expressions reuse the
+.tdxn-yaml {
+  /* Syntax palette tuned to the dark-green theme. TDXN =expressions reuse the
      brand accent so live expressions glow. */
-  --tdn-key: #9fc6b3;
-  --tdn-str: #cbb892;
-  --tdn-num: #d79a73;
-  --tdn-kw: #c79bd1;
+  --tdxn-key: #9fc6b3;
+  --tdxn-str: #cbb892;
+  --tdxn-num: #d79a73;
+  --tdxn-kw: #c79bd1;
   /* Inset to align with the summary/hint (18px) so the summary bar, toolbar,
      search, and code box never touch the panel edges. */
   padding: 0 18px 18px;
   font-family: var(--font-mono);
   font-size: 0.82rem;
 }
-.tdn-yaml__summary {
+.tdxn-yaml__summary {
   margin: 0 0 0.75rem;
   color: var(--text-muted);
   font-size: 0.74rem;
   letter-spacing: 0.03em;
 }
-.tdn-yaml__toolbar {
+.tdxn-yaml__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2312,8 +2312,8 @@ body.is-app-shell .footer {
   gap: 0.6rem;
   margin-bottom: 0.7rem;
 }
-.tdn-yaml__search { display: inline-flex; align-items: center; gap: 0.4rem; }
-.tdn-yaml__search-input {
+.tdxn-yaml__search { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tdxn-yaml__search-input {
   min-height: 34px;
   width: min(260px, 50vw);
   padding: 0.35rem 0.8rem;
@@ -2324,14 +2324,14 @@ body.is-app-shell .footer {
   font: inherit;
   font-size: 0.78rem;
 }
-.tdn-yaml__search-input::placeholder { color: var(--text-faint); }
-.tdn-yaml__search-input:focus { outline: none; border-color: var(--accent); }
-.tdn-yaml__search-nav { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-muted); }
-.tdn-yaml__count { min-width: 3em; text-align: right; font-size: 0.72rem; }
-.tdn-yaml__tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
-.tdn-yaml__search-nav button,
-.tdn-yaml__btn,
-.tdn-yaml__jump-btn {
+.tdxn-yaml__search-input::placeholder { color: var(--text-faint); }
+.tdxn-yaml__search-input:focus { outline: none; border-color: var(--accent); }
+.tdxn-yaml__search-nav { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-muted); }
+.tdxn-yaml__count { min-width: 3em; text-align: right; font-size: 0.72rem; }
+.tdxn-yaml__tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tdxn-yaml__search-nav button,
+.tdxn-yaml__btn,
+.tdxn-yaml__jump-btn {
   min-height: 30px;
   padding: 0.2rem 0.65rem;
   border: 1px solid var(--border);
@@ -2345,30 +2345,30 @@ body.is-app-shell .footer {
   transition: color 140ms ease, border-color 140ms ease;
 }
 /* collapse-all / expand-all carry a -/+ glyph before the label. */
-.tdn-yaml__btn {
+.tdxn-yaml__btn {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
 }
-.tdn-yaml__btn-icon {
+.tdxn-yaml__btn-icon {
   flex: none;
   opacity: 0.85;
 }
-.tdn-yaml__search-nav button { min-width: 30px; padding: 0.2rem 0.4rem; }
-.tdn-yaml__search-nav button:hover:not(:disabled),
-.tdn-yaml__btn:hover,
-.tdn-yaml__jump-btn:hover { color: var(--text); border-color: var(--accent); }
-.tdn-yaml__search-nav button:disabled { opacity: 0.4; cursor: default; }
-.tdn-yaml__btn.is-on { color: var(--accent); border-color: var(--accent); }
+.tdxn-yaml__search-nav button { min-width: 30px; padding: 0.2rem 0.4rem; }
+.tdxn-yaml__search-nav button:hover:not(:disabled),
+.tdxn-yaml__btn:hover,
+.tdxn-yaml__jump-btn:hover { color: var(--text); border-color: var(--accent); }
+.tdxn-yaml__search-nav button:disabled { opacity: 0.4; cursor: default; }
+.tdxn-yaml__btn.is-on { color: var(--accent); border-color: var(--accent); }
 
 /* App-native "jump to" dropdown (replaces a browser-native <select>): a styled
    trigger + an absolutely-positioned listbox, matching the collection/contribute
    .dd dropdowns. */
-.tdn-yaml__jump { position: relative; display: inline-flex; }
-.tdn-yaml__jump-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
-.tdn-yaml__jump-btn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
-.tdn-yaml__chev { flex: none; opacity: 0.8; }
-.tdn-yaml__jump-menu {
+.tdxn-yaml__jump { position: relative; display: inline-flex; }
+.tdxn-yaml__jump-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tdxn-yaml__jump-btn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
+.tdxn-yaml__chev { flex: none; opacity: 0.8; }
+.tdxn-yaml__jump-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
@@ -2387,7 +2387,7 @@ body.is-app-shell .footer {
   box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
   outline: none;
 }
-.tdn-yaml__jump-opt {
+.tdxn-yaml__jump-opt {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -2399,16 +2399,16 @@ body.is-app-shell .footer {
   white-space: nowrap;
   cursor: pointer;
 }
-.tdn-yaml__jump-name { overflow: hidden; text-overflow: ellipsis; }
-.tdn-yaml__jump-kind {
+.tdxn-yaml__jump-name { overflow: hidden; text-overflow: ellipsis; }
+.tdxn-yaml__jump-kind {
   flex: none;
   color: var(--text-faint);
   font-size: 0.66rem;
 }
-.tdn-yaml__jump-opt.is-active,
-.tdn-yaml__jump-opt[aria-selected="true"] { background: rgba(110, 230, 104, 0.12); color: var(--text); }
+.tdxn-yaml__jump-opt.is-active,
+.tdxn-yaml__jump-opt[aria-selected="true"] { background: rgba(110, 230, 104, 0.12); color: var(--text); }
 
-.tdn-yaml__code {
+.tdxn-yaml__code {
   max-height: 540px;
   overflow: auto;
   padding: 0.55rem 0;
@@ -2418,12 +2418,12 @@ body.is-app-shell .footer {
   line-height: 1.55;
   -webkit-overflow-scrolling: touch;
 }
-.tdn-yaml__line { display: flex; align-items: flex-start; padding: 0 0.7rem; white-space: pre; }
-.tdn-yaml__code.is-wrap .tdn-yaml__line { white-space: pre-wrap; }
-.tdn-yaml__code.is-wrap .tdn-yaml__text { overflow-wrap: anywhere; word-break: break-word; }
-.tdn-yaml__line.is-active { background: rgba(110, 230, 104, 0.09); }
-.tdn-yaml__gutter { flex: none; display: inline-flex; align-items: baseline; gap: 0.15rem; user-select: none; }
-.tdn-yaml__fold {
+.tdxn-yaml__line { display: flex; align-items: flex-start; padding: 0 0.7rem; white-space: pre; }
+.tdxn-yaml__code.is-wrap .tdxn-yaml__line { white-space: pre-wrap; }
+.tdxn-yaml__code.is-wrap .tdxn-yaml__text { overflow-wrap: anywhere; word-break: break-word; }
+.tdxn-yaml__line.is-active { background: rgba(110, 230, 104, 0.09); }
+.tdxn-yaml__gutter { flex: none; display: inline-flex; align-items: baseline; gap: 0.15rem; user-select: none; }
+.tdxn-yaml__fold {
   width: 1.2em;
   padding: 0;
   border: 0;
@@ -2433,55 +2433,55 @@ body.is-app-shell .footer {
   line-height: 1.55;
   cursor: pointer;
 }
-.tdn-yaml__fold:hover { color: var(--accent); }
-.tdn-yaml__fold--none { cursor: default; }
-.tdn-yaml__ln {
+.tdxn-yaml__fold:hover { color: var(--accent); }
+.tdxn-yaml__fold--none { cursor: default; }
+.tdxn-yaml__ln {
   display: inline-block;
   /* content-box so the digit width (min-width) excludes the padding -- with the
      global border-box, 3ch min-width was eaten by the 0.85rem padding, so 2-digit
      numbers overflowed and shifted the code right. Sized to the file's widest
-     line number via --tdn-ln-digits so every row's code aligns. */
+     line number via --tdxn-ln-digits so every row's code aligns. */
   box-sizing: content-box;
-  min-width: calc(var(--tdn-ln-digits, 3) * 1ch);
+  min-width: calc(var(--tdxn-ln-digits, 3) * 1ch);
   padding-right: 0.85rem;
   text-align: right;
   color: var(--text-faint);
   font-size: 0.72rem;
   user-select: none;
 }
-.tdn-yaml__text { white-space: inherit; color: var(--text); }
-.tdn-yaml__ellipsis { color: var(--text-faint); }
+.tdxn-yaml__text { white-space: inherit; color: var(--text); }
+.tdxn-yaml__ellipsis { color: var(--text-faint); }
 
-.tdn-yaml__key { color: var(--tdn-key); }
-.tdn-yaml__str { color: var(--tdn-str); }
-.tdn-yaml__num { color: var(--tdn-num); }
-.tdn-yaml__kw { color: var(--tdn-kw); }
-.tdn-yaml__expr { color: var(--accent); }
-.tdn-yaml__com { color: var(--text-faint); font-style: italic; }
-.tdn-yaml__punct { color: var(--text-muted); }
-.tdn-yaml__plain { color: var(--text); }
-.tdn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
+.tdxn-yaml__key { color: var(--tdxn-key); }
+.tdxn-yaml__str { color: var(--tdxn-str); }
+.tdxn-yaml__num { color: var(--tdxn-num); }
+.tdxn-yaml__kw { color: var(--tdxn-kw); }
+.tdxn-yaml__expr { color: var(--accent); }
+.tdxn-yaml__com { color: var(--text-faint); font-style: italic; }
+.tdxn-yaml__punct { color: var(--text-muted); }
+.tdxn-yaml__plain { color: var(--text); }
+.tdxn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
 
-/* ---- Editable TDN editor (contribute + edit forms) ----
-   Built to look like the read-only .tdn-yaml viewer: a pinned line-number gutter,
+/* ---- Editable TDXN editor (contribute + edit forms) ----
+   Built to look like the read-only .tdxn-yaml viewer: a pinned line-number gutter,
    a transparent <textarea> over a syntax-highlighted <pre> backdrop, and the SAME
    font / size / line-height / palette as the viewer. The backdrop + textarea must
    share identical text metrics or the colored backdrop drifts from the caret; the
    gutter shares the per-line box height so numbers line up with code rows. The
-   --tdn-* palette is redefined here so the shared .tdn-yaml__<token> color classes
-   resolve outside a .tdn-yaml ancestor. */
-.tdn-editor {
-  /* Match the viewer's palette (.tdn-yaml). */
-  --tdn-key: #9fc6b3;
-  --tdn-str: #cbb892;
-  --tdn-num: #d79a73;
-  --tdn-kw: #c79bd1;
+   --tdxn-* palette is redefined here so the shared .tdxn-yaml__<token> color classes
+   resolve outside a .tdxn-yaml ancestor. */
+.tdxn-editor {
+  /* Match the viewer's palette (.tdxn-yaml). */
+  --tdxn-key: #9fc6b3;
+  --tdxn-str: #cbb892;
+  --tdxn-num: #d79a73;
+  --tdxn-kw: #c79bd1;
   /* Shared text metrics (viewer-matched): font-size 0.82rem, line-height 1.55. */
-  --tdn-fs: 0.82rem;
-  --tdn-lh: 1.55;
-  --tdn-pad-y: 0.7rem;
-  --tdn-pad-x: 0.85rem;
-  --tdn-line-h: calc(var(--tdn-fs) * var(--tdn-lh));
+  --tdxn-fs: 0.82rem;
+  --tdxn-lh: 1.55;
+  --tdxn-pad-y: 0.7rem;
+  --tdxn-pad-x: 0.85rem;
+  --tdxn-line-h: calc(var(--tdxn-fs) * var(--tdxn-lh));
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -2490,8 +2490,8 @@ body.is-app-shell .footer {
 }
 
 /* CodeMirror-based editor: a compact one-row toolbar (search + fold -/+ + wrap)
-   above a CM instance themed (in TdnYamlEditor.tsx) to match the read-only viewer. */
-.tdn-editor__toolbar {
+   above a CM instance themed (in TdxnYamlEditor.tsx) to match the read-only viewer. */
+.tdxn-editor__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2501,7 +2501,7 @@ body.is-app-shell .footer {
 }
 /* Composite search field: a pill containing the magnifier, the text input, and
    (when a query is present) the match counter + prev/next/clear controls. */
-.tdn-editor__searchbox {
+.tdxn-editor__searchbox {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -2515,9 +2515,9 @@ body.is-app-shell .footer {
   background: rgba(24, 30, 30, 0.72);
   transition: border-color 140ms ease;
 }
-.tdn-editor__searchbox:focus-within { border-color: var(--accent); }
-.tdn-editor__search-icon { flex: none; color: var(--text-faint); }
-.tdn-editor__search {
+.tdxn-editor__searchbox:focus-within { border-color: var(--accent); }
+.tdxn-editor__search-icon { flex: none; color: var(--text-faint); }
+.tdxn-editor__search {
   flex: 1 1 auto;
   min-width: 0;
   border: none;
@@ -2526,10 +2526,10 @@ body.is-app-shell .footer {
   font-family: var(--font-mono);
   font-size: 0.72rem;
 }
-.tdn-editor__search:focus { outline: none; }
-.tdn-editor__search::placeholder { color: var(--text-faint); }
-.tdn-editor__search-nav { flex: none; display: inline-flex; align-items: center; gap: 0.1rem; }
-.tdn-editor__search-count {
+.tdxn-editor__search:focus { outline: none; }
+.tdxn-editor__search::placeholder { color: var(--text-faint); }
+.tdxn-editor__search-nav { flex: none; display: inline-flex; align-items: center; gap: 0.1rem; }
+.tdxn-editor__search-count {
   font-family: var(--font-mono);
   font-size: 0.64rem;
   color: var(--text-faint);
@@ -2537,7 +2537,7 @@ body.is-app-shell .footer {
   padding: 0 0.2rem;
   font-variant-numeric: tabular-nums;
 }
-.tdn-editor__search-navbtn {
+.tdxn-editor__search-navbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2551,13 +2551,13 @@ body.is-app-shell .footer {
   cursor: pointer;
   transition: color 120ms ease, background 120ms ease;
 }
-.tdn-editor__search-navbtn:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.06); }
-.tdn-editor__search-navbtn:disabled { opacity: 0.35; cursor: default; }
-.tdn-editor__search-navbtn--clear:hover:not(:disabled) { color: var(--accent); }
+.tdxn-editor__search-navbtn:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.tdxn-editor__search-navbtn:disabled { opacity: 0.35; cursor: default; }
+.tdxn-editor__search-navbtn--clear:hover:not(:disabled) { color: var(--accent); }
 
 /* Go-to-line popover: a small native-styled line-number input below the button. */
-.tdn-editor__goto { position: relative; display: inline-flex; }
-.tdn-editor__goto-pop {
+.tdxn-editor__goto { position: relative; display: inline-flex; }
+.tdxn-editor__goto-pop {
   position: absolute;
   z-index: 30;
   top: calc(100% + 6px);
@@ -2571,7 +2571,7 @@ body.is-app-shell .footer {
   background: var(--bg-elevated-2, #1f2321);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
-.tdn-editor__goto-input {
+.tdxn-editor__goto-input {
   width: 76px;
   min-height: 26px;
   padding: 0.25rem 0.5rem;
@@ -2582,8 +2582,8 @@ body.is-app-shell .footer {
   font-family: var(--font-mono);
   font-size: 0.74rem;
 }
-.tdn-editor__goto-input:focus { outline: none; border-color: var(--accent); }
-.tdn-editor__goto-go {
+.tdxn-editor__goto-input:focus { outline: none; border-color: var(--accent); }
+.tdxn-editor__goto-go {
   min-height: 26px;
   padding: 0.25rem 0.65rem;
   border: 1px solid var(--border);
@@ -2595,13 +2595,13 @@ body.is-app-shell .footer {
   cursor: pointer;
   transition: color 140ms ease, border-color 140ms ease;
 }
-.tdn-editor__goto-go:hover { color: var(--accent); border-color: var(--accent); }
+.tdxn-editor__goto-go:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Custom clear ("x") button for the remaining native type=search fields:
    -webkit-appearance:none guarantees the pointer cursor (the default native
-   cancel button ignores `cursor`) and gives it a hover brighten. Covers the TDN
+   cancel button ignores `cursor`) and gives it a hover brighten. Covers the TDXN
    viewer search and the form category/requires search pickers. */
-.tdn-yaml__search-input::-webkit-search-cancel-button,
+.tdxn-yaml__search-input::-webkit-search-cancel-button,
 .dd__search::-webkit-search-cancel-button,
 .msdd__search::-webkit-search-cancel-button {
   -webkit-appearance: none;
@@ -2613,11 +2613,11 @@ body.is-app-shell .footer {
   -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M6%206L18%2018M18%206L6%2018'%20stroke='%23000'%20stroke-width='3'%20stroke-linecap='round'/%3E%3C/svg%3E") center / 13px no-repeat;
   mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M6%206L18%2018M18%206L6%2018'%20stroke='%23000'%20stroke-width='3'%20stroke-linecap='round'/%3E%3C/svg%3E") center / 13px no-repeat;
 }
-.tdn-yaml__search-input::-webkit-search-cancel-button:hover,
+.tdxn-yaml__search-input::-webkit-search-cancel-button:hover,
 .dd__search::-webkit-search-cancel-button:hover,
 .msdd__search::-webkit-search-cancel-button:hover { background-color: var(--text); }
-.tdn-editor__tools { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; }
-.tdn-editor__btn {
+.tdxn-editor__tools { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; }
+.tdxn-editor__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2634,12 +2634,12 @@ body.is-app-shell .footer {
   cursor: pointer;
   transition: color 140ms ease, border-color 140ms ease;
 }
-.tdn-editor__btn:hover { color: var(--text); border-color: var(--accent); }
-.tdn-editor__btn.is-on { color: var(--accent); border-color: var(--accent); }
-.tdn-editor__cm {
+.tdxn-editor__btn:hover { color: var(--text); border-color: var(--accent); }
+.tdxn-editor__btn.is-on { color: var(--accent); border-color: var(--accent); }
+.tdxn-editor__cm {
   position: relative;
   /* DEFINITE height (not flex:1 + min-height) so CodeMirror's .cm-editor
-     height:100% resolves and .cm-scroller (overflow:auto) scrolls a long TDN
+     height:100% resolves and .cm-scroller (overflow:auto) scrolls a long TDXN
      INTERNALLY. With only a min-height the box grew to fit every line, so a
      several-thousand-line paste stretched the page instead of scrolling.
      Viewport-relative so it stays a sensible size on any screen. */
@@ -2650,17 +2650,17 @@ body.is-app-shell .footer {
   overflow: hidden;
   transition: border-color 140ms ease;
 }
-.tdn-editor__cm:focus-within { border-color: var(--accent); }
-.tdn-editor__cm .cm-editor { height: 100%; }
+.tdxn-editor__cm:focus-within { border-color: var(--accent); }
+.tdxn-editor__cm .cm-editor { height: 100%; }
 
-.tdn-editor__scroll {
+.tdxn-editor__scroll {
   /* Width of the line-number gutter, sized to the widest line number. The mono
      font + size below are LOAD-BEARING: `1ch` must resolve against the SAME font
      here as in the textarea's padding-left, or the gutter ends up wider than the
      padding and tucks the first character under it. */
   font-family: var(--font-mono);
-  font-size: var(--tdn-fs);
-  --tdn-gutter-w: calc(var(--tdn-ln-digits, 2) * 1ch + 1.5rem);
+  font-size: var(--tdxn-fs);
+  --tdxn-gutter-w: calc(var(--tdxn-ln-digits, 2) * 1ch + 1.5rem);
   position: relative;
   flex: 1;
   min-height: clamp(320px, 52vh, 680px);
@@ -2670,30 +2670,30 @@ body.is-app-shell .footer {
   overflow: hidden;
   transition: border-color 140ms ease;
 }
-.tdn-editor__scroll:focus-within { border-color: var(--accent); }
+.tdxn-editor__scroll:focus-within { border-color: var(--accent); }
 
 /* Pinned gutter column: scrolls vertically (transform synced in JS), never
    horizontally. Opaque so horizontally-scrolled code tucks behind it. */
-.tdn-editor__gutter {
+.tdxn-editor__gutter {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  width: var(--tdn-gutter-w);
+  width: var(--tdxn-gutter-w);
   overflow: hidden;
   z-index: 2;
   background: var(--bg-code);
   border-right: 1px solid var(--border-faint);
   pointer-events: none;
 }
-.tdn-editor__gutter-inner {
-  padding-top: var(--tdn-pad-y);
+.tdxn-editor__gutter-inner {
+  padding-top: var(--tdxn-pad-y);
   will-change: transform;
 }
-.tdn-editor__ln {
+.tdxn-editor__ln {
   display: block;
-  height: var(--tdn-line-h);
-  line-height: var(--tdn-line-h);
+  height: var(--tdxn-line-h);
+  line-height: var(--tdxn-line-h);
   padding-right: 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -2701,21 +2701,21 @@ body.is-app-shell .footer {
   color: var(--text-faint);
 }
 
-.tdn-editor__backdrop,
-.tdn-editor__textarea {
+.tdxn-editor__backdrop,
+.tdxn-editor__textarea {
   position: absolute;
   inset: 0;
   margin: 0;
   border: 0;
   /* Left padding clears the gutter (+ a small gap) so code starts just right of
      the numbers and never tucks under the opaque gutter. */
-  padding: var(--tdn-pad-y) var(--tdn-pad-x) var(--tdn-pad-y) calc(var(--tdn-gutter-w) + 0.4rem);
+  padding: var(--tdxn-pad-y) var(--tdxn-pad-x) var(--tdxn-pad-y) calc(var(--tdxn-gutter-w) + 0.4rem);
   font-family: var(--font-mono);
-  font-size: var(--tdn-fs);
-  /* Integer px (set in JS from font-size * --tdn-lh, snapped) so every row is the
+  font-size: var(--tdxn-fs);
+  /* Integer px (set in JS from font-size * --tdxn-lh, snapped) so every row is the
      SAME whole-pixel height in the textarea, backdrop, and gutter. calc() fallback
      pre-hydration. */
-  line-height: var(--tdn-line-h);
+  line-height: var(--tdxn-line-h);
   letter-spacing: 0;
   tab-size: 2;
   white-space: pre;
@@ -2723,29 +2723,29 @@ body.is-app-shell .footer {
   word-break: normal;
   box-sizing: border-box;
 }
-.tdn-editor__backdrop {
+.tdxn-editor__backdrop {
   overflow: hidden;
   pointer-events: none;
   color: var(--text);
   z-index: 0;
 }
-.tdn-editor__backdrop code {
+.tdxn-editor__backdrop code {
   font: inherit;
   white-space: inherit;
 }
 /* The windowed slab: only the visible line range lives here; JS translates it to
    glue it to the scrolled textarea. Each row is a fixed-height block so empty
    lines still occupy a row. */
-.tdn-editor__slab {
+.tdxn-editor__slab {
   display: block;
   will-change: transform;
 }
-.tdn-editor__bline {
+.tdxn-editor__bline {
   display: block;
-  height: var(--tdn-line-h);
-  line-height: var(--tdn-line-h);
+  height: var(--tdxn-line-h);
+  line-height: var(--tdxn-line-h);
 }
-.tdn-editor__textarea {
+.tdxn-editor__textarea {
   overflow: auto;
   resize: none;
   background: transparent;
@@ -2754,20 +2754,20 @@ body.is-app-shell .footer {
   z-index: 1;
   -webkit-overflow-scrolling: touch;
 }
-.tdn-editor__textarea::placeholder { color: var(--text-faint); }
-.tdn-editor__textarea:focus { outline: none; }
-.tdn-editor__error {
+.tdxn-editor__textarea::placeholder { color: var(--text-faint); }
+.tdxn-editor__textarea:focus { outline: none; }
+.tdxn-editor__error {
   font-size: 0.8rem;
   line-height: 1.5;
   color: #ff9b9b;
 }
 
 @media (pointer: coarse) {
-  .tdn-yaml__search-nav button,
-  .tdn-yaml__btn,
-  .tdn-yaml__jump-btn { min-height: 40px; }
-  .tdn-yaml__jump-opt { padding: 0.6rem; }
-  .tdn-yaml__fold { width: 1.6em; min-height: 28px; }
+  .tdxn-yaml__search-nav button,
+  .tdxn-yaml__btn,
+  .tdxn-yaml__jump-btn { min-height: 40px; }
+  .tdxn-yaml__jump-opt { padding: 0.6rem; }
+  .tdxn-yaml__fold { width: 1.6em; min-height: 28px; }
 }
 
 /* Multi-select grouped dropdown (the "requires" picker on the submit + edit

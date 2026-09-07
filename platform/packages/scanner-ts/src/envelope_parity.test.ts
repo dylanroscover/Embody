@@ -2,8 +2,8 @@
  * Contract C1 canonical-serialization parity.
  *
  * The clipboard envelope's sha256 is taken over a canonical serialization of
- * the tdn payload. Python (TDXNExt.canonical_tdn_bytes) and TypeScript
- * (contracts/envelope.ts canonicalTdnString) hashed the SAME specimen to
+ * the tdxn payload. Python (TDXNExt.canonical_tdn_bytes) and TypeScript
+ * (contracts/envelope.ts canonicalTdxnString) hashed the SAME specimen to
  * different digests until 2026-08-30: Python printed whole floats as `1.0`,
  * `-0.0` and `1e+16`, which a parsed JSON payload can never reproduce. Both
  * sides now use JavaScript Number::toString rules and code-point key order;
@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { canonicalTdnString } from "@embody/contracts";
+import { canonicalTdxnString } from "@embody/contracts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(HERE, "..", "..", "contracts", "fixtures", "canonical_cases.json");
@@ -34,12 +34,12 @@ describe("C1 canonical serialization parity", () => {
 
   for (const c of doc.cases) {
     it(`matches python: ${c.name}`, () => {
-      expect(canonicalTdnString(c.value)).toBe(c.expected);
+      expect(canonicalTdxnString(c.value)).toBe(c.expected);
     });
   }
 
   it("refuses non-finite numbers like the python side", () => {
-    expect(() => canonicalTdnString({ a: Number.NaN })).toThrow();
-    expect(() => canonicalTdnString({ a: Number.POSITIVE_INFINITY })).toThrow();
+    expect(() => canonicalTdxnString({ a: Number.NaN })).toThrow();
+    expect(() => canonicalTdxnString({ a: Number.POSITIVE_INFINITY })).toThrow();
   });
 });

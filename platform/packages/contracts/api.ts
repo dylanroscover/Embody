@@ -252,14 +252,16 @@ export interface ErrorResponse {
 
 /**
  * Endpoint catalog (documentation of the surface; each Worker route implements one).
- * GET /api/specimens/:slug/tdn returns the raw .tdn bytes from R2 (egress-free) with the
+ * GET /api/specimens/:slug/tdxn returns the raw .tdxn bytes from R2 (egress-free) with the
  * capability summary in headers - the RETRIEVE endpoint the Embody extension hits.
  */
 export const API_ROUTES = {
   list: "GET /api/specimens",
   search: "GET /api/search",
   detail: "GET /api/specimens/:slug",
-  tdn: "GET /api/specimens/:slug/tdn",
+  tdxn: "GET /api/specimens/:slug/tdxn",
+  /** @deprecated Legacy alias kept for already-shipped Embody builds. */
+  tdnLegacy: "GET /api/specimens/:slug/tdn",
   submit: "POST /api/specimens",
   like: "POST /api/specimens/:slug/like",
   report: "POST /api/specimens/:slug/report",

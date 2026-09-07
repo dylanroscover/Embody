@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { fillTdn } from "./editor";
+import { fillTdxn } from "./editor";
 
 // Owner submission lifecycle: edit metadata, delete, and the ownership gate.
 const pw = "e2e-passw0rd";
@@ -15,10 +15,10 @@ async function registerAndSubmit(page: Page): Promise<{ slug: string; stamp: num
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
 
   const stamp = Date.now();
-  const tdn = JSON.stringify({ name: "e2e_owned", type: "baseCOMP", children: [] }, null, 2);
+  const tdxn = JSON.stringify({ name: "e2e_owned", type: "baseCOMP", children: [] }, null, 2);
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`E2E Owned ${stamp}`);
-  await fillTdn(page, tdn);
+  await fillTdxn(page, tdxn);
   await page.locator("[data-submit-go]").click();
   await expect(page).toHaveURL(/\/c\/e2e-owned-/, { timeout: 25_000 });
   const slug = new URL(page.url()).pathname.split("/").filter(Boolean).pop() as string;

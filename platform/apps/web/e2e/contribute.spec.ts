@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { fillTdn } from "./editor";
+import { fillTdxn } from "./editor";
 
 // The core write path: a signed-in user submits a Specimen. In dev,
 // ENVIRONMENT=development so the Turnstile gate accepts the dev-bypass path.
@@ -26,12 +26,12 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
 
   const stamp = Date.now();
   const title = `E2E Net ${stamp}`;
-  const tdn = JSON.stringify({ name: "e2e_net", type: "baseCOMP", children: [] }, null, 2);
+  const tdxn = JSON.stringify({ name: "e2e_net", type: "baseCOMP", children: [] }, null, 2);
 
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(title);
   await page.locator('textarea[name="description"]').fill("An e2e-submitted test network.");
-  await fillTdn(page, tdn);
+  await fillTdxn(page, tdxn);
   await page.locator("[data-submit-go]").click();
 
   // On success the client redirects to /c/<new-slug>.
@@ -44,11 +44,11 @@ test("signed-in user submits with multiple categories", async ({ page }) => {
 
   const stamp = Date.now();
   const title = `E2E Multicat ${stamp}`;
-  const tdn = JSON.stringify({ name: "e2e_multicat", type: "baseCOMP", children: [] }, null, 2);
+  const tdxn = JSON.stringify({ name: "e2e_multicat", type: "baseCOMP", children: [] }, null, 2);
 
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(title);
-  await fillTdn(page, tdn);
+  await fillTdxn(page, tdxn);
 
   // Open the categories picker (the .msdd holding name="categories") and add two
   // more on top of the default-checked "generative".
@@ -85,7 +85,7 @@ test("invalid TDXN is rejected", async ({ page }) => {
   await register(page);
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`Bad TDXN ${Date.now()}`);
-  await fillTdn(page, "{ not valid json");
+  await fillTdxn(page, "{ not valid json");
   // Invalid TDXN keeps the submit button in the not-ready (aria-disabled) state.
   await expect(page.locator("[data-submit-go]")).toHaveAttribute("aria-disabled", "true");
   // It is aria-disabled (not the `disabled` attribute), so a real click still

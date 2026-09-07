@@ -10,9 +10,9 @@ import type {
   ScanVerdict
 } from "@embody/contracts";
 
-type TdnRecord = Record<string, unknown>;
+type TdxnRecord = Record<string, unknown>;
 
-const MAX_SERIALIZED_TDN_BYTES = 5 * 1024 * 1024;
+const MAX_SERIALIZED_TDXN_BYTES = 5 * 1024 * 1024;
 const MAX_OPERATORS = 50000;
 const EVIDENCE_LIMIT = 200;
 
@@ -129,14 +129,14 @@ interface SourceScanResult {
   detail: string;
 }
 
-export function scanTdn(
-  tdn: Record<string, unknown>,
+export function scanTdxn(
+  tdxn: Record<string, unknown>,
   scannerVersion = "v6-scan-ts-1"
 ): CapabilityJson {
   const counts = emptyCapabilityCounts();
   const findings: ScanFinding[] = [];
 
-  const serializedSize = serializedSizeBytes(tdn);
+  const serializedSize = serializedSizeBytes(tdxn);
   if (serializedSize === undefined) {
     findings.push(
       finding(
@@ -149,7 +149,7 @@ export function scanTdn(
     return capability(scannerVersion, "blocked", counts, findings);
   }
 
-  if (serializedSize > MAX_SERIALIZED_TDN_BYTES) {
+  if (serializedSize > MAX_SERIALIZED_TDXN_BYTES) {
     findings.push(
       finding(
         "/",
@@ -162,7 +162,7 @@ export function scanTdn(
   }
 
   try {
-    const opBound = operatorCountExceeds(tdn, MAX_OPERATORS);
+    const opBound = operatorCountExceeds(tdxn, MAX_OPERATORS);
     if (opBound.exceeds) {
       findings.push(
         finding(
@@ -193,7 +193,7 @@ export function scanTdn(
   };
 
   try {
-    scanTdnRoot(tdn, state);
+    scanTdxnRoot(tdxn, state);
   } catch (error) {
     state.blocked = true;
     findings.push(
@@ -237,14 +237,14 @@ function orderedCounts(counts: CapabilityCounts): CapabilityCounts {
   return ordered;
 }
 
-function scanTdnRoot(tdn: unknown, state: ScanState): void {
-  if (!isRecord(tdn)) return;
+function scanTdxnRoot(tdxn: unknown, state: ScanState): void {
+  if (!isRecord(tdxn)) return;
 
-  const typeDefaults = isRecord(tdn.type_defaults) ? tdn.type_defaults : {};
-  const path = rootPath(tdn);
-  scanOperatorLike(tdn, path, typeDefaults, state);
+  const typeDefaults = isRecord(tdxn.type_defaults) ? tdxn.type_defaults : {};
+  const path = rootPath(tdxn);
+  scanOperatorLike(tdxn, path, typeDefaults, state);
 
-  for (const child of safeList(tdn.operators)) {
+  for (const child of safeList(tdxn.operators)) {
     if (isRecord(child)) {
       scanOperator(child, path, typeDefaults, state);
     }
@@ -252,9 +252,9 @@ function scanTdnRoot(tdn: unknown, state: ScanState): void {
 }
 
 function scanOperator(
-  opData: TdnRecord,
+  opData: TdxnRecord,
   parentPath: string,
-  typeDefaults: TdnRecord,
+  typeDefaults: TdxnRecord,
   state: ScanState
 ): void {
   const name = typeof opData.name === "string" && opData.name ? opData.name : "<unnamed>";
@@ -269,9 +269,9 @@ function scanOperator(
 }
 
 function scanOperatorLike(
-  opData: TdnRecord,
+  opData: TdxnRecord,
   opPath: string,
-  typeDefaults: TdnRecord,
+  typeDefaults: TdxnRecord,
   state: ScanState
 ): void {
   const opType = safeString(opData.type);
@@ -313,7 +313,7 @@ function scanOperatorLike(
   scanExternalRefs(opData, opPath, state);
 }
 
-function scanExternalRefs(opData: TdnRecord, opPath: string, state: ScanState): void {
+function scanExternalRefs(opData: TdxnRecord, opPath: string, state: ScanState): void {
   for (const key of ["tdn_ref", "tox_ref"] as const) {
     const ref = opData[key];
     if (typeof ref === "string" && ref.trim()) {
@@ -329,7 +329,7 @@ function scanExternalRefs(opData: TdnRecord, opPath: string, state: ScanState): 
 }
 
 function scanExecuteDat(
-  opData: TdnRecord,
+  opData: TdxnRecord,
   opPath: string,
   opType: string,
   state: ScanState
@@ -349,10 +349,10 @@ function scanExecuteDat(
 }
 
 function scanDatContentTokens(
-  opData: TdnRecord,
+  opData: TdxnRecord,
   opPath: string,
   opType: string,
-  params: TdnRecord,
+  params: TdxnRecord,
   state: ScanState
 ): void {
   const content = opData.dat_content;
@@ -378,7 +378,7 @@ function scanDatContentTokens(
   );
 }
 
-function scanParameters(params: TdnRecord, opPath: string, state: ScanState): void {
+function scanParameters(params: TdxnRecord, opPath: string, state: ScanState): void {
   for (const [parName, value] of Object.entries(params)) {
     scanParameterValue(parName, value, opPath, state);
     scanPathParameter(parName, value, opPath, state);
@@ -460,7 +460,7 @@ function scanCustomParameters(customPars: unknown, opPath: string, state: ScanSt
 }
 
 function scanCustomParameterDef(
-  parDef: TdnRecord,
+  parDef: TdxnRecord,
   opPath: string,
   state: ScanState
 ): void {
@@ -498,7 +498,7 @@ function scanSequences(
   sequences: unknown,
   opPath: string,
   opType: string,
-  params: TdnRecord,
+  params: TdxnRecord,
   state: ScanState
 ): void {
   // One count per extension-bearing COMP, whichever way it is declared.
@@ -530,7 +530,7 @@ function scanSequences(
   }
 }
 
-function scanStorage(opData: TdnRecord, opPath: string, state: ScanState): void {
+function scanStorage(opData: TdxnRecord, opPath: string, state: ScanState): void {
   for (const key of ["storage", "startup_storage"] as const) {
     const payload = opData[key];
     if (hasStoragePayload(payload)) {
@@ -546,11 +546,11 @@ function scanStorage(opData: TdnRecord, opPath: string, state: ScanState): void 
 }
 
 function effectiveParameters(
-  opData: TdnRecord,
-  typeDefaults: TdnRecord,
+  opData: TdxnRecord,
+  typeDefaults: TdxnRecord,
   opType: string
-): TdnRecord {
-  const params: TdnRecord = {};
+): TdxnRecord {
+  const params: TdxnRecord = {};
   const defaultsForType = typeDefaults[opType];
   if (isRecord(defaultsForType) && isRecord(defaultsForType.parameters)) {
     Object.assign(params, defaultsForType.parameters);
@@ -695,8 +695,8 @@ function sequenceHasExtension(extSequence: unknown): boolean {
   return false;
 }
 
-function flatExtensionBlocks(params: TdnRecord): Map<string, TdnRecord> {
-  const blocks = new Map<string, TdnRecord>();
+function flatExtensionBlocks(params: TdxnRecord): Map<string, TdxnRecord> {
+  const blocks = new Map<string, TdxnRecord>();
   for (const [key, value] of Object.entries(params)) {
     const match = EXT_PARAM_RE.exec(key);
     const index = match?.[1];
@@ -709,7 +709,7 @@ function flatExtensionBlocks(params: TdnRecord): Map<string, TdnRecord> {
   return blocks;
 }
 
-function flatParamsDeclareExtension(params: TdnRecord): boolean {
+function flatParamsDeclareExtension(params: TdxnRecord): boolean {
   for (const block of flatExtensionBlocks(params).values()) {
     if (sequenceHasExtension([block])) return true;
   }
@@ -721,7 +721,7 @@ function isScriptOpType(opType: string): boolean {
 }
 
 /** Mirror of scanner.py _dat_content_is_python. */
-function datContentIsPython(opType: string, params: TdnRecord): boolean {
+function datContentIsPython(opType: string, params: TdxnRecord): boolean {
   if (isExecuteDatType(opType)) return true;
   if (typeKey(opType) !== "textdat") return false;
   const lang = params.language;
@@ -831,15 +831,15 @@ function serializedSizeBytes(value: unknown): number | undefined {
 }
 
 function operatorCountExceeds(
-  tdn: unknown,
+  tdxn: unknown,
   cap: number
 ): { exceeds: boolean; count: number } {
-  if (!isRecord(tdn)) {
+  if (!isRecord(tdxn)) {
     return { exceeds: false, count: 0 };
   }
 
   let count = 1;
-  const stack = [...safeList(tdn.operators)].reverse();
+  const stack = [...safeList(tdxn.operators)].reverse();
   const seen = new WeakSet<object>();
 
   while (stack.length > 0) {
@@ -885,12 +885,12 @@ function typeKey(value: unknown): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function rootPath(tdn: TdnRecord): string {
-  if (typeof tdn.network_path === "string" && tdn.network_path) {
-    return tdn.network_path;
+function rootPath(tdxn: TdxnRecord): string {
+  if (typeof tdxn.network_path === "string" && tdxn.network_path) {
+    return tdxn.network_path;
   }
-  if (typeof tdn.name === "string" && tdn.name) {
-    return tdn.name;
+  if (typeof tdxn.name === "string" && tdxn.name) {
+    return tdxn.name;
   }
   return "/";
 }
@@ -920,6 +920,6 @@ function errorName(error: unknown): string {
   return safeString(error) || "Error";
 }
 
-function isRecord(value: unknown): value is TdnRecord {
+function isRecord(value: unknown): value is TdxnRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

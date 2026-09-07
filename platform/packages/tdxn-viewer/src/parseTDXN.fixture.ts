@@ -1,5 +1,5 @@
-export const parseTDNFixture = {
-  format: "tdn",
+export const parseTDXNFixture = {
+  format: "tdxn",
   version: "1.4",
   network_path: "/project1/feedback_tunnel",
   type: "baseCOMP",

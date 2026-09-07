@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { scanTdn } from "./scanner";
+import { scanTdxn } from "./scanner";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "fixtures");
@@ -30,6 +30,7 @@ interface Fixture {
   name: string;
   why: string;
   surfaces: string[];
+  /** Fixture key stays `tdn`: the corpus JSON is shared verbatim with the Python side. */
   tdn: Record<string, unknown>;
   expect_py: { verdict: string; counts: Record<string, number> };
   expect_ts: { verdict: string; counts: Record<string, number> };
@@ -64,7 +65,7 @@ describe("scanner parity corpus (C8)", () => {
 
   for (const fx of fixtures) {
     it(`typescript matches its recorded expectation: ${fx.name}`, () => {
-      const result = scanTdn(fx.tdn);
+      const result = scanTdxn(fx.tdn);
       expect(result.verdict, `${fx.name}: verdict drifted`).toBe(fx.expect_ts.verdict);
       expect(normalizedCounts(result.counts as unknown as Record<string, number>),
              `${fx.name}: counts drifted`).toEqual(fx.expect_ts.counts);

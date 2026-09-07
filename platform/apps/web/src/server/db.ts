@@ -83,17 +83,17 @@ export interface InsertSpecimenInput {
   /** 'public' or 'private'; anything else (or absent) defaults to 'private'
    *  (the author's draft -- they publish to 'public' to add it to the Collection). */
   visibility?: Visibility;
-  tdnR2Key: string;
-  tdnSha256: string;
+  tdxnR2Key: string;
+  tdxnSha256: string;
   sizeBytes: number;
   scan: CapabilityJson;
   thumbnailKey?: string;
   /** R2 key for the cover video (videos/{sha256}). Omitted = image-only cover. */
   videoKey?: string;
-  parsedTdn?: unknown;
+  parsedTdxn?: unknown;
 }
 
-export interface CurrentTdnBlob {
+export interface CurrentTdxnBlob {
   key: string;
   capability: CapabilityJson;
 }
@@ -671,14 +671,14 @@ function fallbackSpecimensByAuthor(handle: string): SpecimenSummary[] {
   return fixtureSummaries.filter((summary) => summary.author_handle === handle);
 }
 
-export async function getCurrentTdnBlobForSlug(
+export async function getCurrentTdxnBlobForSlug(
   db: D1Database,
   slug: string,
   // When set to the signed-in user's id, that user can also load their OWN
   // non-public draft's network (preview / edit prefill / edit diff). Left unset
   // by the public /tdn + /copy endpoints, which must only ever serve public TDXN.
   viewerId?: string | null
-): Promise<CurrentTdnBlob | null> {
+): Promise<CurrentTdxnBlob | null> {
   const row = await db
     .prepare(
       `SELECT v.tdn_r2_key AS key,
@@ -712,7 +712,7 @@ export async function insertSpecimenWithVersion(
   const title = input.title.trim();
   const description = input.description.trim();
   const capabilityJson = JSON.stringify(input.scan);
-  const opCount = countTdnOperators(input.parsedTdn);
+  const opCount = countTdxnOperators(input.parsedTdxn);
   // Categories (multi). Prefer the submit-form list; fall back to the legacy
   // single category, then the first tag's slug, then "community". The first
   // entry is the PRIMARY, stored in specimens.category (single-slot display +
@@ -774,8 +774,8 @@ export async function insertSpecimenWithVersion(
       .bind(
         versionId,
         specimenId,
-        input.tdnR2Key,
-        input.tdnSha256,
+        input.tdxnR2Key,
+        input.tdxnSha256,
         input.sizeBytes,
         opCount,
         scanId
@@ -824,7 +824,7 @@ export async function insertSpecimenWithVersion(
     description,
     tags: tags.map((tag) => tag.name),
     authorHandle: input.user.handle,
-    datText: extractDatText(input.parsedTdn)
+    datText: extractDatText(input.parsedTdxn)
   });
 
   // TODO: Queue follow-up jobs for generated thumbnails and Sigstore signing.
@@ -915,7 +915,7 @@ export async function getSpecimenForEdit(
 // Owner edit of a specimen's METADATA (title/description/tags/license/
 // level/category/requires). The TDXN body is NOT touched here -- changing
 // the network would require a re-scan + a new specimen_versions row, which is a
-// separate "new version" path. parsedTdn (the unchanged current network) is
+// separate "new version" path. parsedTdxn (the unchanged current network) is
 // passed only so the FTS mirror's dat_text is preserved on re-sync: syncSpecimensFts
 // does INSERT OR REPLACE on the whole row, so omitting dat_text would wipe it.
 // Set (or clear) ONLY a specimen's cover-video key, without touching any other
@@ -956,7 +956,7 @@ export async function updateSpecimenMetadata(
      * an omitted videoKey, which leaves the existing video as-is. When true,
      * videoKey is ignored. */
     clearVideo?: boolean;
-    parsedTdn?: Record<string, unknown> | null;
+    parsedTdxn?: Record<string, unknown> | null;
   }
 ): Promise<void> {
   const tags = normalizeTags(input.tags);
@@ -1040,7 +1040,7 @@ export async function updateSpecimenMetadata(
     description,
     tags: tags.map((tag) => tag.name),
     authorHandle: input.authorHandle,
-    datText: input.parsedTdn ? extractDatText(input.parsedTdn) : ""
+    datText: input.parsedTdxn ? extractDatText(input.parsedTdxn) : ""
   });
 }
 
@@ -1059,17 +1059,17 @@ export async function addSpecimenVersion(
     title: string;
     description: string;
     tags: string[];
-    tdnR2Key: string;
-    tdnSha256: string;
+    tdxnR2Key: string;
+    tdxnSha256: string;
     sizeBytes: number;
     scan: CapabilityJson;
-    parsedTdn: Record<string, unknown>;
+    parsedTdxn: Record<string, unknown>;
   }
 ): Promise<{ versionNum: number }> {
   const versionId = crypto.randomUUID();
   const scanId = crypto.randomUUID();
   const capabilityJson = JSON.stringify(input.scan);
-  const opCount = countTdnOperators(input.parsedTdn);
+  const opCount = countTdxnOperators(input.parsedTdxn);
   const scanStatus = input.scan.verdict;
 
   // Next version number for this specimen (current max + 1).
@@ -1092,8 +1092,8 @@ export async function addSpecimenVersion(
         versionId,
         input.specimenId,
         versionNum,
-        input.tdnR2Key,
-        input.tdnSha256,
+        input.tdxnR2Key,
+        input.tdxnSha256,
         input.sizeBytes,
         opCount,
         scanId
@@ -1130,7 +1130,7 @@ export async function addSpecimenVersion(
     description: input.description.trim(),
     tags: normalizeTags(input.tags).map((tag) => tag.name),
     authorHandle: input.authorHandle,
-    datText: extractDatText(input.parsedTdn)
+    datText: extractDatText(input.parsedTdxn)
   });
 
   return { versionNum };
@@ -1777,7 +1777,7 @@ function shortId(): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function countTdnOperators(value: unknown): number {
+function countTdxnOperators(value: unknown): number {
   if (!isRecord(value)) return 0;
 
   let count = hasOperatorShape(value) ? 1 : 0;
@@ -1786,7 +1786,7 @@ function countTdnOperators(value: unknown): number {
     if (!Array.isArray(children)) continue;
 
     for (const child of children) {
-      count += countTdnOperators(child);
+      count += countTdxnOperators(child);
     }
   }
 

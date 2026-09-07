@@ -2,9 +2,9 @@
 import { env } from "cloudflare:workers";
 import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_LICENSES, SUBMIT_REQUIRE_GROUPS } from "@embody/contracts";
 import Base from "../../../layouts/Base.astro";
-import TdnYamlEditor from "../../../components/TdnYamlEditor";
-import { getCurrentTdnBlobForSlug, getSpecimenForEdit, getVideoKeyForSlug } from "../../../server/db";
-import { getTdn } from "../../../server/r2";
+import TdxnYamlEditor from "../../../components/TdxnYamlEditor";
+import { getCurrentTdxnBlobForSlug, getSpecimenForEdit, getVideoKeyForSlug } from "../../../server/db";
+import { getTdxn } from "../../../server/r2";
 
 export const prerender = false;
 
@@ -28,13 +28,13 @@ if (specimen.authorId !== user.id) {
 }
 
 // Pre-fill the editor with the current network text (raw TDXN exactly as stored).
-let currentTdn = "";
+let currentTdxn = "";
 try {
   // user.id (ownership verified above) so a private draft's network prefills too.
-  const blob = await getCurrentTdnBlobForSlug(env.DB, slug, user.id);
-  if (blob) currentTdn = (await getTdn(env.BLOBS, blob.key)) ?? "";
+  const blob = await getCurrentTdxnBlobForSlug(env.DB, slug, user.id);
+  if (blob) currentTdxn = (await getTdxn(env.BLOBS, blob.key)) ?? "";
 } catch {
-  currentTdn = "";
+  currentTdxn = "";
 }
 
 // Whether this specimen already carries a cover video, so the edit form can show
@@ -80,7 +80,7 @@ const currentLicenseLabel =
       capability scan and saves a new version of the network.
     </p>
 
-    <form class="submit-form" data-edit-form data-slug={specimen.slug} data-tdn-prefilled={currentTdn.trim() ? "1" : "0"} novalidate>
+    <form class="submit-form" data-edit-form data-slug={specimen.slug} data-tdxn-prefilled={currentTdxn.trim() ? "1" : "0"} novalidate>
       <div class="submit-cols">
       <div class="submit-col submit-col--fields">
       <label class="submit-field">
@@ -208,13 +208,13 @@ const currentLicenseLabel =
       </label>
       </div>
 
-      <div class="submit-col submit-col--tdn">
+      <div class="submit-col submit-col--tdxn">
       <div class="submit-field submit-field--editor">
         <span>TDXN (YAML)</span>
         <small class="submit-hint">
           edit the network directly. saving a changed TDXN re-runs the capability scan and creates a new version.
         </small>
-        <TdnYamlEditor client:load name="tdn" initialValue={currentTdn} />
+        <TdxnYamlEditor client:load name="tdn" initialValue={currentTdxn} />
       </div>
       </div>
       <div class="submit-footer">
@@ -498,20 +498,20 @@ const currentLicenseLabel =
   }
 
   // The TDXN editor (React island) validates on every edit and broadcasts a
-  // bubbling `tdn:change` with its validity, so "save changes" stays greyed while
+  // bubbling `tdxn:change` with its validity, so "save changes" stays greyed while
   // the network is unparseable. Seed the flag from the SERVER-prefilled content
-  // (data-tdn-prefilled): the stored network was already valid when saved, so a
+  // (data-tdxn-prefilled): the stored network was already valid when saved, so a
   // rename that never touches the editor still passes the gate even if the
   // island's mount event fires before this listener attaches (a race that would
   // otherwise leave the button permanently greyed and silently block saves).
-  let tdnValid = form?.dataset.tdnPrefilled === "1";
-  form?.addEventListener("tdn:change", (event) => {
-    tdnValid = Boolean((event as CustomEvent).detail?.valid);
+  let tdxnValid = form?.dataset.tdxnPrefilled === "1";
+  form?.addEventListener("tdxn:change", (event) => {
+    tdxnValid = Boolean((event as CustomEvent).detail?.valid);
     refreshReady();
   });
 
   function isReady() {
-    return !titleMissing() && tdnValid;
+    return !titleMissing() && tdxnValid;
   }
   function refreshReady() {
     if (!goBtn) return;
@@ -533,7 +533,7 @@ const currentLicenseLabel =
     if (!isReady()) {
       const probs: string[] = [];
       if (titleMissing()) probs.push("a title");
-      if (!tdnValid) probs.push("a valid TDXN network");
+      if (!tdxnValid) probs.push("a valid TDXN network");
       setFieldError("title", titleMissing() ? "add a title." : "");
       setStatus(`fix ${probs.join(" and ")} before saving.`, "error");
       return;
@@ -615,7 +615,7 @@ const currentLicenseLabel =
       level: String(data.get("level") || "intermediate"),
       categories: categoriesSel,
       requires: data.getAll("requires").map(String),
-      tdn: String(data.get("tdn") || ""),
+      tdxn: String(data.get("tdn") || ""),
       ...(thumbnail ? { thumbnail } : {})
     };
 
@@ -973,7 +973,7 @@ const currentLicenseLabel =
      same submit-form / submit-field markup classes, so it needs the same scoped
      rules to look consistent. embody.css can't be edited here, so duplicating
      the relevant block is the accepted approach. Contribute-only bits
-     (.submit-tdn, .submit-turnstile, sign-out chrome) are intentionally omitted
+     (.submit-tdxn, .submit-turnstile, sign-out chrome) are intentionally omitted
      since this form has none of that markup. */
 
   /* Centered reading column, same treatment as the manifesto body: a narrow
@@ -1012,7 +1012,7 @@ const currentLicenseLabel =
     min-width: 0;
   }
 
-  .submit-col--tdn {
+  .submit-col--tdxn {
     min-height: 100%;
   }
 

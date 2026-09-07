@@ -1,9 +1,9 @@
 ---
 import { env } from "cloudflare:workers";
 import type { SpecimenDetail } from "@embody/contracts";
-import { TdnViewer } from "@embody/tdn-viewer";
-import CopyTdnEnvelopeButton from "../../components/CopyTdnEnvelopeButton";
-import TdnYamlViewer from "../../components/TdnYamlViewer";
+import { TdxnViewer } from "@embody/tdxn-viewer";
+import CopyTdxnEnvelopeButton from "../../components/CopyTdxnEnvelopeButton";
+import TdxnYamlViewer from "../../components/TdxnYamlViewer";
 import Base from "../../layouts/Base.astro";
 import {
   findFixtureSpecimen,
@@ -13,10 +13,10 @@ import {
 import { reactionsClusterHtml } from "../../lib/reactions";
 import { resultImage, resultVideo } from "../../lib/specimenThumb";
 import { SITE_ORIGIN, absoluteUrl } from "../../lib/site";
-import { sampleTdn } from "../../fixtures/sample-tdn";
+import { sampleTdxn } from "../../fixtures/sample-tdxn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { getSpecimenBySlug } from "../../server/db";
-import { getParsedTdnForSlug } from "../../server/tdn";
+import { getParsedTdxnForSlug } from "../../server/tdxn";
 import { getSpecimenIdBySlug, getUserReactions, REPORT_REASONS } from "../../server/engagement";
 
 export const prerender = false;
@@ -89,27 +89,27 @@ if (sessionUser) {
 const reportReasons = REPORT_REASONS;
 
 // Resolve the real specimen network for the viewer + copy + raw view.
-// Fallback chain: parsed R2 .tdn YAML -> bundled stripped graph -> sampleTdn.
-// Raw view prefers the real blob YAML; tdnToYaml is only a fallback.
-let tdn: Record<string, unknown>;
-let rawTdn: string;
+// Fallback chain: parsed R2 .tdn YAML -> bundled stripped graph -> sampleTdxn.
+// Raw view prefers the real blob YAML; tdxnToYaml is only a fallback.
+let tdxn: Record<string, unknown>;
+let rawTdxn: string;
 
 try {
-  const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, specimen.slug, Astro.locals.user?.id);
+  const parsed = await getParsedTdxnForSlug(env.DB, env.BLOBS, specimen.slug, Astro.locals.user?.id);
   if (parsed) {
-    tdn = parsed.tdn;
-    rawTdn = parsed.raw;
+    tdxn = parsed.tdxn;
+    rawTdxn = parsed.raw;
   } else {
-    tdn = specimenGraph(specimen.slug) ?? sampleTdn;
-    rawTdn = tdnToYaml(tdn);
+    tdxn = specimenGraph(specimen.slug) ?? sampleTdxn;
+    rawTdxn = tdxnToYaml(tdxn);
   }
 } catch {
-  tdn = specimenGraph(specimen.slug) ?? sampleTdn;
-  rawTdn = tdnToYaml(tdn);
+  tdxn = specimenGraph(specimen.slug) ?? sampleTdxn;
+  rawTdxn = tdxnToYaml(tdxn);
 }
 
 // Quick counts for the raw-YAML viewer's summary bar.
-const countOf = (k: string): number => (Array.isArray(tdn[k]) ? (tdn[k] as unknown[]).length : 0);
+const countOf = (k: string): number => (Array.isArray(tdxn[k]) ? (tdxn[k] as unknown[]).length : 0);
 // Connections aren't a top-level array in TDXN -- they're each operator's data
 // `inputs` (the wires the graph draws). Sum those (recursing into nested COMPs);
 // dock links (comp_inputs) are structural, not counted as connections.
@@ -123,11 +123,11 @@ const countConnections = (ops: unknown): number => {
   }
   return n;
 };
-const tdnSummary = {
+const tdxnSummary = {
   operators: countOf("operators"),
-  connections: countOf("connections") || countConnections(tdn.operators),
+  connections: countOf("connections") || countConnections(tdxn.operators),
   annotations: countOf("annotations"),
-  lines: rawTdn.replace(/\n+$/, "").split("\n").length,
+  lines: rawTdxn.replace(/\n+$/, "").split("\n").length,
 };
 
 // Rendered RESULT cover for the sidebar thumbnail: baked render when available,
@@ -204,7 +204,7 @@ function specimenFromLive(
 // Matches Embody's writer: 2-space indent, flow style for short numeric
 // vectors, literal block scalar (|, |-, |+) for multi-line strings, and
 // expression/bind prefixes (=, ~) carried through untouched in the values.
-function tdnToYaml(value: unknown): string {
+function tdxnToYaml(value: unknown): string {
   if (value === null || value === undefined) return "{}\n";
   if (typeof value !== "object" || Array.isArray(value)) {
     return `${emitScalar(value)}\n`;
@@ -604,10 +604,10 @@ function emitKey(key: string): string {
   {/* App shell: a full-viewport working canvas. The network graph fills the
       screen; the identity/actions + properties panels float over it (docked,
       TouchDesigner-style), and the TDXN source slides in from the left. */}
-  <div class={`specimen-app${isOwner ? " is-owner" : ""}`} data-tdn-app>
+  <div class={`specimen-app${isOwner ? " is-owner" : ""}`} data-tdxn-app>
     <div class="specimen-app__canvas">
-      <TdnViewer
-        tdn={tdn}
+      <TdxnViewer
+        tdxn={tdxn}
         height="100%"
         navigable
         rootLabel={specimen.name}
@@ -638,8 +638,8 @@ function emitKey(key: string): string {
       </div>
 
       <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
-        <CopyTdnEnvelopeButton
-          tdn={tdn}
+        <CopyTdxnEnvelopeButton
+          tdxn={tdxn}
           slug={specimen.slug}
           version={specimen.current_version}
           label="embody it"
@@ -706,7 +706,7 @@ function emitKey(key: string): string {
     </aside>
 
     {/* Docked RIGHT properties panel ('p'). Populated from the viewer's
-        tdnviewer:select event with the selected op's customized parameters. */}
+        tdxnviewer:select event with the selected op's customized parameters. */}
     <aside class="specimen-app__props app-panel" data-panel="properties" data-draggable aria-label="properties">
       <div class="panel-head" data-drag-handle>
         <p class="eyebrow"><span class="kbd" aria-hidden="true">p</span>roperties</p>
@@ -803,27 +803,27 @@ function emitKey(key: string): string {
       <button class="panel-tab panel-tab--outline" type="button" data-panel-open="outline" hidden aria-label="show overview (o)" title="overview (o)"><span class="kbd" aria-hidden="true">o</span>verview</button>
       <button class="panel-tab panel-tab--props" type="button" data-panel-open="properties" hidden aria-label="show properties (p)" title="properties (p)"><span class="kbd" aria-hidden="true">p</span>roperties</button>
       <button class="panel-tab panel-tab--thumb" type="button" data-panel-open="thumbnail" hidden aria-label="show rendered result (r)" title="rendered result (r)"><span class="kbd" aria-hidden="true">r</span>esult</button>
-      <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
-        <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
-        <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span>&nbsp;source</span>
+      <button class="tdxn-tab" type="button" data-panel-open="tdxn" aria-expanded="false" aria-controls="tdxn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
+        <svg class="tdxn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
+        <span class="tdxn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdxn-acr">dxn</span>&nbsp;source</span>
       </button>
     </div>
-    <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdxn source">
-      <header class="specimen-app__tdn-head" data-drag-handle>
-        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span> source</p>
-        <CopyTdnEnvelopeButton
-          tdn={tdn}
+    <aside class="specimen-app__tdxn app-panel is-collapsed" id="tdxn-panel" data-panel="tdxn" data-draggable aria-label="tdxn source">
+      <header class="specimen-app__tdxn-head" data-drag-handle>
+        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdxn-acr">dxn</span> source</p>
+        <CopyTdxnEnvelopeButton
+          tdxn={tdxn}
           slug={specimen.slug}
           version={specimen.current_version}
           className="copy-button--summary"
           client:load
         />
-        <button type="button" class="tdn-close" data-panel-collapse="tdn" aria-label="close tdxn source (t)" title="close (t)">
+        <button type="button" class="tdxn-close" data-panel-collapse="tdxn" aria-label="close tdxn source (t)" title="close (t)">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
       </header>
-      <div class="specimen-app__tdn-body">
-        <TdnYamlViewer raw={rawTdn} summary={tdnSummary} client:visible />
+      <div class="specimen-app__tdxn-body">
+        <TdxnYamlViewer raw={rawTdxn} summary={tdxnSummary} client:visible />
       </div>
     </aside>
   </div>
@@ -872,7 +872,7 @@ function emitKey(key: string): string {
     // t = TDXN source. Each panel collapses to a labeled tab on its edge; a class
     // on the app root lets neighbouring panels reclaim the freed space.
     {
-      const app = document.querySelector("[data-tdn-app]") as HTMLElement | null;
+      const app = document.querySelector("[data-tdxn-app]") as HTMLElement | null;
       const PANELS = [
         // defaultOpen mirrors the SSR markup -- it is what applyLayout falls
         // back to when localStorage holds no entry for a panel. Without it,
@@ -881,7 +881,7 @@ function emitKey(key: string): string {
         { id: "outline", key: "o", defaultOpen: true },
         { id: "properties", key: "p", defaultOpen: true },
         { id: "thumbnail", key: "r", defaultOpen: true },
-        { id: "tdn", key: "t", defaultOpen: false }
+        { id: "tdxn", key: "t", defaultOpen: false }
       ];
       const panelEls = (id: string) =>
         Array.from(document.querySelectorAll<HTMLElement>(`[data-panel="${id}"]`));
@@ -947,12 +947,12 @@ function emitKey(key: string): string {
       // Selecting a node reveals its parameters without a trip to the rail. A
       // cleared selection closes the drawer again, so tapping the canvas is also
       // how you dismiss it.
-      document.addEventListener("tdnviewer:select", (e) => {
+      document.addEventListener("tdxnviewer:select", (e) => {
         if (!drawers.matches) return;
         const sel = (e as CustomEvent).detail as { isComp?: boolean } | null;
         // NEVER auto-open over an enterable COMP: the drawer is fixed and ~304px
         // wide, so it would swallow the second tap of the double-tap that drills
-        // into the sub-network (TdnViewer onNodeDoubleClick) and make every COMP
+        // into the sub-network (TdxnViewer onNodeDoubleClick) and make every COMP
         // unreachable on a phone. Leaf ops have nothing to enter, so the
         // convenience is safe there.
         if (sel && sel.isComp) return;
@@ -964,7 +964,7 @@ function emitKey(key: string): string {
         const t = e.target as HTMLElement | null;
         if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
         if (e.key === "Escape") {
-          if (isOpen("tdn")) setPanel("tdn", false);
+          if (isOpen("tdxn")) setPanel("tdxn", false);
           return;
         }
         const match = PANELS.find((p) => p.key === e.key.toLowerCase());
@@ -975,7 +975,7 @@ function emitKey(key: string): string {
     }
 
     // ---- Properties panel: render the selected operator ------------------------
-    // The TdnViewer dispatches `tdnviewer:select` with the op's customized
+    // The TdxnViewer dispatches `tdxnviewer:select` with the op's customized
     // parameters (or null when the selection is cleared). We render only what the
     // TDXN actually stores -- the values this network changed from defaults.
     {
@@ -1111,7 +1111,7 @@ function emitKey(key: string): string {
         empty.hidden = false;
       };
 
-      document.addEventListener("tdnviewer:select", (e) => {
+      document.addEventListener("tdxnviewer:select", (e) => {
         const detail = (e as CustomEvent).detail;
         if (detail) render(detail);
         else clear();
@@ -1642,19 +1642,19 @@ function emitKey(key: string): string {
     height: 100%;
   }
   /* Strip the viewer's card chrome so it reads as the page's full-bleed canvas. */
-  .specimen-app :global(.tdn-viewer.specimen-app__viewer) {
+  .specimen-app :global(.tdxn-viewer.specimen-app__viewer) {
     height: 100% !important;
     min-height: 0;
     border: 0;
     border-radius: 0;
   }
   /* The graph is already fullscreen here, so hide the viewer's fullscreen control. */
-  .specimen-app :global(.tdn-viewer .react-flow__controls) {
+  .specimen-app :global(.tdxn-viewer .react-flow__controls) {
     display: none;
   }
   /* Network-path breadcrumb docked in the bottom-left corner, aligned to the
      same insets as the panels (its own quadrant). */
-  .specimen-app :global(.tdn-viewer__breadcrumb) {
+  .specimen-app :global(.tdxn-viewer__breadcrumb) {
     top: auto;
     bottom: var(--app-bottom);
     left: var(--app-side);
@@ -1691,7 +1691,7 @@ function emitKey(key: string): string {
   .specimen-app__thumb { transform-origin: bottom right; }
   /* The TDXN drawer is a left-edge drawer -- it slides off the left instead of
      scaling toward a corner. */
-  .specimen-app__tdn.is-collapsed {
+  .specimen-app__tdxn.is-collapsed {
     --panel-scale: 1;
     --collapse-x: calc(-100% - 32px);
   }
@@ -1892,7 +1892,7 @@ function emitKey(key: string): string {
   /* Prominent TDXN source tab on the left edge (the drawer's collapsed state).
      Solid + opaque: no gradient/glow/backdrop-filter, and no hover size shift --
      those produced a doubled-outline artifact and cost frames. */
-  .tdn-tab {
+  .tdxn-tab {
     position: absolute;
     z-index: 30;
     /* Docked to the BOTTOM CENTER of the page -- a wide drawer handle new
@@ -1912,21 +1912,21 @@ function emitKey(key: string): string {
     cursor: pointer;
     transition: background 140ms ease, border-color 140ms ease;
   }
-  .tdn-tab[hidden] { display: none; }
-  .tdn-tab:hover {
+  .tdxn-tab[hidden] { display: none; }
+  .tdxn-tab:hover {
     background: color-mix(in srgb, var(--accent) 24%, var(--bg-elevated));
     border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   }
-  .tdn-tab__icon { color: var(--accent); flex-shrink: 0; }
-  .tdn-tab__label {
+  .tdxn-tab__icon { color: var(--accent); flex-shrink: 0; }
+  .tdxn-tab__label {
     display: inline-flex;
     align-items: center;
     font: 700 12px/1 var(--font-mono);
     letter-spacing: 0.18em;
     text-transform: uppercase;
   }
-  .tdn-tab__label .kbd { margin-right: 0; }
-  .tdn-tab .tdn-acr { text-transform: uppercase; }
+  .tdxn-tab__label .kbd { margin-right: 0; }
+  .tdxn-tab .tdxn-acr { text-transform: uppercase; }
 
   /* Rendered-result thumbnail, pinned bottom-right. */
   .specimen-app__thumb {
@@ -2011,7 +2011,7 @@ function emitKey(key: string): string {
   .specimen-app.is-owner .panel-tab--props { top: calc(var(--app-top) + var(--app-owner-h)); }
   .panel-tab--thumb { bottom: var(--app-bottom); right: var(--app-side); }
 
-  .specimen-app__tdn {
+  .specimen-app__tdxn {
     position: absolute;
     z-index: 40;
     top: var(--app-top);
@@ -2023,21 +2023,21 @@ function emitKey(key: string): string {
     overflow: hidden;
     padding: 0;
   }
-  .specimen-app__tdn-head {
+  .specimen-app__tdxn-head {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
   }
-  .specimen-app__tdn-head .eyebrow {
+  .specimen-app__tdxn-head .eyebrow {
     margin: 0;
     color: var(--text-muted);
   }
-  /* "dn" completes the "tdn" acronym the keycap starts -- uppercase it so the
+  /* "dn" completes the "tdxn" acronym the keycap starts -- uppercase it so the
      label reads as one wordmark: [T]DN source. (Kerning is uniform via .kbd.) */
-  .specimen-app__tdn-head .tdn-acr { text-transform: uppercase; }
-  .specimen-app__tdn-head .copy-button { margin-left: auto; }
-  .tdn-close {
+  .specimen-app__tdxn-head .tdxn-acr { text-transform: uppercase; }
+  .specimen-app__tdxn-head .copy-button { margin-left: auto; }
+  .tdxn-close {
     display: grid;
     place-items: center;
     width: 30px;
@@ -2049,8 +2049,8 @@ function emitKey(key: string): string {
     cursor: pointer;
     transition: color 140ms ease, border-color 140ms ease;
   }
-  .tdn-close:hover { color: var(--accent); border-color: var(--border); }
-  .specimen-app__tdn-body {
+  .tdxn-close:hover { color: var(--accent); border-color: var(--border); }
+  .specimen-app__tdxn-body {
     flex: 1;
     min-height: 0;
     overflow: auto;
@@ -2101,7 +2101,7 @@ function emitKey(key: string): string {
       gap: 8px;
     }
     .panel-tab,
-    .tdn-tab {
+    .tdxn-tab {
       position: static;
       inset: auto;
       transform: none;
@@ -2115,7 +2115,7 @@ function emitKey(key: string): string {
       border-right: 0;
       border-radius: var(--radius-sm) 0 0 var(--radius-sm);
       /* One type scale for the whole rail -- the TDXN tab's own label sets it
-         (.tdn-tab__label, 700/12/0.18em); the smaller .panel-tab default was not
+         (.tdxn-tab__label, 700/12/0.18em); the smaller .panel-tab default was not
          legible turned on its side. */
       font: 700 12px/1 var(--font-mono);
       letter-spacing: 0.18em;
@@ -2124,11 +2124,11 @@ function emitKey(key: string): string {
       width: var(--rail-w);
     }
     .panel-tab[hidden],
-    .tdn-tab[hidden] { display: inline-flex; }
+    .tdxn-tab[hidden] { display: inline-flex; }
     /* The keycap chrome is meaningless without a keyboard, but the letter is the
        first letter of the word ([O]verview) -- strip the box, keep the letter. */
     .panel-tab .kbd,
-    .tdn-tab .kbd {
+    .tdxn-tab .kbd {
       display: inline;
       width: auto;
       height: auto;
@@ -2138,9 +2138,9 @@ function emitKey(key: string): string {
       color: inherit;
       font: inherit;
     }
-    .tdn-tab__icon { display: none; }
+    .tdxn-tab__icon { display: none; }
     .panel-tab[aria-expanded="true"],
-    .tdn-tab[aria-expanded="true"] {
+    .tdxn-tab[aria-expanded="true"] {
       border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
       color: var(--accent);
     }
@@ -2149,7 +2149,7 @@ function emitKey(key: string): string {
     .specimen-app__left,
     .specimen-app__props,
     .specimen-app__thumb,
-    .specimen-app__tdn {
+    .specimen-app__tdxn {
       position: fixed;
       top: var(--app-top);
       right: calc(var(--rail-w) + var(--app-gap));
@@ -2166,16 +2166,16 @@ function emitKey(key: string): string {
       overscroll-behavior: contain;
     }
     /* TDXN is a code view -- give it what the viewport can spare, full height. */
-    .specimen-app__tdn {
+    .specimen-app__tdxn {
       bottom: var(--app-bottom);
       width: calc(100vw - var(--rail-w) - var(--app-gap) - var(--app-side));
     }
-    .specimen-app__tdn-body { max-height: none; }
+    .specimen-app__tdxn-body { max-height: none; }
 
     /* Closed = slid off the right edge (past the rail), not scaled to a corner.
-       Overrides the desktop drawer direction on .specimen-app__tdn too. */
+       Overrides the desktop drawer direction on .specimen-app__tdxn too. */
     .app-panel.is-collapsed,
-    .specimen-app__tdn.is-collapsed {
+    .specimen-app__tdxn.is-collapsed {
       --panel-scale: 1;
       --collapse-x: calc(100% + var(--rail-w) + var(--app-gap) + 16px);
     }
@@ -2306,8 +2306,8 @@ function emitKey(key: string): string {
   /* Expressions (= prefix) and binds (~ prefix) read as live, not constant. */
   .prop-row__val.is-expr { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border-faint)); }
   .prop-row__val.is-bind { color: #c79bd1; border-color: color-mix(in srgb, #c79bd1 35%, var(--border-faint)); }
-  .prop-row__val.is-num { color: var(--tdn-num, #d79a73); }
-  .prop-row__val.is-bool { color: var(--tdn-kw, #c79bd1); }
+  .prop-row__val.is-num { color: var(--tdxn-num, #d79a73); }
+  .prop-row__val.is-bool { color: var(--tdxn-kw, #c79bd1); }
   .prop-row__val.is-null { color: var(--text-faint); }
   .prop-empty-note {
     margin: 4px 0 0;
@@ -2361,33 +2361,33 @@ function emitKey(key: string): string {
 
   /* In the app-shell drawer, the YAML viewer fills the full drawer height -- its
      default 540px-capped code area otherwise leaves dead space below. */
-  .specimen-app__tdn-body .tdn-yaml {
+  .specimen-app__tdxn-body .tdxn-yaml {
     display: flex;
     flex-direction: column;
     height: 100%;
   }
-  .specimen-app__tdn-body .tdn-yaml__code {
+  .specimen-app__tdxn-body .tdxn-yaml__code {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
     height: auto;
   }
   /* Put the search field and the jump/collapse/expand controls on one row. */
-  .specimen-app__tdn-body .tdn-yaml__toolbar {
+  .specimen-app__tdxn-body .tdxn-yaml__toolbar {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
   }
-  .specimen-app__tdn-body .tdn-yaml__search {
+  .specimen-app__tdxn-body .tdxn-yaml__search {
     flex: 1 1 140px;
     min-width: 0;
   }
-  .specimen-app__tdn-body .tdn-yaml__search-input {
+  .specimen-app__tdxn-body .tdxn-yaml__search-input {
     width: 100%;
     min-width: 0;
   }
-  .specimen-app__tdn-body .tdn-yaml__tools {
+  .specimen-app__tdxn-body .tdxn-yaml__tools {
     flex: 0 0 auto;
   }
 </style>

@@ -3,17 +3,17 @@
 // the web "Copy TDXN" button, and the submit-form "Paste from clipboard" button.
 // Do NOT change without a contract bump (notify all dependents). ASCII only.
 
-export const EMBODY_TDN_MARKER = "_embody_tdn" as const;
-export const EMBODY_TDN_VERSION = 1 as const;
+export const EMBODY_TDXN_MARKER = "_embody_tdn" as const;
+export const EMBODY_TDXN_VERSION = 1 as const;
 
 export type EnvelopeSource = "embody" | "embody.tools";
 
-export interface EmbodyTdnEnvelope {
+export interface EmbodyTdxnEnvelope {
   /** Detection marker; always 1 for this version. */
   _embody_tdn: 1;
   /**
    * Where the payload came from.
-   * "embody"        = a user's own network round-tripping via Copy tdn (TRUSTED -> direct import).
+   * "embody"        = a user's own network round-tripping via Copy tdxn (TRUSTED -> direct import).
    * "embody.tools"  = community content (UNTRUSTED -> default-inert safe-import on the TD side).
    */
   source: EnvelopeSource;
@@ -36,11 +36,11 @@ export interface EmbodyTdnEnvelope {
 }
 
 /** Type guard: is an arbitrary parsed-JSON value a valid envelope? */
-export function isEmbodyTdnEnvelope(v: unknown): v is EmbodyTdnEnvelope {
+export function isEmbodyTdxnEnvelope(v: unknown): v is EmbodyTdxnEnvelope {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
   return (
-    o[EMBODY_TDN_MARKER] === EMBODY_TDN_VERSION &&
+    o[EMBODY_TDXN_MARKER] === EMBODY_TDXN_VERSION &&
     (o.source === "embody" || o.source === "embody.tools") &&
     typeof o.sha256 === "string" &&
     typeof o.tdn === "object" &&
@@ -49,7 +49,7 @@ export function isEmbodyTdnEnvelope(v: unknown): v is EmbodyTdnEnvelope {
 }
 
 /**
- * Canonical serialization of a tdn payload (the bytes the envelope's sha256
+ * Canonical serialization of a tdxn payload (the bytes the envelope's sha256
  * covers). Rules, identical in dev/embody/Embody/TDXNExt.py
  * canonical_tdn_bytes: keys in Unicode code-point order, `,`/`:` separators,
  * non-ASCII emitted raw, numbers per JavaScript Number::toString (integral
@@ -58,7 +58,7 @@ export function isEmbodyTdnEnvelope(v: unknown): v is EmbodyTdnEnvelope {
  * tell 1.0 from 1, so Python's repr rules could never agree with this side;
  * both now follow the JavaScript rules, pinned by fixtures/canonical_cases.json.
  */
-export function canonicalTdnString(value: unknown): string {
+export function canonicalTdxnString(value: unknown): string {
   const serialized = serializeCanonical(value, false);
   if (serialized === undefined) {
     throw new TypeError("TDXN payload must be JSON serializable.");

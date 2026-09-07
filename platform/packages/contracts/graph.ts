@@ -1,5 +1,5 @@
-// FROZEN CONTRACT C6 - the normalized graph the tdn-viewer renders.
-// `parseTDN(tdnDict)` (packages/tdn-viewer) produces this; the React Flow backend consumes it.
+// FROZEN CONTRACT C6 - the normalized graph the tdxn-viewer renders.
+// `parseTDXN(tdxnDict)` (packages/tdxn-viewer) produces this; the React Flow backend consumes it.
 // TDXN already carries absolute positions + input-index connections, so NO layout engine is
 // needed - this is pure draw-from-data. Source fields: docs/tdxn/specification.md (C7). ASCII only.
 
@@ -30,8 +30,8 @@ export interface GraphNode {
   dock?: string;
   /**
    * Number of operators nested directly inside this op (a COMP's sub-network).
-   * Only the SINGLE-LEVEL parse (parseTDNLevel) sets this -- it powers the
-   * viewer's drill-down affordance. The flattening parse (parseTDN) leaves it
+   * Only the SINGLE-LEVEL parse (parseTDXNLevel) sets this -- it powers the
+   * viewer's drill-down affordance. The flattening parse (parseTDXN) leaves it
    * undefined, since it splays every nested op into one plane. 0/undefined =
    * a leaf op with no sub-network to enter.
    */

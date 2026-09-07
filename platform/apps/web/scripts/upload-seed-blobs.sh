@@ -23,7 +23,7 @@ fi
 python3 - "$MANIFEST" <<'PY' | while IFS=$'\t' read -r SHA PATH_; do
 import json, sys
 for e in json.load(open(sys.argv[1])):
-    print(f"{e['sha256']}\t{e['tdn_path']}")
+    print(f"{e['sha256']}\t{e['tdxn_path']}")
 PY
   echo "Uploading embody-blobs/$SHA  <-  $PATH_  ($TARGET)"
   npx wrangler r2 object put "embody-blobs/$SHA" --file="$PATH_" "$TARGET"

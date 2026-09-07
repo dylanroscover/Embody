@@ -1,6 +1,6 @@
 // Shared TDXN/YAML line tokenizer: splits one line of TDXN v2.0 YAML into colored
 // segments (key / punctuation / string / number / keyword / expression / comment).
-// Used by the read-only TdnYamlViewer and the editable TdnYamlEditor so both
+// Used by the read-only TdxnYamlViewer and the editable TdxnYamlEditor so both
 // render identical syntax highlighting from a single source of truth. The TDXN
 // "=expression" shorthand gets its own class so it shows in the brand accent.
 

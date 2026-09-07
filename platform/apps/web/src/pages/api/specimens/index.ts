@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
+import { detectObviousMalware, scanTdxn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import {
   DEFAULT_LICENSE,
@@ -21,10 +21,10 @@ import {
 import { requireUser } from "../../../server/auth";
 import { notifyOwnerNewSpecimen } from "../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
-import { byteLength, putTdn, putThumbnail } from "../../../server/r2";
+import { byteLength, putTdxn, putThumbnail } from "../../../server/r2";
 import { checkRateLimit } from "../../../server/rateLimit";
 import { verifyTurnstile } from "../../../server/turnstile";
-import { MAX_TDN_TEXT_CHARS } from "../../../server/tdn";
+import { MAX_TDXN_TEXT_CHARS } from "../../../server/tdxn";
 
 // Submit abuse cap: 10 submissions per 10 minutes per client IP. Enforced via
 // KV; with no KV (dev) the limiter allows everything (see rateLimit.ts).
@@ -104,12 +104,12 @@ export const POST: APIRoute = async ({ request }) => {
       return errorResponse(403, "turnstile_failed", "Turnstile verification failed.");
     }
 
-    const parsedTdn = parseTdn(body.request.tdn);
-    if (!parsedTdn.ok) {
-      return errorResponse(400, "invalid_tdn", parsedTdn.detail);
+    const parsedTdxn = parseTdxn(body.request.tdn);
+    if (!parsedTdxn.ok) {
+      return errorResponse(400, "invalid_tdxn", parsedTdxn.detail);
     }
 
-    const scan = scanTdn(parsedTdn.tdn);
+    const scan = scanTdxn(parsedTdxn.tdxn);
     if (scan.verdict === "blocked") {
       return jsonResponse(
         {
@@ -123,7 +123,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     // Submit-side hard-block: reject ONLY unambiguous malware (droppers / shell-network-exec /
     // reverse shells). Generic executable surfaces stay flagged-and-accepted (default-inert import).
-    const malware = detectObviousMalware(parsedTdn.tdn);
+    const malware = detectObviousMalware(parsedTdxn.tdxn);
     if (malware.malicious) {
       return jsonResponse(
         {
@@ -136,7 +136,7 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const blob = await putTdn(env.BLOBS, body.request.tdn);
+    const blob = await putTdxn(env.BLOBS, body.request.tdn);
     const thumbnail = await putThumbnail(env.BLOBS, body.request.thumbnail);
     const inserted = await insertSpecimenWithVersion(env.DB, {
       user,
@@ -148,12 +148,12 @@ export const POST: APIRoute = async ({ request }) => {
       categories: body.request.categories,
       requires: body.request.requires,
       visibility: body.request.visibility,
-      tdnR2Key: blob.key,
-      tdnSha256: blob.sha256,
+      tdxnR2Key: blob.key,
+      tdxnSha256: blob.sha256,
       sizeBytes: byteLength(body.request.tdn),
       scan,
       thumbnailKey: thumbnail?.key,
-      parsedTdn: parsedTdn.tdn
+      parsedTdxn: parsedTdxn.tdxn
     });
 
     // Operational notice to the owner that public content went live. Self-
@@ -208,7 +208,7 @@ async function readSubmitRequest(
   // default rather than rejecting (it is not security-relevant).
   const rawLicense = readString(raw.license).trim();
   const license = SUBMIT_LICENSE_VALUES.includes(rawLicense) ? rawLicense : DEFAULT_LICENSE;
-  const tdn = readString(raw.tdn);
+  const tdxn = readString(raw.tdn);
   const turnstileToken = readString(raw.turnstileToken);
   const tags = Array.isArray(raw.tags)
     ? raw.tags
@@ -219,7 +219,7 @@ async function readSubmitRequest(
     : [];
 
   if (!title) return { ok: false, detail: "title is required." };
-  if (!tdn) return { ok: false, detail: "tdn is required." };
+  if (!tdxn) return { ok: false, detail: "tdn is required." };
   if (!turnstileToken) return { ok: false, detail: "turnstileToken is required." };
 
   // Submit metadata: whitelist-validate against the frozen vocabularies. Each
@@ -303,7 +303,7 @@ async function readSubmitRequest(
       level: level as Level,
       categories,
       requires,
-      tdn,
+      tdn: tdxn,
       thumbnail,
       visibility,
       turnstileToken
@@ -312,25 +312,25 @@ async function readSubmitRequest(
 }
 
 // TDXN is YAML v2.0 (a strict JSON superset, so legacy JSON still parses).
-function parseTdn(
+function parseTdxn(
   value: string
-): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
+): { ok: true; tdxn: Record<string, unknown> } | { ok: false; detail: string } {
   // Bound the synchronous parse on the submit path (DoS guard), same cap the
-  // read path enforces in parseTdnYaml. Without this a large/deeply-nested YAML
+  // read path enforces in parseTdxnYaml. Without this a large/deeply-nested YAML
   // body would parse unbounded on the Worker main thread before any scan.
-  if (value.length > MAX_TDN_TEXT_CHARS) {
-    return { ok: false, detail: "tdn is too large." };
+  if (value.length > MAX_TDXN_TEXT_CHARS) {
+    return { ok: false, detail: "tdxn is too large." };
   }
   let parsed: unknown;
   try {
     parsed = parseYaml(value) as unknown;
   } catch {
-    return { ok: false, detail: "tdn must be valid YAML or JSON." };
+    return { ok: false, detail: "tdxn must be valid YAML or JSON." };
   }
   if (!isRecord(parsed)) {
-    return { ok: false, detail: "tdn must parse to a mapping (object)." };
+    return { ok: false, detail: "tdxn must parse to a mapping (object)." };
   }
-  return { ok: true, tdn: parsed };
+  return { ok: true, tdxn: parsed };
 }
 
 function readString(value: unknown): string {

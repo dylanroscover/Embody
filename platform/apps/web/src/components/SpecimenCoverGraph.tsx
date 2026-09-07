@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { TdnViewer } from "@embody/tdn-viewer";
+import { TdxnViewer } from "@embody/tdxn-viewer";
 
 // The NETWORK layer of a specimen cover. Lazy-mounted by Astro (client:visible),
 // so the React/ReactFlow island only hydrates when the card scrolls into view.
 //
 // Graph source, in order of preference:
-//   1. An SSR-provided `tdn` (the fast path for the first, server-rendered page
+//   1. An SSR-provided `tdxn` (the fast path for the first, server-rendered page
 //      -- no fetch, paints immediately).
 //   2. Otherwise FETCH /api/specimens/<slug>/tdn?format=graph on mount: a light,
 //      pre-trimmed JSON graph. This is how covers scale to thousands -- nothing
@@ -18,25 +18,25 @@ import { TdnViewer } from "@embody/tdn-viewer";
 interface Props {
   slug: string;
   /** Optional SSR graph (first page fast-path). Omit to lazy-fetch. */
-  tdn?: Record<string, unknown>;
+  tdxn?: Record<string, unknown>;
 }
 
 type State =
-  | { status: "ready"; tdn: Record<string, unknown> }
+  | { status: "ready"; tdxn: Record<string, unknown> }
   | { status: "loading" }
   | { status: "error" };
 
-export default function SpecimenCoverGraph({ slug, tdn }: Props) {
+export default function SpecimenCoverGraph({ slug, tdxn }: Props) {
   const [state, setState] = useState<State>(
-    tdn ? { status: "ready", tdn } : { status: "loading" }
+    tdxn ? { status: "ready", tdxn } : { status: "loading" }
   );
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     // SSR fast-path already has the graph; no fetch needed.
-    if (tdn) {
-      setState({ status: "ready", tdn });
+    if (tdxn) {
+      setState({ status: "ready", tdxn });
       return () => {
         mounted.current = false;
       };
@@ -55,7 +55,7 @@ export default function SpecimenCoverGraph({ slug, tdn }: Props) {
       .then((graph: unknown) => {
         if (!mounted.current) return;
         if (graph && typeof graph === "object" && !Array.isArray(graph)) {
-          setState({ status: "ready", tdn: graph as Record<string, unknown> });
+          setState({ status: "ready", tdxn: graph as Record<string, unknown> });
         } else {
           setState({ status: "error" });
         }
@@ -70,10 +70,10 @@ export default function SpecimenCoverGraph({ slug, tdn }: Props) {
       mounted.current = false;
       controller.abort();
     };
-  }, [slug, tdn]);
+  }, [slug, tdxn]);
 
   if (state.status === "ready") {
-    return <TdnViewer tdn={state.tdn} height="100%" />;
+    return <TdxnViewer tdxn={state.tdxn} height="100%" />;
   }
 
   // Loading and error both show the quiet skeleton; error simply never resolves

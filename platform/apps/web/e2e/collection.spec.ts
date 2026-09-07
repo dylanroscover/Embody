@@ -47,7 +47,7 @@ test("collection ?author= filters the grid to one author (SSR)", async ({ page }
 });
 
 test("cover network graph fits the cover (no min-height clipping)", async ({ page }) => {
-  // Regression: the standalone .tdn-viewer carries min-height: 320px, which
+  // Regression: the standalone .tdxn-viewer carries min-height: 320px, which
   // `height: 100%` does NOT override. Inside a card cover (~132-164px tall) that
   // left the ReactFlow pane stuck at 320px, so fitView centered the graph in a
   // box twice the cover's height and the cover clipped the bottom away -- the

@@ -1,9 +1,9 @@
 // Faithful TDXN v2.0 sample network. TDXN files are YAML on disk; this fixture is
-// the parsed object the TdnViewer renders and that [slug].astro serializes for the
+// the parsed object the TdxnViewer renders and that [slug].astro serializes for the
 // "raw TDXN" panel. Keys, ordering, and value shorthand mirror a real v2.0 export
 // (see specimens/simulation/murmuration.tdxn).
-export const sampleTdn = {
-  format: "tdn",
+export const sampleTdxn = {
+  format: "tdxn",
   version: "2.0",
   build: null,
   generator: "Embody/6.0.16",

@@ -5,13 +5,13 @@
 // toggle (no extra JS island here for the flip -- the collection page's inline
 // script flips the data-cover attribute, and CSS swaps which layer is visible):
 //
-//   NETWORK: the interactive TdnViewer node-graph for this specimen,
+//   NETWORK: the interactive TdxnViewer node-graph for this specimen,
 //     mounted as the SpecimenCoverGraph island. Lazy-mounted with client:visible
 //     so the React/ReactFlow island only hydrates when the card scrolls into
 //     view -- many cards never spawn many live viewers at once. The island
 //     LAZY-FETCHES the graph from /api/specimens/<slug>/tdn?format=graph on
 //     mount, so the page NEVER bundles thousands of graphs at build time. An
-//     optional SSR `tdn` prop is a fast path for the first page (no fetch).
+//     optional SSR `tdxn` prop is a fast path for the first page (no fetch).
 //
 //   RESULT (default): the baked render at /public/specimens/<slug>.jpg for known
 //     baked slugs (see lib/specimenThumb BAKED_RESULTS, captured from the live
@@ -39,10 +39,10 @@ interface Props {
    * page -- a fast paint with no fetch. Omit it and the island lazy-fetches the
    * graph itself; this is the path that scales to thousands of cards.
    */
-  tdn?: Record<string, unknown>;
+  tdxn?: Record<string, unknown>;
 }
 
-const { slug, name, category, thumbnailKey, videoKey, tdn } = Astro.props;
+const { slug, name, category, thumbnailKey, videoKey, tdxn } = Astro.props;
 // RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
 // > procedural placeholder. Source of truth lives in lib/specimenThumb.
 const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
@@ -61,13 +61,13 @@ const defaultView = hasBaked ? "result" : "network";
 // SSR render for nothing -- drop it and let the client:visible island lazy-fetch
 // the graph on demand (the same path infinite-scroll/appended cards already
 // use). This strips ~all inline graph weight from /collection's first paint.
-const ssrTdn = hasBaked ? undefined : tdn;
+const ssrTdxn = hasBaked ? undefined : tdxn;
 ---
 
 <!--
   data-cover-interactive marks ONLY the network layer as a "do not navigate"
   island: the collection page's card-click handler bails when the click
-  originates there, so dragging/panning the live TdnViewer canvas never fires
+  originates there, so dragging/panning the live TdxnViewer canvas never fires
   the card's navigation. The result layer (a static thumbnail) is intentionally
   NOT marked, so clicking the rendered image navigates to /c/<slug> like the
   rest of the card -- the card-wide pointer cursor then tells the truth. The
@@ -75,7 +75,7 @@ const ssrTdn = hasBaked ? undefined : tdn;
 -->
 <div class="cover" data-cover={defaultView} data-cover-shell>
   <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasBaked ? "true" : "false"}>
-    <SpecimenCoverGraph slug={slug} tdn={ssrTdn} client:visible />
+    <SpecimenCoverGraph slug={slug} tdxn={ssrTdxn} client:visible />
   </div>
   <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
     <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
@@ -140,7 +140,7 @@ const ssrTdn = hasBaked ? undefined : tdn;
     cursor: default;
   }
 
-  /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box.
+  /* The TdxnViewer renders its own full-bleed flow canvas; pin it to the box.
      Inside a card cover it is flush against the card's clipped corners and the
      body, so it must NOT carry its standalone border + 14px radius (those belong
      to the card frame). Dropping them removes the rounded inner corner sitting
@@ -148,14 +148,14 @@ const ssrTdn = hasBaked ? undefined : tdn;
      into the background along the bottom edge. The detail page / hero viewers,
      which are NOT inside a cover, keep their frame.
 
-     min-height: 0 is LOAD-BEARING: the standalone .tdn-viewer carries
+     min-height: 0 is LOAD-BEARING: the standalone .tdxn-viewer carries
      min-height: 320px (right for the hero), but `height: 100%` does NOT override
      a larger min-height. A cover is only ~132-164px tall, so without this the
      ReactFlow pane stays 320px, fitView centers the graph in that 320px box, and
      the cover clips to its top ~half -- pushing the "centered" content below the
      visible area (big empty top, nodes crammed at the bottom). Clearing the
      min-height lets the pane match the cover so fitView centers in what's seen. */
-  .cover__layer--network :global(.tdn-viewer) {
+  .cover__layer--network :global(.tdxn-viewer) {
     height: 100% !important;
     min-height: 0;
     width: 100%;
@@ -305,7 +305,7 @@ const ssrTdn = hasBaked ? undefined : tdn;
     opacity: 1;
   }
 
-  /* The TdnViewer's fullscreen control reveals on hover for card covers only
+  /* The TdxnViewer's fullscreen control reveals on hover for card covers only
      (the detail-page preview is not a .cover, so it keeps the button visible). */
   .cover__layer--network :global(.react-flow__controls) {
     opacity: 0;
