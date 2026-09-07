@@ -51,7 +51,7 @@ The schema defines these key structures:
 ### Top-Level Document
 
 ```
-tdn
+tdxn
 ├── format: "tdxn" | "tdn"
 ├── version: string
 ├── build: integer | null

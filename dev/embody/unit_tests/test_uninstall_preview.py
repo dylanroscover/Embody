@@ -106,9 +106,9 @@ class TestUninstallPreview(EmbodyTestCase):
     def test_manifest_git_config_is_unset(self):
         self._embody_json('manifest.json',
                           {'version': 1, 'files_created': [], 'files_appended': [],
-                           'git_config': ['diff.tdn.textconv'], 'venv': None,
+                           'git_config': ['diff.tdxn.textconv'], 'venv': None,
                            'network_ops': []})
-        self.assertIn('diff.tdn.textconv', self._plan()['unset'])
+        self.assertIn('diff.tdxn.textconv', self._plan()['unset'])
 
     def test_embody_dir_is_delete(self):
         os.makedirs(os.path.join(self.d, '.embody'), exist_ok=True)

@@ -603,7 +603,7 @@ custom_pars: { ... }
 parameters: { ... }
 flags: [ ... ]
 color: [0.3, 0.5, 0.9]
-tags: [tdn]
+tags: [tdxn]
 comment: Main UI container
 storage: { ... }
 operators: [ ... ]
@@ -614,7 +614,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
+| `format` | string | Yes | `"tdxn"` as of Embody 6.1; `"tdn"` in files written by 6.0 and earlier. Both are read forever. |
 | `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
@@ -1493,7 +1493,7 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
-1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
+1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdxn'` and a matching `rel_file_path`.
 2. **Disk**: The referenced `.tdxn` file must exist at the resolved absolute path.
 
 Mismatches produce warnings, not errors - the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.

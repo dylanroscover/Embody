@@ -302,11 +302,11 @@ class TestTDXNTextconvDegrade(EmbodyTestCase):
     def _load_textconv(self):
         fp = os.path.join(
             project.folder, 'embody', 'Embody', 'templates',
-            'text_tdn_textconv.py')
+            'text_tdxn_textconv.py')
         if not os.path.isfile(fp):
             return None
         spec = importlib.util.spec_from_file_location(
-            'v6h_tdn_textconv', fp)
+            'v6h_tdxn_textconv', fp)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod

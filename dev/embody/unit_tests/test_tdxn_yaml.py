@@ -353,11 +353,11 @@ class TestTDXNYaml(EmbodyTestCase):
         """Import the textconv driver template module from disk."""
         fp = os.path.join(
             project.folder, 'embody', 'Embody', 'templates',
-            'text_tdn_textconv.py')
+            'text_tdxn_textconv.py')
         if not os.path.isfile(fp):
             return None
         spec = importlib.util.spec_from_file_location(
-            'tdn_textconv_under_test', fp)
+            'tdxn_textconv_under_test', fp)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod

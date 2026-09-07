@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 1232
-generator: Embody/6.2.34
+generator: Embody/6.2.35
 td_build: 099.2025.33070
-source_file: Embody-6.337.toe
-exported_at: '2026-09-07T11:15:32Z'
+source_file: Embody-6.338.toe
+exported_at: '2026-09-07T17:05:34Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -851,7 +851,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.34
+    value: 6.2.35
   - name: Touchbuild
     style: Str
     label: Touch Build

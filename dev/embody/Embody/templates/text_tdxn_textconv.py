@@ -14,8 +14,8 @@ git cannot see; this driver makes git's view of the on-disk .tdn (working
 tree, history) clean. Together they cover the whole timeline.
 
 Configured via:
-    .gitattributes:  *.tdn diff=tdn
-    git config:      diff.tdn.textconv = python3 <this script>
+    .gitattributes:  *.tdxn diff=tdxn   (and legacy *.tdn)
+    git config:      diff.tdxn.textconv = python3 <this script>
 
 Git invokes it as `<textconv> <path-to-blob>` for each side of a diff and
 compares the stdout. It reads BOTH legacy JSON .tdn (history blobs) and

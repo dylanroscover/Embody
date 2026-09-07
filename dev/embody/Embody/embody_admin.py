@@ -288,7 +288,10 @@ def compute_uninstall_plan(ext, target_dir=None):
                 pass
     # git config (read-only query) for pre-manifest installs
     if not plan['unset']:
-        for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
+        # Both spellings: the driver was renamed tdn -> tdxn in 6.2.35,
+        # and an install that never re-ran setup still carries the old key.
+        for key in ('diff.tdxn.textconv', 'diff.tdxn.cachetextconv',
+                    'diff.tdn.textconv', 'diff.tdn.cachetextconv'):
             try:
                 r = subprocess.run(['git', 'config', '--get', key],
                                    cwd=str(root), capture_output=True,

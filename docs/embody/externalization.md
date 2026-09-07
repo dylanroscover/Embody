@@ -63,7 +63,7 @@ Embody maintains an `externalizations` tableDAT outside the Embody component wit
 | `dirty` | Dirty state (`True`, `False`, or `Par` for parameter changes) |
 | `build` | Build number (COMPs only) |
 | `touch_build` | TouchDesigner build version (COMPs only) |
-| `strategy` | Externalization strategy (`tox`, `tdn`, `py`, `txt`, etc.) |
+| `strategy` | Externalization strategy (`tox`, `tdxn`, `py`, `txt`, etc.) |
 | `node_x` | Operator X position in the network (for restoration) |
 | `node_y` | Operator Y position in the network (for restoration) |
 | `node_color` | Operator node color (for restoration) |
@@ -80,7 +80,7 @@ COMPs can also be externalized using the **TDXN strategy** instead of `.tox`. Th
 !!! note "`.tdn` files from before Embody 6.1"
     The format was called TDN (`.tdn`) until Embody 6.1 renamed it to TDXN (`.tdxn`). Existing files are **not** migrated: Embody keeps writing whichever extension a COMP already uses, and only a *new* externalization mints `.tdxn`, so a project can legitimately hold both. Convert when you choose to, with the **Migrate .tdn to .tdxn** pulse on the Embody COMP.
 
-    Two internal identifiers deliberately still read `tdn` and always will: the `strategy` column in `externalizations.tsv`, and the operator tag. They are not user-facing names, and changing them would orphan every tracked row and tagged COMP in every existing project.
+    The `strategy` column and the operator tag both read `tdxn` as of 6.2.30 -- they were `tdn`, and both spellings are still accepted on read forever, so an existing project keeps working whether or not you re-tag it.
 
 See [TDXN Format](../tdxn/index.md) for format details, and ["Why TDXN"](#why-tdxn) below for the concrete wins.
 
@@ -124,9 +124,9 @@ You can switch modes at any time — existing `.tdxn` files on disk and tracked 
 
 The `Tdxnexcludetag` parameter on the Embody COMP (default value: `tdxn_exclude`) defines a tag that **opts a single COMP out of the entire TDXN system**. Tagged COMPs are invisible to TDXN: never exported, never inlined in a parent's `.tdxn`, never stripped on save, never destroyed by reconstruction.
 
-**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdxncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdxn_exclude` to that child to keep it opted out.
+**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdxncascade` parameter), tagging a parent COMP `tdxn` propagates the `tdxn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdxn_exclude` to that child to keep it opted out.
 
-**Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdxn_exclude` is the only durable opt-out.
+**Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdxn` on the next scan. `tdxn_exclude` is the only durable opt-out.
 
 **For app-managed copies**: a runtime `.copy()` does inherit `tdxn_exclude`, but the tag only keeps the clone out of the **TDXN pipeline** (cascade autotag, parent inlining, strip, reconstruction, and the dropped-`.tox` sweep). It is not a general "invisible to Embody" flag — duplicate-path detection never reads it. So `tdxn_exclude` alone is sufficient only when the copied template is **not itself externalized**. Copy a COMP that *is* externalized (or that contains externalized DATs) and the copy carries the master's Embody tags and file references, joins the master's duplicate group, and still prompts.
 
@@ -141,7 +141,7 @@ For app-spawned copies of an externalized master, use a relationship Embody's du
 
 - Only COMPs are excludable. Annotation COMPs are explicitly ineligible.
 - Whole-subtree exclusion only applies to a **direct child** of a TDXN boundary. If you nest an excluded COMP *deeper* (under a non-excluded TDXN COMP), the exclusion tag has no effect at that depth — so instead of dropping it, Embody serializes the excluded child as **ordinary content** (it round-trips and survives strip/reconstruction) and warns at export time that the tag was ignored there. The warning names the intervening COMP(s) to tag, or suggests making it a direct child, if you want the exclusion honored.
-- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`ext.Embody.saveTDN()` directly on an excluded COMP) currently still writes the `.tdxn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
+- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`ext.Embody.saveTDXN()` directly on an excluded COMP) currently still writes the `.tdxn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
 
 ### Excluding a parameter's value (the `tdxn_exclude:<par>` tag)
 
@@ -162,7 +162,7 @@ What it does and does not do:
 - The tag itself appears in the operator's `tags:` list in the `.tdxn`, so the file records why the value is absent, and the marker survives reconstruction.
 - A tag naming a parameter the operator does not have logs a **WARNING** at export — a typo cannot silently no-op.
 - The prefix is the same **`.tdxn` Exclude Tag** parameter that governs whole-COMP exclusion (Tags page, default `tdxn_exclude`); clearing it disables the whole family.
-- Exclusions take effect at the COMP's **next export** — its **Save tdn** action, an **Update** sweep, or a project save — and the tags themselves persist in the `.toe`/`.tdxn` like any other operator state.
+- Exclusions take effect at the COMP's **next export** — its **Save tdxn** action, an **Update** sweep, or a project save — and the tags themselves persist in the `.toe`/`.tdxn` like any other operator state.
 
 ### Excluding a DAT's contents (the `tdxn_exclude:dat_content` tag)
 

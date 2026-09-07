@@ -226,8 +226,8 @@ def configure_mcp_client(ext, port, target_dir=None):
         else:
             python_cmd = 'python' if sys.platform == 'win32' else 'python3'
 
-        # --- Deploy the .tdn git diff driver (semantic git diffs) ---
-        configure_tdn_diff_driver(ext, target_dir, python_cmd)
+        # --- Deploy the TDXN git diff driver (semantic git diffs) ---
+        configure_tdxn_diff_driver(ext, target_dir, python_cmd)
 
         # --- Write envoy.json project config ---
         write_envoy_config(ext, target_dir / '.embody', port)
@@ -2014,24 +2014,24 @@ def configure_gitignore(ext, git_root):
 
 def configure_gitattributes(ext, git_root):
     """Ensure .gitattributes normalizes line endings for TD-exported files
-    and enables semantic diffs for .tdn. TouchDesigner writes CRLF on all
+    and enables semantic TDXN diffs. TouchDesigner writes CRLF on all
     platforms; this forces LF in git so externalized files don't show as
-    dirty after every TD save. The `diff=tdn` attribute pairs with the git
-    diff driver registered by _configureTdnDiffDriver, so `git diff` on a
-    .tdn shows only real network changes -- the volatile export header
+    dirty after every TD save. The `diff=tdxn` attribute pairs with the git
+    diff driver registered by _configureTdxnDiffDriver, so `git diff` on a
+    `.tdxn` shows only real network changes -- the volatile export header
     (build/timestamp/version/source .toe) is stripped before diffing.
-    Idempotent -- migrates an existing managed block that predates the
-    diff driver."""
+    Idempotent -- migrates a managed block that predates the diff driver,
+    and one still naming the pre-6.2.35 `diff=tdn` driver."""
     MANAGED_BLOCK = (
         '\n# Embody / Envoy -- normalize TD line endings (auto-managed)\n'
         '*.py text eol=lf\n'
         '*.md text eol=lf\n'
         # Both suffixes point at the SAME driver name: git resolves
-        # `diff=tdn` to diff.tdn.textconv, so .tdxn needs no new git config
-        # key and nothing to add to the uninstall sweep. The driver script
-        # is extension-agnostic (it takes a blob path, never a filename).
-        '*.tdxn text eol=lf diff=tdn\n'
-        '*.tdn text eol=lf diff=tdn\n'
+        # `diff=tdxn` to diff.tdxn.textconv, so a legacy .tdn needs no
+        # second git config key. The driver script is extension-agnostic
+        # (it takes a blob path, never a filename).
+        '*.tdxn text eol=lf diff=tdxn\n'
+        '*.tdn text eol=lf diff=tdxn\n'
         '*.json text eol=lf\n'
         '*.tsv text eol=lf\n'
         '*.xml text eol=lf\n'
@@ -2047,14 +2047,24 @@ def configure_gitattributes(ext, git_root):
             existing = gitattr.read_text(encoding='utf-8')
 
         if MARKER in existing:
-            # Migrate a managed block that predates the .tdn diff driver.
-            if ('*.tdn text eol=lf diff=tdn' not in existing
+            # Migrate a managed block that predates the diff driver, and
+            # one still naming the pre-6.2.35 `tdn` driver.
+            # Scoped to OUR two attribute lines: a user's own `diff=tdn`
+            # on some other pattern is their driver, not ours.
+            ours = [t + ' text eol=lf diff=tdn' for t in ('*.tdxn', '*.tdn')]
+            if any(o in existing for o in ours):
+                for o in ours:
+                    existing = existing.replace(o, o[:-3] + 'tdxn')
+                gitattr.write_text(existing, encoding='utf-8', newline='\n')
+                ext._log('Migrated .gitattributes: the TDXN diff driver '
+                         'is now diff=tdxn')
+            elif ('*.tdn text eol=lf diff=tdxn' not in existing
                     and '*.tdn text eol=lf' in existing):
                 existing = existing.replace(
-                    '*.tdn text eol=lf', '*.tdn text eol=lf diff=tdn')
+                    '*.tdn text eol=lf', '*.tdn text eol=lf diff=tdxn')
                 gitattr.write_text(existing, encoding='utf-8', newline='\n')
                 ext._log(
-                    'Migrated .gitattributes: enabled .tdn semantic diff')
+                    'Migrated .gitattributes: enabled TDXN semantic diff')
 
             # Backfill attribute lines added by later releases. Without
             # this the function returned on ANY existing marker, so a
@@ -2131,41 +2141,49 @@ def configure_gitattributes(ext, git_root):
         ext._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
 
 
-def configure_tdn_diff_driver(ext, target_dir, python_cmd):
-    """Deploy the .tdn git textconv script and register it as a git diff
-    driver in the repo. With the `*.tdn diff=tdn` attribute (set by
-    _configureGitattributes), this makes `git diff` / `git log -p` /
-    `git show` on .tdn files show only semantic network changes -- the
-    volatile export header is stripped before diffing, so re-exporting an
-    unchanged network produces an empty diff. This is the committed/on-disk
-    counterpart to the live `diff_tdn` MCP tool. The driver definition must
-    live in the repo's git config (git refuses to run textconv commands
-    defined by a cloned repo), so Embody configures it the same way it
-    manages .gitignore/.gitattributes/.mcp.json. Idempotent."""
+def configure_tdxn_diff_driver(ext, target_dir, python_cmd):
+    """Deploy the TDXN git textconv script and register it as a git diff
+    driver in the repo. With the `diff=tdxn` attribute (set by
+    configure_gitattributes), this makes `git diff` / `git log -p` /
+    `git show` on `.tdxn` (and legacy `.tdn`) files show only semantic
+    network changes -- the volatile export header is stripped before
+    diffing, so re-exporting an unchanged network produces an empty diff.
+    This is the committed/on-disk counterpart to the live `diff_tdxn` MCP
+    tool. The driver definition must live in the repo's git config (git
+    refuses to run textconv commands defined by a cloned repo), so Embody
+    configures it the same way it manages
+    .gitignore/.gitattributes/.mcp.json.
+
+    Idempotent, and it MIGRATES an install carrying the pre-6.2.35 `tdn`
+    driver: the old key and script are retired LAST, only after `diff.tdxn`
+    is registered. The two halves live on different setup paths
+    (.gitattributes is written by init_git_repo), so a project can briefly
+    carry `diff=tdxn` with no driver yet -- that degrades to a plain diff,
+    never an error, and the next Envoy start completes it."""
     from pathlib import Path
     try:
         target_dir = Path(target_dir)
         embody_dir = target_dir / '.embody'
         embody_dir.mkdir(parents=True, exist_ok=True)
-        script_path = embody_dir / 'tdn_textconv.py'
+        script_path = embody_dir / 'tdxn_textconv.py'
 
         # Source from the templates textDAT, else the dev/embody fallback.
         content = None
         try:
             templates = ext.ownerComp.op('templates')
-            dat = templates.op('text_tdn_textconv') if templates else None
+            dat = templates.op('text_tdxn_textconv') if templates else None
             if dat:
                 content = dat.text
         except Exception:
             pass
         if not content:
-            source = Path(project.folder) / 'embody' / 'tdn_textconv.py'
+            source = Path(project.folder) / 'embody' / 'tdxn_textconv.py'
             if source.exists():
                 content = source.read_text(encoding='utf-8')
         if not content:
             ext._log(
-                'tdn_textconv source not found -- skipping .tdn diff driver',
-                'DEBUG')
+                'tdxn_textconv source not found -- skipping the TDXN diff '
+                'driver', 'DEBUG')
             return
 
         # Write only if changed, to avoid touching mtime needlessly.
@@ -2184,36 +2202,64 @@ def configure_tdn_diff_driver(ext, target_dir, python_cmd):
                           creationflags=getattr(
                               subprocess, 'CREATE_NO_WINDOW', 0))
         current = subprocess.run(
-            ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
+            ['git', 'config', '--get', 'diff.tdxn.textconv'], **git_kwargs)
         if (current.stdout or '').strip() != driver:
             def _write():
                 subprocess.run(
-                    ['git', 'config', 'diff.tdn.textconv', driver],
+                    ['git', 'config', 'diff.tdxn.textconv', driver],
                     check=True, **git_kwargs)
                 subprocess.run(
-                    ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
+                    ['git', 'config', 'diff.tdxn.cachetextconv', 'false'],
                     check=True, **git_kwargs)
-                ext._log('Configured git diff driver for .tdn (semantic diffs)')
+                ext._log('Configured git diff driver for TDXN '
+                         '(semantic diffs)')
                 try:  # record so Uninstall un-sets the repo git config
                     op.Embody.ext.Embody._manifestRecordGitConfig(
                         str(target_dir),
-                        ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
+                        ['diff.tdxn.textconv', 'diff.tdxn.cachetextconv'])
                 except Exception:
                     pass
 
             # Advanced: confirm before mutating the repo's .git/config.
             op.Embody.ext.Embody._guardFileWrite(
                 'Git config',
-                f'register the .tdn semantic-diff driver in '
+                f'register the TDXN semantic-diff driver in '
                 f'{target_dir}/.git/config',
-                ['git config diff.tdn.textconv',
-                 'git config diff.tdn.cachetextconv'],
+                ['git config diff.tdxn.textconv',
+                 'git config diff.tdxn.cachetextconv'],
                 _write)
 
+        _retire_legacy_tdn_driver(ext, target_dir, embody_dir, git_kwargs)
+
     except (subprocess.SubprocessError, OSError) as e:
-        ext._log(f'Could not configure .tdn git diff driver: {e}', 'DEBUG')
+        ext._log(f'Could not configure the TDXN git diff driver: {e}', 'DEBUG')
     except Exception as e:
-        ext._log(f'Could not deploy tdn_textconv: {e}', 'WARNING')
+        ext._log(f'Could not deploy tdxn_textconv: {e}', 'WARNING')
+
+
+def _retire_legacy_tdn_driver(ext, target_dir, embody_dir, git_kwargs):
+    """Drop the pre-6.2.35 `tdn` driver once `tdxn` is registered.
+
+    Runs LAST, and only unsets a key whose value still points at OUR old
+    script -- a user who pointed diff.tdn at their own textconv keeps it.
+    Never raises: the new driver is already live by this point, so a
+    cleanup failure must not fail the setup."""
+    import subprocess
+    old_script = embody_dir / 'tdn_textconv.py'
+    try:
+        cur = subprocess.run(
+            ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
+        val = (cur.stdout or '').strip()
+        if val and 'tdn_textconv.py' in val:
+            for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
+                subprocess.run(['git', 'config', '--unset-all', key],
+                               **git_kwargs)
+            ext._log('Retired the legacy .tdn git diff driver '
+                     '(replaced by diff.tdxn)')
+        if old_script.is_file():
+            old_script.unlink()
+    except Exception as e:
+        ext._log(f'Could not retire the legacy tdn diff driver: {e}', 'DEBUG')
 
 
 def cleanup_temp_files(ext):

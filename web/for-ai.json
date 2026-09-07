@@ -33,7 +33,7 @@
       "role": "lateral velocity",
       "description": "Externalizes TouchDesigner operators to version-control-friendly text files on disk (.py, .tox, .tdn, .json, .xml). Externalized files are the source of truth; auto-restore on project open."
     },
-    "tdn": {
+    "tdxn": {
       "role": "the substrate",
       "description": "A TouchDesigner network exported as human-readable YAML (operators, parameters, connections, positions, flags, DAT content, annotations).",
       "token_note": "read_tdn returns a whole live network as TDXN YAML in one call - ~20-90x fewer tokens than walking it operator-by-operator with get_op."

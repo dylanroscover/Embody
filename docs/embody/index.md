@@ -73,7 +73,7 @@ For DATs, the format is determined by the DAT's content type — a Python DAT ex
 === "Python API"
 
     ```python
-    # Tag an operator for externalization ('tox' or 'tdn' for a COMP, 'py' for a DAT)
+    # Tag an operator for externalization ('tox' or 'tdxn' for a COMP, 'py' for a DAT)
     op.Embody.ext.Embody.applyTagToOperator(op('myComp'), 'tox')
 
     # Write all dirty operators to disk

@@ -125,7 +125,7 @@ class TestInstallManifest(EmbodyTestCase):
 
     def test_git_config_list_and_str_deduped(self):
         self.ext._manifestRecordGitConfig(
-            self.d, ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
-        self.ext._manifestRecordGitConfig(self.d, 'diff.tdn.textconv')  # str + dedup
+            self.d, ['diff.tdxn.textconv', 'diff.tdxn.cachetextconv'])
+        self.ext._manifestRecordGitConfig(self.d, 'diff.tdxn.textconv')  # str + dedup
         self.assertEqual(self._load()['git_config'],
-                         ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
+                         ['diff.tdxn.textconv', 'diff.tdxn.cachetextconv'])

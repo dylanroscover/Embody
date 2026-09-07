@@ -130,7 +130,7 @@ The comparison is **semantic, not byte-level**: both sides normalize through the
 
 ### Git integration: the `.tdxn` textconv driver
 
-`diff_tdxn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdxn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdxn diff=tdn`, `.embody/tdn_textconv.py`, and `git config diff.tdn.textconv`). Use `diff_tdxn` for what you have not saved; use `git diff` for what you have committed.
+`diff_tdxn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdxn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdxn diff=tdxn`, `.embody/tdxn_textconv.py`, and `git config diff.tdxn.textconv`). Before 6.2.35 the driver was named `tdn`; Envoy renames it in place on its next start — registering `diff.tdxn` first, then repointing `.gitattributes`, then unsetting `diff.tdn` and deleting the old script. A `diff.tdn` you pointed at your own textconv is left alone. Use `diff_tdxn` for what you have not saved; use `git diff` for what you have committed.
 
 ---
 

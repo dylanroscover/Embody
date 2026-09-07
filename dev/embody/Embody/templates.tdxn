@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 29
-generator: Embody/6.2.29
+build: 30
+generator: Embody/6.2.34
 td_build: 099.2025.33070
-source_file: Embody-6.332.toe
-exported_at: '2026-09-07T09:16:59Z'
+source_file: Embody-6.337.toe
+exported_at: '2026-09-07T16:57:59Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -54,12 +54,12 @@ operators:
   position: [900, 1200]
   tags:
   - py
-- name: text_tdn_textconv
+- name: text_tdxn_textconv
   type: textDAT
   parameters:
-    file: embody/Embody/templates/text_tdn_textconv.py
+    file: embody/Embody/templates/text_tdxn_textconv.py
     language: python
-  position: [0, -1000]
+  position: [900, -600]
   tags:
   - py
 - name: text_rule_td_python

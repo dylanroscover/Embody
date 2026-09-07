@@ -117,7 +117,7 @@ TDXN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
 # BOTH format tokens, permanently.
 #
 # NOT derived from these -- frozen 'tdn' identity/wire values, forever:
-#   externalizations `strategy` token, par.Tdxntag default, the diff=tdn git
+#   externalizations `strategy` token, par.Tdxntag default, the diff=tdxn git
 #   driver name, the `tdn_ref` key, the _embody_tdn envelope marker, the
 #   MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
 #   Every one is PERSISTED somewhere Embody does not own and cannot
@@ -1062,7 +1062,7 @@ class TDXNExt:
 	def _normalize_dat_content(node):
 		"""Convert legacy v1.5 array-of-lines dat_content to the v2.0 joined
 		string in place, so an unchanged DAT does not diff across the v1.5->v2.0
-		format bump. Mirrors tdn_textconv._normalize_dat_content."""
+		format bump. Mirrors tdxn_textconv._normalize_dat_content."""
 		if isinstance(node, dict):
 			if (node.get('dat_content_format') == 'text'
 					and isinstance(node.get('dat_content'), list)):

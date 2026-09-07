@@ -146,7 +146,7 @@ class TestUninstallExecute(EmbodyTestCase):
 
     def test_strip_marked_block_helper(self):
         text = ('*.py text eol=lf\n\n# Embody / Envoy -- normalize (auto-managed)\n'
-                '*.tdn text eol=lf diff=tdn\n*.toe binary\n')
+                '*.tdn text eol=lf diff=tdxn\n*.toe binary\n')
         out = self.ext._stripMarkedBlock(text, 'Embody / Envoy')
         self.assertIn('*.py text eol=lf', out)
         self.assertNotIn('Embody / Envoy', out)

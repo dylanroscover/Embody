@@ -62,7 +62,6 @@ on:
       # canonical-serialization corpus shared with scanner-ts.
       - 'dev/embody/unit_tests/test_tdxn_schema.py'
       - 'docs/tdxn.schema.yaml'
-      - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'
       - 'specimens/**'
       - 'platform/packages/contracts/fixtures/**'
@@ -119,7 +118,6 @@ on:
       # canonical-serialization corpus shared with scanner-ts.
       - 'dev/embody/unit_tests/test_tdxn_schema.py'
       - 'docs/tdxn.schema.yaml'
-      - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'
       - 'specimens/**'
       - 'platform/packages/contracts/fixtures/**'

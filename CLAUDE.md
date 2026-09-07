@@ -65,9 +65,9 @@ All externalized operators are fully recoverable from disk, regardless of `.toe`
 
 Dual-thread design: worker thread runs MCP server (no TD imports), main thread executes TD operations via `_onRefresh()`. Communication via `threading.Event` + `Queue`. A main-thread handler that needs real frames (a non-TOP capture waiting for its OP Viewer TOP) returns a `{'_defer': {'frames', 'continue'}}` marker and is re-entered on later frames by `_scheduleDeferred`; the worker keeps waiting on its Event. Server auto-configures `.mcp.json` in the git root (or project folder if no git) on startup.
 
-### TDN Network Format
+### TDXN Network Format
 
-YAML-based on-disk format (v2.0; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdxn/specification.md`
+YAML-based on-disk format (v2.1; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdxn/specification.md`
 
 ## Extension Referencing
 
@@ -97,4 +97,4 @@ op.Embody.ext.Embody.getExternalizedOps(COMP)   # opFamily is REQUIRED
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
 - **Skill prerequisites**: `rules/skill-prerequisites.md` (always loaded) is the authoritative load-this-skill-first table
 - **Tests**: Use the `/run-tests` skill for running and writing tests
-- **TDN Spec**: See `docs/tdxn/specification.md` for the full format specification
+- **TDXN Spec**: See `docs/tdxn/specification.md` for the full format specification

@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.35
+
+The last two `tdn` names a user can see: the git diff driver, and the docs that still described the old behavior.
+
+- **The git textconv driver is `tdxn`.** `.embody/tdxn_textconv.py`, `git config diff.tdxn.textconv`, `.gitattributes` `diff=tdxn`. Envoy renames it in place on its next start -- new key first, then `.gitattributes`, then the old key and script last -- and leaves a `diff.tdn` you pointed at your own textconv alone. Uninstall now sweeps both spellings.
+- **Docs that had gone false**: the externalization page still promised the `strategy` column and the operator tag would "always read `tdn`"; both are `tdxn`. Also `saveTDN()` -> `saveTDXN()`, the tag-cascade examples, and CLAUDE.md's `### TDN Network Format`.
+- **CI stopped watching the wizard.** Two path filters named `dev/**/*.tdn`, and no `.tdn` files remain -- so a wizard change skipped its own tests.
+- **Fixed: the specimen build script** read `tdxn_path` from a manifest that still said `tdn_path`, which would have died on a `KeyError`.
+
 ## v6.2.34
 
 The TDXN rename reaches the parts you actually read: the tag on your COMPs, the strategy column, the files on disk, and embody.tools.
