@@ -141,7 +141,7 @@ class TestAutosave(EmbodyTestCase):
         comp, abs_tdxn = self._make_tdxn('cp_state')
         comp.op('n1').par.period = 12.5
         self.embody_ext.checkpoint(comp.path)
-        doc = self.embody.ext.TDXN.tdn_load(open(abs_tdxn).read())
+        doc = self.embody.ext.TDXN.tdxn_load(open(abs_tdxn).read())
         period = None
         for o in doc.get('operators', []):
             if o.get('name') == 'n1':

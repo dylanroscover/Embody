@@ -187,16 +187,16 @@ def onValueChange(par, prev):
 		parent.Embody.showCustomOnly = not bool(par.eval())
 
 	elif par.name == 'Tdxnmode':
-		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
+		parent.Embody.ext.Embody._onTdxnModeChanged(str(par.eval()))
 
 	elif par.name == 'Embeddatsintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
-		if parent.Embody.ext.Embody._tdnEnabled():
+		if parent.Embody.ext.Embody._tdxnEnabled():
 			parent.Embody.ext.TDXN.reexportAllTDXNs()
 
 	elif par.name == 'Embedstorageintdxns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
-		if parent.Embody.ext.Embody._tdnEnabled():
+		if parent.Embody.ext.Embody._tdxnEnabled():
 			parent.Embody.ext.TDXN.reexportAllTDXNs()
 
 	elif par.name == 'Tdxncascade':

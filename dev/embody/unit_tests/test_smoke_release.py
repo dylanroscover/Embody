@@ -467,7 +467,7 @@ class TestSmokeRelease(EmbodyTestCase):
             'CollectionExt must be loaded on the Collection COMP')
 
     def test_v6_collection_scan_clean_tdxn_returns_clean(self):
-        """A benign source -> null TDXN scans 'clean' via CollectionExt.ScanTdn."""
+        """A benign source -> null TDXN scans 'clean' via CollectionExt.ScanTdxn."""
         ext = self._collection_ext()
         clean_tdxn = {
             'format': 'tdn',
@@ -479,7 +479,7 @@ class TestSmokeRelease(EmbodyTestCase):
                 {'name': 'null1', 'type': 'nullTOP', 'inputs': ['source1']},
             ],
         }
-        result = ext.ScanTdn(clean_tdxn)
+        result = ext.ScanTdxn(clean_tdxn)
         self.assertIsInstance(result, dict)
         self.assertIn('verdict', result,
             'Capability report must carry a verdict key')

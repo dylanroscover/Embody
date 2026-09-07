@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 373
-generator: Embody/6.2.38
+build: 374
+generator: Embody/6.2.39
 td_build: 099.2025.33070
-source_file: Embody-6.341.toe
-exported_at: '2026-09-07T19:10:49Z'
+source_file: Embody-6.342.toe
+exported_at: '2026-09-07T19:53:41Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -38,7 +38,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 3444
+    rows: 17
     cols: 5
   flags:
   - viewer

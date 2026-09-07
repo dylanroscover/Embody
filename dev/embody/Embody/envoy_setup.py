@@ -2229,7 +2229,7 @@ def configure_tdxn_diff_driver(ext, target_dir, python_cmd):
                  'git config diff.tdxn.cachetextconv'],
                 _write)
 
-        _retire_legacy_tdn_driver(ext, target_dir, embody_dir, git_kwargs)
+        _retire_legacy_tdxn_driver(ext, target_dir, embody_dir, git_kwargs)
 
     except (subprocess.SubprocessError, OSError) as e:
         ext._log(f'Could not configure the TDXN git diff driver: {e}', 'DEBUG')
@@ -2237,7 +2237,7 @@ def configure_tdxn_diff_driver(ext, target_dir, python_cmd):
         ext._log(f'Could not deploy tdxn_textconv: {e}', 'WARNING')
 
 
-def _retire_legacy_tdn_driver(ext, target_dir, embody_dir, git_kwargs):
+def _retire_legacy_tdxn_driver(ext, target_dir, embody_dir, git_kwargs):
     """Drop the pre-6.2.35 `tdn` driver once `tdxn` is registered.
 
     Runs LAST, and only unsets a key whose value still points at OUR old

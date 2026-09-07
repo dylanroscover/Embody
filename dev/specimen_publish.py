@@ -28,15 +28,15 @@ def _publish():
         if not comp:
             missing.append(slug)
             continue
-        out = spec_dir / spec['tdn_path']
+        out = spec_dir / spec['tdxn_path']
         res = TDN.ExportNetwork(root_path=comp.path,
                                 include_dat_content=True, embed_all=True)
         if not res.get('success'):
             missing.append(slug + ' (export failed)')
             continue
         new = res['tdn']
-        old = TDN._read_existing_tdn(str(out)) if out.exists() else None
-        if old and TDN._tdn_content_equal(new, old):
+        old = TDN._read_existing_tdxn(str(out)) if out.exists() else None
+        if old and TDN._tdxn_content_equal(new, old):
             skipped.append(slug)
             continue
         out.parent.mkdir(parents=True, exist_ok=True)

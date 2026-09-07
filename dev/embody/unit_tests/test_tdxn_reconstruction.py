@@ -2724,16 +2724,16 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		# Create a TDXN COMP outside Embody and register it
 		tdxn_comp = self.sandbox.create(baseCOMP, 'tdn_test_comp')
 		tdxn_comp.create(noiseTOP, 'child1')
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		rel_path = f'embody/{tdxn_comp.name}.tdn'
-		self._addTableRow(tdn_path, 'base', 'tdn', rel_path)
+		self._addTableRow(tdxn_path, 'base', 'tdn', rel_path)
 		try:
 			comps = self.embody_ext._getTDXNStrategyComps()
-			found = any(cp == tdn_path for cp, _ in comps)
+			found = any(cp == tdxn_path for cp, _ in comps)
 			self.assertTrue(found,
-				f'{tdn_path} should be included in TDXN strategy comps')
+				f'{tdxn_path} should be included in TDXN strategy comps')
 		finally:
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	def test_P03_embody_help_specifically_excluded(self):
 		"""The /embody/Embody/help COMP must not appear in strip list.
@@ -2761,13 +2761,13 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		child_dat = tdxn_comp.create(textDAT, 'tracked_child')
 		child_dat.text = 'important content'
 
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		child_path = child_dat.path
 		tdxn_rel = f'embody/{tdxn_comp.name}.tdn'
 		child_rel = f'embody/{tdxn_comp.name}/tracked_child.txt'
 
 		# Register both - child has EMPTY strategy (purely TDXN-managed)
-		self._addTableRow(tdn_path, 'base', 'tdn', tdxn_rel)
+		self._addTableRow(tdxn_path, 'base', 'tdn', tdxn_rel)
 		self._addTableRow(child_path, 'text', '', child_rel)
 
 		try:
@@ -2784,7 +2784,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 				'Continuity check must NOT remove pure TDXN-managed children')
 		finally:
 			self._removeTableRow(child_path)
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	def test_P04b_continuity_detects_deleted_individually_externalized_child(self):
 		"""Individually-externalized children inside TDXN COMPs must be checked.
@@ -2796,13 +2796,13 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		tdxn_comp = self.sandbox.create(baseCOMP, 'tdn_with_py_child')
 		child_dat = tdxn_comp.create(textDAT, 'my_script')
 
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		child_path = child_dat.path
 		tdxn_rel = f'embody/{tdxn_comp.name}.tdn'
 		child_rel = f'embody/{tdxn_comp.name}/my_script.py'
 
 		# Child has its OWN strategy 'py' (individually externalized)
-		self._addTableRow(tdn_path, 'base', 'tdn', tdxn_rel)
+		self._addTableRow(tdxn_path, 'base', 'tdn', tdxn_rel)
 		self._addTableRow(child_path, 'text', 'py', child_rel)
 
 		try:
@@ -2819,7 +2819,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 				'Deleted individually-externalized child must be cleaned up')
 		finally:
 			self._removeTableRow(child_path)
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	def test_P05_continuity_check_still_catches_real_missing_ops(self):
 		"""Operators NOT inside TDXN COMPs should still be caught as missing."""
@@ -2853,9 +2853,9 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		inner = tdxn_comp.create(baseCOMP, 'inner')
 		deep_dat = inner.create(textDAT, 'deep_tracked')
 
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		deep_path = deep_dat.path
-		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
+		self._addTableRow(tdxn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
 		self._addTableRow(deep_path, 'text', '',
 			f'embody/{tdxn_comp.name}/inner/deep_tracked.txt')
 
@@ -2871,7 +2871,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 				'Deeply nested pure TDXN-managed children must be skipped')
 		finally:
 			self._removeTableRow(deep_path)
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	# --- P7-P8: Full strip/restore cycle ---
 
@@ -2919,18 +2919,18 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		child = tdxn_comp.create(textDAT, 'tracked_dat')
 		child.text = 'must survive'
 
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		child_path = child.path
 
 		# Register in table - empty strategy (TDXN-managed child)
-		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
+		self._addTableRow(tdxn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
 		self._addTableRow(child_path, 'text', '',
 			f'embody/{tdxn_comp.name}/tracked_dat.txt')
 
 		try:
 			# Phase 1: Export (like Update does)
 			export_result = self.tdn.ExportNetwork(
-				root_path=tdn_path, include_dat_content=True)
+				root_path=tdxn_path, include_dat_content=True)
 			self.assertTrue(export_result.get('success'))
 			tdxn_doc = export_result['tdn']
 
@@ -2940,7 +2940,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 
 			# Phase 3: Restore (like onProjectPostSave)
 			self.tdn.ImportNetwork(
-				target_path=tdn_path, tdn=tdxn_doc,
+				target_path=tdxn_path, tdn=tdxn_doc,
 				clear_first=True, restore_file_links=True)
 
 			# Phase 4: Continuity check (like the delayed Refresh)
@@ -2957,7 +2957,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 			self.assertEqual(restored.text, 'must survive')
 		finally:
 			self._removeTableRow(child_path)
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	# --- P9-P10: Update suppress_refresh and worst-case timing ---
 
@@ -2980,11 +2980,11 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		child = tdxn_comp.create(textDAT, 'victim')
 		child.text = 'do not delete me'
 
-		tdn_path = tdxn_comp.path
+		tdxn_path = tdxn_comp.path
 		child_path = child.path
 
 		# Empty strategy = pure TDXN-managed child (protected by skip)
-		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
+		self._addTableRow(tdxn_path, 'base', 'tdn', f'embody/{tdxn_comp.name}.tdn')
 		self._addTableRow(child_path, 'text', '',
 			f'embody/{tdxn_comp.name}/victim.txt')
 
@@ -3002,7 +3002,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 				'Table entry must survive continuity check during strip window')
 		finally:
 			self._removeTableRow(child_path)
-			self._removeTableRow(tdn_path, 'tdn')
+			self._removeTableRow(tdxn_path, 'tdn')
 
 	# =================================================================
 	# Q. Operator Storage round-trips
@@ -3145,7 +3145,7 @@ class TestTDXNReconstruction(EmbodyTestCase):
 			self.sandbox.op('n').fetch(
 				'seed_offset', None, search=False), 123)
 
-	def test_Q16_embed_dats_in_tdn_preserved(self):
+	def test_Q16_embed_dats_in_tdxn_preserved(self):
 		"""The embed_dats_in_tdn storage key (Embody per-COMP setting) round-trips."""
 		c = self.sandbox.create(baseCOMP, 'c')
 		c.store('embed_dats_in_tdn', True)
@@ -3820,10 +3820,10 @@ class TestTDXNReconstruction(EmbodyTestCase):
 
 		try:
 			result = self.embody_ext._getTDXNStrategyComps()
-			tdn_paths = [r[0] for r in result]
+			tdxn_paths = [r[0] for r in result]
 
 			# Filter to just our test paths
-			test_paths = [p for p in tdn_paths if p.startswith('/project/a')]
+			test_paths = [p for p in tdxn_paths if p.startswith('/project/a')]
 			self.assertEqual(len(test_paths), 3,
 				'All three test paths must be present')
 

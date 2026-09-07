@@ -3566,17 +3566,17 @@ class TestWorktreeCoordination(EmbodyTestCase):
             landing_files=['a.py', 'b.py', 'c.tdn', 'd.md'],
             main_dirty=['b.py', 'zz.txt'],
             peer_files=['c.tdn'],
-            tdn_unsaved=['c.tdn', 'other.tdn'])
+            tdxn_unsaved=['c.tdn', 'other.tdn'])
         self.assertEqual(out['main_dirty'], ['b.py'])
         self.assertEqual(out['peers'], ['c.tdn'])
-        self.assertEqual(out['tdn_unsaved'], ['c.tdn'])
+        self.assertEqual(out['tdxn_unsaved'], ['c.tdn'])
 
     def test_landing_conflicts_clear(self):
         mod = self._mod()
         out = mod.compute_landing_conflicts(
             ['a.py'], ['b.py'], ['c.py'], ['d.py'])
         self.assertEqual(out, {'main_dirty': [], 'peers': [],
-                               'tdn_unsaved': []})
+                               'tdxn_unsaved': []})
 
     # -- read_tsv_dirty_paths -----------------------------------------
 

@@ -11,7 +11,7 @@ ext-diet WP7c + WP7d clusters C5 + C9). Holds:
         consumer is compute_uninstall_plan and nothing external reads them.
   - C9  Settings/config.json persistence: settings_path / find_settings_file /
         project_json_path / write_project_json / save_settings /
-        defer_save_settings / restore_settings / show_tdn_migration_nudge.
+        defer_save_settings / restore_settings / show_tdxn_migration_nudge.
         Plus the project.json 'convoy' key steward (Convoy Phase 2):
         mint_convoy_id / read_convoy_entry / read_convoy_id /
         read_convoy_binding_state / ensure_convoy_id / adopt_convoy_id,
@@ -36,7 +36,7 @@ monkeypatches any name in this cluster -- verified). Cross-module hops go throug
 the facade via ext.*: _loadInstallManifest / _loadHashManifest (embody_git stubs
 on the facade), and the spine/retained methods _findProjectRoot / _rootForMode /
 _venvPaths / _uninstallClassifyMarker / _messageBox / _getTDXNStrategyComps /
-_applyTdnModeGating. The class attr _PERSISTED_PARAMS stays on EmbodyExt (read by
+_applyTdxnModeGating. The class attr _PERSISTED_PARAMS stays on EmbodyExt (read by
 parexec.py) and is reached via ext._PERSISTED_PARAMS. Instance state
 (_settings_save_pending, _restoring_settings) lives on the ext, unchanged.
 
@@ -1526,8 +1526,8 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
         '_tdn_migration_scheduled', False, search=False)
     if ('Tdnenable' in params and 'Tdxnmode' not in params
             and not already_scheduled):
-        prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
-        ext.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
+        prev_tdxn_enable = bool(params.get('Tdnenable', {}).get('val', True))
+        ext.my.store('_tdn_migration_prev_enable', prev_tdxn_enable)
         ext.my.store('_tdn_migration_scheduled', True)
         run(f"op('{ext.my}').ext.Embody._showTDXNMigrationNudge()",
             delayFrames=60)
@@ -1540,7 +1540,7 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
     return restored > 0
 
 
-def show_tdn_migration_nudge(ext) -> None:
+def show_tdxn_migration_nudge(ext) -> None:
     """One-time dialog after upgrading from the binary Tdnenable toggle.
 
     Fires when a user opens a project previously saved with the old
@@ -1558,13 +1558,13 @@ def show_tdn_migration_nudge(ext) -> None:
                                search=False)
     ext.my.unstore('_tdn_migration_prev_enable')
 
-    tdn_comps = []
+    tdxn_comps = []
     try:
-        tdn_comps = ext._getTDXNStrategyComps()
+        tdxn_comps = ext._getTDXNStrategyComps()
     except Exception:
         pass
 
-    if not tdn_comps:
+    if not tdxn_comps:
         # No TDXN COMPs tracked -- silently accept the new default.
         ext.my.store('_tdn_mode_migration_shown', True)
         return
@@ -1581,7 +1581,7 @@ def show_tdn_migration_nudge(ext) -> None:
         f'  \u2022 Roundtrip (Experimental) -- bidirectional '
         f'strip/restore on save and reconstruction on open (previous '
         f'behavior)\n\n'
-        f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
+        f'Currently set to Export-on-Save. Your {len(tdxn_comps)} '
         f'tracked TDXN COMP(s) will stop round-tripping on save.\n\n'
         f'Keep the new default, or restore Full?'
     )
@@ -1593,7 +1593,7 @@ def show_tdn_migration_nudge(ext) -> None:
     if choice == 1:
         try:
             ext.my.par.Tdxnmode = 'full'
-            ext._applyTdnModeGating()
+            ext._applyTdxnModeGating()
             ext.Log('TDXN mode restored to Full per user choice', 'INFO')
         except Exception as e:
             ext.Log(f'Could not restore Full mode: {e}', 'WARNING')

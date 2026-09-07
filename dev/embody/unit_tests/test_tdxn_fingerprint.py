@@ -385,7 +385,7 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
         before = tdxn.ExportNetwork(root_path=root.path)['tdn']
         mutate()
         after = tdxn.ExportNetwork(root_path=root.path)['tdn']
-        changed = not tdxn._tdn_content_equal(after, before)
+        changed = not tdxn._tdxn_content_equal(after, before)
         dirty = emb._isTDXNDirty(root)
         self.assertEqual(changed, expect_change,
                          f'{label}: the export did not behave as the test assumes')

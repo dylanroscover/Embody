@@ -3,7 +3,7 @@ Test suite: Community-safety SAFE-IMPORT transform + CollectionExt glue.
 
 Runs inside the main Embody suite against the LIVE Collection modules:
     si  = op.Embody.op('Collection/safe_import').module   (make_inert, is_inert)
-    coll = op.Embody.op('Collection').ext.Collection       (ScanTdn, PlanCommunityPaste)
+    coll = op.Embody.op('Collection').ext.Collection       (ScanTdxn, PlanCommunityPaste)
 
 safe_import is the default-inert TDXN import transform. It is PRESENCE-agnostic
 and ARMED-STATE-based: it disarms every auto-run surface (execute DATs, expr/bind
@@ -415,7 +415,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     # make_inert -- malformed input must not raise
     # =======================================================================
 
-    def test_malformed_tdn_does_not_raise(self):
+    def test_malformed_tdxn_does_not_raise(self):
         """None ops, str flags, and a non-dict 'parameters' value are tolerated."""
         malformed = {
             "network_path": "/bad",
@@ -453,7 +453,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
     # =======================================================================
 
     def test_scanner_detects_every_armed_surface(self):
-        counts = self.scanner.scan_tdn(_adversarial_tdxn())["counts"]
+        counts = self.scanner.scan_tdxn(_adversarial_tdxn())["counts"]
         self.assertGreaterEqual(counts["execute_dats"], 1)
         self.assertGreaterEqual(counts["file_read_exprs"], 1)
         self.assertGreaterEqual(counts["extensions"], 1)
@@ -466,7 +466,7 @@ class TestCollectionSafeImport(EmbodyTestCase):
         presence-only surfaces (web_ops type, traversal path) may legitimately
         remain since the bypassed op is still in the inventory."""
         inert, _ = self.si.make_inert(_adversarial_tdxn())
-        counts = self.scanner.scan_tdn(inert)["counts"]
+        counts = self.scanner.scan_tdxn(inert)["counts"]
         self.assertEqual(counts["file_read_exprs"], 0)
         self.assertEqual(counts["extensions"], 0)
         self.assertEqual(counts["storage_payloads"], 0)
@@ -474,9 +474,9 @@ class TestCollectionSafeImport(EmbodyTestCase):
     def test_make_inert_does_not_change_original_scan(self):
         """make_inert mutates nothing, so the ORIGINAL re-scans identically."""
         original = _adversarial_tdxn()
-        before = self.scanner.scan_tdn(original)["counts"]
+        before = self.scanner.scan_tdxn(original)["counts"]
         self.si.make_inert(original)
-        after = self.scanner.scan_tdn(original)["counts"]
+        after = self.scanner.scan_tdxn(original)["counts"]
         self.assertEqual(before, after)
 
     # =======================================================================
@@ -506,12 +506,12 @@ class TestCollectionSafeImport(EmbodyTestCase):
         self.assertIn(plan["capability"]["verdict"], ("flagged", "blocked"))
 
     def test_scan_tdxn_empty_is_clean(self):
-        """ScanTdn({}) -- no surfaces present -> 'clean' verdict."""
-        report = self.coll.ScanTdn({})
+        """ScanTdxn({}) -- no surfaces present -> 'clean' verdict."""
+        report = self.coll.ScanTdxn({})
         self.assertEqual(report["verdict"], "clean")
         self.assertDictHasKey(report, "counts")
 
     def test_scan_tdxn_non_dict_coerced(self):
-        """ScanTdn defends against a non-dict argument (coerced to {})."""
-        report = self.coll.ScanTdn(None)
+        """ScanTdxn defends against a non-dict argument (coerced to {})."""
+        report = self.coll.ScanTdxn(None)
         self.assertEqual(report["verdict"], "clean")

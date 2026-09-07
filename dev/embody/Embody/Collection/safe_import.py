@@ -278,32 +278,32 @@ def make_inert(tdn: dict, is_pure_expr=None) -> tuple[dict, dict]:
     expression is neutralized (fail-closed, the original behavior).
     """
     global _PRESERVE_PURE
-    inert_tdn = copy.deepcopy(tdn)
+    inert_tdxn = copy.deepcopy(tdn)
     summary = _empty_summary()
 
-    if not isinstance(inert_tdn, dict):
-        return inert_tdn, summary
+    if not isinstance(inert_tdxn, dict):
+        return inert_tdxn, summary
 
     _PRESERVE_PURE = is_pure_expr
     try:
-        type_defaults = _type_defaults(inert_tdn)
+        type_defaults = _type_defaults(inert_tdxn)
         original_type_defaults = copy.deepcopy(type_defaults)
-        _neutralize_type_defaults(inert_tdn, summary)
-        _neutralize_par_templates(inert_tdn, summary)
+        _neutralize_type_defaults(inert_tdxn, summary)
+        _neutralize_par_templates(inert_tdxn, summary)
         _neutralize_node(
-            inert_tdn,
-            _root_path(inert_tdn),
+            inert_tdxn,
+            _root_path(inert_tdxn),
             type_defaults,
             original_type_defaults,
             summary,
         )
 
-        operators = inert_tdn.get("operators")
+        operators = inert_tdxn.get("operators")
         if isinstance(operators, list):
             for op_def in operators:
                 _walk_operator(
                     op_def,
-                    _root_path(inert_tdn),
+                    _root_path(inert_tdxn),
                     type_defaults,
                     original_type_defaults,
                     summary,
@@ -311,7 +311,7 @@ def make_inert(tdn: dict, is_pure_expr=None) -> tuple[dict, dict]:
     finally:
         _PRESERVE_PURE = None
 
-    return inert_tdn, summary
+    return inert_tdxn, summary
 
 
 def strip_global_shortcuts(tdn: dict) -> tuple[dict, dict]:
@@ -353,7 +353,7 @@ def strip_global_shortcuts(tdn: dict) -> tuple[dict, dict]:
     return out, summary
 
 
-def plan_community_paste(tdn: dict, scan_tdn, is_pure_expr) -> dict:
+def plan_community_paste(tdn: dict, scan_tdxn, is_pure_expr) -> dict:
     """The import plan for a community TDXN: live if scanned clean, else inert.
 
     Pure so it can be tested without TouchDesigner; CollectionExt delegates
@@ -362,13 +362,13 @@ def plan_community_paste(tdn: dict, scan_tdn, is_pure_expr) -> dict:
     pasted network cannot register an op.TD<Name> of its own.
     """
     tdn = tdn if isinstance(tdn, dict) else {}
-    capability = scan_tdn(tdn)
+    capability = scan_tdxn(tdn)
     if capability.get("verdict") == "clean":
-        live_tdn, summary = strip_global_shortcuts(tdn)
-        return {"mode": "live", "tdn": live_tdn,
+        live_tdxn, summary = strip_global_shortcuts(tdn)
+        return {"mode": "live", "tdn": live_tdxn,
                 "capability": capability, "summary": summary}
-    inert_tdn, summary = make_inert(tdn, is_pure_expr=is_pure_expr)
-    return {"mode": "inert", "tdn": inert_tdn,
+    inert_tdxn, summary = make_inert(tdn, is_pure_expr=is_pure_expr)
+    return {"mode": "inert", "tdn": inert_tdxn,
             "capability": capability, "summary": summary}
 
 

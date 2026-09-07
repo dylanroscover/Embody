@@ -6,7 +6,7 @@ elsewhere (test_tdn_yaml.py, test_tdn_file_io.py, test_tdn_sequences.py,
 test_tdn_fingerprint.py). Each class targets one seam:
 
   TestTDXNLoadMalformedJSON
-      tdn_load's narrowed-except (TDXNExt.py ~L94): a brace-prefixed doc that
+      tdxn_load's narrowed-except (TDXNExt.py ~L94): a brace-prefixed doc that
       is invalid JSON AND invalid YAML must RAISE, not silently degrade to a
       lenient default. Plus: ExportNetwork stamps the literal TDXN_VERSION
       '2.0' (not just "a version key present").
@@ -32,7 +32,7 @@ test_tdn_fingerprint.py). Each class targets one seam:
 
   TestTDXNFingerprintExclusionAndRefs
       EmbodyExt._computeTDXNFingerprint -- an excluded child is omitted (vs
-      included differs only by that child), and a tdn_paths-referenced child
+      included differs only by that child), and a tdxn_paths-referenced child
       is recorded structurally so inner param edits do NOT dirty the parent.
 
   TestUvicornStdoutIsattyGuard
@@ -56,7 +56,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
 # =============================================================================
-# tdn_load narrowed-except + ExportNetwork version stamp
+# tdxn_load narrowed-except + ExportNetwork version stamp
 # =============================================================================
 
 class TestTDXNLoadMalformedJSON(EmbodyTestCase):
@@ -75,7 +75,7 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         """A brace-prefixed doc that is invalid JSON AND invalid YAML must
         RAISE -- it must NOT silently degrade to a lenient parse / a default.
 
-        tdn_load tries json.loads first (narrowed to JSONDecodeError), then
+        tdxn_load tries json.loads first (narrowed to JSONDecodeError), then
         falls through to yaml.load. For a doubly-malformed flow mapping like
         '{"a": 1,, "b": 2}', json raises JSONDecodeError (swallowed) and the
         YAML fallback then raises a YAMLError -- which must propagate. (The
@@ -86,12 +86,12 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         raised = False
         result = '__sentinel__'
         try:
-            result = self.tdn.tdn_load(malformed)
+            result = self.tdn.tdxn_load(malformed)
         except Exception:
             raised = True
         self.assertTrue(
             raised,
-            'tdn_load must raise on a doubly-malformed brace doc, not return '
+            'tdxn_load must raise on a doubly-malformed brace doc, not return '
             f'a lenient value (got {result!r})')
 
     def test_malformed_bracket_json_raises_not_degraded(self):
@@ -99,16 +99,16 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         malformed = '[1, 2,, 3]'
         raised = False
         try:
-            self.tdn.tdn_load(malformed)
+            self.tdn.tdxn_load(malformed)
         except Exception:
             raised = True
         self.assertTrue(raised,
-            'tdn_load must raise on a doubly-malformed bracket doc')
+            'tdxn_load must raise on a doubly-malformed bracket doc')
 
     def test_valid_json_still_parses(self):
         """The narrowed except must NOT break the happy path: a valid
         brace-prefixed JSON doc still loads to the expected dict."""
-        loaded = self.tdn.tdn_load('{"format": "tdn", "version": "1.5"}')
+        loaded = self.tdn.tdxn_load('{"format": "tdn", "version": "1.5"}')
         self.assertEqual(loaded.get('format'), 'tdn')
         self.assertEqual(loaded.get('version'), '1.5')
 
@@ -419,7 +419,7 @@ class TestPOPSequenceResolution(EmbodyTestCase):
 
 
 # =============================================================================
-# Fingerprint exclusion + tdn_paths-referenced child
+# Fingerprint exclusion + tdxn_paths-referenced child
 # =============================================================================
 
 class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
@@ -429,8 +429,8 @@ class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
         self.emb = self.embody_ext
         self.exclude_tag = self.embody.par.Tdxnexcludetag.eval()
 
-    def _fp(self, comp, tdn_paths=None, exclude_tag=None):
-        return self.emb._computeTDXNFingerprint(comp, tdn_paths, exclude_tag)
+    def _fp(self, comp, tdxn_paths=None, exclude_tag=None):
+        return self.emb._computeTDXNFingerprint(comp, tdxn_paths, exclude_tag)
 
     def test_excluded_child_omitted_from_fingerprint(self):
         """An exclude-tagged child COMP is omitted from the fingerprint, so a
@@ -441,8 +441,8 @@ class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
         excluded = parent.create(baseCOMP, 'excluded_child')
         excluded.tags.add(self.exclude_tag)
 
-        included_fp = self._fp(parent, tdn_paths=None, exclude_tag=None)
-        excluded_fp = self._fp(parent, tdn_paths=None,
+        included_fp = self._fp(parent, tdxn_paths=None, exclude_tag=None)
+        excluded_fp = self._fp(parent, tdxn_paths=None,
                                exclude_tag=self.exclude_tag)
 
         self.assertNotEqual(included_fp, excluded_fp,
@@ -452,7 +452,7 @@ class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
         # the excluded child physically removed (and exclude_tag=None) must
         # equal the excluded-via-tag fingerprint.
         excluded.destroy()
-        removed_fp = self._fp(parent, tdn_paths=None, exclude_tag=None)
+        removed_fp = self._fp(parent, tdxn_paths=None, exclude_tag=None)
         self.assertEqual(removed_fp, excluded_fp,
             'omitting via exclude_tag must equal physically removing the '
             'child -- the exclusion is the only difference')
@@ -469,14 +469,14 @@ class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
         excluded.tags.add(self.exclude_tag)
         inner = excluded.create(constantCHOP, 'inner_chop')
 
-        before = self._fp(parent, tdn_paths=None, exclude_tag=self.exclude_tag)
+        before = self._fp(parent, tdxn_paths=None, exclude_tag=self.exclude_tag)
         inner.par.value0 = 7.0
-        after = self._fp(parent, tdn_paths=None, exclude_tag=self.exclude_tag)
+        after = self._fp(parent, tdxn_paths=None, exclude_tag=self.exclude_tag)
         self.assertEqual(before, after,
             'editing inside an excluded child COMP must not dirty the parent')
 
     def test_referenced_child_recorded_structurally_not_by_params(self):
-        """A tdn_paths-referenced child is recorded only structurally (name,
+        """A tdxn_paths-referenced child is recorded only structurally (name,
         type, position, etc.) -- its own params are NOT embedded -- so an
         inner param edit does NOT change the parent fingerprint, but a
         structural move DOES."""
@@ -485,34 +485,34 @@ class TestTDXNFingerprintExclusionAndRefs(EmbodyTestCase):
         inner = child.create(constantCHOP, 'inner_chop')
         child.nodeX, child.nodeY = 0, 0
 
-        tdn_paths = {child.path}  # child is separately TDXN-externalized
+        tdxn_paths = {child.path}  # child is separately TDXN-externalized
 
-        before = self._fp(parent, tdn_paths=tdn_paths, exclude_tag=None)
+        before = self._fp(parent, tdxn_paths=tdxn_paths, exclude_tag=None)
         # Inner param edit deep inside the referenced child.
         inner.par.value0 = 9.0
-        after_param = self._fp(parent, tdn_paths=tdn_paths, exclude_tag=None)
+        after_param = self._fp(parent, tdxn_paths=tdxn_paths, exclude_tag=None)
         self.assertEqual(before, after_param,
-            'inner param edits of a tdn_paths-referenced child must NOT '
+            'inner param edits of a tdxn_paths-referenced child must NOT '
             'change the parent fingerprint (child is referenced, not embedded)')
 
         # A STRUCTURAL change to the referenced child (its own position) IS
         # recorded -- the child still appears structurally in the parent.
         child.nodeX += 100
-        after_move = self._fp(parent, tdn_paths=tdn_paths, exclude_tag=None)
+        after_move = self._fp(parent, tdxn_paths=tdxn_paths, exclude_tag=None)
         self.assertNotEqual(before, after_move,
             'moving the referenced child must change the parent fingerprint')
 
     def test_embedded_child_inner_edit_does_dirty_parent(self):
-        """Contrast case: when the child is NOT in tdn_paths (embedded), an
+        """Contrast case: when the child is NOT in tdxn_paths (embedded), an
         inner param edit DOES change the parent fingerprint -- confirming the
         referenced-vs-embedded distinction is what the previous test isolates."""
         parent = self.sandbox.create(baseCOMP, 'embed_parent')
         child = parent.create(baseCOMP, 'embed_child')
         inner = child.create(constantCHOP, 'inner_chop')
 
-        before = self._fp(parent, tdn_paths=None, exclude_tag=None)
+        before = self._fp(parent, tdxn_paths=None, exclude_tag=None)
         inner.par.value0 = 3.0
-        after = self._fp(parent, tdn_paths=None, exclude_tag=None)
+        after = self._fp(parent, tdxn_paths=None, exclude_tag=None)
         self.assertNotEqual(before, after,
             'inner param edits of an EMBEDDED child must dirty the parent')
 

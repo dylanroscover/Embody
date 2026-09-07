@@ -1023,14 +1023,14 @@ class TestTransientParScrub(EmbodyTestCase):
             self.embody_ext._transientParNames(self.embody),
             self._orig_registry['Embody'])
         self.assertEqual(
-            self.embody_ext._tdnValueOmitNames(self.embody),
+            self.embody_ext._tdxnValueOmitNames(self.embody),
             self._orig_omit['Embody'])
         plain = self.sandbox.create(baseCOMP, 'rht_plain_scope')
         self.assertEqual(
             self.embody_ext._transientParNames(plain), {},
             'a comp with no registered shortcut must scrub nothing')
         self.assertEqual(
-            self.embody_ext._tdnValueOmitNames(plain), frozenset())
+            self.embody_ext._tdxnValueOmitNames(plain), frozenset())
 
     # -- scrub / restore ---------------------------------------------
 

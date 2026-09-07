@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import safe_import
 
 
-def base_tdn(operators=None, **extra):
+def base_tdxn(operators=None, **extra):
     tdn = {
         "format": "tdn",
         "version": "1.4",
@@ -59,7 +59,7 @@ class TestSafeImport(unittest.TestCase):
             self.assertEqual(summary[key], value, key)
 
     def test_execute_dat_is_deactivated_and_content_is_kept(self):
-        tdn = base_tdn([
+        tdn = base_tdxn([
             {
                 "name": "exec1",
                 "type": "executeDAT",
@@ -78,7 +78,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_expression_and_bind_parameters_become_constants_with_details(self):
-        tdn = base_tdn([
+        tdn = base_tdxn([
             {
                 "name": "exprs",
                 "type": "constantCHOP",
@@ -132,7 +132,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_comp_extensions_are_disabled_without_removing_children(self):
-        tdn = base_tdn([
+        tdn = base_tdxn([
             {
                 "name": "owner",
                 "type": "baseCOMP",
@@ -167,7 +167,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_io_operator_is_bypassed(self):
-        tdn = base_tdn([
+        tdn = base_tdxn([
             {
                 "name": "client1",
                 "type": "webclientDAT",
@@ -185,7 +185,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_storage_and_startup_storage_are_quarantined(self):
-        tdn = base_tdn(
+        tdn = base_tdxn(
             [
                 {
                     "name": "stored",
@@ -209,7 +209,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_input_is_not_mutated_idempotent_and_structure_is_preserved(self):
-        tdn = base_tdn([
+        tdn = base_tdxn([
             {
                 "name": "container1",
                 "type": "baseCOMP",
@@ -251,7 +251,7 @@ class TestSafeImport(unittest.TestCase):
         self.assertTrue(safe_import.is_inert(inert))
 
     def test_type_defaults_and_root_surfaces_are_neutralized(self):
-        tdn = base_tdn(
+        tdn = base_tdxn(
             [
                 {
                     "name": "movie1",
@@ -285,7 +285,7 @@ class TestSafeImport(unittest.TestCase):
         self.assert_summary_counts(summary, exprs_neutralized=3, io_ops_bypassed=1)
         self.assertTrue(safe_import.is_inert(inert))
 
-    def test_malformed_tdn_does_not_raise(self):
+    def test_malformed_tdxn_does_not_raise(self):
         malformed = {
             "network_path": "/bad",
             "parameters": "bad",

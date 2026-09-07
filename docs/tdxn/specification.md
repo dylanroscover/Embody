@@ -1092,7 +1092,7 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdxn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdxn` -> `B.tdxn` -> `A.tdxn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdxn`.
 
-Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ext.Embody.reconstructTDXNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
+Two callers pass `restore_tdxn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ext.Embody.reconstructTDXNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 

@@ -31,7 +31,7 @@ The annotate guards added for the 2026-07-21 report live in
 `_getTDXNStrategyComps` (EmbodyExt.py:8340) and `applyTagToOperator`.
 `checkOpsForContinuity` builds `rows_to_check` straight from the
 externalizations table (EmbodyExt.py:4862-4868) and never consults them.
-The `stripped_tdn_paths` shield (EmbodyExt.py:4882-4886) does NOT apply
+The `stripped_tdxn_paths` shield (EmbodyExt.py:4882-4886) does NOT apply
 either: it is only read at EmbodyExt.py:4943, inside the non-TDXN branch,
 which the `if is_tdxn:` branch at 4911 never reaches (it `continue`s at
 4928).

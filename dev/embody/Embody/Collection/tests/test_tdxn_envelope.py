@@ -4,7 +4,7 @@ import types
 import unittest
 
 
-def load_tdn_ext_headless():
+def load_tdxn_ext_headless():
     tests_dir = os.path.dirname(os.path.abspath(__file__))
     collection_dir = os.path.dirname(tests_dir)
     embody_dir = os.path.dirname(collection_dir)
@@ -16,22 +16,22 @@ def load_tdn_ext_headless():
     return module
 
 
-tdn_envelope = load_tdn_ext_headless()
+tdxn_envelope = load_tdxn_ext_headless()
 
 
-class TestTdnEnvelope(unittest.TestCase):
+class TestTdxnEnvelope(unittest.TestCase):
     def test_wrap_produces_valid_envelope_without_optional_fields(self):
         tdn = {"operators": [{"name": "text1", "type": "textDAT"}]}
 
-        envelope = tdn_envelope.wrap_tdn(tdn, "embody")
+        envelope = tdxn_envelope.wrap_tdxn(tdn, "embody")
 
-        self.assertTrue(tdn_envelope.is_embody_tdn_envelope(envelope))
+        self.assertTrue(tdxn_envelope.is_embody_tdxn_envelope(envelope))
         self.assertEqual(
-            envelope[tdn_envelope.EMBODY_TDN_MARKER],
-            tdn_envelope.EMBODY_TDN_VERSION,
+            envelope[tdxn_envelope.EMBODY_TDXN_MARKER],
+            tdxn_envelope.EMBODY_TDXN_VERSION,
         )
         self.assertEqual(envelope["source"], "embody")
-        self.assertEqual(envelope["sha256"], tdn_envelope.tdn_sha256(tdn))
+        self.assertEqual(envelope["sha256"], tdxn_envelope.tdn_sha256(tdn))
         self.assertIs(envelope["tdn"], tdn)
         self.assertNotIn("slug", envelope)
         self.assertNotIn("version", envelope)
@@ -39,28 +39,28 @@ class TestTdnEnvelope(unittest.TestCase):
     def test_wrap_includes_optional_fields_when_given(self):
         tdn = {"operators": []}
 
-        envelope = tdn_envelope.wrap_tdn(
+        envelope = tdxn_envelope.wrap_tdxn(
             tdn,
             "embody.tools",
             slug="sample-network",
             version=7,
         )
 
-        self.assertTrue(tdn_envelope.is_embody_tdn_envelope(envelope))
+        self.assertTrue(tdxn_envelope.is_embody_tdxn_envelope(envelope))
         self.assertEqual(envelope["source"], "embody.tools")
         self.assertEqual(envelope["slug"], "sample-network")
         self.assertEqual(envelope["version"], 7)
 
     def test_clipboard_round_trip_returns_equal_envelope(self):
-        envelope = tdn_envelope.wrap_tdn(
+        envelope = tdxn_envelope.wrap_tdxn(
             {"b": 2, "a": {"name": "base1"}},
             "embody",
             slug="round-trip",
             version=1,
         )
 
-        text = tdn_envelope.to_clipboard_str(envelope)
-        unwrapped = tdn_envelope.unwrap_clipboard(text)
+        text = tdxn_envelope.to_clipboard_str(envelope)
+        unwrapped = tdxn_envelope.unwrap_clipboard(text)
 
         self.assertEqual(unwrapped, envelope)
 
@@ -69,57 +69,57 @@ class TestTdnEnvelope(unittest.TestCase):
         # integrity hash is over the canonical inner tdn -- not the string --
         # so indentation must never change the sha256 or break the round-trip.
         tdn = {"b": 2, "a": {"name": "base1"}}
-        envelope = tdn_envelope.wrap_tdn(tdn, "embody", slug="indent", version=1)
-        text = tdn_envelope.to_clipboard_str(envelope)
+        envelope = tdxn_envelope.wrap_tdxn(tdn, "embody", slug="indent", version=1)
+        text = tdxn_envelope.to_clipboard_str(envelope)
 
         self.assertIn("\n", text)            # multi-line == indented
         self.assertIn("  ", text)            # has indentation
-        self.assertEqual(envelope["sha256"], tdn_envelope.tdn_sha256(tdn))
-        self.assertTrue(tdn_envelope.verify_envelope_integrity(
-            tdn_envelope.unwrap_clipboard(text)))
+        self.assertEqual(envelope["sha256"], tdxn_envelope.tdn_sha256(tdn))
+        self.assertTrue(tdxn_envelope.verify_envelope_integrity(
+            tdxn_envelope.unwrap_clipboard(text)))
 
     def test_unwrap_malformed_json_returns_none(self):
-        self.assertIsNone(tdn_envelope.unwrap_clipboard("not json"))
+        self.assertIsNone(tdxn_envelope.unwrap_clipboard("not json"))
 
     def test_unwrap_non_envelope_json_returns_none(self):
-        self.assertIsNone(tdn_envelope.unwrap_clipboard('{"a":1}'))
+        self.assertIsNone(tdxn_envelope.unwrap_clipboard('{"a":1}'))
 
-    def test_tdn_sha256_is_deterministic_regardless_of_key_order(self):
+    def test_tdxn_sha256_is_deterministic_regardless_of_key_order(self):
         first = {"b": 2, "a": {"d": 4, "c": 3}}
         second = {"a": {"c": 3, "d": 4}, "b": 2}
 
         self.assertEqual(
-            tdn_envelope.tdn_sha256(first),
-            tdn_envelope.tdn_sha256(second),
+            tdxn_envelope.tdn_sha256(first),
+            tdxn_envelope.tdn_sha256(second),
         )
 
     def test_verify_envelope_integrity_detects_mutation(self):
-        envelope = tdn_envelope.wrap_tdn({"operators": [{"name": "a"}]}, "embody")
+        envelope = tdxn_envelope.wrap_tdxn({"operators": [{"name": "a"}]}, "embody")
 
-        self.assertTrue(tdn_envelope.verify_envelope_integrity(envelope))
+        self.assertTrue(tdxn_envelope.verify_envelope_integrity(envelope))
 
         envelope["tdn"]["operators"][0]["name"] = "b"
 
-        self.assertFalse(tdn_envelope.verify_envelope_integrity(envelope))
+        self.assertFalse(tdxn_envelope.verify_envelope_integrity(envelope))
 
     def test_wrap_raises_value_error_on_bad_source(self):
         with self.assertRaises(ValueError):
-            tdn_envelope.wrap_tdn({"operators": []}, "other")
+            tdxn_envelope.wrap_tdxn({"operators": []}, "other")
 
     def test_resolve_name_from_network_path_basename(self):
         tdn = {"network_path": "/specimen_lab/murmuration"}
-        self.assertEqual(tdn_envelope.resolve_tdn_name(tdn, slug="ignored"),
+        self.assertEqual(tdxn_envelope.resolve_tdxn_name(tdn, slug="ignored"),
                          "murmuration")
 
     def test_resolve_name_skips_root_path_and_uses_slug(self):
         # network_path "/" has no basename -> fall through to the slug
-        self.assertEqual(tdn_envelope.resolve_tdn_name({"network_path": "/"},
+        self.assertEqual(tdxn_envelope.resolve_tdxn_name({"network_path": "/"},
                                                        slug="from-web"),
                          "from-web")
 
     def test_resolve_name_returns_none_when_nothing_usable(self):
-        self.assertIsNone(tdn_envelope.resolve_tdn_name({}))
-        self.assertIsNone(tdn_envelope.resolve_tdn_name(None))
+        self.assertIsNone(tdxn_envelope.resolve_tdxn_name({}))
+        self.assertIsNone(tdxn_envelope.resolve_tdxn_name(None))
 
 
 if __name__ == "__main__":
@@ -146,10 +146,10 @@ class TestCanonicalParityCorpus(unittest.TestCase):
             with self.subTest(case=case["name"]):
                 self.assertEqual(
                     case["expected"],
-                    tdn_envelope.canonical_tdn_bytes(case["value"]).decode("utf-8"))
+                    tdxn_envelope.canonical_tdn_bytes(case["value"]).decode("utf-8"))
 
     def test_non_finite_numbers_are_refused(self):
         with self.assertRaises(ValueError):
-            tdn_envelope.canonical_tdn_bytes({"a": float("inf")})
+            tdxn_envelope.canonical_tdn_bytes({"a": float("inf")})
         with self.assertRaises(ValueError):
-            tdn_envelope.canonical_tdn_bytes({"a": float("nan")})
+            tdxn_envelope.canonical_tdn_bytes({"a": float("nan")})

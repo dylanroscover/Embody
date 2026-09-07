@@ -107,12 +107,12 @@ def _load_theme():
 	except Exception:
 		uncommitted = (0.60, 0.30, 0.03, 1.0)
 
-	tdn_saved_raw = _par4('Tdxnsavedcolor')
-	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
+	tdxn_saved_raw = _par4('Tdxnsavedcolor')
+	tdxn_saved = _composite(tdxn_saved_raw, row) if tdxn_saved_raw[3] < 1.0 else tdxn_saved_raw
 
 	# TDXN exporting -- warm shift from TDXN saved blue
-	tdn_amber = (tdn_saved[0] + 0.12, max(0, tdn_saved[1] - 0.02),
-	             max(0, tdn_saved[2] - 0.04), 1.0)
+	tdxn_amber = (tdxn_saved[0] + 0.12, max(0, tdxn_saved[1] - 0.02),
+	             max(0, tdxn_saved[2] - 0.04), 1.0)
 
 	# Subtle column separator -- just visible enough to delineate columns
 	border = _brighten(row, 0.04)
@@ -136,10 +136,10 @@ def _load_theme():
 		'par_change_roll': _brighten(par_change, 0.08),
 		'uncommitted': uncommitted,
 		'uncommitted_roll': _brighten(uncommitted, 0.08),
-		'tdn_saved': tdn_saved,
-		'tdn_saved_roll': _brighten(tdn_saved, 0.08),
-		'tdn_amber': tdn_amber,
-		'tdn_amber_roll': _brighten(tdn_amber, 0.08),
+		'tdxn_saved': tdxn_saved,
+		'tdn_saved_roll': _brighten(tdxn_saved, 0.08),
+		'tdxn_amber': tdxn_amber,
+		'tdn_amber_roll': _brighten(tdxn_amber, 0.08),
 		'border': border,
 	})
 
@@ -174,13 +174,13 @@ def _strategy_style(state):
 	elif state == 'TOX_ParChange':
 		return ('TOX Par', _t['par_change'], None)
 	elif state == 'TDXN_Saved':
-		return ('TDXN', _t['tdn_saved'], None)
+		return ('TDXN', _t['tdxn_saved'], None)
 	elif state == 'TDXN_Dirty':
 		return ('TDXN', _t['dirty'], None)
 	elif state == 'TDN_ParChange':
 		return ('TDXN Par', _t['par_change'], None)
 	elif state == 'TDXN_Exporting':
-		return ('...', _t['tdn_amber'], None)
+		return ('...', _t['tdxn_amber'], None)
 	elif state == 'Comp':
 		return ('Tag', _t['comp'], None)
 	elif state == 'DAT_Saved':

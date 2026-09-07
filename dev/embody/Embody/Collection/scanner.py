@@ -164,7 +164,7 @@ class _AstScanResult:
         self.blocked = blocked
 
 
-def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
+def scan_tdxn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
     """Return a C2 CapabilityJson dict for a parsed TDXN payload."""
     counts = empty_capability_counts()
     findings = []
@@ -206,7 +206,7 @@ def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
 
     state = _ScanState(counts, findings)
     try:
-        _scan_tdn_root(tdn, state)
+        _scan_tdxn_root(tdn, state)
     except Exception as exc:
         # FAIL CLOSED: an internal scan error must NOT be reported as clean - an aborted walk
         # may have missed surfaces. Treat it as blocked so an unverifiable payload is never
@@ -239,7 +239,7 @@ def _capability(scanner_version, verdict, counts, findings):
     }
 
 
-def _scan_tdn_root(tdn, state):
+def _scan_tdxn_root(tdn, state):
     if not isinstance(tdn, dict):
         return
 

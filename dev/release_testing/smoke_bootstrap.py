@@ -648,7 +648,7 @@ def _exercise_features(attempt=0):
             'ops missing from .tdn'
         # mutate -> save -> the file must carry the new value
         n.par.period = 9.25
-        ext.saveTDN(comp.path)
+        ext.saveTDXN(comp.path)
         text = open(path, encoding='utf-8').read()
         assert '9.25' in text, 'SaveTDN did not persist the change'
         # disk -> network: rebuild from the file, verify the value returns

@@ -115,7 +115,7 @@ class TestMakeInertPreservesPure(unittest.TestCase):
 
 class TestScannerExpressionPurity(unittest.TestCase):
     def _flagged_expr(self, expr):
-        return scanner.scan_tdn(tdn([
+        return scanner.scan_tdxn(tdn([
             {"name": "l", "type": "levelTOP", "parameters": {"opacity": expr}}]))
 
     def test_pure_param_exprs_do_not_flag(self):
@@ -129,7 +129,7 @@ class TestScannerExpressionPurity(unittest.TestCase):
             self.assertGreaterEqual(res["counts"]["file_read_exprs"], 1, "missed: %s" % s)
 
     def test_par_eval_idiom_scans_clean(self):
-        res = scanner.scan_tdn(tdn([
+        res = scanner.scan_tdxn(tdn([
             {"name": "g", "type": "glslTOP",
              "sequences": {"vec": [{"name": "u", "valuex": "=parent().par.Power.eval()"}]}}]))
         self.assertEqual(res["verdict"], "clean")
@@ -137,20 +137,20 @@ class TestScannerExpressionPurity(unittest.TestCase):
 
 class TestScannerGlslAndData(unittest.TestCase):
     def test_glsl_textdat_by_language_not_python(self):
-        res = scanner.scan_tdn(tdn([
+        res = scanner.scan_tdxn(tdn([
             {"name": "px", "type": "textDAT", "parameters": {"language": "glsl"},
              "dat_content": "uniform vec4 u;\nvoid main(){ }"}]))
         self.assertEqual(res["counts"]["execute_dats"], 0)
         self.assertEqual(res["verdict"], "clean")
 
     def test_glsl_textdat_by_extension_not_python(self):
-        res = scanner.scan_tdn(tdn([
+        res = scanner.scan_tdxn(tdn([
             {"name": "px", "type": "textDAT", "parameters": {"extension": "frag"},
              "dat_content": "// shader\nuniform vec4 u; void main(){}"}]))
         self.assertEqual(res["counts"]["execute_dats"], 0)
 
     def test_python_textdat_with_import_still_flags(self):
-        res = scanner.scan_tdn(tdn([
+        res = scanner.scan_tdxn(tdn([
             {"name": "code", "type": "textDAT",
              "dat_content": "import os\nos.system('id')"}]))
         self.assertGreaterEqual(res["counts"]["execute_dats"], 1)
@@ -158,7 +158,7 @@ class TestScannerGlslAndData(unittest.TestCase):
 
 class TestScannerAndInertScriptOps(unittest.TestCase):
     def test_script_top_scans_flagged(self):
-        res = scanner.scan_tdn(tdn([{"name": "s", "type": "scriptTOP"}]))
+        res = scanner.scan_tdxn(tdn([{"name": "s", "type": "scriptTOP"}]))
         self.assertGreaterEqual(res["counts"]["execute_dats"], 1)
         self.assertEqual(res["verdict"], "flagged")
 
@@ -171,7 +171,7 @@ class TestScannerAndInertScriptOps(unittest.TestCase):
 
 class TestToxRef(unittest.TestCase):
     def test_tox_ref_scans_flagged(self):
-        res = scanner.scan_tdn(tdn([{"name": "c", "type": "baseCOMP", "tox_ref": "x.tox"}]))
+        res = scanner.scan_tdxn(tdn([{"name": "c", "type": "baseCOMP", "tox_ref": "x.tox"}]))
         self.assertGreaterEqual(res["counts"]["external_refs"], 1)
 
     def test_tox_ref_stripped_by_make_inert(self):
@@ -213,7 +213,7 @@ class TestPaletteTrust(unittest.TestCase):
         return tdn([node])
 
     def test_palette_extension_scans_clean(self):
-        self.assertEqual(scanner.scan_tdn(self._comp_with_ext(self.PALETTE))["verdict"], "clean")
+        self.assertEqual(scanner.scan_tdxn(self._comp_with_ext(self.PALETTE))["verdict"], "clean")
 
     def test_palette_extension_not_disabled(self):
         inert, summary = safe_import.make_inert(self._comp_with_ext(self.PALETTE), is_pure_expr=PURE)
@@ -221,15 +221,15 @@ class TestPaletteTrust(unittest.TestCase):
         self.assertTrue(inert["operators"][0]["sequences"]["ext"][0].get("object"))
 
     def test_foreign_extension_flagged_and_disabled(self):
-        self.assertEqual(scanner.scan_tdn(self._comp_with_ext(self.FOREIGN))["verdict"], "flagged")
+        self.assertEqual(scanner.scan_tdxn(self._comp_with_ext(self.FOREIGN))["verdict"], "flagged")
         inert, summary = safe_import.make_inert(self._comp_with_ext(self.FOREIGN), is_pure_expr=PURE)
         self.assertEqual(summary["extensions_disabled"], 1)
 
     def test_opshortcut_hijack_is_stripped(self):
         # An attacker registering op.TDAnnotate to repoint the trusted ref at their
         # code: the global shortcut must be stripped so the palette ref stays real.
-        tdn_hijack = self._comp_with_ext(self.PALETTE, parameters={"opshortcut": "TDAnnotate"})
-        inert, summary = safe_import.make_inert(tdn_hijack, is_pure_expr=PURE)
+        tdxn_hijack = self._comp_with_ext(self.PALETTE, parameters={"opshortcut": "TDAnnotate"})
+        inert, summary = safe_import.make_inert(tdxn_hijack, is_pure_expr=PURE)
         self.assertEqual(summary["global_shortcuts_stripped"], 1)
         self.assertNotIn("opshortcut", inert["operators"][0].get("parameters", {}))
 
@@ -243,13 +243,13 @@ class TestPaletteTrust(unittest.TestCase):
 
     def test_palette_substring_in_a_comment_is_not_trusted(self):
         t = self._comp_with_ext(self.BYPASS_COMMENT)
-        self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 1)
+        self.assertEqual(scanner.scan_tdxn(t)["counts"]["extensions"], 1)
         _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
         self.assertEqual(summary["extensions_disabled"], 1)
 
     def test_palette_substring_in_a_dead_branch_is_not_trusted(self):
         t = self._comp_with_ext(self.BYPASS_BRANCH)
-        self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 1)
+        self.assertEqual(scanner.scan_tdxn(t)["counts"]["extensions"], 1)
         _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
         self.assertEqual(summary["extensions_disabled"], 1)
 
@@ -259,7 +259,7 @@ class TestPaletteTrust(unittest.TestCase):
                     "op.TDModules.mod.TDFunctions"):
             with self.subTest(obj=obj):
                 t = self._comp_with_ext(obj)
-                self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 0)
+                self.assertEqual(scanner.scan_tdxn(t)["counts"]["extensions"], 0)
                 _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
                 self.assertEqual(summary["extensions_disabled"], 0)
 
@@ -283,7 +283,7 @@ class TestIssue94ReviewBypasses(unittest.TestCase):
             "dat_content": "class Evil:\n    def __init__(self, o):\n        pass\n"}
 
     def _plan(self, t):
-        return safe_import.plan_community_paste(t, scanner.scan_tdn, PURE)
+        return safe_import.plan_community_paste(t, scanner.scan_tdxn, PURE)
 
     def test_flat_ext0object_is_counted_and_disabled(self):
         t = tdn([{"name": "c", "type": "baseCOMP",

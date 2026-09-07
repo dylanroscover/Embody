@@ -1,7 +1,7 @@
 """
 Test suite: TDXN v2.0 (JSON -> YAML) serialization.
 
-Covers the tdn_dump / tdn_load helpers on the TDXN ext: lossless round-trip,
+Covers the tdxn_dump / tdxn_load helpers on the TDXN ext: lossless round-trip,
 block-scalar chomping, tab-shader fallback, YAML typing safety, JSON
 back-compat (legacy tab-indented and BOM-prefixed), determinism, trailing
 newline, no-anchors, dumper isolation, post-write validation, the textconv
@@ -85,14 +85,14 @@ class TestTDXNYaml(EmbodyTestCase):
             if not fp.is_file():
                 continue
             checked += 1
-            doc = self.tdn.tdn_load(fp.read_text(encoding='utf-8'))
+            doc = self.tdn.tdxn_load(fp.read_text(encoding='utf-8'))
             _v15_lists_to_strings(doc)
-            dumped = self.tdn.tdn_dump(doc)
-            reloaded = self.tdn.tdn_load(dumped)
+            dumped = self.tdn.tdxn_dump(doc)
+            reloaded = self.tdn.tdxn_load(dumped)
             self.assertEqual(reloaded, doc,
                 f'{rel}: round-trip mismatch')
             # Determinism: re-dump must be byte-identical.
-            self.assertEqual(self.tdn.tdn_dump(doc), dumped,
+            self.assertEqual(self.tdn.tdxn_dump(doc), dumped,
                 f'{rel}: re-dump not byte-identical')
         if checked == 0:
             self.skipTest('no specimen files present')
@@ -111,11 +111,11 @@ class TestTDXNYaml(EmbodyTestCase):
             'two_trailing': ('a\nb\n\n', '|+'),
         }
         for label, (s, indicator) in cases.items():
-            dumped = self.tdn.tdn_dump(
+            dumped = self.tdn.tdxn_dump(
                 {'dat_content': s, 'dat_content_format': 'text'})
             self.assertIn(indicator, dumped,
                 f'{label}: expected chomping indicator {indicator!r}')
-            back = self.tdn.tdn_load(dumped)
+            back = self.tdn.tdxn_load(dumped)
             self.assertEqual(back['dat_content'], s,
                 f'{label}: not byte-identical')
 
@@ -128,7 +128,7 @@ class TestTDXNYaml(EmbodyTestCase):
             'crlf': 'a\r\nb',
         }
         for label, s in tricky.items():
-            back = self.tdn.tdn_load(self.tdn.tdn_dump(
+            back = self.tdn.tdxn_load(self.tdn.tdxn_dump(
                 {'dat_content': s, 'dat_content_format': 'text'}))
             self.assertEqual(back['dat_content'], s,
                 f'{label}: tricky string not byte-identical')
@@ -140,7 +140,7 @@ class TestTDXNYaml(EmbodyTestCase):
         """
         shader = ('void main()\n{\n\tvec4 c = vec4(1.0);\n'
                   '\tfragColor = c;\n}')
-        dumped = self.tdn.tdn_dump(
+        dumped = self.tdn.tdxn_dump(
             {'dat_content': shader, 'dat_content_format': 'text'})
         # A tab-bearing multi-line string must NOT become a literal block (|);
         # it falls back to a double-quoted scalar.
@@ -148,7 +148,7 @@ class TestTDXNYaml(EmbodyTestCase):
             'tab shader must not serialize as a literal block scalar')
         self.assertIn('"', dumped,
             'tab shader should serialize as a double-quoted scalar')
-        back = self.tdn.tdn_load(dumped)
+        back = self.tdn.tdxn_load(dumped)
         self.assertEqual(back['dat_content'], shader,
             'tab shader not byte-identical after round-trip')
 
@@ -165,7 +165,7 @@ class TestTDXNYaml(EmbodyTestCase):
             '*x', '&y', '# z', '2026-06-10', 'y', 'n', '1e3',
         ]
         doc = {f'k{i}': v for i, v in enumerate(ambiguous)}
-        back = self.tdn.tdn_load(self.tdn.tdn_dump(doc))
+        back = self.tdn.tdxn_load(self.tdn.tdxn_dump(doc))
         for i, v in enumerate(ambiguous):
             key = f'k{i}'
             self.assertIsInstance(back[key], str,
@@ -180,8 +180,8 @@ class TestTDXNYaml(EmbodyTestCase):
             'bind_speed': '~Speed',
             'bind_op': '~op("c").par.Y',
         }
-        dumped = self.tdn.tdn_dump(shorthand)
-        back = self.tdn.tdn_load(dumped)
+        dumped = self.tdn.tdxn_dump(shorthand)
+        back = self.tdn.tdxn_load(dumped)
         for key, val in shorthand.items():
             self.assertEqual(back[key], val,
                 f'{val!r} did not survive as str')
@@ -214,7 +214,7 @@ class TestTDXNYaml(EmbodyTestCase):
         legacy_text = json.dumps(doc, indent='\t')
         self.assertIn('\t', legacy_text)
 
-        parsed = self.tdn.tdn_load(legacy_text)
+        parsed = self.tdn.tdxn_load(legacy_text)
         self.assertEqual(parsed['version'], '1.5')
         self.assertEqual(parsed['operators'][0]['dat_content'],
             ['one', 'two', 'three'])
@@ -229,10 +229,10 @@ class TestTDXNYaml(EmbodyTestCase):
         self.assertEqual(imported.text, 'one\ntwo\nthree')
 
         # The pure-python SafeLoader alone would ScannerError on the tab;
-        # tdn_load's json-first path must succeed regardless of libyaml.
+        # tdxn_load's json-first path must succeed regardless of libyaml.
         self.assertRaises(yaml.YAMLError,
             yaml.load, legacy_text, Loader=yaml.SafeLoader)
-        self.assertEqual(self.tdn.tdn_load(legacy_text), doc)
+        self.assertEqual(self.tdn.tdxn_load(legacy_text), doc)
 
     def test_tdxn_backcompat_bom_legacy_json(self):
         """A UTF-8 BOM-prefixed legacy tab-indented JSON .tdn loads via the
@@ -248,7 +248,7 @@ class TestTDXNYaml(EmbodyTestCase):
         legacy_text = json.dumps(doc, indent='\t')
         bom_text = '\ufeff' + legacy_text
 
-        parsed = self.tdn.tdn_load(bom_text)
+        parsed = self.tdn.tdxn_load(bom_text)
         self.assertEqual(parsed, doc)
 
         # Forced pure-python loader on the raw BOM+tab text would fail; the
@@ -273,19 +273,19 @@ class TestTDXNYaml(EmbodyTestCase):
                  'dat_content': 'x\ny', 'dat_content_format': 'text'},
             ],
         }
-        first = self.tdn.tdn_dump(doc)
+        first = self.tdn.tdxn_dump(doc)
         for _ in range(5):
-            self.assertEqual(self.tdn.tdn_dump(doc), first,
-                'tdn_dump is not deterministic')
+            self.assertEqual(self.tdn.tdxn_dump(doc), first,
+                'tdxn_dump is not deterministic')
 
     def test_tdxn_trailing_newline(self):
-        """tdn_dump output always ends with a single trailing newline --
+        """tdxn_dump output always ends with a single trailing newline --
         locks the contract test_export_file_not_truncated depends on now that
         the explicit `raw + '\\n'` serializer is gone."""
         doc = {'format': 'tdn', 'version': '2.0', 'operators': []}
-        self.assertTrue(self.tdn.tdn_dump(doc).endswith('\n'))
+        self.assertTrue(self.tdn.tdxn_dump(doc).endswith('\n'))
         # Even single-line / scalar-only docs end with exactly one newline.
-        out = self.tdn.tdn_dump({'k': 'v'})
+        out = self.tdn.tdxn_dump({'k': 'v'})
         self.assertTrue(out.endswith('\n'))
         self.assertFalse(out.endswith('\n\n'))
 
@@ -300,27 +300,27 @@ class TestTDXNYaml(EmbodyTestCase):
             'format': 'tdn', 'version': '2.0',
             'operators': [dict(shared), dict(shared)],
         }
-        dumped = self.tdn.tdn_dump(doc)
+        dumped = self.tdn.tdxn_dump(doc)
         self.assertNotIn('&', dumped, 'unexpected YAML anchor token')
         self.assertNotIn('*', dumped, 'unexpected YAML alias token')
 
     def test_tdxn_dumper_isolation(self):
         """Representers are scoped to the private dumper subclass: the global
-        yaml.dump does NOT block-style a multi-line string, while tdn_dump
+        yaml.dump does NOT block-style a multi-line string, while tdxn_dump
         DOES."""
         plain = yaml.dump({'k': 'a\nb'})
         self.assertNotIn('|', plain,
             'global SafeDumper unexpectedly uses block style')
-        ours = self.tdn.tdn_dump({'k': 'a\nb'})
+        ours = self.tdn.tdxn_dump({'k': 'a\nb'})
         self.assertIn('|', ours,
-            'tdn_dump should use a literal block scalar for multi-line text')
+            'tdxn_dump should use a literal block scalar for multi-line text')
 
     # =================================================================
     # Post-write validation (YAML + legacy JSON)
     # =================================================================
 
     def test_tdxn_validate_yaml_file(self):
-        """_validate_tdn_file accepts a freshly-written v2.0 YAML .tdn AND a
+        """_validate_tdxn_file accepts a freshly-written v2.0 YAML .tdn AND a
         legacy JSON .tdn (guards the post-write read-back)."""
         import tempfile
         d = tempfile.mkdtemp(prefix='tdn_yaml_val_')
@@ -330,15 +330,15 @@ class TestTDXNYaml(EmbodyTestCase):
             # v2.0 YAML
             yaml_fp = os.path.join(d, 'v2.tdn')
             Path(yaml_fp).write_text(
-                self.tdn.tdn_dump(doc), encoding='utf-8')
-            v = self.tdn._validate_tdn_file(yaml_fp)
+                self.tdn.tdxn_dump(doc), encoding='utf-8')
+            v = self.tdn._validate_tdxn_file(yaml_fp)
             self.assertTrue(v.get('valid'),
                 f'v2.0 YAML should validate: {v}')
             # Legacy JSON
             json_fp = os.path.join(d, 'legacy.tdn')
             Path(json_fp).write_text(
                 json.dumps(doc, indent='\t'), encoding='utf-8')
-            v2 = self.tdn._validate_tdn_file(json_fp)
+            v2 = self.tdn._validate_tdxn_file(json_fp)
             self.assertTrue(v2.get('valid'),
                 f'legacy JSON should still validate: {v2}')
         finally:
@@ -395,7 +395,7 @@ class TestTDXNYaml(EmbodyTestCase):
             ],
         }
         json_blob = json.dumps(v15, indent='\t')
-        yaml_blob = self.tdn.tdn_dump(v20)
+        yaml_blob = self.tdn.tdxn_dump(v20)
 
         norm_json = mod.normalize(json_blob)
         norm_yaml = mod.normalize(yaml_blob)
@@ -433,8 +433,8 @@ class TestTDXNYaml(EmbodyTestCase):
                'td_build': '2025', 'exported_at': '2026-08-27',
                'source_file': 'P.toe',
                'operators': [{'name': 'a', 'type': 'textDAT'}]}
-        old = self.tdn.tdn_dump(dict(net, format='tdn'))
-        new_ = self.tdn.tdn_dump(dict(net, format='tdxn'))
+        old = self.tdn.tdxn_dump(dict(net, format='tdn'))
+        new_ = self.tdn.tdxn_dump(dict(net, format='tdxn'))
         self.assertNotEqual(old, new_, 'fixture: the blobs must differ on disk')
         self.assertEqual(
             mod.normalize(old), mod.normalize(new_),
@@ -450,12 +450,12 @@ class TestTDXNYaml(EmbodyTestCase):
                          "'format' must stay comparable so files converge")
         base = {'version': '2.0', 'operators': [{'name': 'a', 'type': 'textDAT'}]}
         self.assertFalse(
-            self.tdn._tdn_content_equal(dict(base, format='tdxn'),
+            self.tdn._tdxn_content_equal(dict(base, format='tdxn'),
                                         dict(base, format='tdn')),
             'a format bump must count as a content change, or the one-time '
             'convergence rewrite never happens')
         self.assertTrue(
-            self.tdn._tdn_content_equal(dict(base, format='tdxn'),
+            self.tdn._tdxn_content_equal(dict(base, format='tdxn'),
                                         dict(base, format='tdxn')),
             'identical documents must still compare equal')
 
@@ -484,7 +484,7 @@ class TestTDXNYaml(EmbodyTestCase):
         self.assertIn('  ', out)
         self.assertNotIn('\t', out, 'YAML output must not contain tabs')
         # Round-trips back to the same document.
-        self.assertEqual(self.tdn.tdn_load(out), doc)
+        self.assertEqual(self.tdn.tdxn_load(out), doc)
         self.assertTrue(out.endswith('\n'))
 
     # =================================================================

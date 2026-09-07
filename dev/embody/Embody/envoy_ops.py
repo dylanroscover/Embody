@@ -793,15 +793,15 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         # the configured value BEFORE tagging, or a caller passing the other
         # one tags the COMP with a string the report branch below does not
         # recognize -- success with an empty 'file'.
-        tdn_tag = op.Embody.par.Tdxntag.eval()
+        tdxn_tag = op.Embody.par.Tdxntag.eval()
         if tag_type in op.Embody.ext.Embody._tdxnTags():
-            tag_type = tdn_tag
+            tag_type = tdxn_tag
 
         # The tagger REFUSES unknown values -- an unchecked return reported
         # success while nothing was tagged.
         if not op.Embody.ext.Embody.applyTagToOperator(target, tag_type):
             return {'error': f'{op_path}: tag_type {tag_type!r} was rejected. '
-                             f'COMPs accept "tox" or {tdn_tag!r} (the TDXN '
+                             f'COMPs accept "tox" or {tdxn_tag!r} (the TDXN '
                              f'strategy tag, legacy "tdn" also accepted); '
                              f'DATs accept a source type such as "py". '
                              f'Nothing was tagged.'}
@@ -812,7 +812,7 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         # a stale/wrong .tox -- the tox par plays no role in TDXN strategy).
         if target.family == 'DAT':
             file_path = target.par.file.eval()
-        elif tag_type == tdn_tag:
+        elif tag_type == tdxn_tag:
             file_path = (op.Embody.ext.Embody._getStrategyFilePath(
                 target.path, 'tdn')
                 or target.fetch('_tdn_rel_path', '', search=False))
@@ -883,11 +883,11 @@ def remove_externalization_tag(ext, op_path: str,
         embody = op.Embody.ext.Embody
         removed = [tag for tag in embody.getTags()
                    if target.tags and tag in target.tags]
-        is_tdn = (op.Embody.par.Tdxntag.eval() in removed
+        is_tdxn = (op.Embody.par.Tdxntag.eval() in removed
                   or bool(embody._getStrategyFilePath(target.path, 'tdn')))
         rows_before = _tracked_rows(embody, target.path)
 
-        if is_tdn:
+        if is_tdxn:
             # Strips tags, drops the row + _tdn_rel_path breadcrumb,
             # resets color (issue #48).
             embody.removeTDXNEntry(target.path, delete_file=delete_file)
@@ -937,7 +937,7 @@ def remove_externalization_tag(ext, op_path: str,
             'summary': summary,
             # Deletion is best-effort: RemoveListerRow's safety checks
             # (clones, files still referenced elsewhere) can keep the file.
-            'file_delete_requested': bool(delete_file and (is_tdn or removed))
+            'file_delete_requested': bool(delete_file and (is_tdxn or removed))
         }
     except Exception as e:
         return {'error': f'Failed to remove tag: {e}'}
@@ -1167,10 +1167,10 @@ def create_extension(ext, parent_path: str, class_name: str,
 
 
 def import_network(ext, target_path, tdn, clear_first=False,
-                   restore_tdn_shells=True):
+                   restore_tdxn_shells=True):
     """Delegate to TDXN extension for network import.
 
-    restore_tdn_shells=True (default) fills nested externalized-TDXN
+    restore_tdxn_shells=True (default) fills nested externalized-TDXN
     children from their own .tdn files in the same import, recursively
     -- one import of a deeply nested boundary therefore fans out into
     one ImportNetwork per nested tracked COMP (correctness over speed:
@@ -1186,5 +1186,5 @@ def import_network(ext, target_path, tdn, clear_first=False,
         target_path=target_path,
         tdn=tdn,
         clear_first=clear_first,
-        restore_tdn_shells=restore_tdn_shells,
+        restore_tdxn_shells=restore_tdxn_shells,
     )

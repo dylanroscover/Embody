@@ -27,7 +27,7 @@ _CANDIDATES = [os.path.join(REPO, "dev", "embody", "Embody" + ext)
                for ext in (".tdxn", ".tdn")]
 # Prefer .tdxn; .tdn is still accepted so the tool keeps working
 # against a project that has not converted its receipts yet.
-TDN_PATH = next((c for c in _CANDIDATES if os.path.isfile(c)),
+TDXN_PATH = next((c for c in _CANDIDATES if os.path.isfile(c)),
                 _CANDIDATES[0])
 OUT_PATH = os.path.join(REPO, "docs", "embody", "parameters.md")
 
@@ -116,12 +116,12 @@ def par_name_cell(par):
 
 
 def main():
-    with open(TDN_PATH, "r", encoding="utf-8") as handle:
+    with open(TDXN_PATH, "r", encoding="utf-8") as handle:
         doc = yaml.safe_load(handle)
 
     pages = doc.get("custom_pars")
     if not pages:
-        sys.exit("No top-level custom_pars found in %s" % TDN_PATH)
+        sys.exit("No top-level custom_pars found in %s" % TDXN_PATH)
 
     total = sum(len(p) for p in pages.values())
 

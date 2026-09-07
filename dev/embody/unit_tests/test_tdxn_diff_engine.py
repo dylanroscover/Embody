@@ -13,20 +13,20 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 class TestTDXNNormalize(EmbodyTestCase):
 
     def test_normalize_empty(self):
-        self.assertEqual(op.Embody.ext.TDXN._normalize_tdn_for_compare({}), {})
+        self.assertEqual(op.Embody.ext.TDXN._normalize_tdxn_for_compare({}), {})
 
     def test_normalize_nondict(self):
-        self.assertEqual(op.Embody.ext.TDXN._normalize_tdn_for_compare(None), {})
+        self.assertEqual(op.Embody.ext.TDXN._normalize_tdxn_for_compare(None), {})
 
     def test_input_not_mutated(self):
         src = {'build': 5, 'operators': [{'name': 'x', 'type': 'noiseTOP'}],
                'type_defaults': {'noiseTOP': {'parameters': {'period': 2}}}}
         before = copy.deepcopy(src)
-        op.Embody.ext.TDXN._normalize_tdn_for_compare(src)
+        op.Embody.ext.TDXN._normalize_tdxn_for_compare(src)
         self.assertEqual(src, before, 'normalize must not mutate its input')
 
     def test_volatile_keys_stripped(self):
-        n = op.Embody.ext.TDXN._normalize_tdn_for_compare({
+        n = op.Embody.ext.TDXN._normalize_tdxn_for_compare({
             'build': 1, 'generator': 'x', 'td_build': 'y', 'exported_at': 'z',
             'source_file': 'Proj.toe', 'type': 'baseCOMP', 'operators': []})
         for k in ('build', 'generator', 'td_build', 'exported_at', 'source_file'):
@@ -34,14 +34,14 @@ class TestTDXNNormalize(EmbodyTestCase):
         self.assertEqual(n.get('type'), 'baseCOMP')
 
     def test_type_defaults_merged_and_dropped(self):
-        n = op.Embody.ext.TDXN._normalize_tdn_for_compare({
+        n = op.Embody.ext.TDXN._normalize_tdxn_for_compare({
             'operators': [{'name': 'x', 'type': 'noiseTOP'}],
             'type_defaults': {'noiseTOP': {'parameters': {'period': 2}}}})
         self.assertEqual(n['operators'][0].get('parameters'), {'period': 2})
         self.assertNotIn('type_defaults', n)
 
     def test_par_templates_resolved(self):
-        n = op.Embody.ext.TDXN._normalize_tdn_for_compare({
+        n = op.Embody.ext.TDXN._normalize_tdxn_for_compare({
             'operators': [{'name': 'c', 'type': 'baseCOMP',
                            'custom_pars': {'Settings': {'$t': 'settings',
                                                         'Speed': 5}}}],
@@ -138,7 +138,7 @@ class TestTDXNDiffEngine(EmbodyTestCase):
         self.assertEqual(len(anns), 1)
         self.assertEqual(anns[0]['name'], 'Note1')
 
-    def test_tdn_ref_pointer_change(self):
+    def test_tdxn_ref_pointer_change(self):
         a = {'operators': [{'name': 'ch', 'type': 'baseCOMP', 'tdn_ref': 'ch.tdn'}]}
         b = {'operators': [{'name': 'ch', 'type': 'baseCOMP', 'tdn_ref': 'old.tdn'}]}
         m = op.Embody.ext.TDXN._diff_normalized(a, b, comp_path='/p')['modified'][0]
@@ -219,8 +219,8 @@ class TestTDXNDiffDatContent(EmbodyTestCase):
                                'dat_content_format': 'text',
                                'dat_content': 'line one\nline two'}]}
         tdn = op.Embody.ext.TDXN
-        self.assertEqual(tdn._normalize_tdn_for_compare(disk),
-                         tdn._normalize_tdn_for_compare(live))
+        self.assertEqual(tdn._normalize_tdxn_for_compare(disk),
+                         tdn._normalize_tdxn_for_compare(live))
 
     def test_v15_unchanged_dat_does_not_diff(self):
         disk = {'operators': [{'name': 'd', 'type': 'textDAT',

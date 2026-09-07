@@ -14,9 +14,9 @@ class CollectionExt:
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
 
-    def ScanTdn(self, tdn):
+    def ScanTdxn(self, tdn):
         """Return the C2 capability report for a TDXN dict."""
-        return self.ownerComp.op('scanner').module.scan_tdn(tdn if isinstance(tdn, dict) else {})
+        return self.ownerComp.op('scanner').module.scan_tdxn(tdn if isinstance(tdn, dict) else {})
 
     def PlanCommunityPaste(self, tdn):
         """Scan a community TDXN dict and return the import plan (live or inert).
@@ -40,4 +40,4 @@ class CollectionExt:
         # palette carve-out is sound only if the pasted network cannot
         # register an op.TD<Name> itself (issue #94 review).
         return safe_import.plan_community_paste(
-            tdn, scanner.scan_tdn, scanner.is_pure_value_expression)
+            tdn, scanner.scan_tdxn, scanner.is_pure_value_expression)

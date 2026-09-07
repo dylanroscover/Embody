@@ -84,7 +84,7 @@ class TestScannerParityCorpus(EmbodyTestCase):
     def test_python_scanner_matches_its_recorded_expectation(self):
         for fx in _load_fixtures():
             with self.subTest(fixture=fx['name']):
-                result = scanner.scan_tdn(fx['tdn'])
+                result = scanner.scan_tdxn(fx['tdn'])
                 self.assertEqual(fx['expect_py']['verdict'], result['verdict'],
                                  '%s: verdict drifted' % fx['name'])
                 self.assertEqual(fx['expect_py']['counts'], _counts(result),

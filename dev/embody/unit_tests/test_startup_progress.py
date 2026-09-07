@@ -35,7 +35,7 @@ sys.modules[_spec.name] = sp
 # Prefer .tdxn, accept .tdn: the receipt's suffix follows whatever the
 # project has been converted to, and a hardcoded name breaks collection
 # outright (not just this test) the moment it changes.
-_EMBODY_TDN = next(
+_EMBODY_TDXN = next(
     (c for c in (os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody' + e)
                  for e in ('.tdxn', '.tdn')) if os.path.isfile(c)),
     os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody.tdxn'))
@@ -60,7 +60,7 @@ def _real_custom_pars():
     import re
     names = set()
     inside = False
-    with io.open(_EMBODY_TDN, 'r', encoding='utf-8') as handle:
+    with io.open(_EMBODY_TDXN, 'r', encoding='utf-8') as handle:
         for line in handle:
             if not inside:
                 inside = line.rstrip('\n') == 'custom_pars:'

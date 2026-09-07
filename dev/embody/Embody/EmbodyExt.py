@@ -1376,7 +1376,7 @@ class EmbodyExt:
         return self.my.par.Folder.eval() or ''
 
     @property
-    def _tdnBackupDir(self) -> Path:
+    def _tdxnBackupDir(self) -> Path:
         """Rotated network-file backups dir, beside the .toe.
 
         Promoted, so it stays for anyone referencing it; it had no callers
@@ -2246,7 +2246,7 @@ class EmbodyExt:
             if not tracked:
                 return False
             tox_tag = self.my.par.Toxtag.val
-            tdn_tag = self.my.par.Tdxntag.val
+            tdxn_tag = self.my.par.Tdxntag.val
             candidates = 0
             for child in self.root.children:
                 if child.family != 'COMP':
@@ -3406,7 +3406,7 @@ class EmbodyExt:
 
     def _showTDXNMigrationNudge(self) -> None:
         """One-time dialog after upgrading from the binary Tdnenable toggle -- see embody_admin."""
-        return mod.embody_admin.show_tdn_migration_nudge(self)
+        return mod.embody_admin.show_tdxn_migration_nudge(self)
 
     def verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
@@ -3756,7 +3756,7 @@ class EmbodyExt:
 
         # Apply UI gating for the TDXN mode menu (greys out dependent
         # parameters based on Off / Export / Full).
-        self._applyTdnModeGating()
+        self._applyTdxnModeGating()
 
         # Interactive path: frame-chunked so the pulse never stalls the
         # session (synchronous Update() measured 0.5-1s = 30-60 dropped
@@ -3821,7 +3821,7 @@ class EmbodyExt:
             return
 
         self._updateHead(save_dirty)
-        tdn_paths, additions, subtractions = self._updateScan()
+        tdxn_paths, additions, subtractions = self._updateScan()
 
         # Batch locked-content warnings across the whole sweep into ONE
         # combined dialog. A full-project externalization triggers one TDXN
@@ -3893,17 +3893,17 @@ class EmbodyExt:
 
     def _updateScan(self) -> tuple:
         """Update phase 2 (shared): duplicates check + additions/
-        subtractions discovery. Returns (tdn_paths, additions,
-        subtractions); tdn_paths keeps tracked TDXN COMPs out of the
+        subtractions discovery. Returns (tdxn_paths, additions,
+        subtractions); tdxn_paths keeps tracked TDXN COMPs out of the
         subtractions filter. Additions are emptied (with one log) on a
         never-saved project -- handleAddition's save gate would defer
         each one anyway, and the sweep report should count what landed.
         """
-        tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
-        tdn_paths = {comp.path for comp in tdn_comps}
-        if not self._tdnEnabled() and tdn_comps:
+        tdxn_comps = self.getExternalizedOps(COMP, strategy='tdn')
+        tdxn_paths = {comp.path for comp in tdxn_comps}
+        if not self._tdxnEnabled() and tdxn_comps:
             self.Log(
-                f'TDXN disabled -- skipping export for {len(tdn_comps)} '
+                f'TDXN disabled -- skipping export for {len(tdxn_comps)} '
                 f'tracked TDXN COMP(s)', 'INFO')
 
         if self.my.par.Detectduplicatepaths:
@@ -3927,7 +3927,7 @@ class EmbodyExt:
         # without tagging the root) get incorrectly removed as "subtractions".
         subtractions = [
             oper for oper in externalized_ops
-            if oper.path not in tdn_paths
+            if oper.path not in tdxn_paths
             and not set(all_tags).intersection(oper.tags)
             and not oper.warnings()
             and not oper.scriptErrors()
@@ -3941,7 +3941,7 @@ class EmbodyExt:
                      f"{'s' if len(additions) > 1 else ''} until the "
                      "project is saved", "INFO")
             additions = []
-        return tdn_paths, additions, subtractions
+        return tdxn_paths, additions, subtractions
 
     # -- Deferred (frame-chunked) Update: the interactive pulse path ----
 
@@ -3965,7 +3965,7 @@ class EmbodyExt:
         self._updd_state = {
             'phase': 'head', 'save_dirty': save_dirty,
             'additions': [], 'subtractions': [],
-            'queue': [], 'idx': 0, 'tdn_paths': None, 'exclude_tag': '',
+            'queue': [], 'idx': 0, 'tdxn_paths': None, 'exclude_tag': '',
             'ext_tags': None,
             'exports': [], 'saved': [], 'batch_open': False,
         }
@@ -3989,8 +3989,8 @@ class EmbodyExt:
                 self._updateHead(st['save_dirty'])
                 st['phase'] = 'scan'
             elif phase == 'scan':
-                tdn_paths, adds, subs = self._updateScan()
-                st['tdn_paths'] = tdn_paths
+                tdxn_paths, adds, subs = self._updateScan()
+                st['tdxn_paths'] = tdxn_paths
                 st['additions'] = adds
                 st['subtractions'] = subs
                 if adds or subs:
@@ -4040,10 +4040,10 @@ class EmbodyExt:
                          f'{oper.path}: {e}', 'DEBUG')
             if dirty and st['save_dirty']:
                 st['exports'].append(('tox', oper.path))
-        if self._tdnEnabled():
+        if self._tdxnEnabled():
             exclude_tag = self.my.par.Tdxnexcludetag.eval()
             st['exclude_tag'] = exclude_tag
-            st['tdn_paths'] = self._getTDXNPaths()
+            st['tdxn_paths'] = self._getTDXNPaths()
             st['ext_tags'] = self._extBoundaryTags()
             st['queue'] = [
                 oper.path
@@ -4065,7 +4065,7 @@ class EmbodyExt:
             if oper is None:
                 continue
             try:
-                dirty = self._isTDXNDirty(oper, st['tdn_paths'],
+                dirty = self._isTDXNDirty(oper, st['tdxn_paths'],
                                          st['exclude_tag'], st['ext_tags'])
                 self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and st['save_dirty']:
@@ -4100,7 +4100,7 @@ class EmbodyExt:
         if kind == 'tox':
             if self.Save(path):
                 st['saved'].append(path)
-        elif (self._isTDXNDirty(oper, st['tdn_paths'], st['exclude_tag'],
+        elif (self._isTDXNDirty(oper, st['tdxn_paths'], st['exclude_tag'],
                                st['ext_tags'])
                 and self.saveTDXN(path)):
             st['saved'].append(path)
@@ -4241,12 +4241,12 @@ class EmbodyExt:
                 key=base_filter
             )
             # TDXN-tagged COMPs (no externaltox needed)
-            tdn_tags = self.getTags('tdn')
-            tdn_ops = self.root.findChildren(
-                type=COMP, tags=tdn_tags,
+            tdxn_tags = self.getTags('tdn')
+            tdxn_ops = self.root.findChildren(
+                type=COMP, tags=tdxn_tags,
                 key=base_filter
             )
-            return tox_ops + tdn_ops
+            return tox_ops + tdxn_ops
         else:
             tags = self.getTags('DAT')
             return self.root.findChildren(
@@ -4490,7 +4490,7 @@ class EmbodyExt:
         """
         if self._performMode:
             return False
-        if not self._tdnEnabled():
+        if not self._tdxnEnabled():
             self.Log(f'TDXN disabled -- skipping saveTDXN for {opPath}', 'INFO')
             return False
         try:
@@ -4582,11 +4582,11 @@ class EmbodyExt:
                 # column records when the FILE changed, and stamping it on a
                 # skipped export dirtied externalizations.tsv on every
                 # Refresh with a one-line diff (field 2026-08-29).
-                tdn_changes = {} if skipped else {
+                tdxn_changes = {} if skipped else {
                     'timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}
-                tdn_changes.update(self._positionCells(oper))
-                if tdn_changes:
-                    self._updateRowCells(opPath, tdn_changes, strategy='tdn')
+                tdxn_changes.update(self._positionCells(oper))
+                if tdxn_changes:
+                    self._updateRowCells(opPath, tdxn_changes, strategy='tdn')
                 # Snapshot the network structure so _isTDXNDirty returns False
                 self._storeTDXNFingerprint(oper)
                 self.Log(f"Exported TDXN for {opPath}", "SUCCESS")
@@ -4614,7 +4614,7 @@ class EmbodyExt:
             return False
         if self.my.fetch('_suppress_dialogs', False, search=False):
             return False  # save window open -- the strip owns exports now
-        if not self._tdnEnabled():
+        if not self._tdxnEnabled():
             return False
         try:
             oper = op(opPath)
@@ -4689,7 +4689,7 @@ class EmbodyExt:
             refused = False
             detail = ''
             try:
-                doc = self.my.ext.TDXN.tdn_load(
+                doc = self.my.ext.TDXN.tdxn_load(
                     existing.read_text(encoding='utf-8'))
                 if isinstance(doc, dict):
                     refused = bool(doc.get('operators')
@@ -4836,7 +4836,7 @@ class EmbodyExt:
         queued = 0
         try:
             if self._coarse_sweep_cursor is None:
-                tdn_paths = self._getTDXNPaths()
+                tdxn_paths = self._getTDXNPaths()
                 # Baselines of deleted COMPs were never pruned (rename pops,
                 # delete did not) and rode inside the .toe forever; 14 dead
                 # keys plus Embody's own 43 descendants filled the cap so
@@ -4849,7 +4849,7 @@ class EmbodyExt:
                 fps = self._tdn_fingerprints
                 for dead in [k for k in list(fps) if op(k) is None]:
                     fps.pop(dead, None)
-                ordered = sorted(set(tdn_paths) | set(fps.keys()))
+                ordered = sorted(set(tdxn_paths) | set(fps.keys()))
                 cap = self._COARSE_SWEEP_CAP
                 if len(ordered) > cap:
                     start = self._coarse_sweep_offset % len(ordered)
@@ -4861,10 +4861,10 @@ class EmbodyExt:
                 # Frozen for the whole sweep: re-reading the table and the tag
                 # pars per frame would undo the point of chunking.
                 self._coarse_sweep_ctx = (
-                    tdn_paths,
+                    tdxn_paths,
                     self.my.par.Tdxnexcludetag.eval(),
                     self._extBoundaryTags())
-            tdn_paths, exclude_tag, ext_tags = self._coarse_sweep_ctx
+            tdxn_paths, exclude_tag, ext_tags = self._coarse_sweep_ctx
             cursor = self._coarse_sweep_cursor
             # `is None`, not truthiness: budget_ms=0.0 means the SMALLEST
             # slice (one root), not an unbounded sweep.
@@ -4875,7 +4875,7 @@ class EmbodyExt:
                 comp = op(path)
                 if (comp is not None and comp.valid
                         and path not in self._pending_checkpoint_roots
-                        and self._isTDXNDirty(comp, tdn_paths=tdn_paths,
+                        and self._isTDXNDirty(comp, tdxn_paths=tdxn_paths,
                                              exclude_tag=exclude_tag,
                                              ext_tags=ext_tags)):
                     self._pending_checkpoint_roots.add(path)
@@ -5159,17 +5159,17 @@ class EmbodyExt:
             if not table or table[0, 'strategy'] is None:
                 return
             prefix = op_path.rstrip('/') + '/'
-            tdn_paths = []
+            tdxn_paths = []
             other_paths = []
             for i in range(1, table.numRows):
                 p = self._cellVal(i, 'path')
                 if p != op_path and not p.startswith(prefix):
                     continue
                 if self._rowStrategy(i) == 'tdn':
-                    tdn_paths.append(p)
+                    tdxn_paths.append(p)
                 else:
                     other_paths.append((p, self._cellVal(i, 'rel_file_path')))
-            for p in tdn_paths:
+            for p in tdxn_paths:
                 self._pending_checkpoint_roots.discard(p)
                 self._removeTDXNStrategy(p, delete_file=True)
             for p, rel_path in other_paths:
@@ -5323,7 +5323,7 @@ class EmbodyExt:
             return {}
         return self._TRANSIENT_STATUS_PARS.get(shortcut, {})
 
-    def _tdnValueOmitNames(self, comp) -> frozenset:
+    def _tdxnValueOmitNames(self, comp) -> frozenset:
         """Registered TDXN-value-omit par names for `comp`, else empty."""
         shortcut = self._registryShortcut(comp)
         if not shortcut:
@@ -6275,7 +6275,7 @@ class EmbodyExt:
             return ()
 
     @staticmethod
-    def _computeTDXNFingerprint(comp, tdn_paths: Optional[set] = None,
+    def _computeTDXNFingerprint(comp, tdxn_paths: Optional[set] = None,
                                exclude_tag: Optional[str] = None,
                                ext_tags: Optional[frozenset] = None) -> tuple:
         """Compute a hashable fingerprint of a TDXN COMP's network structure.
@@ -6294,7 +6294,7 @@ class EmbodyExt:
         export emits a reference rather than the child's content.
 
         ext_tags carries that boundary (see _extBoundaryTags). Pass it:
-        tdn_paths alone under-reports -- see the boundary comment below.
+        tdxn_paths alone under-reports -- see the boundary comment below.
         """
         parts = []
         # The root COMP's own parameters are part of its TDXN export, so a
@@ -6352,7 +6352,7 @@ class EmbodyExt:
             # A separately externalized child is REFERENCED, not embedded:
             # TDXNExt emits tdn_ref/tox_ref for a TAGGED child and stops, so
             # its content is not in this file and must not move this
-            # fingerprint. The tag is that authority -- tdn_paths alone
+            # fingerprint. The tag is that authority -- tdxn_paths alone
             # under-reports (_getTDXNStrategyComps omits Embody, its ancestors
             # and its descendants), which made /embody re-walk the entire
             # Embody subtree: 188ms in one frame, plus a byte-identical
@@ -6365,7 +6365,7 @@ class EmbodyExt:
             is_separate = (
                 (ext_tags is not None and c.isCOMP
                  and not ext_tags.isdisjoint(c.tags))
-                or (tdn_paths is not None and c.path in tdn_paths))
+                or (tdxn_paths is not None and c.path in tdxn_paths))
             is_embedded_comp = c.isCOMP and not is_separate
             if not c.isCOMP or is_embedded_comp:
                 parts.append((c.name, 'pars', EmbodyExt._parFingerprint(c)))
@@ -6377,7 +6377,7 @@ class EmbodyExt:
                 # -- otherwise an app edit to a nested "excluded" COMP would
                 # go undetected and the .tdn would drift stale.
                 child_fp = EmbodyExt._computeTDXNFingerprint(
-                    c, tdn_paths, None, ext_tags)
+                    c, tdxn_paths, None, ext_tags)
                 parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) -- uses annotation-specific attrs
         for ann in sorted(comp.findChildren(type=annotateCOMP, depth=1,
@@ -6453,23 +6453,23 @@ class EmbodyExt:
             self.my.store('_tdn_fingerprints', cache)
         return cache
 
-    def _isTDXNDirty(self, comp, tdn_paths: Optional[set] = None,
+    def _isTDXNDirty(self, comp, tdxn_paths: Optional[set] = None,
                     exclude_tag: Optional[str] = None,
                     ext_tags: Optional[frozenset] = None) -> bool:
         """Check if a TDXN COMP's network has changed since last export.
 
         Callers sweeping many COMPs in one pass (Update/dirtyHandler) should
-        precompute tdn_paths + exclude_tag + ext_tags once and pass them in, so
+        precompute tdxn_paths + exclude_tag + ext_tags once and pass them in, so
         the per-COMP full-table scan in _getTDXNPaths() and the par.eval()s
         don't repeat for every COMP on every Refresh.
         """
-        if tdn_paths is None:
-            tdn_paths = self._getTDXNPaths()
+        if tdxn_paths is None:
+            tdxn_paths = self._getTDXNPaths()
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdxnexcludetag.eval()
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
-        current = self._computeTDXNFingerprint(comp, tdn_paths, exclude_tag,
+        current = self._computeTDXNFingerprint(comp, tdxn_paths, exclude_tag,
                                               ext_tags)
         stored = self._tdn_fingerprints.get(comp.path)
         if stored is None:
@@ -6478,7 +6478,7 @@ class EmbodyExt:
             return False
         return current != stored
 
-    def _storeTDXNFingerprint(self, comp, tdn_paths: Optional[set] = None,
+    def _storeTDXNFingerprint(self, comp, tdxn_paths: Optional[set] = None,
                              exclude_tag: Optional[str] = None,
                              ext_tags: Optional[frozenset] = None) -> None:
         """Snapshot the TDXN COMP's network structure after export.
@@ -6486,14 +6486,14 @@ class EmbodyExt:
         MUST use the same boundary as _isTDXNDirty -- a baseline stored with a
         wider walk than the check reads false-dirty forever.
         """
-        if tdn_paths is None:
-            tdn_paths = self._getTDXNPaths()
+        if tdxn_paths is None:
+            tdxn_paths = self._getTDXNPaths()
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdxnexcludetag.eval()
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
         self._tdn_fingerprints[comp.path] = self._computeTDXNFingerprint(
-            comp, tdn_paths, exclude_tag, ext_tags)
+            comp, tdxn_paths, exclude_tag, ext_tags)
 
     # The externalizations `strategy` cell is USER-FACING (documented, and
     # the manager shows it), so it reads 'tdxn'. Internally the wire value
@@ -6810,10 +6810,10 @@ class EmbodyExt:
         # already covers both structural AND authored-parameter changes, so
         # there is no separate compareParameters() pass for TDXN COMPs (that
         # was redundant work and, reading .eval(), the source of false-dirty
-        # churn). Precompute tdn_paths + exclude_tag once and reuse them for
+        # churn). Precompute tdxn_paths + exclude_tag once and reuse them for
         # every COMP so the per-COMP full-table scan doesn't repeat.
-        if self._tdnEnabled():
-            tdn_paths = self._getTDXNPaths()
+        if self._tdxnEnabled():
+            tdxn_paths = self._getTDXNPaths()
             exclude_tag = self.my.par.Tdxnexcludetag.eval()
             ext_tags = self._extBoundaryTags()
             for oper in self.getExternalizedOps(COMP, strategy='tdn'):
@@ -6821,7 +6821,7 @@ class EmbodyExt:
                 # excluded app-managed COMPs -- never auto dirty-check/save.
                 if oper.path == '/' or exclude_tag in oper.tags:
                     continue
-                dirty = self._isTDXNDirty(oper, tdn_paths, exclude_tag,
+                dirty = self._isTDXNDirty(oper, tdxn_paths, exclude_tag,
                                          ext_tags)
                 self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and update:
@@ -6869,7 +6869,7 @@ class EmbodyExt:
         # mid-sweep kept it fingerprinting and writing TDXN dirty cells.
         gen = getattr(self, '_dirty_gen', 0) + 1
         self._dirty_gen = gen
-        if not self._tdnEnabled():
+        if not self._tdxnEnabled():
             self._dirty_queue = []
             return
 
@@ -6891,7 +6891,7 @@ class EmbodyExt:
         # _getTDXNPaths() is a full table scan; reading it per chunk put ~33 of
         # them where the synchronous sweep had 1 -- and it sat outside the
         # frame budget, so each chunk really cost scan + budget.
-        self._dirty_tdn_paths = self._getTDXNPaths()
+        self._dirty_tdxn_paths = self._getTDXNPaths()
         self._dirty_exclude_tag = exclude_tag
         self._dirty_ext_tags = self._extBoundaryTags()
         # Defer even the FIRST chunk, so the frame that triggered the Refresh
@@ -6913,9 +6913,9 @@ class EmbodyExt:
         if not queue:
             return
         # Resolved once per sweep by _dirtyHandlerDeferred, not per chunk.
-        tdn_paths = getattr(self, '_dirty_tdn_paths', None)
-        if tdn_paths is None:
-            tdn_paths = self._getTDXNPaths()
+        tdxn_paths = getattr(self, '_dirty_tdxn_paths', None)
+        if tdxn_paths is None:
+            tdxn_paths = self._getTDXNPaths()
         exclude_tag = getattr(self, '_dirty_exclude_tag', None)
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdxnexcludetag.eval()
@@ -6934,7 +6934,7 @@ class EmbodyExt:
             # for the rest of the session with nothing pointing at the cause.
             # A detached callback must not be able to fail silently.
             try:
-                dirty = self._isTDXNDirty(oper, tdn_paths, exclude_tag,
+                dirty = self._isTDXNDirty(oper, tdxn_paths, exclude_tag,
                                          ext_tags)
                 self._setDirtyState(oper.path, 'True' if dirty else '')
             except Exception as e:
@@ -7184,7 +7184,7 @@ class EmbodyExt:
         through the applyTagToOperator -> _handleTDXNAddition ->
         _cascadeTDXNTag chain, processing each level in order.
         """
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
         for child in parent_comp.findChildren(type=COMP, depth=1):
             # Annotations never cascade: they are captured semantically by
             # the parent's annotations: section, and tagging one turns its
@@ -7198,7 +7198,7 @@ class EmbodyExt:
             if self.my.ext.TDXN._hasExcludeTag(child):
                 continue
             if not self._hasTDXNTag(child):
-                self.applyTagToOperator(child, tdn_tag)
+                self.applyTagToOperator(child, tdxn_tag)
 
     def _buildTDXNRelPath(self, oper: OP, suffix: Optional[str] = None) -> Path:
         """Generate a relative TDXN file path for a COMP.
@@ -7480,7 +7480,7 @@ class EmbodyExt:
 
         try:
             rows_to_check = []
-            tdn_comp_paths = set()
+            tdxn_comp_paths = set()
             headers = [self._cellVal(0, c, table=externalizations)
                        for c in range(externalizations.numCols)]
             has_strategy = 'strategy' in headers
@@ -7502,16 +7502,16 @@ class EmbodyExt:
                     rel_file_path = self.normalizePath(self._cellVal(i, 'rel_file_path'))
                     row_type = self._cellVal(i, 'type')
                     # Normalized: the cell reads 'tdxn', the wire value
-                    # is 'tdn'. A raw compare here made is_tdn False for
+                    # is 'tdn'. A raw compare here made is_tdxn False for
                     # every TDXN row, so continuity skipped the rename
                     # branch and deleted the row as a dead entry.
                     strategy = (self._rowStrategy(i) if has_strategy
                                 else '')
                     rows_to_check.append((row_path, rel_file_path, row_type, strategy))
                     # Collect TDXN COMP paths so we can skip their children
-                    is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
-                    if is_tdn:
-                        tdn_comp_paths.add(row_path)
+                    is_tdxn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
+                    if is_tdxn:
+                        tdxn_comp_paths.add(row_path)
 
             # Detect stripped or missing TDXN COMPs:
             # - Stripped: exists but has no children (e.g., after save
@@ -7521,11 +7521,11 @@ class EmbodyExt:
             # Their children will be restored by reconstructTDXNComps(),
             # so we must skip ALL their entries (even individually-
             # externalized ones like .py files) to prevent false removals.
-            stripped_tdn_paths = set()
-            for tdn_path in tdn_comp_paths:
-                tdn_op = op(tdn_path)
-                if not tdn_op or not tdn_op.findChildren(depth=1):
-                    stripped_tdn_paths.add(tdn_path)
+            stripped_tdxn_paths = set()
+            for tdxn_path in tdxn_comp_paths:
+                tdxn_op = op(tdxn_path)
+                if not tdxn_op or not tdxn_op.findChildren(depth=1):
+                    stripped_tdxn_paths.add(tdxn_path)
 
             # Check for ancestor rename before per-operator processing.
             # When a parent COMP is renamed, all children go missing
@@ -7549,8 +7549,8 @@ class EmbodyExt:
                     continue
 
                 # TDXN-strategy COMPs don't set externaltox/file -- just verify the op exists
-                is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
-                if is_tdn:
+                is_tdxn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
+                if is_tdxn:
                     # A legacy row AT an annotation is an inert pre-guard
                     # artifact, NOT a vanished operator. Bare op() cannot
                     # resolve a UTILITY annotateCOMP itself (the utility flag
@@ -7572,9 +7572,9 @@ class EmbodyExt:
                         if not found:
                             # Check if .tdn file exists on disk
                             if rel_file_path:
-                                abs_tdn = self.buildAbsolutePath(
+                                abs_tdxn = self.buildAbsolutePath(
                                     self.normalizePath(rel_file_path))
-                                if abs_tdn.is_file():
+                                if abs_tdxn.is_file():
                                     missing_with_files.append(
                                         (old_op_path, rel_file_path, 'tdn'))
                                     continue
@@ -7589,13 +7589,13 @@ class EmbodyExt:
                 #   reconstruction). If the parent exists but is empty, the
                 #   child was genuinely deleted -- check it normally.
                 #   (Save-cycle stripping is protected by suppress_refresh.)
-                parent_tdn = next(
-                    (p for p in tdn_comp_paths
+                parent_tdxn = next(
+                    (p for p in tdxn_comp_paths
                      if old_op_path.startswith(p + '/')), None)
-                if parent_tdn is not None:
+                if parent_tdxn is not None:
                     if not strategy:
                         continue
-                    if parent_tdn in stripped_tdn_paths and not op(parent_tdn):
+                    if parent_tdxn in stripped_tdxn_paths and not op(parent_tdxn):
                         continue
 
                 existing_op = op(old_op_path)
@@ -7877,17 +7877,17 @@ class EmbodyExt:
         To avoid false matches, only same-parent candidates are considered
         and only when there is exactly one unambiguous candidate.
         """
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
         table = self.Externalizations
 
         # Collect all TDXN paths currently in the table (excluding the
         # missing entry itself, which is about to be updated or removed)
-        tracked_tdn_paths = set()
+        tracked_tdxn_paths = set()
         for i in range(1, table.numRows):
             if self._rowStrategy(i) == 'tdn':
                 p = self._cellVal(i, 'path')
                 if p != old_op_path:
-                    tracked_tdn_paths.add(p)
+                    tracked_tdxn_paths.add(p)
 
         # Embody exclusion -- same as _getTDXNStrategyComps
         embody_path = self.my.path
@@ -7896,7 +7896,7 @@ class EmbodyExt:
         old_parent = '/'.join(old_op_path.rstrip('/').rsplit('/', 1)[:-1]) or '/'
         candidates = []
         for potential_op in self.root.findChildren(type=COMP, tags=list(self._tdxnTags())):
-            if potential_op.path in tracked_tdn_paths:
+            if potential_op.path in tracked_tdxn_paths:
                 continue
             if potential_op.path in processed_ops:
                 continue
@@ -9051,7 +9051,7 @@ class EmbodyExt:
         elif oper.family == 'COMP':
             switch.par.index = 2
             tox_tag = self.my.par.Toxtag.val
-            tdn_tag = self.my.par.Tdxntag.val
+            tdxn_tag = self.my.par.Tdxntag.val
             if tox_tag in oper.tags:
                 run(lambda: self.setupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
@@ -9104,13 +9104,13 @@ class EmbodyExt:
         # Set dynamic labels on tag buttons based on current strategy
         is_tox = strategy_state.startswith('TOX_')
         tox_btn = self.tagger.op('button1')
-        tdn_btn = self.tagger.op('button2')
+        tdxn_btn = self.tagger.op('button2')
         if tox_btn:
             tox_btn.par.display = True
             tox_btn.par.label = '\u00d7  Remove tox' if is_tox else '\u21c4  Convert to tox'
-        if tdn_btn:
-            tdn_btn.par.display = True
-            tdn_btn.par.label = '\u00d7  Remove tdxn' if not is_tox else '\u21c4  Convert to tdxn'
+        if tdxn_btn:
+            tdxn_btn.par.display = True
+            tdxn_btn.par.label = '\u00d7  Remove tdxn' if not is_tox else '\u21c4  Convert to tdxn'
 
         # Order the pair per ROLE, not per button: the remove-role
         # button anchors the BOTTOM (destructive, farthest from the
@@ -9120,8 +9120,8 @@ class EmbodyExt:
         # replicants back to 1.0.
         if tox_btn:
             tox_btn.par.alignorder = 3.0 if is_tox else 1.1
-        if tdn_btn:
-            tdn_btn.par.alignorder = 1.1 if is_tox else 3.0
+        if tdxn_btn:
+            tdxn_btn.par.alignorder = 1.1 if is_tox else 3.0
 
         # Hide any extra DAT-tag buttons (safety net for replicator timing)
         for i in range(3, 16):
@@ -9549,8 +9549,8 @@ class EmbodyExt:
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
                 tox_tag = self.my.par.Toxtag.val
-                tdn_tag = self.my.par.Tdxntag.val
-                other_tag = tdn_tag if tag == tox_tag else tox_tag
+                tdxn_tag = self.my.par.Tdxntag.val
+                other_tag = tdxn_tag if tag == tox_tag else tox_tag
                 if other_tag in oper.tags:
                     self._removeCompStrategy(oper, other_tag)
             elif oper.family == 'DAT':
@@ -9673,7 +9673,7 @@ class EmbodyExt:
                             if self._rowReferencesFile(rp):
                                 debug(f"_delete skipped: {rp} is tracked again")
                                 return
-                            if fp.is_file() and self.my.ext.TDXN.is_tdn_network_file(fp):
+                            if fp.is_file() and self.my.ext.TDXN.is_tdxn_network_file(fp):
                                 fp.unlink()
                                 self.Log(f'Removed TDXN externalization for {opp} ({rp})', 'SUCCESS')
                             else:
@@ -9731,7 +9731,7 @@ class EmbodyExt:
             if delete_file and rel_file and not self._rowReferencesFile(rel_file):
                 try:
                     fp = self.buildAbsolutePath(self.normalizePath(rel_file))
-                    if fp.is_file() and self.my.ext.TDXN.is_tdn_network_file(fp):
+                    if fp.is_file() and self.my.ext.TDXN.is_tdxn_network_file(fp):
                         fp.unlink()
                         self.Log(f"Removed orphaned child file {rel_file}", "INFO")
                 except Exception as e:
@@ -9939,8 +9939,8 @@ class EmbodyExt:
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
                 tox_tag = self.my.par.Toxtag.val
-                tdn_tag = self.my.par.Tdxntag.val
-                other_tag = tdn_tag if tag == tox_tag else tox_tag
+                tdxn_tag = self.my.par.Tdxntag.val
+                other_tag = tdxn_tag if tag == tox_tag else tox_tag
                 if other_tag in oper.tags:
                     self._removeCompStrategy(oper, other_tag)
             elif oper.family == 'DAT':
@@ -10080,7 +10080,7 @@ class EmbodyExt:
         # already captured by that ancestor's .tdn/.tox -- don't double-manage
         # (and don't collide with the TDXN parent/child model).
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
         ancestor = oper.parent()
         while ancestor is not None and ancestor.path != '/':
             if (tox_tag in ancestor.tags or self._hasTDXNTag(ancestor)
@@ -10089,7 +10089,7 @@ class EmbodyExt:
             ancestor = ancestor.parent()
 
         # COMP -> TDXN (diffable); DAT -> inferred source type.
-        tag = tdn_tag if oper.family == 'COMP' else self._inferDATTagValue(oper)
+        tag = tdxn_tag if oper.family == 'COMP' else self._inferDATTagValue(oper)
 
         # Idempotent: already carries this tag -> nothing to do.
         if tag in oper.tags:
@@ -10190,13 +10190,13 @@ class EmbodyExt:
     def handleStrategySwitch(self, oper: OP) -> None:
         """Switch a COMP between TOX and TDXN strategies."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
 
         # A refused switch (e.g. the annotate guard) keeps the OLD tag --
         # bail out entirely so externalizeImmediate does not re-export the
         # file under the old strategy that the refusal meant to keep inert.
         if tox_tag in oper.tags:
-            if not self.applyTagToOperator(oper, tdn_tag):
+            if not self.applyTagToOperator(oper, tdxn_tag):
                 return
         elif self._hasTDXNTag(oper):
             if not self.applyTagToOperator(oper, tox_tag):
@@ -10208,7 +10208,7 @@ class EmbodyExt:
     def handleStrategySave(self, oper: OP) -> None:
         """Save the current strategy for a COMP."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
 
         if tox_tag in oper.tags:
             # allow_empty: this is the one EXPLICIT save gesture, so a
@@ -10230,7 +10230,7 @@ class EmbodyExt:
     def handleReload(self, oper: OP) -> None:
         """Reload a COMP from its external tdn/tox file on disk."""
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
 
         # Determine strategy from tags, falling back to table for untagged COMPs
         if self._hasTDXNTag(oper):
@@ -10260,25 +10260,25 @@ class EmbodyExt:
 
     def _reloadTDXN(self, oper: OP) -> None:
         """Reload a single TDXN-strategy COMP from its .tdn file on disk."""
-        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
-        if not rel_tdn_path:
+        rel_tdxn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if not rel_tdxn_path:
             self.Log(f'No TDXN file path found for {oper.path}', 'ERROR')
             return
 
-        abs_path = self.buildAbsolutePath(rel_tdn_path)
+        abs_path = self.buildAbsolutePath(rel_tdxn_path)
         if not abs_path.is_file():
-            self.Log(f'TDXN file not found: {rel_tdn_path}', 'ERROR')
+            self.Log(f'TDXN file not found: {rel_tdxn_path}', 'ERROR')
             return
 
         try:
-            tdn_doc = self.my.ext.TDXN.tdn_load(abs_path.read_text(encoding='utf-8'))
+            tdxn_doc = self.my.ext.TDXN.tdxn_load(abs_path.read_text(encoding='utf-8'))
         except Exception as e:
             self.Log(f'Failed to read TDXN for {oper.path}: {e}', 'ERROR')
             return
 
         result = self.my.ext.TDXN.ImportNetwork(
             target_path=oper.path,
-            tdn=tdn_doc,
+            tdn=tdxn_doc,
             clear_first=True,
             restore_file_links=True,
         )
@@ -10301,16 +10301,16 @@ class EmbodyExt:
             # (field data loss, 2026-08-12; the shells themselves are now
             # filled by import Phase 8.6).
             try:
-                tdn_paths = self._getTDXNPaths()
+                tdxn_paths = self._getTDXNPaths()
                 exclude_tag = self.my.par.Tdxnexcludetag.eval()
-                self._storeTDXNFingerprint(oper, tdn_paths, exclude_tag)
+                self._storeTDXNFingerprint(oper, tdxn_paths, exclude_tag)
                 prefix = oper.path.rstrip('/') + '/'
                 for comp_path, _rel in self._getTDXNStrategyComps():
                     if comp_path.startswith(prefix):
                         nested = op(comp_path)
                         if nested is not None:
                             self._storeTDXNFingerprint(
-                                nested, tdn_paths, exclude_tag)
+                                nested, tdxn_paths, exclude_tag)
                 self.param_tracker.updateParamStore(oper)
             except Exception as e:
                 self.Log(f'Reload re-baseline failed for {oper.path}: '
@@ -10349,9 +10349,9 @@ class EmbodyExt:
         oper.store('embed_dats_in_tdn', new_val)
 
         # Re-export the .tdn with the new setting
-        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
-        if rel_tdn_path:
-            abs_path = str(self.buildAbsolutePath(rel_tdn_path))
+        rel_tdxn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if rel_tdxn_path:
+            abs_path = str(self.buildAbsolutePath(rel_tdxn_path))
             protected = self._getAllTrackedTDXNFiles(exclude_path=oper.path)
             self.my.ext.TDXN.ExportNetwork(
                 root_path=oper.path, output_file=abs_path,
@@ -10375,9 +10375,9 @@ class EmbodyExt:
         oper.store('embed_storage_in_tdn', new_val)
 
         # Re-export the .tdn with the new setting
-        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
-        if rel_tdn_path:
-            abs_path = str(self.buildAbsolutePath(rel_tdn_path))
+        rel_tdxn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if rel_tdxn_path:
+            abs_path = str(self.buildAbsolutePath(rel_tdxn_path))
             protected = self._getAllTrackedTDXNFiles(exclude_path=oper.path)
             self.my.ext.TDXN.ExportNetwork(
                 root_path=oper.path, output_file=abs_path,
@@ -10430,7 +10430,7 @@ class EmbodyExt:
         tracking entry, and resets operator color.
         """
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
 
         if self._hasTDXNTag(oper):
             # removeTDXNEntry strips the tags itself (issue #48)
@@ -10491,21 +10491,21 @@ class EmbodyExt:
         Avoids the full Update() scan of all dirty operators.
         """
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
 
         is_tox = tox_tag in oper.tags
-        is_tdn = self._hasTDXNTag(oper)
-        is_dat = (not is_tox and not is_tdn
+        is_tdxn = self._hasTDXNTag(oper)
+        is_dat = (not is_tox and not is_tdxn
                   and oper.family == 'DAT'
                   and any(t in oper.tags for t in self.getTags('DAT')))
 
-        if not is_tox and not is_tdn and not is_dat:
+        if not is_tox and not is_tdxn and not is_dat:
             return
 
         # Determine strategy for table lookup
         if is_tox:
             strategy = 'tox'
-        elif is_tdn:
+        elif is_tdxn:
             strategy = self._TDXN_STRATEGY_CELL
         else:
             # DAT strategy is the tag value itself (py, json, xml, etc.)
@@ -10520,7 +10520,7 @@ class EmbodyExt:
                 # Already tracked -- just re-save
                 if is_tox:
                     self.Save(oper.path)
-                elif is_tdn:
+                elif is_tdxn:
                     self.saveTDXN(oper.path)
                 # DATs use syncfile -- no explicit save needed
                 return
@@ -10554,8 +10554,8 @@ class EmbodyExt:
         if choice < 1:
             return
 
-        use_tdn = choice in (2, 4)
-        export_project_tdn = choice in (3, 4)
+        use_tdxn = choice in (2, 4)
+        export_project_tdxn = choice in (3, 4)
 
         # Find system COMPs to exclude
         sys_comps = self.root.findChildren(
@@ -10579,7 +10579,7 @@ class EmbodyExt:
                 self.applyTagToOperator(oper, tag_value)
 
         # Process COMPs
-        if use_tdn:
+        if use_tdxn:
             comp_tag = self.my.par.Tdxntag.val
             for oper in self.root.findChildren(type=COMP):
                 if self._shouldSkipOp(oper, paths_to_exclude):
@@ -10595,7 +10595,7 @@ class EmbodyExt:
         self.updateHandler()
 
         # Export project-wide TDXN snapshot if requested
-        if export_project_tdn:
+        if export_project_tdxn:
             self.my.ext.TDXN.ExportNetworkAsync(
                 output_file='auto', embed_all=True)
 
@@ -10799,7 +10799,7 @@ class EmbodyExt:
         # SAVE's network; the network is freshly restored now, so drop them
         # and let the first sweep re-seed against the current live state.
         self.my.unstore('_tdn_fingerprints')
-        mode = self._tdnMode()
+        mode = self._tdxnMode()
         if mode == 'off':
             self.Log('TDXN mode=off -- skipping reconstruction', 'INFO')
             return
@@ -10824,14 +10824,14 @@ class EmbodyExt:
                      'reconstruction', 'INFO')
             return
 
-        tdn_comps = self._getTDXNStrategyComps()
-        if not tdn_comps:
+        tdxn_comps = self._getTDXNStrategyComps()
+        if not tdxn_comps:
             return
 
-        self.Log(f'Reconstructing {len(tdn_comps)} TDXN COMP(s)...', 'INFO')
+        self.Log(f'Reconstructing {len(tdxn_comps)} TDXN COMP(s)...', 'INFO')
         errors_total = 0
 
-        for comp_path, rel_tdn_path in tdn_comps:
+        for comp_path, rel_tdxn_path in tdxn_comps:
             # Re-check per row: at enumeration time the stripped .toe may
             # not contain a legacy row's annotate yet, so the enumerator's
             # filter can miss it (unresolvable -> not filtered). Parents
@@ -10845,13 +10845,13 @@ class EmbodyExt:
                     f'in the Embody manager to clear it; the annotation '
                     f'itself is kept)', 'WARNING')
                 continue
-            abs_path = self.buildAbsolutePath(rel_tdn_path)
+            abs_path = self.buildAbsolutePath(rel_tdxn_path)
             if not abs_path.is_file():
-                self.Log(f'TDXN file not found: {rel_tdn_path}', 'WARNING')
+                self.Log(f'TDXN file not found: {rel_tdxn_path}', 'WARNING')
                 continue
 
             try:
-                tdn_doc = self.my.ext.TDXN.tdn_load(
+                tdxn_doc = self.my.ext.TDXN.tdxn_load(
                     abs_path.read_text(encoding='utf-8'))
             except Exception as e:
                 self.Log(f'Failed to read TDXN for {comp_path}: {e}', 'ERROR')
@@ -10862,9 +10862,9 @@ class EmbodyExt:
             if comp is None:
                 # COMP was tagged but .toe wasn't saved -- create the shell.
                 # Prefer type from TDXN file (v1.1+), then table, then 'base'.
-                tdn_type = tdn_doc.get('type')
+                tdxn_type = tdxn_doc.get('type')
                 comp = self._createMissingCompShell(
-                    comp_path, 'tdn', comp_type_override=tdn_type)
+                    comp_path, 'tdn', comp_type_override=tdxn_type)
                 if comp is None:
                     errors_total += 1
                     continue
@@ -10876,16 +10876,16 @@ class EmbodyExt:
             # COMP an empty shell for the session. Convert to an error
             # result so the backup-rollback path below still runs.
             try:
-                # restore_tdn_shells=False: THIS loop imports every
+                # restore_tdxn_shells=False: THIS loop imports every
                 # tracked TDXN COMP itself, depth-sorted parents-first --
                 # Phase 8.6 filling nested shells here would import each
                 # nested COMP twice per project open.
                 result = self.my.ext.TDXN.ImportNetwork(
                     target_path=comp_path,
-                    tdn=tdn_doc,
+                    tdn=tdxn_doc,
                     clear_first=True,
                     restore_file_links=True,
-                    restore_tdn_shells=False,
+                    restore_tdxn_shells=False,
                 )
             except Exception as e:
                 result = {'error': f'Import raised: {e}'}
@@ -10900,12 +10900,12 @@ class EmbodyExt:
                     backup_path = self.my.ext.TDXN._find_existing_backup_instance(
                         str(abs_path))
                     if backup_path is not None:
-                        backup_tdn = self.my.ext.TDXN.tdn_load(
+                        backup_tdxn = self.my.ext.TDXN.tdxn_load(
                             backup_path.read_text(encoding='utf-8'))
                         rb_result = self.my.ext.TDXN.ImportNetwork(
-                            target_path=comp_path, tdn=backup_tdn,
+                            target_path=comp_path, tdn=backup_tdxn,
                             clear_first=True, restore_file_links=True,
-                            restore_tdn_shells=False)
+                            restore_tdxn_shells=False)
                         if rb_result.get('success'):
                             # Name the file: the fallback chain can land on
                             # an older generation, and a silent revert to a
@@ -10949,7 +10949,7 @@ class EmbodyExt:
                 errors_total += len(comp_errors)
 
         # Build report
-        self._logReconstructionReport(tdn_comps, errors_total)
+        self._logReconstructionReport(tdxn_comps, errors_total)
 
     def _recoverMissingTDXNComps(self) -> int:
         """Export-mode auto-save recovery: rebuild TDXN COMPs that are tracked and
@@ -10968,17 +10968,17 @@ class EmbodyExt:
         restore bar; the bars view is gone, but the return stays -- it is
         the honest summary a caller or a log line can still report.
         """
-        tdn_comps = self._getTDXNStrategyComps()
-        if not tdn_comps:
+        tdxn_comps = self._getTDXNStrategyComps()
+        if not tdxn_comps:
             return 0
         # Snapshot missing-at-start BEFORE any import, so a parent import that
         # creates a child shell mid-pass doesn't make us skip a child still
         # needing its own .tdn populated.
         missing = []
-        for comp_path, rel_tdn in tdn_comps:
+        for comp_path, rel_tdxn in tdxn_comps:
             if op(comp_path) is not None:
                 continue  # exists in the .toe -> .toe is truth, leave it
-            abs_path = self.buildAbsolutePath(rel_tdn)
+            abs_path = self.buildAbsolutePath(rel_tdxn)
             if abs_path.is_file():
                 missing.append((comp_path, abs_path))
             else:
@@ -10986,7 +10986,7 @@ class EmbodyExt:
                 # absent from BOTH the .toe and the disk simply vanished
                 # with a manager row pointing at nothing (TDXN review).
                 self.Log(f'TDXN file not found for absent COMP {comp_path}: '
-                         f'{rel_tdn} -- nothing to recover', 'WARNING')
+                         f'{rel_tdxn} -- nothing to recover', 'WARNING')
         if not missing:
             return 0
         # Parent-before-child so an ancestor shell exists before its children.
@@ -11002,7 +11002,7 @@ class EmbodyExt:
                     f'{comp_path} (legacy artifact)', 'WARNING')
                 continue
             try:
-                tdn_doc = self.my.ext.TDXN.tdn_load(
+                tdxn_doc = self.my.ext.TDXN.tdxn_load(
                     abs_path.read_text(encoding='utf-8'))
                 # The op may ALREADY exist -- either as a bare tdn_ref
                 # shell, or FULLY POPULATED by a parent import's Phase
@@ -11016,7 +11016,7 @@ class EmbodyExt:
                 shell = op(comp_path)
                 if shell is None:
                     shell = self._createMissingCompShell(
-                        comp_path, 'tdn', comp_type_override=tdn_doc.get('type'))
+                        comp_path, 'tdn', comp_type_override=tdxn_doc.get('type'))
                 if shell is None:
                     self.Log(f'Auto-save recovery: cannot create shell for '
                              f'{comp_path} (parent missing?)', 'WARNING')
@@ -11034,7 +11034,7 @@ class EmbodyExt:
                     recovered += 1
                     continue
                 res = self.my.ext.TDXN.ImportNetwork(
-                    target_path=comp_path, tdn=tdn_doc,
+                    target_path=comp_path, tdn=tdxn_doc,
                     clear_first=True, restore_file_links=True)
                 if res.get('success'):
                     recovered += 1
@@ -11061,13 +11061,13 @@ class EmbodyExt:
                 return
             toe_mtime = toe.stat().st_mtime
             newer = []
-            for comp_path, rel_tdn in self._getTDXNStrategyComps():
+            for comp_path, rel_tdxn in self._getTDXNStrategyComps():
                 if op(comp_path) is None:
                     continue
-                f = self.buildAbsolutePath(rel_tdn)
+                f = self.buildAbsolutePath(rel_tdxn)
                 try:
                     if f.is_file() and f.stat().st_mtime > toe_mtime + 2:
-                        newer.append(rel_tdn)
+                        newer.append(rel_tdxn)
                 except Exception:
                     continue
             if newer:
@@ -11107,10 +11107,10 @@ class EmbodyExt:
             {'found': [paths], 'restored': [paths], 'failed': [paths]}
         """
         results = {'found': [], 'restored': [], 'failed': []}
-        if self._tdnMode() == 'off':
+        if self._tdxnMode() == 'off':
             return results
-        tdn_tag = self.my.par.Tdxntag.val
-        if not tdn_tag:
+        tdxn_tag = self.my.par.Tdxntag.val
+        if not tdxn_tag:
             return results
 
         # Tracked TDXN paths -- a rowed COMP is the normal reconstruction
@@ -11194,7 +11194,7 @@ class EmbodyExt:
         candidates.sort(key=lambda c: c[0].count('/'))
         for comp_path, abs_path in candidates:
             try:
-                tdn_doc = self.my.ext.TDXN.tdn_load(
+                tdxn_doc = self.my.ext.TDXN.tdxn_load(
                     abs_path.read_text(encoding='utf-8'))
                 # A parent restore's Phase 8.6 may have just filled this
                 # candidate from this very file -- skip the redundant
@@ -11210,15 +11210,15 @@ class EmbodyExt:
                     res = {'success': True}
                 else:
                     res = self.my.ext.TDXN.ImportNetwork(
-                        target_path=comp_path, tdn=tdn_doc,
+                        target_path=comp_path, tdn=tdxn_doc,
                         clear_first=True, restore_file_links=True)
                 if res.get('success'):
                     # Tag is present (that's how we found it), so the row
                     # append passes _trackTDXNExport's enrollment gate.
                     self.my.ext.TDXN._trackTDXNExport(
                         comp_path, str(abs_path),
-                        build_num=tdn_doc.get('build'),
-                        touch_build=tdn_doc.get('td_build'))
+                        build_num=tdxn_doc.get('build'),
+                        touch_build=tdxn_doc.get('td_build'))
                     shell = op(comp_path)
                     if shell:
                         self._reconstructAboutPage(shell, comp_path)
@@ -11375,7 +11375,7 @@ class EmbodyExt:
                 continue
             abs_path = self.buildAbsolutePath(rel)
             try:
-                doc = self.my.ext.TDXN.tdn_load(
+                doc = self.my.ext.TDXN.tdxn_load(
                     abs_path.read_text(encoding='utf-8'))
             except Exception:
                 continue
@@ -11477,13 +11477,13 @@ class EmbodyExt:
                 result['failed'].append(f'{cur_rel} refs: file missing')
                 continue
             try:
-                doc = self.my.ext.TDXN.tdn_load(
+                doc = self.my.ext.TDXN.tdxn_load(
                     cur_abs.read_text(encoding='utf-8'))
                 if self._rewriteTDXNRefs(doc, rename_map):
                     # A validation failure here ROLLS BACK from .bak, so an
                     # unchecked return reports a reverted parent as repointed.
-                    res = self.my.ext.TDXN._safe_write_tdn(
-                        str(cur_abs), self.my.ext.TDXN.tdn_dump(doc),
+                    res = self.my.ext.TDXN._safe_write_tdxn(
+                        str(cur_abs), self.my.ext.TDXN.tdxn_dump(doc),
                         str(project.folder))
                     if not (res or {}).get('success'):
                         result['failed'].append(
@@ -11533,7 +11533,7 @@ class EmbodyExt:
                 changed |= self._rewriteTDXNRefs(item, rename_map)
         return changed
 
-    def _tdnMode(self) -> str:
+    def _tdxnMode(self) -> str:
         """Return 'off' | 'export' | 'full' from Tdxnmode menu.
 
         Defaults to 'export' if the parameter is missing (legacy .tox).
@@ -11547,14 +11547,14 @@ class EmbodyExt:
         except Exception:
             return 'export'
 
-    def _tdnEnabled(self) -> bool:
+    def _tdxnEnabled(self) -> bool:
         """Return True if the TDXN subsystem is NOT in Off mode.
 
         Thin wrapper for call sites that only need to know whether any
         TDXN runtime behavior should fire (export OR strip). Callers that
-        need to distinguish export vs full should use _tdnMode().
+        need to distinguish export vs full should use _tdxnMode().
         """
-        return self._tdnMode() != 'off'
+        return self._tdxnMode() != 'off'
 
     # ==========================================================================
     # PERFORM MODE
@@ -11720,7 +11720,7 @@ class EmbodyExt:
             self.my.par.Envoystatus = 'Perform Mode'
         return was_active
 
-    def _applyTdnModeGating(self) -> None:
+    def _applyTdxnModeGating(self) -> None:
         """Three-way UI gating for TDXN-page parameters based on Tdxnmode.
 
         - Off: all params greyed except Tdxnmode itself.
@@ -11731,7 +11731,7 @@ class EmbodyExt:
         master = getattr(self.my.par, 'Tdxnmode', None)
         if master is None:
             return
-        mode = self._tdnMode()
+        mode = self._tdxnMode()
         try:
             for page in self.my.customPages:
                 # Accept BOTH names: v6.1.0 renames the page to TDXN, but an
@@ -11757,9 +11757,9 @@ class EmbodyExt:
             self.Log(f'Could not apply Tdxnmode gating: {e}', 'DEBUG')
 
     # Backward-compat alias (old name used inside Update / parexec history).
-    _applyTdnEnableGating = _applyTdnModeGating
+    _applyTdxnEnableGating = _applyTdxnModeGating
 
-    def _onTdnModeChanged(self, mode: str) -> None:
+    def _onTdxnModeChanged(self, mode: str) -> None:
         """Handle a Tdxnmode change from parexec.
 
         Transitions surface the impact so the user isn't surprised:
@@ -11788,7 +11788,7 @@ class EmbodyExt:
                     buttons=['Cancel', 'Keep network files (disable only)'])
                 if choice != 1:
                     # User cancelled -- restore to Export (the safe default)
-                    # with parexec suppressed so _onTdnModeChanged doesn't
+                    # with parexec suppressed so _onTdxnModeChanged doesn't
                     # re-fire and log a misleading "mode: Export-on-Save".
                     parexec = self.my.op('parexec')
                     was_active = (parexec.par.active.eval()
@@ -11800,7 +11800,7 @@ class EmbodyExt:
                     finally:
                         if parexec:
                             parexec.par.active = was_active
-                    self._applyTdnModeGating()
+                    self._applyTdxnModeGating()
                     self.Log('TDXN mode change cancelled by user', 'INFO')
                     return
                 self.Log('TDXN disabled (.tdn files preserved on disk)',
@@ -11817,15 +11817,15 @@ class EmbodyExt:
                 'TDXN mode: Export-on-Save. .toe is the source of truth; '
                 '.tdn files are rewritten on save. Reconstruction on open '
                 'is skipped.', 'INFO')
-        self._applyTdnModeGating()
+        self._applyTdxnModeGating()
 
     # Backward-compat alias (old name referenced by parexec pre-rename).
-    _onTdnEnableChanged = _onTdnModeChanged
+    _onTdxnEnableChanged = _onTdxnModeChanged
 
     def _getTDXNStrategyComps(self) -> list[tuple[str, str]]:
         """Get all TDXN-strategy COMPs from the externalizations table.
 
-        Returns list of (comp_path, rel_tdn_path) tuples.
+        Returns list of (comp_path, rel_tdxn_path) tuples.
         Never includes Embody itself, its ancestors, or its descendants --
         reconstructing or stripping anything inside Embody would be
         self-destruction.
@@ -11976,15 +11976,15 @@ class EmbodyExt:
         Returns list of (comp_path, [dat_ops]) tuples for TDXN COMPs where
         Embed DATs is OFF and unexternalized DATs have non-empty content.
         """
-        tdn_comps = self._getTDXNStrategyComps()
-        if not tdn_comps:
+        tdxn_comps = self._getTDXNStrategyComps()
+        if not tdxn_comps:
             return []
 
-        tdn_paths = {path for path, _ in tdn_comps}
+        tdxn_paths = {path for path, _ in tdxn_comps}
         dat_tags = set(self.getTags('DAT'))
         result = []
 
-        for comp_path, _ in tdn_comps:
+        for comp_path, _ in tdxn_comps:
             comp = op(comp_path)
             if not comp:
                 continue
@@ -12013,7 +12013,7 @@ class EmbodyExt:
                     # internal DATs are regenerable palette boilerplate (e.g. an
                     # annotateCOMP's button help tables), never user content, so
                     # they must never trip the content-safety warning.
-                    if (parent_op.path in tdn_paths
+                    if (parent_op.path in tdxn_paths
                             or parent_op.type == 'annotate'
                             or self.my.ext.TDXN._hasExcludeTag(parent_op)
                             or self.my.ext.TDXN._isPaletteClone(parent_op)):
@@ -12106,14 +12106,14 @@ class EmbodyExt:
         COMPs where Embed Storage is OFF and any op inside has non-control,
         non-runtime storage keys.
         """
-        tdn_comps = self._getTDXNStrategyComps()
-        if not tdn_comps:
+        tdxn_comps = self._getTDXNStrategyComps()
+        if not tdxn_comps:
             return []
 
-        tdn_paths = {path for path, _ in tdn_comps}
+        tdxn_paths = {path for path, _ in tdxn_comps}
         result = []
 
-        for comp_path, _ in tdn_comps:
+        for comp_path, _ in tdxn_comps:
             comp = op(comp_path)
             if not comp:
                 continue
@@ -12148,7 +12148,7 @@ class EmbodyExt:
                     while parent_op and parent_op.path != comp_path:
                         # Mirror of _findAtRiskDATs' walk: annotate widget
                         # internals are TD-managed, never user storage.
-                        if (parent_op.path in tdn_paths
+                        if (parent_op.path in tdxn_paths
                                 or parent_op.type == 'annotate'
                                 or self.my.ext.TDXN._hasExcludeTag(parent_op)
                                 or self.my.ext.TDXN._isPaletteClone(parent_op)):
@@ -12445,9 +12445,9 @@ class EmbodyExt:
 
         return errors
 
-    def _logReconstructionReport(self, tdn_comps, errors_total) -> None:
+    def _logReconstructionReport(self, tdxn_comps, errors_total) -> None:
         """Log a summary report after TDXN reconstruction."""
-        count = len(tdn_comps)
+        count = len(tdxn_comps)
         if errors_total:
             self.Log(
                 f'TDXN reconstruction complete: {count} COMP(s), '
@@ -12466,7 +12466,7 @@ class EmbodyExt:
         COMP doesn't exist on project open.
 
         Args:
-            comp_path: Full TD path (e.g., '/embody/base_tdn')
+            comp_path: Full TD path (e.g., '/embody/base_tdxn')
             strategy: 'tdn' or 'tox' -- determines which tag/color to apply
             comp_type_override: Full TD type string (e.g. 'containerCOMP')
                 from TDXN file. Takes priority over externalizations table.
@@ -12578,7 +12578,7 @@ class EmbodyExt:
             return
 
         tox_tag = self.my.par.Toxtag.val
-        tdn_tag = self.my.par.Tdxntag.val
+        tdxn_tag = self.my.par.Tdxntag.val
         embody_path = self.my.path
         reconciled = 0
         failed = 0
@@ -12601,7 +12601,7 @@ class EmbodyExt:
             if strategy == 'tox':
                 tag = tox_tag
             elif strategy == 'tdn':
-                tag = tdn_tag
+                tag = tdxn_tag
             else:
                 tag = strategy  # DAT strategies are the tag value (py, md, tsv, etc.)
 

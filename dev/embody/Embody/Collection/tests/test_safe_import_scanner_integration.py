@@ -19,7 +19,7 @@ import scanner
 import safe_import
 
 
-def adversarial_tdn():
+def adversarial_tdxn():
     return {
         "format": "tdn",
         "version": "1.4",
@@ -56,7 +56,7 @@ def adversarial_tdn():
 
 class TestSafeImportScannerIntegration(unittest.TestCase):
     def test_scanner_detects_every_surface(self):
-        counts = scanner.scan_tdn(adversarial_tdn())["counts"]
+        counts = scanner.scan_tdxn(adversarial_tdxn())["counts"]
         self.assertGreaterEqual(counts["execute_dats"], 1)
         self.assertGreaterEqual(counts["file_read_exprs"], 1)
         self.assertGreaterEqual(counts["extensions"], 1)
@@ -65,7 +65,7 @@ class TestSafeImportScannerIntegration(unittest.TestCase):
         self.assertGreaterEqual(counts["traversal_paths"], 1)
 
     def test_make_inert_yields_is_inert(self):
-        inert, summary = safe_import.make_inert(adversarial_tdn())
+        inert, summary = safe_import.make_inert(adversarial_tdxn())
         self.assertTrue(safe_import.is_inert(inert))
         # safe_import reported neutralizing the auto-run vectors
         self.assertGreaterEqual(summary["execute_dats_disabled"], 1)
@@ -74,18 +74,18 @@ class TestSafeImportScannerIntegration(unittest.TestCase):
         self.assertGreaterEqual(summary["storage_removed"], 1)
 
     def test_rescan_after_inert_drops_armed_surfaces(self):
-        inert, _ = safe_import.make_inert(adversarial_tdn())
-        counts = scanner.scan_tdn(inert)["counts"]
+        inert, _ = safe_import.make_inert(adversarial_tdxn())
+        counts = scanner.scan_tdxn(inert)["counts"]
         # The surfaces safe_import removes/neutralizes must be gone on re-scan:
         self.assertEqual(counts["file_read_exprs"], 0)
         self.assertEqual(counts["extensions"], 0)
         self.assertEqual(counts["storage_payloads"], 0)
 
     def test_make_inert_does_not_mutate_input(self):
-        original = adversarial_tdn()
-        snapshot = scanner.scan_tdn(original)["counts"]
+        original = adversarial_tdxn()
+        snapshot = scanner.scan_tdxn(original)["counts"]
         safe_import.make_inert(original)
-        after = scanner.scan_tdn(original)["counts"]
+        after = scanner.scan_tdxn(original)["counts"]
         self.assertEqual(snapshot, after)
 
 

@@ -93,7 +93,7 @@ class TestClipboardWatch(EmbodyTestCase):
         if not probe:
             probe = self.sandbox.create(baseCOMP, 'cw_probe')
             probe.create(constantCHOP, 'c1')
-        marker = op.Embody.op('TDXNExt').module.EMBODY_TDN_MARKER
+        marker = op.Embody.op('TDXNExt').module.EMBODY_TDXN_MARKER
         op.Embody.ext.TDXN.copyNetworkToClipboard(probe)
         self.requireClipboardHolds(
             lambda raw: marker in raw,
@@ -200,7 +200,7 @@ class TestClipboardWatch(EmbodyTestCase):
         # says nothing about WHICH gate closed, and cost two wrong hypotheses
         # (a clipboard-seed race, then the pane gate) before the real cause --
         # the live watcher tick eating the signature -- was found.
-        marker = op.Embody.op('TDXNExt').module.EMBODY_TDN_MARKER
+        marker = op.Embody.op('TDXNExt').module.EMBODY_TDXN_MARKER
         pane = ui.panes.current
         owner = pane.owner if pane else None
         self.assertEqual(
@@ -240,7 +240,7 @@ class TestClipboardWatch(EmbodyTestCase):
         # string -> a different sig -> it still prompts.
         self._put_envelope()                                   # outbound copy of cw_probe
         m = op.Embody.op('TDXNExt').module
-        foreign = m.wrap_tdn(
+        foreign = m.wrap_tdxn(
             {'format': 'tdn', 'version': '2.0', 'network_path': '/x/foreign',
              'operators': [{'name': 'n', 'type': 'noiseTOP'}]},
             source='embody', slug='foreign')

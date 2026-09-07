@@ -25,7 +25,7 @@ These tests cover:
 
 The _publish bucket tests run HEADLESS by patching the loaded module's
 namespace (op / project) and stubbing TDXN.ExportNetwork, while delegating the
-real, pure TDXN comparison statics (_read_existing_tdn, _tdn_content_equal,
+real, pure TDXN comparison statics (_read_existing_tdxn, _tdxn_content_equal,
 _compact_json_dumps). No live save, no /specimen_lab dependency.
 
 NONE of these belong in the release smoke suite: specimen_publish is
@@ -79,11 +79,11 @@ class _FakeTDXN:
 		return self._export_result
 
 	# Delegate the pure comparison/serialization helpers to the real ext.
-	def _read_existing_tdn(self, file_path):
-		return self._real._read_existing_tdn(file_path)
+	def _read_existing_tdxn(self, file_path):
+		return self._real._read_existing_tdxn(file_path)
 
-	def _tdn_content_equal(self, new_tdn, existing_tdn):
-		return self._real._tdn_content_equal(new_tdn, existing_tdn)
+	def _tdxn_content_equal(self, new_tdxn, existing_tdxn):
+		return self._real._tdxn_content_equal(new_tdxn, existing_tdxn)
 
 	def _compact_json_dumps(self, data):
 		return self._real._compact_json_dumps(data)
@@ -191,7 +191,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 	def test_absent_comp_goes_to_missing_bucket(self):
 		"""A manifest slug whose /specimen_lab COMP is absent -> missing."""
 		self._write_manifest([
-			{'slug': 'ghost-spec', 'tdn_path': 'cat/ghost.tdxn'},
+			{'slug': 'ghost-spec', 'tdxn_path': 'cat/ghost.tdxn'},
 		])
 		# present map is empty -> op('/specimen_lab/ghost_spec') returns None
 		self._install(present={})
@@ -206,7 +206,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		"""ExportNetwork success:False -> 'slug (export failed)' in missing."""
 		self._write_manifest([
 			{'slug': 'reaction-diffusion',
-			 'tdn_path': 'generative/reaction-diffusion.tdxn'},
+			 'tdxn_path': 'generative/reaction-diffusion.tdxn'},
 		])
 		comp_path = '/specimen_lab/reaction_diffusion'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -226,7 +226,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		"""
 		self._write_manifest([
 			{'slug': 'reaction-diffusion',
-			 'tdn_path': 'generative/reaction-diffusion.tdxn'},
+			 'tdxn_path': 'generative/reaction-diffusion.tdxn'},
 		])
 		comp_path = '/specimen_lab/reaction_diffusion'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -247,13 +247,13 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 	def test_skip_unchanged_then_rewrite_on_change(self):
 		"""Identical export skips; a changed export writes again.
 
-		Uses the REAL TDXN _read_existing_tdn / _tdn_content_equal /
+		Uses the REAL TDXN _read_existing_tdxn / _tdxn_content_equal /
 		_compact_json_dumps via the fake's delegation, so the
 		volatile-key-ignoring skip logic is exercised faithfully -- no live
 		/specimen_lab COMP and no save required.
 		"""
 		self._write_manifest([
-			{'slug': 'noise-terrain', 'tdn_path': '3d/noise-terrain.tdxn'},
+			{'slug': 'noise-terrain', 'tdxn_path': '3d/noise-terrain.tdxn'},
 		])
 		comp_path = '/specimen_lab/noise_terrain'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -297,10 +297,10 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self.assertIn('noise-terrain', r3['written'])
 
 	def test_written_file_is_valid_tdxn_roundtrip(self):
-		"""The file _publish writes must re-read via the real _read_existing_tdn
+		"""The file _publish writes must re-read via the real _read_existing_tdxn
 		into a content-equal dict (compact_json_dumps + read are inverse)."""
 		self._write_manifest([
-			{'slug': 'kaleidoscope', 'tdn_path': 'compositing/kaleidoscope.tdxn'},
+			{'slug': 'kaleidoscope', 'tdxn_path': 'compositing/kaleidoscope.tdxn'},
 		])
 		comp_path = '/specimen_lab/kaleidoscope'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -311,9 +311,9 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self.mod._publish()
 		out = Path(self._spec_dir, 'compositing', 'kaleidoscope.tdxn')
 		self.assertTrue(out.exists())
-		reread = self.embody.ext.TDXN._read_existing_tdn(str(out))
+		reread = self.embody.ext.TDXN._read_existing_tdxn(str(out))
 		self.assertIsNotNone(reread)
-		self.assertTrue(self.embody.ext.TDXN._tdn_content_equal(tdn, reread))
+		self.assertTrue(self.embody.ext.TDXN._tdxn_content_equal(tdn, reread))
 
 
 # =============================================================================
@@ -359,8 +359,8 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 		self.assertTrue(res.get('success'),
 						f'live export failed: {res.get("error")}')
 		new = res['tdn']
-		# First write: no existing file -> _read_existing_tdn is None.
-		self.assertIsNone(TDXN._read_existing_tdn(str(out)))
+		# First write: no existing file -> _read_existing_tdxn is None.
+		self.assertIsNone(TDXN._read_existing_tdxn(str(out)))
 		out.write_text(TDXN._compact_json_dumps(new), encoding='utf-8')
 		self.assertTrue(out.exists())
 
@@ -369,9 +369,9 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 		res2 = TDXN.ExportNetwork(root_path=self._live.path,
 								 include_dat_content=True, embed_all=True)
 		self.assertTrue(res2.get('success'))
-		old = TDXN._read_existing_tdn(str(out))
+		old = TDXN._read_existing_tdxn(str(out))
 		self.assertIsNotNone(old)
-		self.assertTrue(TDXN._tdn_content_equal(res2['tdn'], old),
+		self.assertTrue(TDXN._tdxn_content_equal(res2['tdn'], old),
 						'identical re-export should be content-equal -> skipped')
 
 

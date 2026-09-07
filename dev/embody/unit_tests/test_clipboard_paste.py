@@ -4,9 +4,9 @@ Test suite: TDXN clipboard Copy/Paste (Ctrl+Shift+C / Ctrl+Shift+V).
 Covers TWO layers:
 
   HEADLESS  -- the module-level envelope contract in TDXNExt.py
-              (wrap_tdn / canonical_tdn_bytes / tdn_sha256 / to_clipboard_str /
-               unwrap_clipboard / is_embody_tdn_envelope / verify_envelope_integrity /
-               resolve_tdn_name). Pure Python, no TD state, no clipboard.
+              (wrap_tdxn / canonical_tdn_bytes / tdn_sha256 / to_clipboard_str /
+               unwrap_clipboard / is_embody_tdxn_envelope / verify_envelope_integrity /
+               resolve_tdxn_name). Pure Python, no TD state, no clipboard.
 
   LIVE      -- copyNetworkToClipboard / copySelectedToClipboard /
                _planPasteFromClipboard / pasteNetworkFromClipboard /
@@ -88,7 +88,7 @@ def paste_or_skip(tc, res):
     """
     if not res.get('ok'):
         raw = ui.clipboard or ''
-        marker = _tdxn_module().EMBODY_TDN_MARKER
+        marker = _tdxn_module().EMBODY_TDXN_MARKER
         if marker not in raw:
             raise SkipTest(
                 'OS clipboard clobbered between copy and paste by another '
@@ -104,36 +104,36 @@ class TestClipboardEnvelopeHeadless(EmbodyTestCase):
         super().setUp()
         self.m = _tdxn_module()
 
-    # --- wrap_tdn round-trip ------------------------------------------------
+    # --- wrap_tdxn round-trip ------------------------------------------------
 
     def test_wrap_tdxn_round_trip(self):
         tdn = _sample_tdxn()
-        env = self.m.wrap_tdn(tdn, source='embody')
+        env = self.m.wrap_tdxn(tdn, source='embody')
         # Envelope shape: marker, version, source, sha256, inner tdn.
-        self.assertEqual(env[self.m.EMBODY_TDN_MARKER], self.m.EMBODY_TDN_VERSION)
+        self.assertEqual(env[self.m.EMBODY_TDXN_MARKER], self.m.EMBODY_TDXN_VERSION)
         self.assertEqual(env['source'], 'embody')
         self.assertEqual(env['tdn'], tdn)
-        self.assertTrue(self.m.is_embody_tdn_envelope(env))
+        self.assertTrue(self.m.is_embody_tdxn_envelope(env))
         # sha256 matches the canonical hash of the inner tdn.
         self.assertEqual(env['sha256'], self.m.tdn_sha256(tdn))
         self.assertTrue(self.m.verify_envelope_integrity(env))
 
     def test_wrap_tdxn_with_slug_and_version(self):
         tdn = _sample_tdxn()
-        env = self.m.wrap_tdn(tdn, source='embody.tools', slug='my-widget', version=3)
+        env = self.m.wrap_tdxn(tdn, source='embody.tools', slug='my-widget', version=3)
         self.assertEqual(env['source'], 'embody.tools')
         self.assertEqual(env['slug'], 'my-widget')
         self.assertEqual(env['version'], 3)
-        self.assertTrue(self.m.is_embody_tdn_envelope(env))
+        self.assertTrue(self.m.is_embody_tdxn_envelope(env))
 
     def test_wrap_tdxn_omits_optional_keys_when_none(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         self.assertNotIn('slug', env)
         self.assertNotIn('version', env)
 
     def test_wrap_tdxn_bad_source_raises_value_error(self):
         # Source must be one of ENVELOPE_SOURCES; anything else is a ValueError.
-        self.assertRaises(ValueError, self.m.wrap_tdn, _sample_tdxn(), 'evil.source')
+        self.assertRaises(ValueError, self.m.wrap_tdxn, _sample_tdxn(), 'evil.source')
 
     # --- canonical_tdn_bytes ------------------------------------------------
 
@@ -177,7 +177,7 @@ class TestClipboardEnvelopeHeadless(EmbodyTestCase):
     # --- to_clipboard_str / unwrap_clipboard round-trip --------------------
 
     def test_clipboard_str_round_trip(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody', slug='widget')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody', slug='widget')
         text = self.m.to_clipboard_str(env)
         self.assertIsInstance(text, str)
         back = self.m.unwrap_clipboard(text)
@@ -190,7 +190,7 @@ class TestClipboardEnvelopeHeadless(EmbodyTestCase):
         # to_clipboard_str pretty-prints (indent=2), but the sha256 is computed
         # over canonical_tdn_bytes(tdn) -- whitespace-insensitive. Parsing the
         # pretty form and re-hashing must reproduce the same digest.
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         pretty = self.m.to_clipboard_str(env)
         self.assertIn('\n', pretty)  # confirms it really is indented
         parsed = json.loads(pretty)
@@ -217,39 +217,39 @@ class TestClipboardEnvelopeHeadless(EmbodyTestCase):
         # A bare .tdn document (no envelope wrapper) is not an envelope.
         self.assertIsNone(self.m.unwrap_clipboard(json.dumps(_sample_tdxn())))
 
-    # --- is_embody_tdn_envelope edge cases ---------------------------------
+    # --- is_embody_tdxn_envelope edge cases ---------------------------------
 
     def test_is_envelope_rejects_non_dict(self):
-        self.assertFalse(self.m.is_embody_tdn_envelope('string'))
-        self.assertFalse(self.m.is_embody_tdn_envelope(None))
-        self.assertFalse(self.m.is_embody_tdn_envelope([1, 2, 3]))
+        self.assertFalse(self.m.is_embody_tdxn_envelope('string'))
+        self.assertFalse(self.m.is_embody_tdxn_envelope(None))
+        self.assertFalse(self.m.is_embody_tdxn_envelope([1, 2, 3]))
 
     def test_is_envelope_rejects_wrong_marker_version(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
-        env[self.m.EMBODY_TDN_MARKER] = 999
-        self.assertFalse(self.m.is_embody_tdn_envelope(env))
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
+        env[self.m.EMBODY_TDXN_MARKER] = 999
+        self.assertFalse(self.m.is_embody_tdxn_envelope(env))
 
     def test_is_envelope_rejects_bad_source(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         env['source'] = 'embody.tools'  # still a valid source
-        self.assertTrue(self.m.is_embody_tdn_envelope(env))
+        self.assertTrue(self.m.is_embody_tdxn_envelope(env))
         env['source'] = 'totally.bogus'
-        self.assertFalse(self.m.is_embody_tdn_envelope(env))
+        self.assertFalse(self.m.is_embody_tdxn_envelope(env))
 
     def test_is_envelope_rejects_missing_tdxn(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         env['tdn'] = 'not a dict'
-        self.assertFalse(self.m.is_embody_tdn_envelope(env))
+        self.assertFalse(self.m.is_embody_tdxn_envelope(env))
 
     # --- verify_envelope_integrity -----------------------------------------
 
     def test_verify_integrity_true_for_clean_envelope(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         self.assertTrue(self.m.verify_envelope_integrity(env))
 
     def test_verify_integrity_detects_post_hash_mutation(self):
         # Mutate the inner tdn AFTER hashing -> sha256 no longer matches.
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         env['tdn']['operators'].append({'name': 'extra', 'type': 'nullTOP'})
         self.assertFalse(self.m.verify_envelope_integrity(env))
 
@@ -257,25 +257,25 @@ class TestClipboardEnvelopeHeadless(EmbodyTestCase):
         # Missing 'tdn'/'sha256' -> caught internally, returns False (no raise).
         self.assertFalse(self.m.verify_envelope_integrity({}))
 
-    # --- resolve_tdn_name ---------------------------------------------------
+    # --- resolve_tdxn_name ---------------------------------------------------
 
     def test_resolve_name_from_network_path_basename(self):
         tdn = {'network_path': '/project1/scene/widget'}
-        self.assertEqual(self.m.resolve_tdn_name(tdn), 'widget')
+        self.assertEqual(self.m.resolve_tdxn_name(tdn), 'widget')
 
     def test_resolve_name_strips_trailing_slash(self):
         tdn = {'network_path': '/project1/widget/'}
-        self.assertEqual(self.m.resolve_tdn_name(tdn), 'widget')
+        self.assertEqual(self.m.resolve_tdxn_name(tdn), 'widget')
 
     def test_resolve_name_falls_back_to_slug(self):
         # No usable network_path -> envelope slug.
         tdn = {'network_path': '/'}  # rstrip('/') -> '' -> no basename
-        self.assertEqual(self.m.resolve_tdn_name(tdn, slug='myslug'), 'myslug')
+        self.assertEqual(self.m.resolve_tdxn_name(tdn, slug='myslug'), 'myslug')
 
     def test_resolve_name_none_when_nothing_usable(self):
-        self.assertIsNone(self.m.resolve_tdn_name({'network_path': '/'}))
-        self.assertIsNone(self.m.resolve_tdn_name({}))
-        self.assertIsNone(self.m.resolve_tdn_name(None))
+        self.assertIsNone(self.m.resolve_tdxn_name({'network_path': '/'}))
+        self.assertIsNone(self.m.resolve_tdxn_name({}))
+        self.assertIsNone(self.m.resolve_tdxn_name(None))
 
 
 class TestClipboardLiveRoundTrip(EmbodyTestCase):
@@ -347,7 +347,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         this very suite.
         """
         res = self.tdxn_ext.copyNetworkToClipboard(host)
-        marker = _tdxn_module().EMBODY_TDN_MARKER
+        marker = _tdxn_module().EMBODY_TDXN_MARKER
         self.requireClipboardHolds(
             lambda raw: marker in raw,
             what='the envelope just copied',
@@ -486,7 +486,7 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         }
 
     def test_own_envelope_routes_direct(self):
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody', slug='widget')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody', slug='widget')
         wrote = self.m.to_clipboard_str(env)
         self._set_clipboard(wrote)
         # _plan_or_skip separates an OS clipboard clobber (SKIP) from a
@@ -508,7 +508,7 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         armed = self._armed_tdxn()
         self.assertFalse(si.is_inert(armed),
             'fixture must START armed (not inert) for the test to be meaningful')
-        env = self.m.wrap_tdn(armed, source='embody.tools', slug='shared')
+        env = self.m.wrap_tdxn(armed, source='embody.tools', slug='shared')
         wrote = self.m.to_clipboard_str(env)
         self._set_clipboard(wrote)
         plan = plan_or_skip(self, wrote)
@@ -639,7 +639,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
         # of the integrity result -- it only RECORDS integrity_ok. So a mutated
         # own-source envelope still produces a usable plan (ok True) with the
         # mismatch surfaced via integrity_ok=False, and the paste proceeds.
-        env = self.m.wrap_tdn(_sample_tdxn(), source='embody')
+        env = self.m.wrap_tdxn(_sample_tdxn(), source='embody')
         env['tdn']['operators'].append({'name': 'injected', 'type': 'nullTOP'})
         # sha256 no longer matches the (now-mutated) inner tdn.
         self.assertFalse(self.m.verify_envelope_integrity(env))

@@ -920,14 +920,14 @@ def durable_claim_alive(claim: dict, now: float,
 
 
 def compute_landing_conflicts(landing_files, main_dirty, peer_files,
-                              tdn_unsaved) -> dict:
+                              tdxn_unsaved) -> dict:
     """Intersect a worktree landing's file list with the three hazard sets.
     Pure function; all args are iterables of repo-relative POSIX paths."""
     landing = set(landing_files)
     return {
         'main_dirty': sorted(landing & set(main_dirty)),
         'peers': sorted(landing & set(peer_files)),
-        'tdn_unsaved': sorted(landing & set(tdn_unsaved)),
+        'tdxn_unsaved': sorted(landing & set(tdxn_unsaved)),
     }
 
 
@@ -1824,13 +1824,13 @@ class EnvoyMCPServer:
         except Exception as e:
             return {'error': 'git preflight failed: %s' % e}
 
-        tdn_unsaved = read_tsv_dirty_paths(root)
+        tdxn_unsaved = read_tsv_dirty_paths(root)
         # Dirty is runtime-only since 2026-08-20 (the tsv column is blank
         # by contract): merge the live mirror EmbodyExt._setDirtyState
         # maintains in a sys slot -- worker-safe, no TD objects. The file
         # scan above stays for foreign/legacy tsvs in the tree.
         try:
-            tdn_unsaved |= set(
+            tdxn_unsaved |= set(
                 dict(getattr(sys, '_embody_dirty_files', {}) or {})
                 .values())
         except Exception:
@@ -1852,7 +1852,7 @@ class EnvoyMCPServer:
                         break
 
         collisions = compute_landing_conflicts(
-            landing, main_dirty, peer_files, tdn_unsaved)
+            landing, main_dirty, peer_files, tdxn_unsaved)
         has_conflicts = any(collisions.values())
         result = {
             'worktree': wt,
@@ -1865,7 +1865,7 @@ class EnvoyMCPServer:
                 'Reconcile before landing: rebase the worktree on the '
                 'main tree for main_dirty collisions, coordinate with the '
                 'listed peers, and save the project (or re-export) for '
-                'tdn_unsaved collisions. Never overwrite blind.')
+                'tdxn_unsaved collisions. Never overwrite blind.')
 
         # Shared-ledger context: ACTIVE tasks whose file: scopes intersect
         # the landing set. Report-only in this iteration (the verdict stays
@@ -3828,7 +3828,7 @@ class EnvoyMCPServer:
 
             Returns:
                 Dict with worktree, landing_files, collisions {main_dirty,
-                peers, tdn_unsaved}, verdict 'clear'|'conflicts', or
+                peers, tdxn_unsaved}, verdict 'clear'|'conflicts', or
                 {'error': ...}. May also carry 'ledger_tasks' (active
                 shared-ledger tasks whose file: scopes intersect the
                 landing, each with 'overlap') and 'ledger_hint' when one is

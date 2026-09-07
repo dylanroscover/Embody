@@ -48,7 +48,7 @@ except Exception:
 # v6.1.0 tdn->tdxn identity bump would otherwise show as a one-line diff in
 # every tracked file. Do NOT 'sync' this to equality with
 # _TDXN_VOLATILE_KEYS -- the broader set is correct by intent, and adding
-# 'format' THERE would make _tdn_content_equal treat the bump as "no change",
+# 'format' THERE would make _tdxn_content_equal treat the bump as "no change",
 # so existing files would never converge to the new key.
 VOLATILE_KEYS = ('build', 'generator', 'td_build', 'exported_at',
                  'source_file', 'version', 'format')
@@ -69,26 +69,26 @@ if _HAVE_YAML:
         """Private subclass so TDXN representers never leak into SafeDumper."""
         pass
 
-    def _tdn_str_representer(dumper, data):
+    def _tdxn_str_representer(dumper, data):
         style = '|' if '\n' in data else None
         return dumper.represent_scalar('tag:yaml.org,2002:str', data,
                                        style=style)
 
-    def _tdn_list_representer(dumper, data):
+    def _tdxn_list_representer(dumper, data):
         flow = (len(data) <= 4
                 and all(isinstance(x, (int, float)) and not isinstance(x, bool)
                         for x in data))
         return dumper.represent_sequence('tag:yaml.org,2002:seq', data,
                                          flow_style=flow)
 
-    _TDXNYamlDumper.add_representer(str, _tdn_str_representer)
-    _TDXNYamlDumper.add_representer(list, _tdn_list_representer)
+    _TDXNYamlDumper.add_representer(str, _tdxn_str_representer)
+    _TDXNYamlDumper.add_representer(list, _tdxn_list_representer)
 
 
 def _parse(raw):
     """Parse a .tdn document. JSON-first (legacy tab-indented JSON), else YAML.
 
-    Mirrors TDXNExt.tdn_load: feeds json.loads the BOM/whitespace-stripped text
+    Mirrors TDXNExt.tdxn_load: feeds json.loads the BOM/whitespace-stripped text
     so a BOM-prefixed legacy JSON blob does not fall through to a YAML parse
     that would ScannerError on the tab indentation.
     """

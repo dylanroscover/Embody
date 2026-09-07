@@ -241,10 +241,10 @@ class ToolbarExt:
 		current = emb.par.Performmode.eval()
 		emb.par.Performmode = not current
 
-	def _action_export_tdn(self):
+	def _action_export_tdxn(self):
 		self.ownerComp.parent.Embody.ext.TDXN.exportProjectTDXNInteractive()
 
-	def _action_export_comp_tdn(self):
+	def _action_export_comp_tdxn(self):
 		comp = None
 		for pane in ui.panes:
 			if pane.type == PaneType.NETWORKEDITOR:

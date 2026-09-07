@@ -124,7 +124,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""Rotation writes ONLY the current dir. The legacy .tdn_backup/ is
 		read but never written -- nothing migrates or deletes it, because a
 		bulk move would race a concurrent rotate from a second TD instance
-		and _safe_write_tdn swallows that failure into the result dict."""
+		and _safe_write_tdxn swallows that failure into the result dict."""
 		Path(self._tdxn_path).write_text('v1', encoding='utf-8')
 		self.tdn._rotate_backups(self._tdxn_path, self._proj_folder)
 		self.assertTrue(
@@ -280,7 +280,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		blocker = Path(self._proj_folder) / '.embody_backup'
 		blocker.write_text('not a directory', encoding='utf-8')
 
-		result = self.tdn._safe_write_tdn(
+		result = self.tdn._safe_write_tdxn(
 			self._tdxn_path, _make_valid_tdxn_json(), self._proj_folder)
 
 		self.assertTrue(result.get('success'),
@@ -381,14 +381,14 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""Well-formed TDXN JSON should pass validation."""
 		Path(self._tdxn_path).write_text(
 			_make_valid_tdxn_json(), encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertTrue(result.get('valid'))
 
 	def test_C02_validate_truncated_json(self):
 		"""Truncated JSON should fail validation."""
 		full = _make_valid_tdxn_json(10)
 		Path(self._tdxn_path).write_text(full[:len(full)//2], encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		self.assertIn('Invalid TDXN', result.get('error', ''))
 
@@ -396,7 +396,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""JSON without 'format' key should fail."""
 		bad = json.dumps({'operators': []})
 		Path(self._tdxn_path).write_text(bad, encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		self.assertIn('format', result.get('error', ''))
 
@@ -404,20 +404,20 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""JSON with format but no operators should fail."""
 		bad = json.dumps({'format': 'tdn', 'version': '1.0'})
 		Path(self._tdxn_path).write_text(bad, encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		self.assertIn('operators', result.get('error', ''))
 
 	def test_C05_validate_empty_file(self):
 		"""Empty file should fail validation."""
 		Path(self._tdxn_path).write_text('', encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 
 	def test_C06_validate_binary_garbage(self):
 		"""Random binary data should fail validation."""
 		Path(self._tdxn_path).write_bytes(os.urandom(256))
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 
 	# =================================================================
@@ -431,7 +431,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		Path(self._tdxn_path).write_text(v1, encoding='utf-8')
 		# Safe write a new version
 		v2 = _make_valid_tdxn_json(5)
-		result = self.tdn._safe_write_tdn(
+		result = self.tdn._safe_write_tdxn(
 			self._tdxn_path, v2, self._proj_folder)
 		self.assertTrue(result.get('success'))
 		# Current file has new content
@@ -447,7 +447,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""First export: no existing file, no backup created."""
 		new_path = os.path.join(self._tdxn_dir, 'fresh.tdn')
 		content = _make_valid_tdxn_json()
-		result = self.tdn._safe_write_tdn(
+		result = self.tdn._safe_write_tdxn(
 			new_path, content, self._proj_folder)
 		self.assertTrue(result.get('success'))
 		self.assertEqual(
@@ -464,7 +464,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		Path(self._tdxn_path).write_text(v1, encoding='utf-8')
 		# Try safe-writing invalid content (missing 'format' key)
 		bad_content = json.dumps({'not_tdn': True})
-		result = self.tdn._safe_write_tdn(
+		result = self.tdn._safe_write_tdxn(
 			self._tdxn_path, bad_content, self._proj_folder)
 		# Should report error
 		self.assertIn('error', result)
@@ -495,12 +495,12 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		# Corrupt the main file
 		Path(self._tdxn_path).write_text(v1[:20], encoding='utf-8')
 		# Validate catches it
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		# Backup is still intact
 		bak = self.tdn._get_backup_path(
 			self._tdxn_path, self._proj_folder, '.bak')
-		bak_result = self.tdn._validate_tdn_file(str(bak))
+		bak_result = self.tdn._validate_tdxn_file(str(bak))
 		self.assertTrue(bak_result.get('valid'))
 
 	def test_E02_corrupt_empty_file_recovery(self):
@@ -509,7 +509,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		Path(self._tdxn_path).write_text(v1, encoding='utf-8')
 		self.tdn._rotate_backups(self._tdxn_path, self._proj_folder)
 		Path(self._tdxn_path).write_text('', encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		bak = self.tdn._get_backup_path(
 			self._tdxn_path, self._proj_folder, '.bak')
@@ -522,7 +522,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		self.tdn._rotate_backups(self._tdxn_path, self._proj_folder)
 		bad = json.dumps({'format': 'not_tdn', 'operators': []})
 		Path(self._tdxn_path).write_text(bad, encoding='utf-8')
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		self.assertIn('format', result.get('error', ''))
 
@@ -532,7 +532,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		Path(self._tdxn_path).write_text(v1, encoding='utf-8')
 		self.tdn._rotate_backups(self._tdxn_path, self._proj_folder)
 		Path(self._tdxn_path).write_bytes(os.urandom(512))
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		bak = self.tdn._get_backup_path(
 			self._tdxn_path, self._proj_folder, '.bak')
@@ -548,12 +548,12 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 			self._tdxn_path, self._proj_folder, '.bak')
 		self.assertTrue(bak.is_file())
 		# Backup can be parsed as valid TDXN
-		doc = self.tdn.tdn_load(bak.read_text(encoding='utf-8'))
+		doc = self.tdn.tdxn_load(bak.read_text(encoding='utf-8'))
 		self.assertEqual(doc.get('format'), 'tdn')
 
 	def test_E06_missing_tdxn_and_backup(self):
 		"""Both .tdn and .bak missing - validation should fail gracefully."""
-		result = self.tdn._validate_tdn_file(self._tdxn_path)
+		result = self.tdn._validate_tdxn_file(self._tdxn_path)
 		self.assertFalse(result.get('valid'))
 		bak = self.tdn._get_backup_path(
 			self._tdxn_path, self._proj_folder, '.bak')
@@ -573,7 +573,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		Path(self._tdxn_path).write_text(v1, encoding='utf-8')
 		# Safe write should succeed even though backup rotation fails
 		v2 = _make_valid_tdxn_json(5)
-		result = self.tdn._safe_write_tdn(
+		result = self.tdn._safe_write_tdxn(
 			self._tdxn_path, v2, self._proj_folder)
 		self.assertTrue(result.get('success'),
 			f'Write should succeed despite backup failure: {result}')
@@ -682,11 +682,11 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 			output_file=tdxn_file)
 		self.assertTrue(result.get('success'), f'Export failed: {result}')
 		# Validate file
-		validation = self.tdn._validate_tdn_file(tdxn_file)
+		validation = self.tdn._validate_tdxn_file(tdxn_file)
 		self.assertTrue(validation.get('valid'),
 			f'Validation failed: {validation}')
 		# Verify TDXN JSON has correct operator count
-		tdxn_doc = self.tdn.tdn_load(Path(tdxn_file).read_text(encoding='utf-8'))
+		tdxn_doc = self.tdn.tdxn_load(Path(tdxn_file).read_text(encoding='utf-8'))
 		top_level_ops = len(tdxn_doc.get('operators', []))
 		self.assertGreater(top_level_ops, 900,
 			f'Expected 900+ top-level ops in TDXN, got {top_level_ops}')
@@ -742,7 +742,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		self.assertIsNotNone(found_bak, 'Backup file should exist')
 		# Validate all files are valid JSON
 		for f in [tdxn_file, str(found_bak)]:
-			v = self.tdn._validate_tdn_file(f)
+			v = self.tdn._validate_tdxn_file(f)
 			self.assertTrue(v.get('valid'), f'{f} failed validation: {v}')
 
 	# =================================================================
@@ -750,11 +750,11 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 	# =================================================================
 
 	def _write(self, doc):
-		return self.tdn._safe_write_tdn(
+		return self.tdn._safe_write_tdxn(
 			self._tdxn_path, json.dumps(doc), self._proj_folder)
 
 	def test_G01_skips_rewrite_when_network_is_unchanged(self):
-		"""Every .tdn write funnels through _safe_write_tdn, so this guard is
+		"""Every .tdn write funnels through _safe_write_tdxn, so this guard is
 		what stops an explicit save (manager Save, save_externalization,
 		dirty-driven SaveTDXN) from rewriting a file whose network is
 		identical. Without it the file reads modified in `git status` while
@@ -830,11 +830,11 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		self.assertTrue(r.get('success'))
 		# Read the valid content before corrupting
 		valid_content = Path(tdxn_file).read_text(encoding='utf-8')
-		valid_tdxn = self.tdn.tdn_load(valid_content)
+		valid_tdxn = self.tdn.tdxn_load(valid_content)
 		# Corrupt the file
 		Path(tdxn_file).write_text('CORRUPTED!!!', encoding='utf-8')
 		# Verify corruption is detectable
-		v = self.tdn._validate_tdn_file(tdxn_file)
+		v = self.tdn._validate_tdxn_file(tdxn_file)
 		self.assertFalse(v.get('valid'), 'Corrupted file should fail validation')
 		# Clear sandbox and import from the valid content (simulating rollback)
 		for c in list(self.sandbox.children):
@@ -965,14 +965,14 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		After corrupting .tdn and .bak, .bak2 (v1) should still be valid.
 		"""
 		expected = self._buildStressNetwork(self.sandbox, 500)
-		# Use _safe_write_tdn directly for controlled backup behavior
+		# Use _safe_write_tdxn directly for controlled backup behavior
 		tdxn_file = os.path.join(self._temp_dir, 'multi.tdn')
 		# v1: export the 500-op network
 		result_v1 = self.tdn.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(result_v1.get('success'))
 		v1_json = json.dumps(result_v1['tdn'])
-		wr1 = self.tdn._safe_write_tdn(tdxn_file, v1_json, self._proj_folder)
+		wr1 = self.tdn._safe_write_tdxn(tdxn_file, v1_json, self._proj_folder)
 		self.assertTrue(wr1.get('success'), f'v1 write failed: {wr1}')
 		# v2: modify and re-export
 		top0 = self.sandbox.op('top_0')
@@ -982,7 +982,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(result_v2.get('success'))
 		v2_json = json.dumps(result_v2['tdn'])
-		wr2 = self.tdn._safe_write_tdn(tdxn_file, v2_json, self._proj_folder)
+		wr2 = self.tdn._safe_write_tdxn(tdxn_file, v2_json, self._proj_folder)
 		self.assertTrue(wr2.get('success'), f'v2 write failed: {wr2}')
 		# v3: modify again and re-export
 		if top0:
@@ -991,7 +991,7 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(result_v3.get('success'))
 		v3_json = json.dumps(result_v3['tdn'])
-		wr3 = self.tdn._safe_write_tdn(tdxn_file, v3_json, self._proj_folder)
+		wr3 = self.tdn._safe_write_tdxn(tdxn_file, v3_json, self._proj_folder)
 		self.assertTrue(wr3.get('success'), f'v3 write failed: {wr3}')
 		# Now: .tdn = v3, .bak = v2, .bak2 = v1
 		# Corrupt .tdn and .bak
@@ -1004,11 +1004,11 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		bak2 = self.tdn._get_backup_path(
 			tdxn_file, self._proj_folder, '.bak2')
 		self.assertTrue(bak2.is_file(), '.bak2 should exist')
-		v = self.tdn._validate_tdn_file(str(bak2))
+		v = self.tdn._validate_tdxn_file(str(bak2))
 		self.assertTrue(v.get('valid'),
 			f'.bak2 should be valid: {v}')
 		# Recover from .bak2
-		recovered_tdxn = self.tdn.tdn_load(
+		recovered_tdxn = self.tdn.tdxn_load(
 			bak2.read_text(encoding='utf-8'))
 		imp = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,

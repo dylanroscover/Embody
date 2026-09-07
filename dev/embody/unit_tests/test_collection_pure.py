@@ -95,20 +95,20 @@ class CollectionPureExpressionTests(EmbodyTestCase):
 
     def test_par_eval_idiom_scans_clean(self):
         _si, sc = self._modules()
-        res = sc.scan_tdn(_tdxn([{"name": "g", "type": "glslTOP",
+        res = sc.scan_tdxn(_tdxn([{"name": "g", "type": "glslTOP",
             "sequences": {"vec": [{"name": "u", "valuex": "=parent().par.Power.eval()"}]}}]))
         self.assertEqual(res["verdict"], "clean", res["findings"])
 
     def test_dangerous_expr_scans_flagged(self):
         _si, sc = self._modules()
-        res = sc.scan_tdn(_tdxn([{"name": "l", "type": "levelTOP",
+        res = sc.scan_tdxn(_tdxn([{"name": "l", "type": "levelTOP",
             "parameters": {"opacity": "=op('v').destroy()"}}]))
         self.assertGreaterEqual(res["counts"]["file_read_exprs"], 1)
 
     def test_glsl_shader_dat_not_flagged_as_python(self):
         _si, sc = self._modules()
         for params in ({"language": "glsl"}, {"extension": "frag"}):
-            res = sc.scan_tdn(_tdxn([{"name": "px", "type": "textDAT",
+            res = sc.scan_tdxn(_tdxn([{"name": "px", "type": "textDAT",
                 "parameters": params, "dat_content": "uniform vec4 u; void main(){}"}]))
             self.assertEqual(res["counts"]["execute_dats"], 0, params)
 
@@ -117,7 +117,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
     def test_script_op_flagged_and_bypassed(self):
         si, sc = self._modules()
         tdn = _tdxn([{"name": "s", "type": "scriptTOP"}])
-        self.assertGreaterEqual(sc.scan_tdn(tdn)["counts"]["execute_dats"], 1)
+        self.assertGreaterEqual(sc.scan_tdxn(tdn)["counts"]["execute_dats"], 1)
         inert, summary = si.make_inert(tdn, is_pure_expr=sc.is_pure_value_expression)
         self.assertIn("bypass", inert["operators"][0].get("flags", []))
         self.assertEqual(summary["script_ops_bypassed"], 1)
@@ -125,7 +125,7 @@ class CollectionPureExpressionTests(EmbodyTestCase):
     def test_tox_ref_flagged_and_stripped(self):
         si, sc = self._modules()
         tdn = _tdxn([{"name": "c", "type": "baseCOMP", "tox_ref": "x.tox"}])
-        self.assertGreaterEqual(sc.scan_tdn(tdn)["counts"]["external_refs"], 1)
+        self.assertGreaterEqual(sc.scan_tdxn(tdn)["counts"]["external_refs"], 1)
         inert, summary = si.make_inert(tdn, is_pure_expr=sc.is_pure_value_expression)
         self.assertNotIn("tox_ref", inert["operators"][0])
         self.assertEqual(summary["external_refs_stripped"], 1)
@@ -138,8 +138,8 @@ class CollectionPureExpressionTests(EmbodyTestCase):
             {"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)", "name": "E"}]}}])
         foreign = _tdxn([{"name": "b", "type": "baseCOMP", "sequences": {"ext": [
             {"object": "op('./Evil').module.Evil(me)", "name": "E"}]}}])
-        self.assertEqual(sc.scan_tdn(palette)["verdict"], "clean")
-        self.assertEqual(sc.scan_tdn(foreign)["verdict"], "flagged")
+        self.assertEqual(sc.scan_tdxn(palette)["verdict"], "clean")
+        self.assertEqual(sc.scan_tdxn(foreign)["verdict"], "flagged")
         pi, ps = si.make_inert(palette, is_pure_expr=sc.is_pure_value_expression)
         self.assertEqual(ps["extensions_disabled"], 0)
         fi, fs = si.make_inert(foreign, is_pure_expr=sc.is_pure_value_expression)

@@ -49,7 +49,7 @@ class TestTdxnMode(EmbodyTestCase):
         # test_gating_off_greys_all_except_mode would leak enable=False
         # across all TDXN params into the next test / user session).
         try:
-            self.embody_ext._applyTdnModeGating()
+            self.embody_ext._applyTdxnModeGating()
         except Exception:
             pass
         try:
@@ -103,15 +103,15 @@ class TestTdxnMode(EmbodyTestCase):
     def test_tdxnMode_helper_returns_menu_value(self):
         for mode in ('off', 'export', 'full'):
             self._setMode(mode)
-            self.assertEqual(self.embody_ext._tdnMode(), mode)
+            self.assertEqual(self.embody_ext._tdxnMode(), mode)
 
     def test_tdxnEnabled_false_only_when_off(self):
         self._setMode('off')
-        self.assertFalse(self.embody_ext._tdnEnabled())
+        self.assertFalse(self.embody_ext._tdxnEnabled())
         self._setMode('export')
-        self.assertTrue(self.embody_ext._tdnEnabled())
+        self.assertTrue(self.embody_ext._tdxnEnabled())
         self._setMode('full')
-        self.assertTrue(self.embody_ext._tdnEnabled())
+        self.assertTrue(self.embody_ext._tdxnEnabled())
 
     # ------------------------------------------------------------------
     # 3. Reconstruction gating
@@ -252,7 +252,7 @@ class TestTdxnMode(EmbodyTestCase):
     def _getTdxnPage(self):
         # v6.1.0 renamed the page to TDXN; an install that self-updated
         # keeps its existing 'TDN' page, so both must resolve -- this
-        # mirrors the same dual match in _applyTdnModeGating.
+        # mirrors the same dual match in _applyTdxnModeGating.
         for page in self.embody.customPages:
             if page.name in ('TDXN', 'TDN'):
                 return page
@@ -260,7 +260,7 @@ class TestTdxnMode(EmbodyTestCase):
 
     def test_gating_off_greys_all_except_mode(self):
         self._setMode('off')
-        self.embody_ext._applyTdnModeGating()
+        self.embody_ext._applyTdxnModeGating()
         page = self._getTdxnPage()
         self.assertIsNotNone(page)
         for p in page.pars:
@@ -272,7 +272,7 @@ class TestTdxnMode(EmbodyTestCase):
 
     def test_gating_export_greys_strip_params_only(self):
         self._setMode('export')
-        self.embody_ext._applyTdnModeGating()
+        self.embody_ext._applyTdxnModeGating()
         full_only = self.embody_ext._TDXN_FULL_ONLY_PARAMS
         page = self._getTdxnPage()
         for p in page.pars:
@@ -287,7 +287,7 @@ class TestTdxnMode(EmbodyTestCase):
 
     def test_gating_full_enables_all(self):
         self._setMode('full')
-        self.embody_ext._applyTdnModeGating()
+        self.embody_ext._applyTdxnModeGating()
         page = self._getTdxnPage()
         for p in page.pars:
             self.assertTrue(p.enable,

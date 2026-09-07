@@ -133,8 +133,8 @@ class CatalogManagerExt:
 		# Idempotent: onStart and onCreate both call this; skip when
 		# the current run already populated the catalog.
 		try:
-			tdn_ext = self.ownerComp.ext.TDXN
-			if tdn_ext._divergent_loaded and tdn_ext._palette_catalog:
+			tdxn_ext = self.ownerComp.ext.TDXN
+			if tdxn_ext._divergent_loaded and tdxn_ext._palette_catalog:
 				return
 		except Exception:
 			pass
@@ -1060,26 +1060,26 @@ class CatalogManagerExt:
 		patches = []  # [(op_path, par_name, old_val, new_val)]
 
 		try:
-			tdn_comps = self.ownerComp.ext.Embody._getTDXNStrategyComps()
+			tdxn_comps = self.ownerComp.ext.Embody._getTDXNStrategyComps()
 		except Exception:
 			return
 
-		if not tdn_comps:
+		if not tdxn_comps:
 			return
 
 		# Cache loaded source catalogs to avoid re-reading
 		source_catalogs = {}
 
-		for comp_path, rel_tdn_path in tdn_comps:
+		for comp_path, rel_tdxn_path in tdxn_comps:
 			# Read td_build from the .tdn file header
 			try:
 				abs_path = str(self.ownerComp.ext.Embody.buildAbsolutePath(
-					rel_tdn_path))
+					rel_tdxn_path))
 				if not os.path.isfile(abs_path):
 					continue
 				with open(abs_path, 'r', encoding='utf-8') as f:
-					tdn_doc = self.ownerComp.ext.TDXN.tdn_load(f.read())
-				source_build = tdn_doc.get('td_build', '')
+					tdxn_doc = self.ownerComp.ext.TDXN.tdxn_load(f.read())
+				source_build = tdxn_doc.get('td_build', '')
 			except Exception:
 				continue
 
@@ -1216,19 +1216,19 @@ class CatalogManagerExt:
 		mapping goes into _palette_catalog.
 		"""
 		try:
-			tdn_ext = self.ownerComp.ext.TDXN
+			tdxn_ext = self.ownerComp.ext.TDXN
 		except Exception:
 			return
 
 		palette = catalog.get('_palette', {})
 		if palette:
-			tdn_ext._palette_catalog = palette
+			tdxn_ext._palette_catalog = palette
 
 		# Strip reserved keys so op-type lookup stays clean
 		param_catalog = {k: v for k, v in catalog.items()
 						 if not k.startswith('_')}
-		tdn_ext._divergent_defaults = param_catalog
-		tdn_ext._divergent_loaded = True
+		tdxn_ext._divergent_defaults = param_catalog
+		tdxn_ext._divergent_loaded = True
 
 	# =================================================================
 	# Bootstrap Palette Catalog (shipped tableDAT)

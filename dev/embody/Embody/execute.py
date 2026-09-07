@@ -86,7 +86,7 @@ def onStart():
 	# and palette-clone detection; both are dormant when Tdxnmode=off.
 	run(
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
-		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
+		f"if op('{parent.Embody}').ext.Embody._tdxnMode() != 'off' else None",
 		delayFrames=10)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
@@ -136,7 +136,7 @@ def onCreate():
 	# Skip in Off mode -- see onStart() for rationale.
 	run(
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
-		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
+		f"if op('{parent.Embody}').ext.Embody._tdxnMode() != 'off' else None",
 		delayFrames=45)
 	# The Autoupdate-gated check on the FRESH-INSTALL path too. It was
 	# scheduled only from onStart (project open) -- but on a first install
@@ -294,7 +294,7 @@ def _runPreSaveExternalization():
 
 	# Master TDXN mode: when Off, skip the entire TDXN pre-save pipeline
 	# (export, strip, restore). .tdn files on disk stay untouched.
-	mode = parent.Embody.ext.Embody._tdnMode()
+	mode = parent.Embody.ext.Embody._tdxnMode()
 	if mode == 'off':
 		parent.Embody.ext.Embody.Log(
 			'TDXN mode=off -- skipping pre-save TDXN strip/export', 'INFO')
@@ -303,8 +303,8 @@ def _runPreSaveExternalization():
 	# TDXN content safety -- detect unprotected DATs and storage before strip/restore
 	parent.Embody.ext.Embody._checkTDXNContentSafety()
 
-	tdn_comps = parent.Embody.ext.Embody._getTDXNStrategyComps()
-	if not tdn_comps:
+	tdxn_comps = parent.Embody.ext.Embody._getTDXNStrategyComps()
+	if not tdxn_comps:
 		return
 
 	# Phase 1: Export current in-memory state to .tdn files, but only
@@ -312,7 +312,7 @@ def _runPreSaveExternalization():
 	# noisy git diffs from volatile header fields (build, generator,
 	# exported_at, td_build).
 	exported = []
-	for comp_path, rel_tdn_path in tdn_comps:
+	for comp_path, rel_tdxn_path in tdxn_comps:
 		comp = op(comp_path)
 		if not comp:
 			continue
@@ -321,7 +321,7 @@ def _runPreSaveExternalization():
 		if not has_children:
 			continue
 		try:
-			abs_path = str(parent.Embody.ext.Embody.buildAbsolutePath(rel_tdn_path))
+			abs_path = str(parent.Embody.ext.Embody.buildAbsolutePath(rel_tdxn_path))
 
 			# Export to dict only (no file write yet)
 			result = parent.Embody.ext.TDXN.ExportNetwork(
@@ -332,30 +332,30 @@ def _runPreSaveExternalization():
 					f'{result.get("error")}', 'ERROR')
 				continue
 
-			new_tdn = result['tdn']
+			new_tdxn = result['tdn']
 
 			# Compare against existing file - skip write if content unchanged
-			existing_tdn = parent.Embody.ext.TDXN._read_existing_tdn(abs_path)
-			if existing_tdn and parent.Embody.ext.TDXN._tdn_content_equal(
-					new_tdn, existing_tdn):
-				exported.append((comp_path, rel_tdn_path))
+			existing_tdxn = parent.Embody.ext.TDXN._read_existing_tdxn(abs_path)
+			if existing_tdxn and parent.Embody.ext.TDXN._tdxn_content_equal(
+					new_tdxn, existing_tdxn):
+				exported.append((comp_path, rel_tdxn_path))
 				continue
 
 			# Content changed (or first export) - write to disk
 			scan_folder = str(project.folder)
-			before_tdn = parent.Embody.ext.TDXN._collectExistingTDXNFiles(
+			before_tdxn = parent.Embody.ext.TDXN._collectExistingTDXNFiles(
 				scan_folder, comp_path)
 			# Only files Embody tracks are deletion candidates -- never
 			# reclaim a stray the user placed themselves.
-			before_tdn = parent.Embody.ext.TDXN._restrictToTrackedTDXN(
-				before_tdn)
-			content = parent.Embody.ext.TDXN._compact_json_dumps(new_tdn)
+			before_tdxn = parent.Embody.ext.TDXN._restrictToTrackedTDXN(
+				before_tdxn)
+			content = parent.Embody.ext.TDXN._compact_json_dumps(new_tdxn)
 			# Same value as scan_folder, separate name on purpose:
 			# scan_folder is the stale-cleanup DELETE boundary, backup_root
 			# is where rotation mirrors copies. See the note in
 			# TDXNExt.ExportNetwork.
 			backup_root = str(project.folder)
-			write_result = parent.Embody.ext.TDXN._safe_write_tdn(
+			write_result = parent.Embody.ext.TDXN._safe_write_tdxn(
 				abs_path, content, backup_root)
 			if not write_result.get('success'):
 				parent.Embody.ext.Embody.Log(
@@ -377,15 +377,15 @@ def _runPreSaveExternalization():
 			if other_protected:
 				protected.extend(other_protected)
 			parent.Embody.ext.TDXN._cleanupStaleTDXNFiles(
-				before_tdn, protected, scan_folder)
+				before_tdxn, protected, scan_folder)
 
 			# Track export and update fingerprint
 			parent.Embody.ext.TDXN._trackTDXNExport(
 				comp_path, abs_path,
-				build_num=new_tdn.get('build'),
+				build_num=new_tdxn.get('build'),
 				touch_build=f'{app.version}.{app.build}')
 			parent.Embody.ext.Embody._storeTDXNFingerprint(comp)
-			exported.append((comp_path, rel_tdn_path))
+			exported.append((comp_path, rel_tdxn_path))
 		except Exception as e:
 			parent.Embody.ext.Embody.Log(
 				f'Pre-save export error for {comp_path}: {e}', 'ERROR')
@@ -404,13 +404,13 @@ def _runPreSaveExternalization():
 
 	# Save pane owner paths that fall inside TDXN COMPs before stripping.
 	# After restore, we re-navigate orphaned panes back to the rebuilt COMP.
-	tdn_paths = [cp for cp, _ in exported]
+	tdxn_paths = [cp for cp, _ in exported]
 	pane_restore = {}
 	try:
 		for pane in ui.panes:
 			if hasattr(pane, 'owner') and pane.owner:
 				owner_path = pane.owner.path
-				for tp in tdn_paths:
+				for tp in tdxn_paths:
 					if owner_path == tp or owner_path.startswith(tp + '/'):
 						pane_restore[pane.id] = owner_path
 						break
@@ -440,7 +440,7 @@ def _runPreSaveExternalization():
 	# source of truth, so saved data is never lost -- but session integrity is).
 	if exported_by_depth:
 		parent.Embody.store('_tdn_stripped_paths', list(exported_by_depth))
-	for comp_path, rel_tdn_path in exported_by_depth:
+	for comp_path, rel_tdxn_path in exported_by_depth:
 		comp = op(comp_path)
 		if comp:
 			parent.Embody.ext.Embody.stripCompChildren(comp)
@@ -482,7 +482,7 @@ def onProjectPostSave():
 			return p.count('/')
 		stripped = sorted(stripped, key=_depth_key)
 		for entry in stripped:
-			# Unpack stored (comp_path, rel_tdn_path) tuples.
+			# Unpack stored (comp_path, rel_tdxn_path) tuples.
 			# Fall back to legacy format (plain string) for safety.
 			if isinstance(entry, (list, tuple)) and len(entry) == 2:
 				comp_path, rel_path = entry
@@ -502,14 +502,14 @@ def onProjectPostSave():
 					parent.Embody.ext.Embody.Log(
 						f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
 					continue
-				tdn_doc = parent.Embody.ext.TDXN.tdn_load(
+				tdxn_doc = parent.Embody.ext.TDXN.tdxn_load(
 					abs_path.read_text(encoding='utf-8'))
-				# restore_tdn_shells=False: this restore loop imports every
+				# restore_tdxn_shells=False: this restore loop imports every
 				# stripped TDXN COMP itself -- Phase 8.6 would double-import
 				# nested comps on every Ctrl+S.
 				parent.Embody.ext.TDXN.ImportNetwork(
-					target_path=comp_path, tdn=tdn_doc, clear_first=True,
-					restore_file_links=True, restore_tdn_shells=False)
+					target_path=comp_path, tdn=tdxn_doc, clear_first=True,
+					restore_file_links=True, restore_tdxn_shells=False)
 			except Exception as e:
 				# print() as backup - Log may fail if extensions are reinitializing
 				print(f'Embody > Post-save restore failed for {comp_path}: {e}')
@@ -526,12 +526,12 @@ def onProjectPostSave():
 					backup_path = parent.Embody.ext.TDXN._find_existing_backup_instance(
 						str(abs_path))
 					if backup_path is not None:
-						backup_tdn = parent.Embody.ext.TDXN.tdn_load(
+						backup_tdxn = parent.Embody.ext.TDXN.tdxn_load(
 							backup_path.read_text(encoding='utf-8'))
 						parent.Embody.ext.TDXN.ImportNetwork(
-							target_path=comp_path, tdn=backup_tdn,
+							target_path=comp_path, tdn=backup_tdxn,
 							clear_first=True, restore_file_links=True,
-							restore_tdn_shells=False)
+							restore_tdxn_shells=False)
 						# Name the file: the fallback chain can land on an
 						# older generation, and a silent revert to a stale
 						# network is its own data loss.

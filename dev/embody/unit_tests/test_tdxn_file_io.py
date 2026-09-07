@@ -92,7 +92,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 				rel.startswith('embody/Embody/embody/'),
 				f'Path segment duplication detected: {rel}')
 
-	def test_splitPerComp_replaces_children_with_tdn_ref(self):
+	def test_splitPerComp_replaces_children_with_tdxn_ref(self):
 		"""Parent entries should have tdn_ref instead of children."""
 		ops = [{'name': 'c', 'type': 'baseCOMP', 'children': [
 			{'name': 'x', 'type': 'textDAT'}]}]
@@ -103,7 +103,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertIn('tdn_ref', entry)
 		self.assertEqual(entry['tdn_ref'], 'c.tdn')
 
-	def test_splitPerComp_tdn_ref_nested_is_relative(self):
+	def test_splitPerComp_tdxn_ref_nested_is_relative(self):
 		"""Nested tdn_ref should be a relative path from root."""
 		ops = [{'name': 'o', 'type': 'baseCOMP', 'children': [
 			{'name': 'i', 'type': 'baseCOMP', 'children': [
@@ -1048,7 +1048,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 				return True
 		return False
 
-	def test_tdn_ref_written_on_export(self):
+	def test_tdxn_ref_written_on_export(self):
 		"""Export of parent with TDXN-tagged child should include tdn_ref."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
@@ -1077,7 +1077,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertIn('tdn_ref', child_entry)
 		self.assertNotIn('children', child_entry)
 
-	def test_tdn_ref_absent_without_tag(self):
+	def test_tdxn_ref_absent_without_tag(self):
 		"""Export of parent with non-TDXN child should not include tdn_ref."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
@@ -1092,7 +1092,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertNotIn('tdn_ref', child_entry)
 		self.assertIn('children', child_entry)
 
-	def test_tdn_ref_absent_with_embed_all(self):
+	def test_tdxn_ref_absent_with_embed_all(self):
 		"""embed_all=True should suppress tdn_ref even for tagged children."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child = parent.create(baseCOMP, 'child_comp')
@@ -1388,7 +1388,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 			except Exception:
 				pass
 
-	def test_createOps_skips_children_with_tdn_ref(self):
+	def test_createOps_skips_children_with_tdxn_ref(self):
 		"""Import with tdn_ref should create shell but no children."""
 		parent = self.sandbox.create(baseCOMP, 'import_target')
 		op_defs = [{

@@ -3,7 +3,7 @@ Test suite: TDXN helper methods (pure Python logic).
 
 Tests _serializeValue, _valuesDiffer, _colorsDiffer,
 _assembleHierarchy, _getGroupBaseName, _serializeStorageValue,
-_deserializeStorageValue, _tdn_content_equal, and _read_existing_tdn.
+_deserializeStorageValue, _tdxn_content_equal, and _read_existing_tdxn.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -226,7 +226,7 @@ class TestTDXNHelpers(EmbodyTestCase):
             {'$type': 'unknown', '$value': 'x'})
         self.assertIsInstance(result, dict)
 
-    # --- _tdn_content_equal ---
+    # --- _tdxn_content_equal ---
 
     def _make_tdxn(self, **overrides):
         """Build a minimal TDXN dict with sensible defaults."""
@@ -249,7 +249,7 @@ class TestTDXNHelpers(EmbodyTestCase):
     def test_tdxn_content_equal_identical(self):
         """Identical dicts (same volatile fields) returns True."""
         tdn = self._make_tdxn()
-        self.assertTrue(self.tdn._tdn_content_equal(tdn, tdn.copy()))
+        self.assertTrue(self.tdn._tdxn_content_equal(tdn, tdn.copy()))
 
     def test_tdxn_content_equal_only_volatile_diff(self):
         """Dicts differing only in volatile header fields returns True."""
@@ -260,7 +260,7 @@ class TestTDXNHelpers(EmbodyTestCase):
             td_build='100.2030.99999',
             exported_at='2030-12-31T23:59:59Z',
         )
-        self.assertTrue(self.tdn._tdn_content_equal(a, b))
+        self.assertTrue(self.tdn._tdxn_content_equal(a, b))
 
     def test_tdxn_content_equal_different_operators(self):
         a = self._make_tdxn()
@@ -268,37 +268,37 @@ class TestTDXNHelpers(EmbodyTestCase):
             {'name': 'noise1', 'type': 'noiseTOP'},
             {'name': 'null1', 'type': 'nullTOP'},
         ])
-        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+        self.assertFalse(self.tdn._tdxn_content_equal(a, b))
 
     def test_tdxn_content_equal_different_options(self):
         a = self._make_tdxn()
         b = self._make_tdxn(options={'include_dat_content': False})
-        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+        self.assertFalse(self.tdn._tdxn_content_equal(a, b))
 
     def test_tdxn_content_equal_extra_key_in_existing(self):
         """Key present in existing but not in new is detected."""
         a = self._make_tdxn()
         b = self._make_tdxn(annotations=[{'name': 'ann1'}])
-        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+        self.assertFalse(self.tdn._tdxn_content_equal(a, b))
 
     def test_tdxn_content_equal_extra_key_in_new(self):
         """Key present in new but not in existing is detected."""
         a = self._make_tdxn(custom_pars=[{'name': 'Speed'}])
         b = self._make_tdxn()
-        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+        self.assertFalse(self.tdn._tdxn_content_equal(a, b))
 
     def test_tdxn_content_equal_different_version(self):
         """Non-volatile header field 'version' difference is detected."""
         a = self._make_tdxn()
         b = self._make_tdxn(version='2.0')
-        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+        self.assertFalse(self.tdn._tdxn_content_equal(a, b))
 
-    # --- _read_existing_tdn ---
+    # --- _read_existing_tdxn ---
 
     def test_read_existing_tdxn_missing_file(self):
         import os, tempfile
         path = os.path.join(tempfile.gettempdir(), 'nonexistent_abc123.tdn')
-        self.assertIsNone(self.tdn._read_existing_tdn(path))
+        self.assertIsNone(self.tdn._read_existing_tdxn(path))
 
     def test_read_existing_tdxn_corrupt_file(self):
         import os, tempfile
@@ -306,7 +306,7 @@ class TestTDXNHelpers(EmbodyTestCase):
         try:
             with open(path, 'w') as f:
                 f.write('not valid json {{{')
-            self.assertIsNone(self.tdn._read_existing_tdn(path))
+            self.assertIsNone(self.tdn._read_existing_tdxn(path))
         finally:
             if os.path.exists(path):
                 os.unlink(path)
@@ -318,7 +318,7 @@ class TestTDXNHelpers(EmbodyTestCase):
         try:
             with open(path, 'w') as f:
                 json.dump(data, f)
-            result = self.tdn._read_existing_tdn(path)
+            result = self.tdn._read_existing_tdxn(path)
             self.assertIsNotNone(result)
             self.assertEqual(result['format'], 'tdn')
         finally:

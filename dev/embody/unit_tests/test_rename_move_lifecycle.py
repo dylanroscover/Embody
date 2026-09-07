@@ -350,7 +350,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
 
     def test_findMovedTDXNOp_updates_table_path(self):
         """After _findMovedTDXNOp, the table row should have the new path."""
-        comp, old_path, old_rel = self._externalize_tdxn_comp(self.workspace, 'tdn_path')
+        comp, old_path, old_rel = self._externalize_tdxn_comp(self.workspace, 'tdxn_path')
         comp.name = 'tdn_path_new'
         new_path = comp.path
 

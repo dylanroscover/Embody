@@ -126,7 +126,7 @@ class TestTdxnMigration(EmbodyTestCase):
         path = self._abs(rel)
         if not path.is_file():
             return set()
-        doc = self.embody.ext.TDXN.tdn_load(path.read_text(encoding='utf-8'))
+        doc = self.embody.ext.TDXN.tdxn_load(path.read_text(encoding='utf-8'))
         return self.embody_ext._collectTDXNRefs(doc)
 
     def _migrate(self, **kw):
@@ -179,7 +179,7 @@ class TestTdxnMigration(EmbodyTestCase):
             self.assertFalse(self._abs(old_rel).is_file(),
                              'legacy file survived the rename: %s' % old_rel)
 
-    def test_parent_tdn_refs_are_repointed(self):
+    def test_parent_tdxn_refs_are_repointed(self):
         """The failure this prevents: children renamed, parents still
         pointing at the old names, so nested COMPs come back empty."""
         paths = self._buildLegacyProject()
@@ -318,7 +318,7 @@ class TestTdxnMigration(EmbodyTestCase):
         self._migrate()
 
         leaf_rel = self._rel(paths['leaf'])
-        doc = self.embody.ext.TDXN.tdn_load(
+        doc = self.embody.ext.TDXN.tdxn_load(
             self._abs(leaf_rel).read_text(encoding='utf-8'))
         self.assertIn('operators', doc)
         self.assertIn(doc.get('format'), ('tdxn', 'tdn'))

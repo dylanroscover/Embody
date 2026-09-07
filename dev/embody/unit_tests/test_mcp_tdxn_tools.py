@@ -127,7 +127,7 @@ class TestMCPTDXNTools(EmbodyTestCase):
                 self.assertIn('operators', result['tdn'])
         finally:
             self.embody.par.Tdxnmode.val = mode_was
-            self.embody_ext._applyTdnModeGating()
+            self.embody_ext._applyTdxnModeGating()
             parexec.par.active = was_active
 
     # ------------------------------------------------------------------

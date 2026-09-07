@@ -15,7 +15,7 @@ returns the frozen C2 CapabilityJson shape:
         "findings": [{"op_path", "surface", "detail", "evidence"}, ...],
     }
 
-Verdict precedence (from scan_tdn): blocked > flagged > clean.
+Verdict precedence (from scan_tdxn): blocked > flagged > clean.
   - clean   : no surface counted, scan completed.
   - flagged : at least one surface counted, scan completed.
   - blocked : a hard bound was exceeded (serialized size, operator count, AST
@@ -44,8 +44,8 @@ _SURFACES = (
 )
 
 
-def make_tdn(operators=None, **overrides):
-    """Mirror the standalone suite's make_tdn fixture.
+def make_tdxn(operators=None, **overrides):
+    """Mirror the standalone suite's make_tdxn fixture.
 
     Builds a minimal-but-valid TDXN dict. Pass a list of operator dicts; extra
     top-level keys via **overrides (e.g. network_path, type)."""
@@ -79,12 +79,12 @@ class CollectionScannerTests(EmbodyTestCase):
         if op is None:
             raise SkipTest('Collection/scanner DAT not present')
         mod = op.module
-        if mod is None or not hasattr(mod, 'scan_tdn'):
+        if mod is None or not hasattr(mod, 'scan_tdxn'):
             raise SkipTest('Collection/scanner module unavailable')
         return mod
 
     def _scan(self, tdn):
-        return self._scanner().scan_tdn(tdn)
+        return self._scanner().scan_tdxn(tdn)
 
     # -----------------------------------------------------------------
     # Shared shape + evidence assertions.
@@ -118,12 +118,12 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_clean_source_to_null_network(self):
         scanner = self._scanner()
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {"name": "source1", "type": "constantTOP"},
             {"name": "null1", "type": "nullTOP", "inputs": ["source1"]},
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertResultShape(result)
         self.assertEqual(result['verdict'], 'clean')
@@ -132,7 +132,7 @@ class CollectionScannerTests(EmbodyTestCase):
         self.assertEqual(result['findings'], [])
 
     def test_clean_network_has_zero_external_refs(self):
-        result = self._scan(make_tdn([{"name": "null1", "type": "nullTOP"}]))
+        result = self._scan(make_tdxn([{"name": "null1", "type": "nullTOP"}]))
         self.assertEqual(result['counts']['external_refs'], 0)
 
     # -----------------------------------------------------------------
@@ -140,7 +140,7 @@ class CollectionScannerTests(EmbodyTestCase):
     # -----------------------------------------------------------------
 
     def test_execute_dat_with_code_flags_execute_surface(self):
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "execute1",
                 "type": "executeDAT",
@@ -156,7 +156,7 @@ class CollectionScannerTests(EmbodyTestCase):
     def test_expression_param_reading_file_flags_file_read_expr(self):
         # Leading '=' marks the value as an expression (scanner strips it then
         # AST-scans). open() is a denylisted Name -> file_read_exprs.
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "level1",
                 "type": "levelTOP",
@@ -172,7 +172,7 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_webclient_dat_counts_web_ops_and_denylisted_types(self):
         # A denylisted IO/network op type bumps BOTH web_ops and denylisted_types.
-        result = self._scan(make_tdn([{"name": "web1", "type": "webclientDAT"}]))
+        result = self._scan(make_tdxn([{"name": "web1", "type": "webclientDAT"}]))
 
         self.assertEqual(result['verdict'], 'flagged')
         self.assertGreaterEqual(result['counts']['web_ops'], 1)
@@ -180,7 +180,7 @@ class CollectionScannerTests(EmbodyTestCase):
         self.assertEvidenceBounded(result)
 
     def test_comp_with_extension_counts_extensions(self):
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "base1",
                 "type": "baseCOMP",
@@ -208,7 +208,7 @@ class CollectionScannerTests(EmbodyTestCase):
         self.assertGreaterEqual(result['counts']['extensions'], 1)
 
     def test_non_empty_storage_payload_counts_storage_payloads(self):
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "base1",
                 "type": "baseCOMP",
@@ -221,7 +221,7 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_traversal_file_param_counts_traversal_paths(self):
         # A path-named parameter ("file") whose value traverses upward (..).
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "text1",
                 "type": "textDAT",
@@ -236,7 +236,7 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_absolute_path_param_counts_traversal_paths(self):
         # Absolute path also trips traversal_paths (POSIX-absolute here).
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "text1",
                 "type": "textDAT",
@@ -253,7 +253,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # A COMP that points at out-of-band content (tdn_ref / tox_ref) cannot
         # be scanned inline, so each must surface as an external_ref.
         for key in ('tdn_ref', 'tox_ref'):
-            result = self._scan(make_tdn(
+            result = self._scan(make_tdxn(
                 [{"name": "child1", "type": "baseCOMP", key: "child1.tdn"}]))
             self.assertEqual(result['verdict'], 'flagged', key)
             self.assertGreaterEqual(result['counts']['external_refs'], 1, key)
@@ -265,7 +265,7 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_evasion_nested_comp_child_is_scanned(self):
         # A malicious execute DAT buried two COMP levels deep is still scanned.
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "outer",
                 "type": "baseCOMP",
@@ -292,7 +292,7 @@ class CollectionScannerTests(EmbodyTestCase):
     def test_evasion_expression_dynamic_import_is_flagged(self):
         # getattr(__import__('os'), 'system')('id') hidden in an expression par.
         # The expression surface is file_read_exprs (AST-scanned).
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "math1",
                 "type": "mathCHOP",
@@ -306,7 +306,7 @@ class CollectionScannerTests(EmbodyTestCase):
         self.assertGreaterEqual(result['counts']['file_read_exprs'], 1)
 
     def test_evasion_storage_payload_is_scanned(self):
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "base1",
                 "type": "baseCOMP",
@@ -326,7 +326,7 @@ class CollectionScannerTests(EmbodyTestCase):
     def test_unparseable_python_flags_not_blocks(self):
         # A SyntaxError in DAT content is flagged ("is not parseable Python"),
         # NOT blocked -- blocked is reserved for resource bounds / fail-closed.
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "text1",
                 "type": "textDAT",
@@ -348,7 +348,7 @@ class CollectionScannerTests(EmbodyTestCase):
     def test_oversized_serialized_tdxn_is_blocked(self):
         scanner = self._scanner()
         # One DAT whose content alone exceeds the serialized-size bound.
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {
                 "name": "text1",
                 "type": "textDAT",
@@ -357,7 +357,7 @@ class CollectionScannerTests(EmbodyTestCase):
             }
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertTrue(result['findings'])
@@ -370,9 +370,9 @@ class CollectionScannerTests(EmbodyTestCase):
         # well under the 5 MB bound (so this exercises the op-count gate, not
         # the size gate).
         ops = [{"type": "nullTOP"} for _ in range(scanner.MAX_OPERATORS + 1)]
-        tdn = make_tdn(ops)
+        tdn = make_tdxn(ops)
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertTrue(result['findings'])
@@ -383,7 +383,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # An expression longer than MAX_AST_SOURCE_CHARS is rejected before
         # parsing -> blocked. Leading '=' marks it as an expression parameter.
         long_expr = "=" + ("a" * (scanner.MAX_AST_SOURCE_CHARS + 1))
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {
                 "name": "math1",
                 "type": "mathCHOP",
@@ -391,7 +391,7 @@ class CollectionScannerTests(EmbodyTestCase):
             }
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertEvidenceBounded(result)
@@ -403,7 +403,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # this isolates the depth gate from the source-length gate.
         terms = scanner.MAX_AST_DEPTH + 50
         deep_expr = "=" + "+".join("1" for _ in range(terms))
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {
                 "name": "math1",
                 "type": "mathCHOP",
@@ -411,7 +411,7 @@ class CollectionScannerTests(EmbodyTestCase):
             }
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertEvidenceBounded(result)
@@ -424,7 +424,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # source-length bound.
         n = scanner.MAX_AST_NODES + 100
         list_expr = "=[" + ",".join("1" for _ in range(n)) + "]"
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {
                 "name": "math1",
                 "type": "mathCHOP",
@@ -432,7 +432,7 @@ class CollectionScannerTests(EmbodyTestCase):
             }
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertEvidenceBounded(result)
@@ -443,19 +443,19 @@ class CollectionScannerTests(EmbodyTestCase):
 
     def test_internal_scan_error_fails_closed(self):
         scanner = self._scanner()
-        # If the internal walk raises, scan_tdn must catch it and return
+        # If the internal walk raises, scan_tdxn must catch it and return
         # "blocked" with a "scanner aborted" finding -- never "clean".
-        original = scanner._scan_tdn_root
+        original = scanner._scan_tdxn_root
 
         def _boom(*a, **k):
             raise RuntimeError('boom')
 
-        scanner._scan_tdn_root = _boom
+        scanner._scan_tdxn_root = _boom
         try:
-            result = scanner.scan_tdn(
-                make_tdn([{"name": "null1", "type": "nullTOP"}]))
+            result = scanner.scan_tdxn(
+                make_tdxn([{"name": "null1", "type": "nullTOP"}]))
         finally:
-            scanner._scan_tdn_root = original
+            scanner._scan_tdxn_root = original
 
         self.assertEqual(result['verdict'], 'blocked')
         self.assertTrue(
@@ -471,7 +471,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # A long-but-parseable expression that still trips a surface; its
         # evidence (the source text) must be truncated to <= 200 chars.
         long_arg = "'" + ("a" * 5000) + "'"
-        result = self._scan(make_tdn([
+        result = self._scan(make_tdxn([
             {
                 "name": "math1",
                 "type": "mathCHOP",
@@ -495,7 +495,7 @@ class CollectionScannerTests(EmbodyTestCase):
         # benign null (clean) + execute DAT (flagged surface) + an oversized
         # AST source (blocked bound). The hardest verdict must win: blocked.
         blocking_expr = "=" + ("a" * (scanner.MAX_AST_SOURCE_CHARS + 1))
-        tdn = make_tdn([
+        tdn = make_tdxn([
             {"name": "null1", "type": "nullTOP"},
             {
                 "name": "execute1",
@@ -510,7 +510,7 @@ class CollectionScannerTests(EmbodyTestCase):
             },
         ])
 
-        result = scanner.scan_tdn(tdn)
+        result = scanner.scan_tdxn(tdn)
 
         self.assertResultShape(result)
         self.assertEqual(result['verdict'], 'blocked')
