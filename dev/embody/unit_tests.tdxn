@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 372
-generator: Embody/6.2.34
+generator: Embody/6.2.35
 td_build: 099.2025.33070
 source_file: Embody-6.338.toe
-exported_at: '2026-09-07T17:05:31Z'
+exported_at: '2026-09-07T17:25:59Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -37,10 +37,11 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 2
+    rows: 26
     cols: 5
   flags:
   - viewer
+  position: [200, -200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -49,7 +50,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/unit_tests/test_pardef.py
-  position: [0, -4000]
+  position: [2000, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_logging
   type: textDAT
@@ -57,13 +58,13 @@ operators:
     file: embody/unit_tests/test_logging.py
   flags:
   - viewer
-  position: [0, -1000]
+  position: [2000, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_sandbox
   type: baseCOMP
   flags:
   - viewer
-  position: [400, 0]
+  position: [200, -400]
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
@@ -73,7 +74,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/unit_tests/test_updater.py
-  position: [0, -3800]
+  position: [2600, -1200]
   color: [0.9, 0.3, 0.4]
 - name: TestRunnerExt
   type: textDAT
@@ -89,37 +90,37 @@ operators:
     file: embody/unit_tests/test_mcp_batch.py
   flags:
   - viewer
-  position: [800, -1600]
+  position: [3800, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_shortcuts
   type: textDAT
   parameters:
     file: embody/unit_tests/test_shortcuts.py
-  position: [200, -3600]
+  position: [2600, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_diff
   type: textDAT
   parameters:
     file: embody/unit_tests/test_tdxn_diff.py
-  position: [0, -3200]
+  position: [200, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_ai_clients
   type: textDAT
   parameters:
     file: embody/unit_tests/test_ai_clients.py
-  position: [1350, -200]
+  position: [3200, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_convoy_ext
   type: textDAT
   parameters:
     file: embody/unit_tests/test_convoy_ext.py
-  position: [200, -3800]
+  position: [5600, -2200]
   color: [0.67, 0.67, 0.67]
 - name: test_git_status
   type: textDAT
   parameters:
     file: embody/unit_tests/test_git_status.py
-  position: [400, -3200]
+  position: [1400, -1200]
   color: [0.9, 0.3, 0.4]
 - name: test_path_utils
   type: textDAT
@@ -127,7 +128,7 @@ operators:
     file: embody/unit_tests/test_path_utils.py
   flags:
   - viewer
-  position: [200, -800]
+  position: [2000, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_update_sync
   type: textDAT
@@ -135,19 +136,19 @@ operators:
     file: embody/unit_tests/test_update_sync.py
   flags:
   - viewer
-  position: [0, -800]
+  position: [2600, -1000]
   color: [0.9, 0.3, 0.4]
 - name: test_data_readers
   type: textDAT
   parameters:
     file: embody/unit_tests/test_data_readers.py
-  position: [600, -3800]
+  position: [3800, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_envoy_bridge
   type: textDAT
   parameters:
     file: embody/unit_tests/test_envoy_bridge.py
-  position: [400, -2600]
+  position: [2000, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_file_io
   type: textDAT
@@ -155,7 +156,7 @@ operators:
     file: embody/unit_tests/test_tdxn_file_io.py
   flags:
   - viewer
-  position: [600, -2200]
+  position: [200, -3000]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_helpers
   type: textDAT
@@ -163,13 +164,13 @@ operators:
     file: embody/unit_tests/test_tdxn_helpers.py
   flags:
   - viewer
-  position: [200, -2200]
+  position: [800, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_claude_config
   type: textDAT
   parameters:
     file: embody/unit_tests/test_claude_config.py
-  position: [0, -3000]
+  position: [3200, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_operators
   type: textDAT
@@ -177,7 +178,7 @@ operators:
     file: embody/unit_tests/test_mcp_operators.py
   flags:
   - viewer
-  position: [0, -1400]
+  position: [4400, -1000]
   color: [0.9, 0.3, 0.4]
 - name: test_param_tracker
   type: textDAT
@@ -185,13 +186,13 @@ operators:
     file: embody/unit_tests/test_param_tracker.py
   flags:
   - viewer
-  position: [400, -800]
+  position: [2000, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_release_hooks
   type: textDAT
   parameters:
     file: embody/unit_tests/test_release_hooks.py
-  position: [200, -1000]
+  position: [2000, -1000]
   color: [0.9, 0.3, 0.4]
 - name: test_tag_lifecycle
   type: textDAT
@@ -199,7 +200,7 @@ operators:
     file: embody/unit_tests/test_tag_lifecycle.py
   flags:
   - viewer
-  position: [0, -600]
+  position: [2600, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_crud_operators
   type: textDAT
@@ -207,7 +208,7 @@ operators:
     file: embody/unit_tests/test_crud_operators.py
   flags:
   - viewer
-  position: [200, -400]
+  position: [1400, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_delete_cleanup
   type: textDAT
@@ -215,13 +216,13 @@ operators:
     file: embody/unit_tests/test_delete_cleanup.py
   flags:
   - viewer
-  position: [400, -600]
+  position: [1400, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_envoy_sessions
   type: textDAT
   parameters:
     file: embody/unit_tests/test_envoy_sessions.py
-  position: [600, -2600]
+  position: [2000, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_extensions
   type: textDAT
@@ -229,7 +230,7 @@ operators:
     file: embody/unit_tests/test_mcp_extensions.py
   flags:
   - viewer
-  position: [200, -1600]
+  position: [4400, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_parameters
   type: textDAT
@@ -237,13 +238,13 @@ operators:
     file: embody/unit_tests/test_mcp_parameters.py
   flags:
   - viewer
-  position: [200, -1400]
+  position: [5000, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_tdxn_tools
   type: textDAT
   parameters:
     file: embody/unit_tests/test_mcp_tdxn_tools.py
-  position: [800, -1400]
+  position: [5000, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_tag_management
   type: textDAT
@@ -251,13 +252,13 @@ operators:
     file: embody/unit_tests/test_tag_management.py
   flags:
   - viewer
-  position: [600, -400]
+  position: [2600, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_migration
   type: textDAT
   parameters:
     file: embody/unit_tests/test_tdxn_migration.py
-  position: [1200, -3800]
+  position: [800, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_sequences
   type: textDAT
@@ -266,7 +267,7 @@ operators:
     extension: py
   flags:
   - viewer
-  position: [1075, -2200]
+  position: [800, -3000]
   color: [0.9, 0.3, 0.4]
 - name: test_externalization
   type: textDAT
@@ -274,7 +275,7 @@ operators:
     file: embody/unit_tests/test_externalization.py
   flags:
   - viewer
-  position: [0, -400]
+  position: [1400, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_file_management
   type: textDAT
@@ -282,13 +283,13 @@ operators:
     file: embody/unit_tests/test_file_management.py
   flags:
   - viewer
-  position: [400, -400]
+  position: [1400, -1000]
   color: [0.9, 0.3, 0.4]
 - name: test_launch_aiclient
   type: textDAT
   parameters:
     file: embody/unit_tests/test_launch_aiclient.py
-  position: [0, -3400]
+  position: [3200, -2600]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_annotations
   type: textDAT
@@ -296,7 +297,7 @@ operators:
     file: embody/unit_tests/test_mcp_annotations.py
   flags:
   - viewer
-  position: [0, -1600]
+  position: [3800, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_connections
   type: textDAT
@@ -304,7 +305,7 @@ operators:
     file: embody/unit_tests/test_mcp_connections.py
   flags:
   - viewer
-  position: [600, -1400]
+  position: [3800, -1000]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_dat_content
   type: textDAT
@@ -312,7 +313,7 @@ operators:
     file: embody/unit_tests/test_mcp_dat_content.py
   flags:
   - viewer
-  position: [400, -1400]
+  position: [4400, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_diagnostics
   type: textDAT
@@ -320,7 +321,7 @@ operators:
     file: embody/unit_tests/test_mcp_diagnostics.py
   flags:
   - viewer
-  position: [400, -1600]
+  position: [4400, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_performance
   type: textDAT
@@ -328,7 +329,7 @@ operators:
     file: embody/unit_tests/test_mcp_performance.py
   flags:
   - viewer
-  position: [400, -1800]
+  position: [5000, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_top_capture
   type: textDAT
@@ -336,19 +337,19 @@ operators:
     file: embody/unit_tests/test_mcp_top_capture.py
   flags:
   - viewer
-  position: [800, -1800]
+  position: [5000, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_opencode_config
   type: textDAT
   parameters:
     file: embody/unit_tests/test_opencode_config.py
-  position: [400, -1000]
+  position: [3200, -2800]
   color: [0.9, 0.3, 0.4]
 - name: test_auto_externalize
   type: textDAT
   parameters:
     file: embody/unit_tests/test_auto_externalize.py
-  position: [0, -3600]
+  position: [1400, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_operator_queries
   type: textDAT
@@ -356,7 +357,7 @@ operators:
     file: embody/unit_tests/test_operator_queries.py
   flags:
   - viewer
-  position: [600, -800]
+  position: [2000, -200]
   color: [0.9, 0.3, 0.4]
 - name: test_server_lifecycle
   type: textDAT
@@ -364,13 +365,13 @@ operators:
     file: embody/unit_tests/test_server_lifecycle.py
   flags:
   - viewer
-  position: [0, -2600]
+  position: [2000, -3000]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_diff_engine
   type: textDAT
   parameters:
     file: embody/unit_tests/test_tdxn_diff_engine.py
-  position: [200, -3200]
+  position: [200, -2600]
   color: [0.9, 0.3, 0.4]
 - name: test_custom_parameters
   type: textDAT
@@ -378,32 +379,32 @@ operators:
     file: embody/unit_tests/test_custom_parameters.py
   flags:
   - viewer
-  position: [600, -1800]
+  position: [3800, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_envoy_thread_comm
   type: textDAT
   parameters:
     file: embody/unit_tests/test_envoy_thread_comm.py
-  position: [200, -2600]
+  position: [2000, -2600]
   color: [0.9, 0.3, 0.4]
 - name: test_no_console_window
   type: textDAT
   parameters:
     file: embody/unit_tests/test_no_console_window.py
-  position: [1200, 0]
+  position: [2000, -2800]
   color: [0.9, 0.3, 0.4]
 - name: test_strategy_handlers
   type: textDAT
   parameters:
     file: embody/unit_tests/test_strategy_handlers.py
-  position: [600, 0]
+  position: [2600, -400]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_crash_safety
   type: textDAT
   parameters:
     file: embody/unit_tests/test_tdxn_crash_safety.py
     extension: py
-  position: [800, -2200]
+  position: [200, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_duplicate_handling
   type: textDAT
@@ -411,7 +412,7 @@ operators:
     file: embody/unit_tests/test_duplicate_handling.py
   flags:
   - viewer
-  position: [600, -600]
+  position: [1400, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_code_execution
   type: textDAT
@@ -419,7 +420,7 @@ operators:
     file: embody/unit_tests/test_mcp_code_execution.py
   flags:
   - viewer
-  position: [0, -1800]
+  position: [3800, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_flags_position
   type: textDAT
@@ -427,13 +428,13 @@ operators:
     file: embody/unit_tests/test_mcp_flags_position.py
   flags:
   - viewer
-  position: [600, -1600]
+  position: [4400, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_shader_diagnostics
   type: textDAT
   parameters:
     file: embody/unit_tests/test_shader_diagnostics.py
-  position: [800, -3800]
+  position: [5000, -800]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_export_import
   type: textDAT
@@ -441,13 +442,13 @@ operators:
     file: embody/unit_tests/test_tdxn_export_import.py
   flags:
   - viewer
-  position: [0, -2200]
+  position: [200, -2800]
   color: [0.9, 0.3, 0.4]
 - name: test_convoy_host_install
   type: textDAT
   parameters:
     file: embody/unit_tests/test_convoy_host_install.py
-  position: [400, -3800]
+  position: [5600, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_externalization
   type: textDAT
@@ -455,13 +456,13 @@ operators:
     file: embody/unit_tests/test_mcp_externalization.py
   flags:
   - viewer
-  position: [200, -1800]
+  position: [4400, -600]
   color: [0.9, 0.3, 0.4]
 - name: test_save_path_contracts
   type: textDAT
   parameters:
     file: embody/unit_tests/test_save_path_contracts.py
-  position: [1350, 0]
+  position: [2600, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_reconstruction
   type: textDAT
@@ -469,19 +470,19 @@ operators:
     file: embody/unit_tests/test_tdxn_reconstruction.py
   flags:
   - viewer
-  position: [400, -2200]
+  position: [800, -2800]
   color: [0.9, 0.3, 0.4]
 - name: test_tdxn_palette_catalog
   type: textDAT
   parameters:
     file: embody/unit_tests/test_tdxn_palette_catalog.py
-  position: [750, 0]
+  position: [800, -2600]
   color: [0.9, 0.3, 0.4]
 - name: test_catalog_default_patch
   type: textDAT
   parameters:
     file: embody/unit_tests/test_catalog_default_patch.py
-  position: [1000, -3800]
+  position: [4400, -2400]
   color: [0.9, 0.3, 0.4]
 - name: test_rename_move_lifecycle
   type: textDAT
@@ -489,72 +490,86 @@ operators:
     file: embody/unit_tests/test_rename_move_lifecycle.py
   flags:
   - viewer
-  position: [200, -600]
+  position: [2000, -1200]
   color: [0.9, 0.3, 0.4]
 - name: test_catalog_bootstrap_palette
   type: textDAT
   parameters:
     file: embody/unit_tests/test_catalog_bootstrap_palette.py
-  position: [925, 0]
+  position: [4400, -2200]
   color: [0.9, 0.3, 0.4]
 annotations:
 - name: annotate1
   mode: annotate
-  title: u
-  text: Test runner, results table, and sandbox
-  position: [-70, -70]
-  size: [1371, 370]
+  title: Runner (3)
+  text: Runner extension, results table, per-suite sandbox
+  position: [130, -470]
+  size: [270, 730]
   color: [0.22, 0.35, 0.22]
   opacity: 0.5
 - name: annotate2
   mode: annotate
-  title: Embody Core Tests (13)
+  title: Embody Core (21)
   text: |-
-    Externalization, CRUD, file management, tagging,
-    rename/move, delete, duplicates, sync, paths,
-    param tracking, operator queries, logging
-  position: [-70, -1070]
-  size: [870, 930]
+    Externalization, tagging, CRUD, files, rename/move,
+    duplicates, sync, paths, logging, updater
+  position: [1330, -1270]
+  size: [1470, 1530]
   color: [0.25, 0.3, 0.45]
   opacity: 0.5
 - name: annotate3
   mode: annotate
-  title: MCP Tools Tests (13)
+  title: MCP Tools (17)
   text: |-
     Operators, parameters, DAT content, connections,
-    annotations, extensions, diagnostics, flags/position,
-    code execution, externalization, performance, custom pars,
-    TOP capture
-  position: [-70, -1870]
-  size: [1070, 730]
+    annotations, extensions, diagnostics, capture, batch
+  position: [3730, -1070]
+  size: [1470, 1330]
   color: [0.45, 0.3, 0.25]
   opacity: 0.5
 - name: annotate4
   mode: annotate
-  title: TDN Format Tests (5)
-  text: Export/import, helpers, reconstruction, file I/O, crash safety
-  position: [-70, -2270]
-  size: [1470, 330]
+  title: TDXN Format (10)
+  text: |-
+    Export/import, helpers, reconstruction, file I/O,
+    crash safety, diff engine, migration, sequences
+  position: [130, -3070]
+  size: [870, 1130]
   color: [0.35, 0.35, 0.25]
   opacity: 0.5
 - name: annotate5
   mode: annotate
-  title: Envoy Infrastructure Tests (4)
+  title: Envoy Infra (5)
   text: |-
-    Server lifecycle, STDIO bridge, thread communication,
-    queue processing, request throttling, log piggybacking,
-    multi-session awareness (identity, presence, cursors)
-  position: [-70, -2670]
-  size: [870, 330]
+    Server lifecycle, STDIO bridge, thread comms,
+    sessions, no-console-window
+  position: [1930, -3070]
+  size: [270, 1130]
   color: [0.35, 0.25, 0.35]
   opacity: 0.5
 - name: annotate6
   mode: annotate
-  title: Claude Config Tests (1)
+  title: AI Clients (4)
   text: |-
-    Claude config generation pipeline, template DATs,
-    writeTemplate, writeClaudeMd, extractClaudeConfig
-  position: [-70, -3070]
-  size: [270, 330]
+    Config generation for Claude, opencode and the
+    client launcher
+  position: [3130, -2870]
+  size: [270, 930]
   color: [0.3, 0.35, 0.4]
+  opacity: 0.5
+- name: annotate7
+  mode: annotate
+  title: Catalog (2)
+  text: Operator catalog bootstrap and default patching
+  position: [4330, -2470]
+  size: [270, 530]
+  color: [0.4, 0.33, 0.22]
+  opacity: 0.5
+- name: annotate8
+  mode: annotate
+  title: Convoy (2)
+  text: Convoy extension and host install
+  position: [5530, -2470]
+  size: [270, 530]
+  color: [0.22, 0.32, 0.4]
   opacity: 0.5

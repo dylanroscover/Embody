@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 1232
-generator: Embody/6.2.35
+generator: Embody/6.2.36
 td_build: 099.2025.33070
-source_file: Embody-6.338.toe
-exported_at: '2026-09-07T17:05:34Z'
+source_file: Embody-6.339.toe
+exported_at: '2026-09-07T17:30:31Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -851,7 +851,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.35
+    value: 6.2.36
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1014,7 +1014,7 @@ operators:
     callbacks: fifo1_callbacks
     fromop: =parent()
     maxlines: 100
-  position: [-300, 600]
+  position: [-700, 700]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   tags:
@@ -1041,7 +1041,7 @@ operators:
     - {}
     - {}
     - {}
-  position: [925, -550]
+  position: [1800, -550]
   color: [0.3, 0.5, 0.9]
   tags:
   - tdxn
@@ -1125,7 +1125,7 @@ operators:
     file: embody/Embody/TDXNExt.py
     syncfile: true
     language: python
-  position: [-900, 600]
+  position: [-2500, 900]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1145,7 +1145,7 @@ operators:
     language: input
   flags:
   - display
-  position: [-300, 800]
+  position: [-700, 1100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1188,7 +1188,7 @@ operators:
     defaultreadencoding: cp1252
     syncfile: true
     language: input
-  position: [-300, 700]
+  position: [-700, 900]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1250,7 +1250,7 @@ operators:
     - {}
     - {}
     - {}
-  position: [500, -550]
+  position: [1000, -550]
   color: [0.3, 0.5, 0.9]
   comment: 'Self-updater (UpdaterExt): GitHub-release self-update'
   tags:
@@ -1262,7 +1262,7 @@ operators:
     file: embody/Embody/EnvoyExt.py
     syncfile: true
     language: python
-  position: [-900, 700]
+  position: [-2500, 1100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1285,7 +1285,7 @@ operators:
     syncfile: true
     language: python
     extension: py
-  position: [-900, 800]
+  position: [-2500, 1300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1296,7 +1296,7 @@ operators:
     file: embody/Embody/envoy_ops.py
     syncfile: true
     language: python
-  position: [-500, 400]
+  position: [-1300, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1307,7 +1307,7 @@ operators:
     file: embody/Embody/envoy_viz.py
     syncfile: true
     language: python
-  position: [-500, 600]
+  position: [-1300, 900]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1354,7 +1354,7 @@ operators:
     language: python
   flags:
   - viewer
-  position: [-500, 300]
+  position: [-1300, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1365,7 +1365,7 @@ operators:
     file: embody/Embody/embody_git.py
     syncfile: true
     language: python
-  position: [-700, 500]
+  position: [-1900, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1376,7 +1376,7 @@ operators:
     file: embody/Embody/envoy_read.py
     syncfile: true
     language: python
-  position: [-500, 800]
+  position: [-1300, 1300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1916,7 +1916,7 @@ operators:
     file: embody/Embody/envoy_setup.py
     syncfile: true
     language: python
-  position: [-500, 700]
+  position: [-1300, 1100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1949,7 +1949,7 @@ operators:
     file: embody/Embody/embody_admin.py
     syncfile: true
     language: python
-  position: [-700, 600]
+  position: [-1900, 900]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1961,7 +1961,7 @@ operators:
     syncfile: true
     language: python
     extension: py
-  position: [-700, 700]
+  position: [-1900, 1100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1972,7 +1972,7 @@ operators:
     file: embody/Embody/envoy_layout.py
     syncfile: true
     language: python
-  position: [-500, 500]
+  position: [-1300, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2024,7 +2024,7 @@ operators:
     file: embody/Embody/embody_launch.py
     syncfile: true
     language: python
-  position: [-700, 800]
+  position: [-1900, 1300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2035,7 +2035,7 @@ operators:
     file: embody/Embody/embody_pardef.py
     syncfile: true
     language: python
-  position: [-700, 400]
+  position: [-1900, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2153,7 +2153,7 @@ operators:
     file: embody/Embody/fifo1_callbacks.py
     syncfile: true
     language: python
-  position: [-300, 500]
+  position: [-700, 580]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2167,7 +2167,7 @@ operators:
     rows: 1054
   flags:
   - viewer
-  position: [-900, 300]
+  position: [-2500, 300]
   color: [0.9, 0.3, 0.4]
   tags:
   - tsv
@@ -2191,7 +2191,7 @@ operators:
     language: python
   flags:
   - viewer
-  position: [-700, 300]
+  position: [-1900, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2202,7 +2202,7 @@ operators:
     file: embody/Embody/CatalogManagerExt.py
     syncfile: true
     language: python
-  position: [-900, 500]
+  position: [-2500, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2213,7 +2213,7 @@ operators:
     file: embody/Embody/divergent_defaults.tsv
     syncfile: true
     rows: 502
-  position: [-900, 400]
+  position: [-2500, 500]
   color: [0.9, 0.3, 0.4]
   tags:
   - tsv
@@ -2228,7 +2228,7 @@ operators:
     borders: false
     includedialog: false
     reloadbuiltin: false
-  position: [900, 675]
+  position: [1000, 675]
   size: [110, 157]
   color: [0.3, 0.5, 0.9]
   tags:
@@ -2513,12 +2513,30 @@ annotations:
   position: [130, -620]
   size: [300, 370]
   color: [0.45, 0.45, 0.45]
+- name: annotate3
+  mode: annotate
+  title: Updater -- in-place self-update
+  text: |-
+    Downloads the release manifest, verifies the .tox, swaps it in
+    and rolls back on a failed boot.
+  position: [930, -620]
+  size: [300, 370]
+  color: [0.45, 0.45, 0.45]
+- name: annotate4
+  mode: annotate
+  title: Convoy -- fleet control
+  text: |-
+    Host/node registry, job relay and remote lifecycle for a
+    multi-machine install.
+  position: [1730, -620]
+  size: [300, 370]
+  color: [0.45, 0.45, 0.45]
 - name: annotation_logic
   mode: annotate
   title: Logic
   text: 'Columns: extension classes | embody_* modules | envoy_* modules | lifecycle callbacks (execute, parexec, fifo logging). Data DATs sit under their reader: catalog tables under CatalogManagerExt, startup_progress under the embody_* column, ai_clients under the envoy_* column. Templates live in the Envoy Config group.'
-  position: [-970, 230]
-  size: [870, 830]
+  position: [-2570, 230]
+  size: [2070, 1330]
   color: [0.485, 0.0, 0.2748]
   opacity: 0.9
 - name: annotation_tagging
