@@ -22,7 +22,7 @@
 export const specimenGraphs: Record<string, Record<string, unknown>> = {
   "murmuration": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {
@@ -327,7 +327,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
   },
   "reaction-diffusion": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {
@@ -548,7 +548,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
   },
   "kaleidoscope": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {
@@ -714,7 +714,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
   },
   "noise-terrain": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {
@@ -1344,7 +1344,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
   },
   "plasma-interference": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {
@@ -1441,7 +1441,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
   },
   "mandelbulb-march": {
     "format": "tdxn",
-    "version": "2.0",
+    "version": "2.1",
     "type": "baseCOMP",
     "operators": [
       {

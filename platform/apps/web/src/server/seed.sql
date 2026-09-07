@@ -200,12 +200,12 @@ INSERT OR REPLACE INTO specimen_versions (
   id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id,
   signature_ref, changelog
 ) VALUES
-  ('ver-murmuration', 'sp-murmuration', 1, '079d5f43f6b73f925c75c81d25309a63bfef4f878eeda93171dffe337e21dd2c', '079d5f43f6b73f925c75c81d25309a63bfef4f878eeda93171dffe337e21dd2c', 13920, 18, 'scan-murmuration', NULL, 'First-party specimen.'),
-  ('ver-reaction-diffusion', 'sp-reaction-diffusion', 1, 'b937b4edab5c91639e9b32eecf56cf9cdff8c9bcd2f391d308246affae61bcc7', 'b937b4edab5c91639e9b32eecf56cf9cdff8c9bcd2f391d308246affae61bcc7', 7165, 14, 'scan-reaction-diffusion', NULL, 'First-party specimen.'),
-  ('ver-kaleidoscope', 'sp-kaleidoscope', 1, '203ff060bd24f8fd0b006129a12b32609e1fdb54ec6bcc76d873bb25d1534363', '203ff060bd24f8fd0b006129a12b32609e1fdb54ec6bcc76d873bb25d1534363', 8206, 11, 'scan-kaleidoscope', NULL, 'First-party specimen.'),
-  ('ver-noise-terrain', 'sp-noise-terrain', 1, '471730e201682b0963577b852c7249f89006ed995c7bbdcb5c8f463f080603c2', '471730e201682b0963577b852c7249f89006ed995c7bbdcb5c8f463f080603c2', 24041, 20, 'scan-noise-terrain', NULL, 'First-party specimen.'),
-  ('ver-plasma-interference', 'sp-plasma-interference', 1, 'fd179f050bb38be404605c54bc036c26a5aaab1f7b0e4db3b46a81b4d223a4cd', 'fd179f050bb38be404605c54bc036c26a5aaab1f7b0e4db3b46a81b4d223a4cd', 7115, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
-  ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, 'bc2bd1a53a6f3c632e9e06c473340f60be3c707170a8c7da6e58500c86f2ff66', 'bc2bd1a53a6f3c632e9e06c473340f60be3c707170a8c7da6e58500c86f2ff66', 10410, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.');
+  ('ver-murmuration', 'sp-murmuration', 1, 'f1bd80f7ac4dee6462727e57bf0e59027a70faf5e8e34a76fa44e4cfd1708dbe', 'f1bd80f7ac4dee6462727e57bf0e59027a70faf5e8e34a76fa44e4cfd1708dbe', 13994, 18, 'scan-murmuration', NULL, 'First-party specimen.'),
+  ('ver-reaction-diffusion', 'sp-reaction-diffusion', 1, '7955ea411ffafa720cf5242cc20612c5c754eba0ccf2976da27a3e9928a2c765', '7955ea411ffafa720cf5242cc20612c5c754eba0ccf2976da27a3e9928a2c765', 7311, 14, 'scan-reaction-diffusion', NULL, 'First-party specimen.'),
+  ('ver-kaleidoscope', 'sp-kaleidoscope', 1, 'e7c89fa19c9ec8ae12b99b5411e5521e419aca12e20c99871c1c7da03420ce05', 'e7c89fa19c9ec8ae12b99b5411e5521e419aca12e20c99871c1c7da03420ce05', 8296, 11, 'scan-kaleidoscope', NULL, 'First-party specimen.'),
+  ('ver-noise-terrain', 'sp-noise-terrain', 1, '03d3ce29102a24b2ee983c73cafbcc95a4c5d04bbd2795679c86a4ed8c946366', '03d3ce29102a24b2ee983c73cafbcc95a4c5d04bbd2795679c86a4ed8c946366', 24142, 20, 'scan-noise-terrain', NULL, 'First-party specimen.'),
+  ('ver-plasma-interference', 'sp-plasma-interference', 1, '65983a202aa64ccd913ee6cff153b88df09004d48db528caa59310116b3d9c33', '65983a202aa64ccd913ee6cff153b88df09004d48db528caa59310116b3d9c33', 7149, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
+  ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, 'e8d8904c95e0e298a1e3bf2f47330d1756b62b94dfdbe8ad0576d811fa3b1b67', 'e8d8904c95e0e298a1e3bf2f47330d1756b62b94dfdbe8ad0576d811fa3b1b67', 10428, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
