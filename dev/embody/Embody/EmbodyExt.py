@@ -1513,8 +1513,8 @@ class EmbodyExt:
             for i in range(1, table.numRows):
                 if self._cellVal(i, 'path', table=table) != row_key:
                     continue
-                if strategy and self._cellVal(i, 'strategy', table=table) not in (
-                        '', strategy):
+                if strategy and self._rowStrategy(i, table) not in (
+                        '', self._normalizeStrategy(strategy)):
                     continue
                 row = i
                 break
@@ -5164,7 +5164,7 @@ class EmbodyExt:
                 p = self._cellVal(i, 'path')
                 if p != op_path and not p.startswith(prefix):
                     continue
-                if self._cellVal(i, 'strategy') == 'tdn':
+                if self._rowStrategy(i) == 'tdn':
                     tdn_paths.append(p)
                 else:
                     other_paths.append((p, self._cellVal(i, 'rel_file_path')))
@@ -6470,6 +6470,26 @@ class EmbodyExt:
         self._tdn_fingerprints[comp.path] = self._computeTDXNFingerprint(
             comp, tdn_paths, exclude_tag, ext_tags)
 
+    # The externalizations `strategy` cell is USER-FACING (documented, and
+    # the manager shows it), so it reads 'tdxn'. Internally the wire value
+    # stays 'tdn' -- ~60 call sites pass it as a parameter and a row
+    # selector -- so every READ normalizes here and nothing else changes.
+    # Read through _rowStrategy, never _cellVal(i,'strategy') directly, or a
+    # committed row stops matching and its COMP drops out of the lifecycle
+    # with no error.
+    _TDXN_STRATEGY_CELL = 'tdxn'      # what a row is WRITTEN as
+    _TDXN_STRATEGY_WIRE = 'tdn'       # what the code passes around
+
+    def _normalizeStrategy(self, value) -> str:
+        """Map a stored strategy token onto the internal wire value."""
+        v = str(value or '').strip().lower()
+        return self._TDXN_STRATEGY_WIRE if v == self._TDXN_STRATEGY_CELL else v
+
+    def _rowStrategy(self, row: int, table=None) -> str:
+        """The strategy of a table row, normalized to the wire value."""
+        return self._normalizeStrategy(
+            self._cellVal(row, 'strategy', table=table))
+
     def _getStrategyFilePath(self, op_path: str, strategy: str) -> Optional[str]:
         """Return the rel_file_path for a given operator + strategy, or None."""
         table = self.Externalizations
@@ -6478,12 +6498,37 @@ class EmbodyExt:
         has_strategy_col = table[0, 'strategy'] is not None
         for i in range(1, table.numRows):
             if self._cellVal(i, 'path', table=table) == op_path:
-                if has_strategy_col and self._cellVal(
-                        i, 'strategy', table=table) == strategy:
+                if (has_strategy_col
+                        and self._rowStrategy(i, table)
+                        == self._normalizeStrategy(strategy)):
                     return self._cellVal(i, 'rel_file_path', table=table)
                 elif not has_strategy_col:
                     return self._cellVal(i, 'rel_file_path', table=table)
         return None
+
+    # Files whose unlink is scheduled but has not fired yet. The deferral
+    # exists so a delete_op+externalize_op batch cannot lose a freshly
+    # written file; this set stops the SAME window from making a stale file
+    # look like a surviving one. Keyed by normalized rel path.
+    def _markUnlinkPending(self, rel_path: str) -> None:
+        try:
+            pending = self._pending_tdxn_unlinks
+        except AttributeError:
+            pending = self._pending_tdxn_unlinks = set()
+        pending.add(self.normalizePath(rel_path))
+
+    def _clearUnlinkPending(self, rel_path: str) -> None:
+        try:
+            self._pending_tdxn_unlinks.discard(self.normalizePath(rel_path))
+        except AttributeError:
+            pass
+
+    def _unlinkPending(self, rel_path: str) -> bool:
+        """Is this file's deletion scheduled but not yet executed?"""
+        try:
+            return self.normalizePath(rel_path) in self._pending_tdxn_unlinks
+        except AttributeError:
+            return False
 
     def _trackedTDXNSuffix(self, op_path: str) -> str:
         """The TDXN file suffix this operator's tracked file ALREADY uses.
@@ -6531,7 +6576,7 @@ class EmbodyExt:
             return []
         protected = []
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy', table=table) != 'tdn':
+            if self._rowStrategy(i, table) != 'tdn':
                 continue
             path = self._cellVal(i, 'path', table=table)
             if path == exclude_path:
@@ -7025,8 +7070,16 @@ class EmbodyExt:
         rel_path = self._buildTDXNRelPath(
             oper, suffix=self._trackedTDXNSuffix(oper.path))
         legacy_rel = self._buildTDXNRelPath(oper, suffix='.tdn')
+        # ...but NOT a file whose deletion is already scheduled. The unlink
+        # in _removeTDXNStrategy is deferred 5 frames while the row goes
+        # synchronously, so an untag+re-externalize inside ONE frame (any
+        # batch_operations call) still sees the old .tdn on disk and adopts
+        # it -- silently minting the legacy suffix the caller just asked to
+        # be rid of, which _delete then cements via its _rowReferencesFile
+        # guard. Pending deletions are not "surviving committed files".
         if (rel_path != legacy_rel
                 and self.buildAbsolutePath(legacy_rel).is_file()
+                and not self._unlinkPending(legacy_rel)
                 and not self.buildAbsolutePath(rel_path).is_file()):
             rel_path = legacy_rel
         abs_path = self.buildAbsolutePath(rel_path)
@@ -7753,7 +7806,7 @@ class EmbodyExt:
         # missing entry itself, which is about to be updated or removed)
         tracked_tdn_paths = set()
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy') == 'tdn':
+            if self._rowStrategy(i) == 'tdn':
                 p = self._cellVal(i, 'path')
                 if p != old_op_path:
                     tracked_tdn_paths.add(p)
@@ -9520,7 +9573,7 @@ class EmbodyExt:
         self.Log(f"_removeTDXNStrategy: searching for '{op_path}' delete_file={delete_file} rows={table.numRows}", "INFO")
         for i in range(1, table.numRows):
             if (self._cellVal(i, 'path') == op_path
-                    and self._cellVal(i, 'strategy') == 'tdn'):
+                    and self._rowStrategy(i) == 'tdn'):
                 rel_path = self._cellVal(i, 'rel_file_path')
                 self.Log(f"_removeTDXNStrategy: found row {i}, rel_path='{rel_path}' delete_file={delete_file}", "INFO")
                 self._tdn_fingerprints.pop(op_path, None)
@@ -9528,9 +9581,12 @@ class EmbodyExt:
                     full_path = self.buildAbsolutePath(
                         self.normalizePath(rel_path)).resolve()
                     self.Debug(f"TDXN delete: rel='{rel_path}' abs='{full_path}' exists={full_path.is_file()} suffix='{full_path.suffix}'")
+                    self._markUnlinkPending(rel_path)
+
                     def _delete(fp=full_path, rp=rel_path, opp=op_path):
                         try:
                             debug(f"_delete executing: {fp} exists={fp.is_file()}")
+                            self._clearUnlinkPending(rp)
                             # Re-check at delete time: a row re-created for
                             # this file inside the 5-frame window (delete_op
                             # then externalize_op at the same path in one
@@ -10381,7 +10437,7 @@ class EmbodyExt:
         table = self.Externalizations
         for i in range(1, table.numRows):
             if (self._cellVal(i, 'path') == oper.path
-                    and self._cellVal(i, 'strategy') == strategy):
+                    and self._rowStrategy(i) == self._normalizeStrategy(strategy)):
                 # Already tracked -- just re-save
                 if is_tox:
                     self.Save(oper.path)
@@ -10984,7 +11040,7 @@ class EmbodyExt:
         table = self.Externalizations
         if table and table[0, 'strategy'] is not None:
             for i in range(1, table.numRows):
-                if self._cellVal(i, 'strategy') == 'tdn':
+                if self._rowStrategy(i) == 'tdn':
                     tracked.add(self._cellVal(i, 'path'))
 
         embody_path = self.my.path
@@ -11165,7 +11221,7 @@ class EmbodyExt:
         rename_map = {}    # old_rel -> new_rel, for the tdn_ref rewrite
         embody_path = self.my.path
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy', table=table) != 'tdn':
+            if self._rowStrategy(i, table) != 'tdn':
                 continue
             op_path = self._cellVal(i, 'path', table=table)
             old_rel = self._cellVal(i, 'rel_file_path', table=table)
@@ -11225,7 +11281,7 @@ class EmbodyExt:
         # died before Pass C, and only a ref repair converges that.
         scanned = []       # (rel_on_disk, abs_path, doc, refs)
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy', table=table) != 'tdn':
+            if self._rowStrategy(i, table) != 'tdn':
                 continue
             row_rel = self._cellVal(i, 'rel_file_path', table=table)
             if not row_rel:
@@ -11709,7 +11765,7 @@ class EmbodyExt:
         # enumerator runs several times per save.
         annotate_rows = {}
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy') == 'tdn':
+            if self._rowStrategy(i) == 'tdn':
                 comp_path = self._cellVal(i, 'path')
                 # Never include root "/" -- stripping it destroys the entire project.
                 # Never include Embody, its ancestors, or its descendants.
@@ -12751,7 +12807,7 @@ class EmbodyExt:
         embody_path = self.my.path
         result = []
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy') == 'tox':
+            if self._rowStrategy(i) == 'tox':
                 comp_path = self._cellVal(i, 'path')
                 # Never include Embody, its ancestors, or its descendants
                 if (comp_path == '/'
@@ -13045,7 +13101,7 @@ class EmbodyExt:
             val = self.dirtyState(op_path)
             if oper and oper.valid and oper.family == 'COMP':
                 # TDXN COMPs: oper.dirty is always True -- trust the table.
-                if self._cellVal(i, 'strategy') == 'tdn':
+                if self._rowStrategy(i) == 'tdn':
                     if val and val not in ('', 'False', 'Clean', 'Saved'):
                         count += 1
                     continue

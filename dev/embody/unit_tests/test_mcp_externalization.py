@@ -248,3 +248,125 @@ class TestMCPExternalization(EmbodyTestCase):
         chop = self.sandbox.create(constantCHOP, 'save_chop')
         result = self.envoy._save_externalization(op_path=chop.path)
         self.assertDictHasKey(result, 'error')
+
+    # --- Re-externalization mints the current suffix (field 2026-09-06) ---
+    #
+    # remove(delete_file=True) + externalize again must land .tdxn. The
+    # suffix comes from the ROW (_trackedTDXNSuffix) AND from DISK
+    # (_handleTDXNAddition adopts a legacy .tdn found beside the minted
+    # path), and _removeTDXNStrategy defers its unlink 5 frames -- so a
+    # removal and a re-externalization sharing a frame see a disk state
+    # nothing else produces, and the export adopted the condemned file.
+    # Every other suffix test moves the file to match the row first, so
+    # none of them can reach this state. A test body is always one frame,
+    # so the sequential case below has the batch's timing and is the
+    # minimal regression.
+
+    def _tdnRow(self, comp_path):
+        """The rel_file_path this COMP's TDXN row currently tracks."""
+        return self.embody_ext._getStrategyFilePath(comp_path, 'tdn') or ''
+
+    def _tdnTwins(self, rel):
+        """(.tdxn, .tdn) absolute paths for one tracked TDXN rel path."""
+        stem = rel[:rel.rfind('.')]
+        return tuple(
+            self.embody_ext.buildAbsolutePath(
+                self.embody_ext.normalizePath(stem + s)).resolve()
+            for s in ('.tdxn', '.tdn'))
+
+    def _assertReExternalizedTdxn(self, comp, reported, how):
+        """Row, reported file and disk must all say .tdxn -- and only .tdxn."""
+        self.assertTrue(str(reported).endswith('.tdxn'),
+            '%s: re-externalization reported %r' % (how, reported))
+        rel = self._tdnRow(comp.path)
+        self.assertTrue(rel.endswith('.tdxn'),
+            '%s: the row tracks %r -- a removed row must MINT the current '
+            'suffix, never fall back to legacy .tdn' % (how, rel))
+        modern, legacy = self._tdnTwins(rel)
+        self.assertTrue(modern.is_file(),
+            '%s: nothing on disk at the tracked path %s' % (how, modern))
+        # The legacy twin may still be on disk: its unlink is deferred 5
+        # frames and a test body never advances one. Only a twin with NO
+        # pending unlink is a real leak -- and the bug's own signature is
+        # the row/report above, not this.
+        stem_rel = rel[:rel.rfind('.')] + '.tdn'
+        if legacy.is_file():
+            self.assertTrue(self.embody_ext._unlinkPending(stem_rel),
+                '%s: a legacy .tdn twin survives at %s with no pending '
+                'unlink -- it was adopted, not condemned' % (how, legacy))
+
+    def _tdxnComp(self, name):
+        """A TDXN-externalized sandbox COMP with content.
+
+        Content matters: an operator-empty COMP takes the
+        _refusesEmptyTDXNOverwrite branch instead of a real export.
+        """
+        if not self.embody_ext._projectSavedOnDisk():
+            self.skipTest('project never saved -- externalize defers the write')
+        comp = self.sandbox.create(baseCOMP, name)
+        comp.create(constantTOP, 'content')
+        first = self.envoy._externalize_op(op_path=comp.path, tag_type='tdn')
+        self.assertTrue(first.get('success'), repr(first.get('error')))
+        self.assertTrue(str(first.get('file', '')).endswith('.tdxn'),
+            'precondition: a first externalization mints .tdxn, got %r'
+            % first.get('file'))
+        # ARM the bug: it needs a LEGACY .tdn on disk beside the minted
+        # path, which is what _handleTDXNAddition's adoption branch looks
+        # for. A freshly externalized COMP has no .tdn at all, so without
+        # this the tests pass whether the guard exists or not (verified
+        # 2026-09-06 by removing the guard and watching them stay green).
+        rel = self._tdnRow(comp.path)
+        legacy = rel[:-len('.tdxn')] + '.tdn'
+        modern_abs = self.embody_ext.buildAbsolutePath(
+            self.embody_ext.normalizePath(rel))
+        legacy_abs = self.embody_ext.buildAbsolutePath(
+            self.embody_ext.normalizePath(legacy))
+        if modern_abs.is_file():
+            modern_abs.replace(legacy_abs)
+        self.embody_ext._updateRowCells(
+            comp.path, {'rel_file_path': legacy}, strategy='tdn')
+        self.assertTrue(legacy_abs.is_file(),
+                        'precondition: a legacy .tdn must exist to adopt')
+        return comp
+
+    def test_re_externalize_after_removal_mints_tdxn(self):
+        """Remove with delete_file, externalize again -> .tdxn, no .tdn twin."""
+        comp = self._tdxnComp('reext_serial')
+
+        removed = self.envoy._remove_externalization_tag(
+            op_path=comp.path, delete_file=True)
+        self.assertTrue(removed.get('success'), repr(removed.get('error')))
+        self.assertEqual(self._tdnRow(comp.path), '',
+                         'precondition: the removal must drop the row')
+
+        again = self.envoy._externalize_op(op_path=comp.path, tag_type='tdn')
+        self.assertTrue(again.get('success'), repr(again.get('error')))
+        self._assertReExternalizedTdxn(comp, again.get('file'), 'serial')
+
+        self.envoy._remove_externalization_tag(op_path=comp.path)
+        self._deleteExportedFile(again.get('file'))
+
+    def test_re_externalize_inside_one_batch_mints_tdxn(self):
+        """The same pair interleaved in ONE batch_operations call.
+
+        batch_operations dispatches every entry synchronously in a single
+        main-thread call, so both halves share a frame and the removal's
+        deferred unlink has NOT run when the re-externalization picks its
+        suffix. This is the shape that shipped .tdn from a batch while two
+        separate MCP calls gave .tdxn.
+        """
+        comp = self._tdxnComp('reext_batch')
+
+        result = self.envoy._batch_operations(operations=[
+            {'tool': 'remove_externalization_tag', 'params': {
+                'op_path': comp.path, 'delete_file': True}},
+            {'tool': 'externalize_op', 'params': {
+                'op_path': comp.path, 'tag_type': 'tdn'}},
+        ])
+        self.assertTrue(result['success'], repr(result['results']))
+        self.assertEqual(result['count'], 2)
+        reported = result['results'][1].get('file', '')
+        self._assertReExternalizedTdxn(comp, reported, 'batched')
+
+        self.envoy._remove_externalization_tag(op_path=comp.path)
+        self._deleteExportedFile(reported)
