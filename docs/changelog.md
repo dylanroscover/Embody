@@ -1,23 +1,14 @@
 # Changelog
 
-## v6.2.35
+## v6.2.40
 
-The last two `tdn` names a user can see: the git diff driver, and the docs that still described the old behavior.
+TDXN finishes its rename at the surfaces you actually touch: the tag on your COMPs, the strategy column, and the files on disk.
 
-- **The git textconv driver is `tdxn`.** `.embody/tdxn_textconv.py`, `git config diff.tdxn.textconv`, `.gitattributes` `diff=tdxn`. Envoy renames it in place on its next start -- new key first, then `.gitattributes`, then the old key and script last -- and leaves a `diff.tdn` you pointed at your own textconv alone. Uninstall now sweeps both spellings.
-- **Docs that had gone false**: the externalization page still promised the `strategy` column and the operator tag would "always read `tdn`"; both are `tdxn`. Also `saveTDN()` -> `saveTDXN()`, the tag-cascade examples, and CLAUDE.md's `### TDN Network Format`.
-- **CI stopped watching the wizard.** Two path filters named `dev/**/*.tdn`, and no `.tdn` files remain -- so a wizard change skipped its own tests.
-- **Fixed: the specimen build script** read `tdxn_path` from a manifest that still said `tdn_path`, which would have died on a `KeyError`.
-
-## v6.2.34
-
-The TDXN rename reaches the parts you actually read: the tag on your COMPs, the strategy column, the files on disk, and embody.tools.
-
-- **The tag is `tdxn`.** `Tdxntag` and `Tdxnexcludetag` now default to `tdxn` / `tdxn_exclude`, and a stored value that was only the old default upgrades with them -- a tag you customized is left alone. Readers accept both spellings forever, and the tagger's Actions menu re-tags a project in one gesture.
-- **The `strategy` column reads `tdxn`**, and every `.tdn` externalized before 6.1 is re-externalized as `.tdxn`. `docs/tdn.schema.yaml` moves to `docs/tdxn.schema.yaml` with its `$id` -- repoint an editor wired to the old raw URL.
-- **Fixed: re-externalizing minted `.tdn` again.** Inside one batch the pending deletion of the old file made it look alive, so the new file adopted the retired suffix.
-- **Fixed: TDXN COMPs dropped out of the lifecycle.** Nine strategy comparisons read the raw cell, so dirty detection, autosave, the manager's Strategy column, the version sync and the project-wide diff all saw zero TDXN COMPs -- and a re-export could blank a row's file path.
-- **embody.tools says TDXN** -- viewer package, components, styles, and a new `/api/specimens/:slug/tdxn` route; the old one stays as an alias.
+- **The tag is `tdxn`.** `Tdxntag` and `Tdxnexcludetag` now default to `tdxn` / `tdxn_exclude`, and a stored value that was only the old default upgrades with them. Both spellings are read forever, so a project you never migrate keeps working.
+- **The `strategy` column reads `tdxn`**, every pre-6.1 `.tdn` re-externalizes as `.tdxn`, and `read_tdxn` / `diff_tdxn` are the tool names to reach for.
+- **The git diff driver is `tdxn`** (`.embody/tdxn_textconv.py`); Envoy renames it in place on its next start. `docs/tdn.schema.yaml` moves to `docs/tdxn.schema.yaml`.
+- **embody.tools says TDXN**, keeping the old `/tdn` API route as a permanent alias.
+- **Fixes.** Re-externalizing could mint `.tdn` again; nine strategy comparisons silently saw zero TDXN COMPs, stalling dirty detection and autosave; node position and colour were never restamped after a move; two toolbar buttons and a CI path filter had gone stale.
 
 ## v6.2.19
 
