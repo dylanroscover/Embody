@@ -136,6 +136,12 @@ TDXN_FILE_SUFFIXES = ('.tdxn', '.tdn')
 TDXN_FORMAT = 'tdxn'
 TDXN_ACCEPTED_FORMATS = frozenset({'tdxn', 'tdn'})
 
+# The externalizations `strategy` CELL value. User-facing (the column is
+# documented and the manager shows it), so it reads 'tdxn'. The internal
+# wire value passed between ~60 call sites stays 'tdn' -- read rows
+# through EmbodyExt._rowStrategy, which normalizes both.
+TDXN_STRATEGY_CELL = 'tdxn'
+
 
 def is_tdn_network_file(path) -> bool:
 	"""True when `path` names a TDXN network file -- either suffix."""

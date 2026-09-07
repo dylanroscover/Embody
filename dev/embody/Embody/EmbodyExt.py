@@ -6533,6 +6533,12 @@ class EmbodyExt:
     def _trackedTDXNSuffix(self, op_path: str) -> str:
         """The TDXN file suffix this operator's tracked file ALREADY uses.
 
+        Provenance, because `git log -S` on THIS name returns one commit and
+        makes the rule look like it was written the day it was renamed: born
+        as _trackedTDNSuffix in adf7812 (v6.1.2, 2026-08-27), disk-adoption
+        branch added in 5e768cc (v6.2.5), renamed here in 934ae91. Search the
+        old spelling for anything behavioral.
+
         Falls back to the current mint suffix when the operator has no TDXN
         row, or the row carries a suffix we do not recognize.
 
