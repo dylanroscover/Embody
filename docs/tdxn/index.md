@@ -49,7 +49,7 @@ No prefix means a constant value. This keeps the common case (constant parameter
 
 ### Read (live, no disk)
 
-Use the `read_tdn` MCP tool to return a live network as a TDXN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
+Use the `read_tdxn` MCP tool to return a live network as a TDXN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
 
 - `comp_path` — Starting COMP (default: `/`)
 - `include_dat_content` — Include DAT text/table content

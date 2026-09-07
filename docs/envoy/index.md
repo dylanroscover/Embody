@@ -178,14 +178,14 @@ Tag operators for externalization, query status, and force-save to disk — the 
 
 ### TDXN Format
 
-Read any COMP's live network as `.tdxn` (no disk I/O), export it to disk, or import a TDXN document back as a live network. Used for Embody's TDXN externalization strategy and for LLM-efficient snapshots of network state — `read_tdn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
+Read any COMP's live network as `.tdxn` (no disk I/O), export it to disk, or import a TDXN document back as a live network. Used for Embody's TDXN externalization strategy and for LLM-efficient snapshots of network state — `read_tdxn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
 
 | Tool | Description |
 |---|---|
-| `read_tdn` | Read a live network as a TDXN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
-| `export_network` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus stale-file cleanup |
+| `read_tdxn` | Read a live network as a TDXN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
+| `export_network` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` plus stale-file cleanup |
 | `import_network` | Recreate a network from `.tdxn` |
-| `diff_tdn` | Diff a live network against its on-disk `.tdxn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
+| `diff_tdxn` | Diff a live network against its on-disk `.tdxn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
 
 ### Capture
 

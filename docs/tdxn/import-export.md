@@ -4,7 +4,7 @@
 
 ### MCP Tool
 
-Use the `read_tdn` tool to return the live network as a TDXN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators — **typically 20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
+Use the `read_tdxn` tool to return the live network as a TDXN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators — **typically 20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -13,9 +13,9 @@ Use the `read_tdn` tool to return the live network as a TDXN dict **without writ
 | `max_depth` | `null` (unlimited) | Cap recursion on large roots |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of skipping their children |
 
-Works in all three `Tdxnmode` values (Off / Export-on-Save / Roundtrip) — `read_tdn` reads live state, not `.tdxn` files on disk.
+Works in all three `Tdxnmode` values (Off / Export-on-Save / Roundtrip) — `read_tdxn` reads live state, not `.tdxn` files on disk.
 
-### When NOT to use `read_tdn`
+### When NOT to use `read_tdxn`
 
 For these, reach for the runtime-state MCP tools instead:
 
@@ -118,7 +118,7 @@ These checks are non-blocking — import always proceeds.
 
 ## Diffing a Network
 
-`diff_tdn` answers the question git cannot: **what have I changed but not saved?** It compares the **live in-memory network** against its on-disk `.tdxn` — the unsaved window, which git never sees (git only reads files on disk, not TouchDesigner's live state).
+`diff_tdxn` answers the question git cannot: **what have I changed but not saved?** It compares the **live in-memory network** against its on-disk `.tdxn` — the unsaved window, which git never sees (git only reads files on disk, not TouchDesigner's live state).
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -130,7 +130,7 @@ The comparison is **semantic, not byte-level**: both sides normalize through the
 
 ### Git integration: the `.tdxn` textconv driver
 
-`diff_tdn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdxn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdxn diff=tdn`, `.embody/tdn_textconv.py`, and `git config diff.tdn.textconv`). Use `diff_tdn` for what you have not saved; use `git diff` for what you have committed.
+`diff_tdxn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdxn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdxn diff=tdn`, `.embody/tdn_textconv.py`, and `git config diff.tdn.textconv`). Use `diff_tdxn` for what you have not saved; use `git diff` for what you have committed.
 
 ---
 

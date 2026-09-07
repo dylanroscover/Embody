@@ -17,7 +17,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | `delete_op` | `op_path`, `override?` | Delete an operator (multi-session gated; `override` bypasses, say so) |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location. Auto-positions the copy and hugs its docked companions (`docks_placed`) |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
-| `get_op` | `op_path`, `include_defaults?` | Returns NON-DEFAULT parameters by default (`include_defaults=True` for all); parameter-heavy COMPs are expensive (~3k+ tokens full) -- prefer `read_tdn` for structure reads |
+| `get_op` | `op_path`, `include_defaults?` | Returns NON-DEFAULT parameters by default (`include_defaults=True` for all); parameter-heavy COMPs are expensive (~3k+ tokens full) -- prefer `read_tdxn` for structure reads |
 | `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | Compact operator list: path/type/family/depth; name = last path segment. Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` |
 | `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
@@ -138,16 +138,18 @@ return the shape and range instead.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
+| `read_tdxn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdxn`. |
 | `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
-| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
+| `diff_tdxn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
 
-**When to prefer `read_tdn`:** exploring or auditing >=3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
+`read_tdn` and `diff_tdn` remain registered as DEPRECATED aliases that call straight through -- the old names are published in shipped rule files and saved agent prompts, so they keep working. Prefer `read_tdxn` / `diff_tdxn`.
 
-**When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
+**When to prefer `read_tdxn`:** exploring or auditing >=3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
 
-**When to use `diff_tdn`:** whenever the user asks "what's changed / unsaved?" for TDXN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdxn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDXN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdxn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdxn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
+**When NOT to use `read_tdxn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdxn` is an authored-state snapshot, not a runtime probe.
+
+**When to use `diff_tdxn`:** whenever the user asks "what's changed / unsaved?" for TDXN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdxn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDXN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdxn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdxn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
 
 ## TOP Capture
 
