@@ -43,7 +43,7 @@ No prefix means a constant value. This keeps the common case (constant parameter
 - Extension: `.tdxn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.yaml`](https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.yaml) — validates the parsed structure
+- Schema: [`tdxn.schema.yaml`](https://github.com/dylanroscover/Embody/blob/main/docs/tdxn.schema.yaml) — validates the parsed structure
 
 ## Usage
 

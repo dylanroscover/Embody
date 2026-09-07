@@ -101,7 +101,7 @@ class TestVersionSync(EmbodyTestCase):
         after the bump.
         """
         version = str(self.embody.par.Version.eval())
-        for rel in ('embody/Embody.tdn', 'embody.tdn'):
+        for rel in ('embody/Embody.tdxn', 'embody.tdxn'):
             head = self._tdn_head(rel)
             self.assertIn(
                 'generator: Embody/%s' % version, head,
@@ -183,7 +183,7 @@ class TestVersionSync(EmbodyTestCase):
         comp.create(noiseTOP, 'n1')
         page = comp.appendCustomPage('Test')
         page.appendInt('Build')[0].val = 5
-        ext.applyTagToOperator(comp, 'tdn')
+        ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
         ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
         abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None

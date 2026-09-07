@@ -95,7 +95,7 @@ KEY LINKS
 - llms-full.txt:    https://embody.tools/llms-full.txt
 - Docs quickstart:  https://dylanroscover.github.io/Embody/quickstart/
 - Tools reference:  https://dylanroscover.github.io/Embody/envoy/tools-reference/
-- TDXN specification:https://dylanroscover.github.io/Embody/tdn/specification/
+- TDXN specification:https://dylanroscover.github.io/Embody/tdxn/specification/
 - GitHub repo:      https://github.com/dylanroscover/Embody
 - Releases (latest):https://github.com/dylanroscover/Embody/releases/latest
 

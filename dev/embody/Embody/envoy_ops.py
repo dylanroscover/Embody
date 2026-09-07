@@ -788,25 +788,31 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
             else:
                 return {'error': f'Cannot externalize {target.family} operators'}
 
-        # Apply the tag and run Update to externalize to disk. The tagger
-        # REFUSES unknown values (the TDXN strategy's tag value is the frozen
-        # 'tdn', so 'tdxn' is the natural wrong guess) -- an unchecked return
-        # reported success while nothing was tagged.
+        # The TDXN boundary tag has two accepted spellings (the configured
+        # 'tdxn' and the legacy 'tdn' it replaced in 6.2.30). Normalize onto
+        # the configured value BEFORE tagging, or a caller passing the other
+        # one tags the COMP with a string the report branch below does not
+        # recognize -- success with an empty 'file'.
+        tdn_tag = op.Embody.par.Tdxntag.eval()
+        if tag_type in op.Embody.ext.Embody._tdxnTags():
+            tag_type = tdn_tag
+
+        # The tagger REFUSES unknown values -- an unchecked return reported
+        # success while nothing was tagged.
         if not op.Embody.ext.Embody.applyTagToOperator(target, tag_type):
-            tdn_tag = op.Embody.par.Tdxntag.eval()
             return {'error': f'{op_path}: tag_type {tag_type!r} was rejected. '
                              f'COMPs accept "tox" or {tdn_tag!r} (the TDXN '
-                             f'strategy keeps the frozen {tdn_tag!r} value); '
+                             f'strategy tag, legacy "tdn" also accepted); '
                              f'DATs accept a source type such as "py". '
                              f'Nothing was tagged.'}
         op.Embody.Update()
 
         # Report the file actually written for the strategy: TDXN comps track
-        # their .tdn in the externalizations table (externaltox would report
+        # their .tdxn in the externalizations table (externaltox would report
         # a stale/wrong .tox -- the tox par plays no role in TDXN strategy).
         if target.family == 'DAT':
             file_path = target.par.file.eval()
-        elif tag_type == op.Embody.par.Tdxntag.eval():
+        elif tag_type == tdn_tag:
             file_path = (op.Embody.ext.Embody._getStrategyFilePath(
                 target.path, 'tdn')
                 or target.fetch('_tdn_rel_path', '', search=False))

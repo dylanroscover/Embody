@@ -86,7 +86,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 
 | Phase | Action | Details |
 |-------|--------|---------|
-| Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (the `tdn_exclude` tag) are preserved, not destroyed. |
+| Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (the `tdxn_exclude` tag) are preserved, not destroyed. |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
@@ -152,7 +152,7 @@ my-project/
             └── bar.tdxn.bak2  ← the one before that
 ```
 
-After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ext.Embody.reconstructTDNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
+After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ext.Embody.reconstructTDXNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
 
 The folder holds backups of **both** `.tdxn` and `.tdn` files — a COMP externalized before v6.1.0 keeps writing `.tdn` forever — which is why the name carries no format token.
 

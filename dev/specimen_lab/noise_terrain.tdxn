@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 4
-generator: Embody/6.2.25
+generator: Embody/6.2.29
 td_build: 099.2025.33070
-source_file: Embody-6.328.toe
-exported_at: '2026-09-07T00:45:15Z'
+source_file: Embody-6.332.toe
+exported_at: '2026-09-07T09:16:46Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: false
@@ -136,7 +136,6 @@ custom_pars:
     help: Render height (px). 4K landscape = 2160.
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
 - tdxn
 operators:
 - name: cam
@@ -149,7 +148,6 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
   - tdxn
   tdn_ref: specimen_lab/noise_terrain/cam.tdxn
 - name: geo
@@ -159,7 +157,6 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
   - tdxn
   tdn_ref: specimen_lab/noise_terrain/geo.tdxn
 - name: out1
@@ -185,7 +182,6 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
   - tdxn
   tdn_ref: specimen_lab/noise_terrain/light.tdxn
 - name: comp_sky

@@ -92,7 +92,7 @@ class TestAutosave(EmbodyTestCase):
         ext = self.embody_ext
         comp = self.sandbox.create(baseCOMP, name)
         comp.create(noiseTOP, 'n1')
-        ext.applyTagToOperator(comp, 'tdn')
+        ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
         ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
         abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
@@ -111,7 +111,7 @@ class TestAutosave(EmbodyTestCase):
         child = parent.create(baseCOMP, child_name)
         child.create(noiseTOP, 'inner')
         for comp in (child, parent):     # child first: parent refs it
-            ext.applyTagToOperator(comp, 'tdn')
+            ext.applyTagToOperator(comp, self.embody.par.Tdxntag.val)
             ext.externalizeImmediate(comp)
             rel = ext._getStrategyFilePath(comp.path, 'tdn')
             self._tdn_cleanup.append(
@@ -230,13 +230,17 @@ class TestAutosave(EmbodyTestCase):
     def test_boundary_tags_match_the_exporter(self):
         """TDXNExt stops the export at _hasTDXNTag / _hasTOXTag. If the
         fingerprint's boundary drifts from those tags the two disagree about
-        what a .tdn actually holds -- the whole class of bug here."""
+        what a .tdxn actually holds -- the whole class of bug here.
+
+        The exporter accepts BOTH tag spellings (tdxnTags), so the boundary
+        must too, or a COMP tagged with the other one is re-walked as
+        content."""
         ext = self.embody_ext
+        exporter = frozenset(op.Embody.ext.TDXN.tdxnTags())
         self.assertEqual(
             ext._extBoundaryTags(),
-            frozenset((self.embody.par.Tdxntag.eval(),
-                       self.embody.par.Toxtag.eval())),
-            'boundary tags must be exactly the exporter\'s TDXN + TOX tags')
+            exporter | frozenset((self.embody.par.Toxtag.eval(),)),
+            "boundary tags must be exactly the exporter's TDXN + TOX tags")
 
     def test_fingerprint_boundary_honors_the_tag_not_just_the_path_set(self):
         """The regression this fixes.
@@ -579,7 +583,7 @@ class TestAutosave(EmbodyTestCase):
         child = parent.create(baseCOMP, 'nc')
         child.create(rampTOP, 'cn')
         for c in (parent, child):
-            ext.applyTagToOperator(c, 'tdn')
+            ext.applyTagToOperator(c, self.embody.par.Tdxntag.val)
             ext.externalizeImmediate(c)
             rel = ext._getStrategyFilePath(c.path, 'tdn')
             self._tdn_cleanup.append((c.path, str(ext.buildAbsolutePath(rel)) if rel else None))

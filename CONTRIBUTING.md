@@ -10,7 +10,7 @@ opening a PR.
 Embody is a TouchDesigner project. The ground truth is a **binary `.toe`
 file** (`dev/Embody-6.toe`), and a large share of the text files in this repo
 are **written by TouchDesigner itself**: when the project is saved, Embody
-exports tagged operators to disk (`.py` for DATs, `.tdn` for COMPs, `.glsl`,
+exports tagged operators to disk (`.py` for DATs, `.tdxn` for COMPs, `.glsl`,
 `.tsv`, `.json`, ...). Those files are the source of truth on project load,
 and TD rewrites them byte-for-byte from live operator content on save.
 

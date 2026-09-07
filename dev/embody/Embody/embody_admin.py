@@ -1413,6 +1413,32 @@ def normalize_legacy_par_keys(params: dict, renames: dict) -> dict:
     return out
 
 
+# A stored value that is merely the OLD SHIPPED DEFAULT was never a user
+# choice, so carrying it forward pins every existing install on the retired
+# spelling forever. A value the user actually customized is left alone.
+_LEGACY_PAR_DEFAULTS = {
+    'Tdxntag': ('tdn', 'tdxn'),
+    'Tdxnexcludetag': ('tdn_exclude', 'tdxn_exclude'),
+}
+
+
+def normalize_legacy_par_values(params: dict) -> dict:
+    """Upgrade stored values that are only the retired shipped default.
+
+    Pure and side-effect free (testable against a real legacy config).
+    Only a constant-mode entry is touched -- an expression or bind is the
+    user's own, whatever it evaluates to.
+    """
+    out = {}
+    for key, entry in params.items():
+        pair = _LEGACY_PAR_DEFAULTS.get(key)
+        if (pair and isinstance(entry, dict) and not entry.get('mode')
+                and entry.get('val') == pair[0]):
+            entry = dict(entry, val=pair[1])
+        out[key] = entry
+    return out
+
+
 def restore_settings(ext, kick_envoy: bool = False) -> bool:
     """Restore parameter values from .embody/config.json. Returns True if restored.
     Sets _restoring_settings flag to suppress onValueChange side effects.
@@ -1461,6 +1487,7 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
     # every existing install (see normalize_legacy_par_keys).
     params = normalize_legacy_par_keys(
         params, getattr(ext, '_TDXN_PAR_RENAMES', None) or {})
+    params = normalize_legacy_par_values(params)
     restored = 0
     ext._restoring_settings = True
     try:

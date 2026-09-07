@@ -118,7 +118,7 @@
               <li>One save format for the whole project</li>
             </ul>
           </article>
-          <article class="compare__col compare__col--tdn">
+          <article class="compare__col compare__col--tdxn">
             <h3 class="compare__heading">externalized files</h3>
             <ul class="compare__list">
               <li>Readable in any text editor</li>
@@ -158,7 +158,7 @@
             <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
             <div>
               <h3 class="feature__name">TDXN strategy</h3>
-              <p class="feature__desc">COMPs mirrored to <a href="/tdn">TDXN</a> JSON on every save &mdash; human-readable, diffable, reviewable in pull requests, and readable by your agent in one call. Your <code>.toe</code> stays the source of truth; the <code>.tdxn</code> rides alongside.</p>
+              <p class="feature__desc">COMPs mirrored to <a href="/tdxn">TDXN</a> JSON on every save &mdash; human-readable, diffable, reviewable in pull requests, and readable by your agent in one call. Your <code>.toe</code> stays the source of truth; the <code>.tdxn</code> rides alongside.</p>
             </div>
           </article>
           <article class="feature">
@@ -206,7 +206,7 @@
           Embody watches every externalized operator for parameter changes. When something changes, the operator is marked dirty. When you press <code>Ctrl+Shift+U</code>, only dirty operators write to disk — no unnecessary file writes, no spurious git changes.
         </p>
 
-        <div class="tdn__grid">
+        <div class="tdxn__grid">
           <div class="details">
             <div class="detail">
               <span class="detail__label">tag an operator</span>
@@ -238,7 +238,7 @@
             </div>
           </div>
 
-          <ul class="tdn__bullets">
+          <ul class="tdxn__bullets">
             <li><strong>Parameter change detection</strong> — every parameter value is tracked. Touch any parameter on an externalized op and it's immediately marked dirty in the table.</li>
             <li><strong>Selective writes</strong> — only dirty operators write on Update. A project with 40 externalized ops and one change writes one file, not 40.</li>
             <li><strong>Content comparison</strong> — if a write produces identical content to the existing file, the write is skipped entirely. Git timestamps stay clean.</li>
@@ -315,7 +315,7 @@
           A git repository is optional — Embody works in any project folder. But once your operators live in files, version control stops being something you wish you had and starts being something that just works.
         </p>
 
-        <ul class="tdn__bullets">
+        <ul class="tdxn__bullets">
           <li><strong>Readable diffs</strong> — <code>git diff</code> shows exactly which parameters changed on which operators between two commits. Not "file changed." The actual change.</li>
           <li><strong>Branching by idea</strong> — each experimental direction is a branch. Merging brings working parts back together without manual copy-paste in the TD network editor.</li>
           <li><strong>Pull request reviews</strong> — reviewers can comment on specific parameter changes, script edits, and network structure without opening TouchDesigner.</li>
@@ -323,7 +323,7 @@
           <li><strong>AI context</strong> — your AI assistant can run <code>git diff</code> against your externalized files and understand exactly what changed between sessions, without you summarizing it.</li>
         </ul>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">The source of truth.</span> The <code>.toe</code> is a working file. The externalized files on disk are what you actually own.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">The source of truth.</span> The <code>.toe</code> is a working file. The externalized files on disk are what you actually own.</p>
       </div>
     </section>
 
@@ -364,7 +364,7 @@
           </article>
         </div>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">Lateral velocity.</span> Every experiment is a branch. Every save is a diff. Every restore is automatic. You move sideways as fast as you move forward.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">Lateral velocity.</span> Every experiment is a branch. Every save is a diff. Every restore is automatic. You move sideways as fast as you move forward.</p>
       </div>
     </section>
 
@@ -484,7 +484,7 @@
       <nav class="footer__col" aria-label="Reference">
         <h4 class="footer__h">Reference</h4>
         <ul>
-          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDXN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/tdxn/specification/">TDXN spec</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/embody/getting-started/">get started</a></li>
           <li><a href="/for-ai">for AI agents</a></li>

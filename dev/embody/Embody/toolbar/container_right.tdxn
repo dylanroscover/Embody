@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 29
-generator: Embody/6.2.26
+build: 26
+generator: Embody/6.2.29
 td_build: 099.2025.33070
-source_file: Embody-6.329.toe
-exported_at: '2026-09-07T02:31:02Z'
+source_file: Embody-6.332.toe
+exported_at: '2026-09-07T09:16:57Z'
 network_path: /embody/Embody/toolbar/container_right
 options:
   include_dat_content: false
@@ -23,7 +23,7 @@ type_defaults:
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
-    - tdn
+    - tdxn
 type: containerCOMP
 parameters:
   w: 270
@@ -37,7 +37,7 @@ flags:
 - viewer
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: pars
   type: textCOMP
@@ -96,5 +96,5 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/toolbar/container_right/spacer_pars.tdxn

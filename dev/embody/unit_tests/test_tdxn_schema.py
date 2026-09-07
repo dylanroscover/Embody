@@ -1,7 +1,7 @@
 """
 Test suite: every committed TDXN document validates against the shipped schema.
 
-docs/tdn.schema.yaml is contract C7 -- docs/tdxn/schema.md tells users to wire
+docs/tdxn.schema.yaml is contract C7 -- docs/tdxn/schema.md tells users to wire
 it into their editor. Until 2026-08-30 nothing ever ran it: the exporter had
 grown annotation `backAlpha`/`titleHeight`/`bodyFontSize` and custom-par
 `sequence` fields that the schema rejected (additionalProperties: false), so
@@ -21,7 +21,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 _IN_TD = 'td' in sys.modules
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(_HERE)))
-_SCHEMA = os.path.join(_REPO, 'docs', 'tdn.schema.yaml')
+_SCHEMA = os.path.join(_REPO, 'docs', 'tdxn.schema.yaml')
 _ROOTS = (os.path.join(_REPO, 'dev'), os.path.join(_REPO, 'specimens'))
 
 

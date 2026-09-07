@@ -9,7 +9,7 @@ TDXN (TouchDesigner eXternal Network) is a YAML-based file format for representi
 - File extension: `.tdxn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.yaml`](../tdn.schema.yaml) — validates the parsed structure.
+- Schema: [`tdxn.schema.yaml`](../tdxn.schema.yaml) — validates the parsed structure.
 
 ---
 
@@ -248,24 +248,24 @@ The following built-in parameters are never exported, as they are internal actio
 - Read-only parameters
 - Custom parameters (handled separately in `custom_pars`)
 
-### Per-Parameter Omission (`tdn_exclude:<par>` tags)
+### Per-Parameter Omission (`tdxn_exclude:<par>` tags)
 
 A project can exclude an individual parameter's **value** from export by tagging the operator itself with the suffixed form of the exclude tag:
 
 ```
-tdn_exclude:<parname>
+tdxn_exclude:<parname>
 ```
 
-One tag per parameter (`tdn_exclude:file`, `tdn_exclude:Port`). The operator, its wiring, and its other parameters export normally; the named parameter's **constant value** is left out of the document. This is the opt-out for runtime state that must not be committed — a negotiated port, a session-specific file path, a live readout. (The **bare** tag on a COMP is the whole-COMP exclusion described elsewhere; the colon-suffixed form never affects COMP visibility.)
+One tag per parameter (`tdxn_exclude:file`, `tdxn_exclude:Port`). The operator, its wiring, and its other parameters export normally; the named parameter's **constant value** is left out of the document. This is the opt-out for runtime state that must not be committed — a negotiated port, a session-specific file path, a live readout. (The **bare** tag on a COMP is the whole-COMP exclusion described elsewhere; the colon-suffixed form never affects COMP visibility.)
 
 - **Constant values only.** An expression or bind on the tagged parameter still exports — a reference is authored configuration, not leaked session state.
 - **Custom parameters**: the definition still ships (style, range, default, help); only its `value` key is dropped.
 - **Visible by design**: the tag round-trips in the operator's `tags:` list, so the exported document records *why* the parameter is absent — and because the marker survives reconstruction, the next export omits it again.
 - **Top-level parameters only**: sequence block parameters are not omittable.
 - **Validation**: a tag naming a parameter the operator does not have logs a `WARNING` at export ("nothing omitted"), so a typo cannot silently no-op.
-- The prefix is the same `Tdxnexcludetag` parameter that governs whole-COMP exclusion (default `tdn_exclude`); clearing it disables the whole family.
+- The prefix is the same `Tdxnexcludetag` parameter that governs whole-COMP exclusion (default `tdxn_exclude`); clearing it disables the whole family.
 
-The Embody UI exposes this through the tagger's **Exclude from tdn** action on TDXN COMPs — a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters (and the bare whole-COMP `tdn_exclude` for dragged COMPs), listing every exclusion in the COMP's subtree, each removable via its **×**.
+The Embody UI exposes this through the tagger's **Exclude from tdxn** action on TDXN COMPs — a drop-zone panel that toggles `tdxn_exclude:<par>` for dragged parameters (and the bare whole-COMP `tdxn_exclude` for dragged COMPs), listing every exclusion in the COMP's subtree, each removable via its **×**.
 
 ### Non-Default Comparison
 
@@ -1092,7 +1092,7 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdxn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdxn` -> `B.tdxn` -> `A.tdxn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdxn`.
 
-Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ext.Embody.reconstructTDNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
+Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ext.Embody.reconstructTDXNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
@@ -1265,7 +1265,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 Importing a `.tdxn` file reconstructs the network in a pre-phase plus a series of ordered phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
-When `clear_first` is set, existing children are destroyed before import — **except** COMPs carrying the exclude tag (the `Tdxnexcludetag` parameter's value, `tdn_exclude` by default), which are preserved. Excluded COMPs are invisible to TDXN (absent from the `.tdxn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
+When `clear_first` is set, existing children are destroyed before import — **except** COMPs carrying the exclude tag (the `Tdxnexcludetag` parameter's value, `tdxn_exclude` by default), which are preserved. Excluded COMPs are invisible to TDXN (absent from the `.tdxn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
 
 | Phase | Action | Details |
 |-------|--------|---------|
@@ -1301,7 +1301,7 @@ The importer accepts either a full `.tdxn` document (with metadata) or just the 
 | 1 | Early | COMP shell created (exists but empty) |
 | 2 | Early | Extension `__init__` runs |
 | 3 | End of frame | `onInitTD` fires — network may not exist yet |
-| 4 | Frame 60 | `ext.Embody.reconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 4 | Frame 60 | `ext.Embody.reconstructTDXNComps` runs `ImportNetwork(clear_first=True)` |
 | 5 | Frame 60+ | All children deleted and recreated from `.tdxn` |
 
 **Timeline on save (strip/restore cycle):**

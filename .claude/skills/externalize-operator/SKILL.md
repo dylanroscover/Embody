@@ -18,17 +18,17 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 `save_externalization` force re-exports an already-externalized operator. Use it after modifying an operator in TD when you need to update its file on disk.
 
-## Excluding Runtime State from TDXN Exports (`tdn_exclude:<par>` tags)
+## Excluding Runtime State from TDXN Exports (`tdxn_exclude:<par>` tags)
 
 When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdxn` files by tagging the operator itself - one tag per parameter, using the colon-suffixed form of the exclude tag:
 
 ```python
-op('deck_a').tags.add('tdn_exclude:file')
+op('deck_a').tags.add('tdxn_exclude:file')
 ```
 
-The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export - references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **x** to remove it.
+The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export - references are configuration). The bare `tdxn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdxn**, a drop-zone panel that toggles `tdxn_exclude:<par>` for dragged parameters and whole-COMP `tdxn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **x** to remove it.
 
-A third form targets a DAT's live **contents** instead of a parameter: `tdn_exclude:dat_content` (a reserved name, so it never trips the unknown-parameter warning). Use it for DATs whose rows are runtime state with no authored value -- a log ring buffer, a status readout. Those are normally force-captured even when Embed DATs is OFF, because Embody refuses to drop content that exists nowhere else on disk; this tag is the only sanctioned way past that net, so apply it only where losing the content is the intent. The operator itself still exports in full (parameters, position, wiring, tags) and returns empty on reconstruction, and the at-risk content warning skips it so the check cannot contradict the export.
+A third form targets a DAT's live **contents** instead of a parameter: `tdxn_exclude:dat_content` (a reserved name, so it never trips the unknown-parameter warning). Use it for DATs whose rows are runtime state with no authored value -- a log ring buffer, a status readout. Those are normally force-captured even when Embed DATs is OFF, because Embody refuses to drop content that exists nowhere else on disk; this tag is the only sanctioned way past that net, so apply it only where losing the content is the intent. The operator itself still exports in full (parameters, position, wiring, tags) and returns empty on reconstruction, and the at-risk content warning skips it so the check cannot contradict the export.
 
 ## Creating Python Files for TouchDesigner
 

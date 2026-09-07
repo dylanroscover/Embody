@@ -82,7 +82,7 @@ Since v6.0.278 the menu is ordered so the most-used actions (**Save**/**Reload**
 | **Reload tox** / **Reload tdxn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdxn` reload also rebuilds nested externalized children from their own `.tdxn` files, so nothing is left as an empty shell. |
 | **Export portable tox** | Writes a self-contained `.tox` with no external dependencies. |
 | **Convert to tox** / **Convert to tdxn** | Switches the strategy; the button reads **Remove tox** / **Remove tdxn** for the strategy that is currently active, which untags the operator instead. |
-| **Exclude from tdxn** | TDXN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdxn` exports (`tdn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdn_excludepar-tag). |
+| **Exclude from tdxn** | TDXN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdxn` exports (`tdxn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdxn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdxn_excludepar-tag). |
 
 Clicking a row's **File** cell opens the externalized file itself.
 

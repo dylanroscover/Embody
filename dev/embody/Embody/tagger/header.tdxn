@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 16
-generator: Embody/6.2.26
+generator: Embody/6.2.29
 td_build: 099.2025.33070
-source_file: Embody-6.329.toe
-exported_at: '2026-09-07T02:31:05Z'
+source_file: Embody-6.332.toe
+exported_at: '2026-09-07T09:16:58Z'
 network_path: /embody/Embody/tagger/header
 options:
   include_dat_content: false
@@ -36,7 +36,7 @@ flags:
 - viewer
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: text1
   type: textCOMP
@@ -57,7 +57,7 @@ operators:
   size: [160, 129]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/tagger/header/text1.tdxn
 - name: button_close
   type: buttonCOMP

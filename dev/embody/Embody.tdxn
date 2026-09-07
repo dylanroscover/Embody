@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 1243
-generator: Embody/6.2.27
+build: 1232
+generator: Embody/6.2.34
 td_build: 099.2025.33070
-source_file: Embody-6.330.toe
-exported_at: '2026-09-07T07:00:59Z'
+source_file: Embody-6.337.toe
+exported_at: '2026-09-07T11:15:32Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -188,7 +188,7 @@ custom_pars:
     style: Header
     label: TDXN Tags
     startSection: true
-    help: Tag strings and operator colors for TDXN externalization. COMPs tagged with the TDXN tag have their children exported as human-readable .tdxn JSON network files.
+    help: Tag strings and operator colors for TDXN externalization. COMPs tagged with the TDXN tag have their children exported as human-readable .tdxn YAML network files.
   - name: Tdxntagcolor
     style: RGBA
     label: TDXN Tag Color
@@ -197,14 +197,14 @@ custom_pars:
   - name: Tdxntag
     style: Str
     label: TDXN Tag
-    default: tdn
-    help: 'Tag string applied to COMPs externalized with the TDXN strategy (their children are exported as human-readable YAML network files). The value stays ''tdn'': it is written into every tagged COMP in every existing project, so changing it would orphan them.'
+    default: tdxn
+    help: Tag string applied to COMPs externalized with the TDXN strategy (their children are exported as human-readable YAML network files). Default 'tdxn' (it was 'tdn' before 6.2.30). Both spellings are ACCEPTED on read forever, so an existing project keeps working; the tagger's Actions menu re-tags one in a single gesture.
   - name: Tdxnexcludetag
     style: Str
     label: TDXN Exclude Tag
     startSection: true
-    default: tdn_exclude
-    help: 'Tag family for excluding things from the TDXN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDXN -- never exported, never inlined in parent .tdxn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDXN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
+    default: tdxn_exclude
+    help: 'Tag family for excluding things from the TDXN system (default ''tdxn_exclude''; the legacy ''tdn_exclude'' is still read). BARE tag on a COMP: the COMP is invisible to TDXN -- never exported, never inlined in parent .tdxn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdxn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDXN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdxn panel. Clear this parameter to disable the whole family.'
   TDXN:
   - name: Tdxnmode
     style: Menu
@@ -851,7 +851,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.27
+    value: 6.2.34
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -959,7 +959,7 @@ flags:
 - showCustomOnly
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: help
   type: opviewerCOMP
@@ -977,7 +977,7 @@ operators:
   size: [142, 155]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/help.tdxn
 - name: list
   type: containerCOMP
@@ -1004,7 +1004,7 @@ operators:
   size: [160, 86]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/list.tdxn
@@ -1018,7 +1018,7 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   tags:
-  - tdn_exclude:dat_content
+  - tdxn_exclude:dat_content
 - name: null2
   type: nullCHOP
   parameters:
@@ -1044,7 +1044,7 @@ operators:
   position: [925, -550]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/convoy.tdxn
 - name: tagger
   type: containerCOMP
@@ -1066,7 +1066,7 @@ operators:
   size: [108, 155]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/tagger.tdxn
 - name: timer1
   type: timerCHOP
@@ -1101,7 +1101,7 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   storage:
     ext_needed: true
     git_missing: false
@@ -1177,7 +1177,7 @@ operators:
   size: [160, 92]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/manager.tdxn
 - name: parexec
   type: parameterexecuteDAT
@@ -1235,7 +1235,7 @@ operators:
   size: [160, 76]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/toolbar.tdxn
@@ -1254,7 +1254,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   comment: 'Self-updater (UpdaterExt): GitHub-release self-update'
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/updater.tdxn
 - name: EnvoyExt
   type: textDAT
@@ -1328,7 +1328,7 @@ operators:
   position: [-400, -1200]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/templates.tdxn
 - name: Collection
   type: baseCOMP
@@ -1344,7 +1344,7 @@ operators:
   position: [200, -550]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/Collection.tdxn
 - name: ai_clients
   type: textDAT
@@ -1888,7 +1888,7 @@ operators:
     position: [300, 0]
     color: [0.67, 0.67, 0.67]
     tags:
-    - tdn_exclude:dat_content
+    - tdxn_exclude:dat_content
   - name: parexec_status
     type: parameterexecuteDAT
     parameters:
@@ -2014,7 +2014,7 @@ operators:
   size: [160, 76]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/windowHeader.tdxn
@@ -2145,7 +2145,7 @@ operators:
   size: [154, 89]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/window_manager.tdxn
 - name: fifo1_callbacks
   type: textDAT
@@ -2232,7 +2232,7 @@ operators:
   size: [110, 157]
   color: [0.3, 0.5, 0.9]
   tags:
-  - tdn
+  - tdxn
   tdn_ref: embody/Embody/window_tagging_menu.tdxn
 - name: chopexec_exit_tagger
   type: chopexecuteDAT

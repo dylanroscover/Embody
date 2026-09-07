@@ -7771,12 +7771,12 @@ class TDXNExt:
 			# whole-project root). An ad-hoc export of an untagged COMP
 			# writes its file but does NOT join the lifecycle.
 			if root_path != '/':
-				try:
-					tdn_tag = self.ownerComp.par.Tdxntag.val
-				except Exception:
-					tdn_tag = ''
-				if not (target is not None and tdn_tag
-						and tdn_tag in target.tags):
+				# BOTH accepted spellings: a COMP still carrying the legacy
+				# 'tdn' tag is enrolled, not silently demoted to an ad-hoc
+				# export the moment the default moved to 'tdxn'.
+				accepted = [t for t in self.tdxnTags() if t]
+				if not (target is not None and accepted
+						and any(t in target.tags for t in accepted)):
 					self._log(
 						f'Ad-hoc TDXN export of untagged {root_path} not '
 						f'tracked -- file written but not enrolled in the '

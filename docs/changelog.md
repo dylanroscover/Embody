@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.2.34
+
+The TDXN rename reaches the parts you actually read: the tag on your COMPs, the strategy column, the files on disk, and embody.tools.
+
+- **The tag is `tdxn`.** `Tdxntag` and `Tdxnexcludetag` now default to `tdxn` / `tdxn_exclude`, and a stored value that was only the old default upgrades with them -- a tag you customized is left alone. Readers accept both spellings forever, and the tagger's Actions menu re-tags a project in one gesture.
+- **The `strategy` column reads `tdxn`**, and every `.tdn` externalized before 6.1 is re-externalized as `.tdxn`. `docs/tdn.schema.yaml` moves to `docs/tdxn.schema.yaml` with its `$id` -- repoint an editor wired to the old raw URL.
+- **Fixed: re-externalizing minted `.tdn` again.** Inside one batch the pending deletion of the old file made it look alive, so the new file adopted the retired suffix.
+- **Fixed: TDXN COMPs dropped out of the lifecycle.** Nine strategy comparisons read the raw cell, so dirty detection, autosave, the manager's Strategy column, the version sync and the project-wide diff all saw zero TDXN COMPs -- and a re-export could blank a row's file path.
+- **embody.tools says TDXN** -- viewer package, components, styles, and a new `/api/specimens/:slug/tdxn` route; the old one stays as an alias.
+
 ## v6.2.19
 
 Envoy sees every operator, recovers from its own errors, and can set up a machine unattended.

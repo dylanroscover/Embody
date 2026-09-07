@@ -562,7 +562,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 ==============================================================================
 # TDXN - Specification
-# source: docs/tdn/specification.md
+# source: docs/tdxn/specification.md
 ==============================================================================
 
 # TDXN Specification
@@ -576,7 +576,7 @@ TDXN (TouchDesigner eXternal Network) is a YAML-based file format (a strict JSON
 - File extension: `.tdxn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.json`](../tdn.schema.json) - validates the parsed structure; YAML and JSON decode to the same object.
+- Schema: [`tdxn.schema.json`](../tdxn.schema.json) - validates the parsed structure; YAML and JSON decode to the same object.
 
 ---
 
@@ -1500,8 +1500,8 @@ Mismatches produce warnings, not errors - the COMP shell is always created regar
 
 **Backward compatibility**:
 
-- Files **without** `tdn_ref` (TDXN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
-- Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
+- Files **without** `tdn_ref` (TDXN v1.1 and earlier) continue to work. The existing `_stripNestedTDXNChildren` mechanism handles them via the externalizations table.
+- Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDXNChildren` path handles the nested COMP correctly as a fallback.
 - The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
 
 ### TOX References (`tox_ref`)
@@ -1682,7 +1682,7 @@ The importer accepts either a full `.tdxn` document (with metadata) or just the 
 | 1 | Early | COMP shell created (exists but empty) |
 | 2 | Early | Extension `__init__` runs |
 | 3 | End of frame | `onInitTD` fires - network may not exist yet |
-| 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 4 | Frame 60 | `ReconstructTDXNComps` runs `ImportNetwork(clear_first=True)` |
 | 5 | Frame 60+ | All children deleted and recreated from `.tdxn` |
 
 **Timeline on save (strip/restore cycle):**
@@ -1709,7 +1709,7 @@ def postInit(self):
 
 The deferred method must be **idempotent** - it will run on every project open, after every save, and on manual reimport. Use a delay of at least 5 frames to ensure all import phases have completed.
 
-For full guidance on writing extensions that coexist with TDXN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
+For full guidance on writing extensions that coexist with TDXN, see the [Extensions](../td-development/extensions.md#initialization-and-tdxn-import-timing) documentation.
 
 ### Version Compatibility
 
@@ -1925,7 +1925,7 @@ Key observations:
 
 ==============================================================================
 # TDXN - Import & Export
-# source: docs/tdn/import-export.md
+# source: docs/tdxn/import-export.md
 ==============================================================================
 
 # Read, Import & Export

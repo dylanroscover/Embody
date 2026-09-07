@@ -2258,7 +2258,7 @@ class EmbodyExt:
                 if not self.isOpProcessable(child) or self.isReplicant(child):
                     continue
                 candidates += 1
-                if tox_tag in child.tags or tdn_tag in child.tags:
+                if tox_tag in child.tags or self._hasTDXNTag(child):
                     continue
                 prefix = child.path + '/'
                 if any(p == child.path or p.startswith(prefix) for p in tracked):
@@ -4205,8 +4205,8 @@ class EmbodyExt:
         for i in range(1, table.numRows):
             # Filter by strategy if requested
             if has_strategy_col and strategy:
-                row_strategy = self._cellVal(i, 'strategy', table=table)
-                if row_strategy != strategy:
+                row_strategy = self._rowStrategy(i, table)
+                if row_strategy != self._normalizeStrategy(strategy):
                     continue
             elif not has_strategy_col:
                 # Legacy table without strategy column -- skip TDXN rows
@@ -6400,16 +6400,40 @@ class EmbodyExt:
         """Return the set of all TDXN-externalized COMP paths."""
         return {path for path, _ in self._getTDXNStrategyComps()}
 
+    # Both KNOWN tag spellings, always accepted on READ. The default moved
+    # 'tdn' -> 'tdxn' in 6.2.29, so a project can legitimately hold either
+    # (or both, mid-migration). An operator whose tag is outside this set
+    # drops out of the lifecycle silently -- no error anywhere. Mirrors
+    # TDXNExt.tdxnTags; writers use the configured par value alone.
+    _LEGACY_TDXN_TAG = 'tdn'
+    _LEGACY_TDXN_EXCLUDE_TAG = 'tdn_exclude'
+
+    def _tdxnTags(self) -> frozenset:
+        """Every tag string that marks a TDXN boundary (configured + legacy)."""
+        configured = str(self.my.par.Tdxntag.val).strip()
+        return frozenset(t for t in (configured, 'tdxn',
+                                     self._LEGACY_TDXN_TAG) if t)
+
+    def _tdxnExcludeTags(self) -> frozenset:
+        """Exclude-tag equivalents of _tdxnTags -- same both-names rule."""
+        configured = str(self.my.par.Tdxnexcludetag.eval()).strip()
+        return frozenset(t for t in (configured, 'tdxn_exclude',
+                                     self._LEGACY_TDXN_EXCLUDE_TAG) if t)
+
+    def _hasTDXNTag(self, oper) -> bool:
+        """True when the operator carries any accepted TDXN boundary tag."""
+        tags = oper.tags
+        return any(t in tags for t in self._tdxnTags())
+
     def _extBoundaryTags(self) -> frozenset:
         """Tags that mark a child COMP as managed by its OWN file.
 
         The fingerprint's recursion boundary must be the exporter's, or the
-        two disagree about what a .tdn actually contains -- see
+        two disagree about what a .tdxn actually contains -- see
         TDXNExt._hasTDXNTag / _hasTOXTag, which stop the export at exactly
         these tags.
         """
-        return frozenset((self.my.par.Tdxntag.eval(),
-                          self.my.par.Toxtag.eval()))
+        return frozenset(self._tdxnTags() | {self.my.par.Toxtag.eval()})
 
     @property
     def _tdn_fingerprints(self) -> dict:
@@ -6601,8 +6625,8 @@ class EmbodyExt:
             return 'tox'  # Legacy table without strategy column
         for i in range(1, table.numRows):
             if self._cellVal(i, 'path', table=table) == comp.path:
-                s = self._cellVal(i, 'strategy', table=table)
-                if s in ('tox', 'tdn'):
+                s = self._rowStrategy(i, table)
+                if s in ("tox", "tdn"):
                     return s
         return None
 
@@ -6657,7 +6681,7 @@ class EmbodyExt:
         cell = table[comp_path, 'strategy']
         if cell is None:
             return None
-        s = cell.val
+        s = self._normalizeStrategy(cell.val)
         return (comp_path, s) if s in ('tox', 'tdn') else None
 
     def _saveByStrategy(self, op_path: str, strategy: str) -> None:
@@ -6958,8 +6982,8 @@ class EmbodyExt:
                 if not has_strategy_col:
                     strategy_by_path[path] = 'tox'  # legacy pre-strategy table
                 else:
-                    s = self._cellVal(i, 'strategy', table=table)
-                    if s in ('tox', 'tdn'):
+                    s = self._rowStrategy(i, table)
+                    if s in ("tox", "tdn"):
                         strategy_by_path[path] = s
 
         for oper in self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT):
@@ -7010,7 +7034,7 @@ class EmbodyExt:
     def handleAddition(self, oper: OP) -> None:
         """Process a newly tagged operator for externalization."""
         # Route TDXN-tagged COMPs to the TDXN handler
-        if oper.family == 'COMP' and self.my.par.Tdxntag.val in oper.tags:
+        if oper.family == "COMP" and self._hasTDXNTag(oper):
             self._handleTDXNAddition(oper)
             return
 
@@ -7172,7 +7196,7 @@ class EmbodyExt:
             # mark an excluded COMP for TDXN. (Explicit user tagging still works.)
             if self.my.ext.TDXN._hasExcludeTag(child):
                 continue
-            if tdn_tag not in child.tags:
+            if not self._hasTDXNTag(child):
                 self.applyTagToOperator(child, tdn_tag)
 
     def _buildTDXNRelPath(self, oper: OP, suffix: Optional[str] = None) -> Path:
@@ -7288,8 +7312,8 @@ class EmbodyExt:
         for row in range(1, self.Externalizations.numRows):
             if self._cellVal(row, 'path') == oper.path:
                 if has_strategy_col:
-                    row_strategy = self._cellVal(row, 'strategy')
-                    if row_strategy != strategy:
+                    row_strategy = self._rowStrategy(row)
+                    if row_strategy != self._normalizeStrategy(strategy):
                         continue
                 self.Externalizations[row, 'rel_file_path'] = normalized_path
                 # Update position/color on existing rows too
@@ -7829,7 +7853,7 @@ class EmbodyExt:
         # Search for untracked TDXN-tagged COMPs in the same parent
         old_parent = '/'.join(old_op_path.rstrip('/').rsplit('/', 1)[:-1]) or '/'
         candidates = []
-        for potential_op in self.root.findChildren(type=COMP, tags=[tdn_tag]):
+        for potential_op in self.root.findChildren(type=COMP, tags=list(self._tdxnTags())):
             if potential_op.path in tracked_tdn_paths:
                 continue
             if potential_op.path in processed_ops:
@@ -8990,7 +9014,7 @@ class EmbodyExt:
                 run(lambda: self.setupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
-            elif tdn_tag in oper.tags:
+            elif self._hasTDXNTag(oper):
                 run(lambda: self.setupTaggerManageMode(oper, 'TDXN_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
@@ -9514,7 +9538,7 @@ class EmbodyExt:
                                          delete_file=delete_file)
                     oper.par.externaltox = ''
                     oper.par.externaltox.readOnly = False
-                elif tag == self.my.par.Tdxntag.val:
+                elif tag in self._tdxnTags():
                     self._removeTDXNStrategy(oper.path,
                                             delete_file=delete_file)
             elif oper.family == 'DAT':
@@ -9571,7 +9595,7 @@ class EmbodyExt:
                                  delete_file=delete_file)
             oper.par.externaltox = ''
             oper.par.externaltox.readOnly = False
-        elif tag == self.my.par.Tdxntag.val:
+        elif tag in self._tdxnTags():
             self._removeTDXNStrategy(oper.path, delete_file=delete_file)
 
     def _removeTDXNStrategy(self, op_path: str, delete_file: bool = True) -> None:
@@ -9676,7 +9700,7 @@ class EmbodyExt:
         if oper.family == 'COMP':
             if tag == self.my.par.Toxtag.val:
                 return (self.my.par.Toxtagcolorr, self.my.par.Toxtagcolorg, self.my.par.Toxtagcolorb)
-            elif tag == self.my.par.Tdxntag.val:
+            elif tag in self._tdxnTags():
                 return (self.my.par.Tdxntagcolorr, self.my.par.Tdxntagcolorg, self.my.par.Tdxntagcolorb)
             self.Log("Use TOX or TDXN tag for COMPs", "ERROR")
             return None
@@ -9903,7 +9927,7 @@ class EmbodyExt:
                         timestamp, oper.dirty, '', ''
                     ])
                     self.Log(f"Added existing TOX externalization to table", "SUCCESS")
-            elif oper.family == 'COMP' and tag == self.my.par.Tdxntag.val:
+            elif oper.family == "COMP" and tag in self._tdxnTags():
                 self._handleTDXNAddition(oper)
 
         return True
@@ -10017,7 +10041,7 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdxntag.val
         ancestor = oper.parent()
         while ancestor is not None and ancestor.path != '/':
-            if (tox_tag in ancestor.tags or tdn_tag in ancestor.tags
+            if (tox_tag in ancestor.tags or self._hasTDXNTag(ancestor)
                     or self._findExternalizedComp(ancestor.path)):
                 return None
             ancestor = ancestor.parent()
@@ -10132,7 +10156,7 @@ class EmbodyExt:
         if tox_tag in oper.tags:
             if not self.applyTagToOperator(oper, tdn_tag):
                 return
-        elif tdn_tag in oper.tags:
+        elif self._hasTDXNTag(oper):
             if not self.applyTagToOperator(oper, tox_tag):
                 return
 
@@ -10149,7 +10173,7 @@ class EmbodyExt:
             # deliberately emptied COMP may overwrite its file here (the
             # automatic writers refuse that shape as data loss).
             self.Save(oper.path, allow_empty=True)
-        elif tdn_tag in oper.tags:
+        elif self._hasTDXNTag(oper):
             self.saveTDXN(oper.path, allow_empty=True)
         else:
             # Fallback: check externalizations table for untagged COMPs (e.g. root)
@@ -10167,7 +10191,7 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdxntag.val
 
         # Determine strategy from tags, falling back to table for untagged COMPs
-        if tdn_tag in oper.tags:
+        if self._hasTDXNTag(oper):
             strategy = self._TDXN_STRATEGY_CELL
         elif tox_tag in oper.tags:
             strategy = 'tox'
@@ -10366,7 +10390,7 @@ class EmbodyExt:
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdxntag.val
 
-        if tdn_tag in oper.tags:
+        if self._hasTDXNTag(oper):
             # removeTDXNEntry strips the tags itself (issue #48)
             self.removeTDXNEntry(oper.path)
         elif tox_tag in oper.tags:
@@ -10428,7 +10452,7 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdxntag.val
 
         is_tox = tox_tag in oper.tags
-        is_tdn = tdn_tag in oper.tags
+        is_tdn = self._hasTDXNTag(oper)
         is_dat = (not is_tox and not is_tdn
                   and oper.family == 'DAT'
                   and any(t in oper.tags for t in self.getTags('DAT')))
@@ -11058,7 +11082,7 @@ class EmbodyExt:
 
         embody_path = self.my.path
         try:
-            tagged = self.root.findChildren(type=COMP, tags=[tdn_tag])
+            tagged = self.root.findChildren(type=COMP, tags=list(self._tdxnTags()))
         except Exception:
             tagged = []
         candidates = []
@@ -12519,7 +12543,7 @@ class EmbodyExt:
 
         for i in range(1, table.numRows):
             path = self._cellVal(i, 'path')
-            strategy = self._cellVal(i, 'strategy') if table[0, 'strategy'] is not None else ''
+            strategy = self._rowStrategy(i) if table[0, "strategy"] is not None else ""
             rel_file_path = self._cellVal(i, 'rel_file_path')
             node_color = self._cellVal(i, 'node_color') if table[0, 'node_color'] is not None else ''
 
@@ -12987,14 +13011,14 @@ class EmbodyExt:
         # Collect TOX/TDXN COMP paths so we can skip DATs inside them
         comp_paths = set()
         for i in range(1, table.numRows):
-            strategy = self._cellVal(i, 'strategy')
-            if strategy in ('tox', 'tdn'):
+            strategy = self._rowStrategy(i)
+            if strategy in ("tox", "tdn"):
                 comp_paths.add(self._cellVal(i, 'path'))
 
         result = []
         for i in range(1, table.numRows):
-            strategy = self._cellVal(i, 'strategy')
-            if strategy in ('tox', 'tdn', ''):
+            strategy = self._rowStrategy(i)
+            if strategy in ("tox", "tdn", ""):
                 continue  # COMP strategies or empty
 
             dat_path = self._cellVal(i, 'path')

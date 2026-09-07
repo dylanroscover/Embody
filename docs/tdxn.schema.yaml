@@ -1,11 +1,11 @@
-# YAML Schema for TDXN (TouchDesigner eXternal Network) v2.0 -- see docs/tdn/schema.md
+# YAML Schema for TDXN (TouchDesigner eXternal Network) v2.0 -- see docs/tdxn/schema.md
 # Follows the JSON Schema standard (draft 2020-12); serialized as YAML, like .tdxn files.
 #
-# The FILENAME and $id below are deliberately unchanged across the v6.1.0
-# TDXN -> TDXN rename: both are a published contract that editors are wired
-# to by raw URL. Renaming either silently breaks every such setup.
+# Renamed from tdn.schema.yaml in 6.2.30, $id with it. An editor wired to the
+# old raw URL gets a 404 rather than a stale schema, so the breakage is loud
+# and the fix is one line in settings.json.
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.yaml
+$id: https://github.com/dylanroscover/Embody/blob/main/docs/tdxn.schema.yaml
 title: TDXN (TouchDesigner eXternal Network)
 description: Schema for TDXN v2.0 - a human-readable YAML format for representing TouchDesigner
   operator networks, externalized to disk. Files carry .tdxn (.tdn before Embody 6.1, still read
@@ -720,7 +720,7 @@ $defs:
         description: true if this COMP is cloned from the TD palette (/sys/). Children are not exported.
       tdn_ref:
         type: string
-        description: Relative path to the child COMP's own .tdn file. Mutually exclusive with children.
+        description: Relative path to the child COMP's own .tdxn file. Mutually exclusive with children.
           Added in v1.2.
       tox_ref:
         type: string

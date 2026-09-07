@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 19
-generator: Embody/6.2.26
+build: 16
+generator: Embody/6.2.29
 td_build: 099.2025.33070
-source_file: Embody-6.329.toe
-exported_at: '2026-09-07T02:33:29Z'
+source_file: Embody-6.332.toe
+exported_at: '2026-09-07T09:16:58Z'
 network_path: /embody/Embody/windowHeader
 options:
   include_dat_content: false
@@ -22,7 +22,7 @@ type_defaults:
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
-    - tdn
+    - tdxn
 type: containerCOMP
 custom_pars:
   Header:
@@ -59,7 +59,7 @@ sequences:
   - {}
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: title
   type: textCOMP

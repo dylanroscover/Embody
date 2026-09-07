@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 32
-generator: Embody/6.2.26
+build: 20
+generator: Embody/6.2.29
 td_build: 099.2025.33070
-source_file: Embody-6.329.toe
-exported_at: '2026-09-07T02:31:03Z'
+source_file: Embody-6.332.toe
+exported_at: '2026-09-07T09:16:57Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
@@ -20,7 +20,7 @@ type_defaults:
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
-    - tdn
+    - tdxn
   textCOMP:
     parameters:
       fontcolorb: =parent.Embody.par.Textcolorb
@@ -33,7 +33,7 @@ type_defaults:
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
-    - tdn
+    - tdxn
   textDAT:
     parameters:
       language: python
@@ -58,7 +58,7 @@ flags:
 - viewer
 color: [0.3, 0.5, 0.9]
 tags:
-- tdn
+- tdxn
 operators:
 - name: status
   type: textCOMP

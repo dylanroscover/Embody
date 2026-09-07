@@ -369,8 +369,22 @@ def writeReleaseManifest(comp, tox_path, version, build):
 _SYNC_MAX_WAITS = 30
 
 
+def _norm_strategy(value) -> str:
+    """The stored `strategy` cell mapped onto the internal wire value.
+
+    The cell reads 'tdxn'; the code compares against 'tdn'. `mod.TDXNExt`
+    does not resolve from this DAT's network (TDXNExt lives inside the
+    Embody COMP), so reach the module through the COMP.
+    """
+    try:
+        return op.Embody.op('TDXNExt').module.normalized_strategy(value)
+    except Exception:
+        v = str(value or '').strip().lower()
+        return 'tdn' if v == 'tdxn' else v
+
+
 def syncVersionIntoTDXN(attempt=0):
-    """Re-export the .tdn rows that carry par.Version, AFTER the bump.
+    """Re-export the .tdxn rows that carry par.Version, AFTER the bump.
 
     THE LAG THIS REMOVES. A single project.save fires onProjectPreSave on
     two different Execute DATs. The Embody COMP's own execute DAT runs
@@ -428,7 +442,9 @@ def syncVersionIntoTDXN(attempt=0):
         marker = 'generator: Embody/%s' % version
         for r in range(1, table.numRows):
             row_path = str(table[r, path_col].val or '')
-            if str(table[r, strategy_col].val or '') != 'tdn':
+            # The CELL reads 'tdxn'; a raw compare here matched nothing, so
+            # the sync silently re-exported no rows at all.
+            if _norm_strategy(table[r, strategy_col].val) != 'tdn':
                 continue
             # Only the rows that CONTAIN the Embody COMP carry its Version.
             # '/' is excluded deliberately: re-exporting the whole project

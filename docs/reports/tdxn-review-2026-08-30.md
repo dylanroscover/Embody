@@ -65,7 +65,7 @@ tests do not exercise.
   abort an entire export for one value".
 - **Embody's own files fail Embody's shipped schema** (v): the exporter
   writes annotation `backAlpha`/`titleHeight`/`bodyFontSize` and custom-par
-  `sequence`, none in `docs/tdn.schema.yaml` (`additionalProperties: false`)
+  `sequence`, none in `docs/tdxn.schema.yaml` (`additionalProperties: false`)
   or the spec tables; 3 of 93 repo files fail validation; nothing in CI
   validates.
 - **C1 clipboard envelope hash diverges between Python and TS** (v): six
@@ -163,7 +163,7 @@ across parameter modes incl. mixed per-component tuplets, `==`/`~~` escapes at
 any depth, expressions with quotes/newlines/unicode, every custom-par style
 with ranges/sections/help/readOnly and page order, Menu default-before-names
 ordering, StrMenu freeform values, `menuSource`, DAT tables with empty cells/
-tabs/CRLF/unicode/numeric-looking strings, `tdn_exclude:dat_content`, sparse
+tabs/CRLF/unicode/numeric-looking strings, `tdxn_exclude:dat_content`, sparse
 fixed-connector inputs, COMP connectors, In/Out wiring through nested COMPs,
 docking, all seven flags, colors/sizes/comments/tags, `$type` storage
 wrappers, `options` (`max_depth`, `include_storage`). 90/93 repo files

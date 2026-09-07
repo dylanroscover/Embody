@@ -61,11 +61,11 @@ The server is local-only - it binds to `127.0.0.1` (never the network), default 
 
 ## TDXN format
 
-- [TDXN index](https://dylanroscover.github.io/Embody/tdn/): overview of the TouchDesigner eXternal Network YAML format.
-- [Specification](https://dylanroscover.github.io/Embody/tdn/specification/): the full format spec - operators, parameters, connections, positions, flags, DAT content, annotations.
-- [Schema (page)](https://dylanroscover.github.io/Embody/tdn/schema/): JSON Schema reference for validating `.tdxn` files.
-- [Import & export](https://dylanroscover.github.io/Embody/tdn/import-export/): round-trip safe - export, edit, import yields the same network.
-- [Examples](https://dylanroscover.github.io/Embody/tdn/examples/): worked TDXN examples.
+- [TDXN index](https://dylanroscover.github.io/Embody/tdxn/): overview of the TouchDesigner eXternal Network YAML format.
+- [Specification](https://dylanroscover.github.io/Embody/tdxn/specification/): the full format spec - operators, parameters, connections, positions, flags, DAT content, annotations.
+- [Schema (page)](https://dylanroscover.github.io/Embody/tdxn/schema/): JSON Schema reference for validating `.tdxn` files.
+- [Import & export](https://dylanroscover.github.io/Embody/tdxn/import-export/): round-trip safe - export, edit, import yields the same network.
+- [Examples](https://dylanroscover.github.io/Embody/tdxn/examples/): worked TDXN examples.
 
 `read_tdn` returns a whole live network as TDXN YAML in one call - ~20-90x fewer tokens than walking it operator-by-operator with `get_op`.
 

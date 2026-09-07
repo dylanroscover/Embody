@@ -61,7 +61,7 @@ on:
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
       - 'dev/embody/unit_tests/test_tdxn_schema.py'
-      - 'docs/tdn.schema.yaml'
+      - 'docs/tdxn.schema.yaml'
       - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'
       - 'specimens/**'
@@ -118,7 +118,7 @@ on:
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
       - 'dev/embody/unit_tests/test_tdxn_schema.py'
-      - 'docs/tdn.schema.yaml'
+      - 'docs/tdxn.schema.yaml'
       - 'dev/**/*.tdn'
       - 'dev/**/*.tdxn'
       - 'specimens/**'

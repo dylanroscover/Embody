@@ -264,7 +264,7 @@ code, kbd, pre {
 }
 .mark__word { line-height: 1; }
 
-/* Mark extension pill (TDN page) */
+/* Mark extension pill (TDXN page) */
 .mark__bridge {
   display: inline-block;
   width: 18px;
@@ -288,7 +288,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   6b. Table of Contents (sticky left sidebar - TDN page)
+   6b. Table of Contents (sticky left sidebar - TDXN page)
    ------------------------------------------------------------ */
 .toc {
   position: fixed;
@@ -509,7 +509,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   8. Pillars (Envoy / Embody / TDN)
+   8. Pillars (Envoy / Embody / TDXN)
    ------------------------------------------------------------ */
 .pillars {
   display: grid;
@@ -534,7 +534,7 @@ code, kbd, pre {
   letter-spacing: -0.015em;
   color: var(--text);
   margin: 0 0 0.4rem;
-  /* preserve casing - Envoy/Embody/TDN are proper names */
+  /* preserve casing - Envoy/Embody/TDXN are proper names */
 }
 .pillar__claim {
   font-family: var(--font-mono);
@@ -593,9 +593,9 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   10. TDN section
+   10. TDXN section
    ------------------------------------------------------------ */
-.tdn__grid {
+.tdxn__grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 2.5rem;
@@ -630,7 +630,7 @@ code, kbd, pre {
 .c-n { color: #6ee668; }              /* numbers */
 .c-p { color: var(--text-faint); }    /* punctuation */
 
-.tdn__callout {
+.tdxn__callout {
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   color: var(--text);
   text-align: left;
@@ -640,24 +640,24 @@ code, kbd, pre {
   line-height: 1.45;
   letter-spacing: -0.005em;
 }
-.tdn__callout-lead {
+.tdxn__callout-lead {
   color: var(--accent);
   font-weight: 600;
 }
 
-.tdn__bullets {
+.tdxn__bullets {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
 }
-.tdn__bullets li {
+.tdxn__bullets li {
   position: relative;
   padding-left: 1.4rem;
   color: var(--text-muted);
   font-size: 0.97rem;
   line-height: 1.55;
 }
-.tdn__bullets li::before {
+.tdxn__bullets li::before {
   content: '';
   position: absolute;
   left: 0;
@@ -667,11 +667,11 @@ code, kbd, pre {
   border-radius: 999px;
   background: var(--accent);
 }
-.tdn__bullets strong {
+.tdxn__bullets strong {
   color: var(--text);
   font-weight: 600;
 }
-.tdn__bullets code {
+.tdxn__bullets code {
   background: var(--bg-code);
   border: 1px solid var(--border-faint);
   padding: 0.05em 0.4em;
@@ -680,7 +680,7 @@ code, kbd, pre {
 }
 
 /* ------------------------------------------------------------
-   10b. Compare (binary vs. text - TDN page)
+   10b. Compare (binary vs. text - TDXN page)
    ------------------------------------------------------------ */
 .compare {
   display: grid;
@@ -693,7 +693,7 @@ code, kbd, pre {
   border-radius: var(--radius);
   padding: 2rem 1.85rem 2.1rem;
 }
-.compare__col--tdn {
+.compare__col--tdxn {
   border-color: var(--border);
 }
 .compare__heading {
@@ -731,7 +731,7 @@ code, kbd, pre {
   color: var(--text-faint);
   font-size: 0.8rem;
 }
-.compare__col--tdn .compare__list li::before {
+.compare__col--tdxn .compare__list li::before {
   content: '\2713';
   position: absolute;
   left: 0;
@@ -739,7 +739,7 @@ code, kbd, pre {
   color: var(--accent);
   font-size: 0.85rem;
 }
-.compare__col--tdn .compare__list li {
+.compare__col--tdxn .compare__list li {
   color: var(--text);
 }
 .compare__list code {
@@ -752,7 +752,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   10c. Features grid (what gets captured - TDN page)
+   10c. Features grid (what gets captured - TDXN page)
    ------------------------------------------------------------ */
 .features {
   display: grid;
@@ -803,7 +803,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   10d. Details (format spec table - TDN page)
+   10d. Details (format spec table - TDXN page)
    ------------------------------------------------------------ */
 .details {
   display: grid;
@@ -842,7 +842,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   10e. Sample / full code block (TDN page)
+   10e. Sample / full code block (TDXN page)
    ------------------------------------------------------------ */
 .code--full {
   font-size: 0.8rem;
@@ -861,7 +861,7 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
-   10f. Pillar variants (TDN page)
+   10f. Pillar variants (TDXN page)
    ------------------------------------------------------------ */
 .pillars--four {
   grid-template-columns: repeat(4, 1fr);
@@ -902,7 +902,7 @@ code, kbd, pre {
 }
 
 
-.tdn__closer {
+.tdxn__closer {
   font-size: clamp(1.05rem, 1.6vw, 1.2rem);
   color: var(--text-muted);
   max-width: 60ch;
@@ -910,7 +910,7 @@ code, kbd, pre {
   line-height: 1.55;
 }
 
-.tdn__link {
+.tdxn__link {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 0.9rem;
@@ -1114,7 +1114,7 @@ code, kbd, pre {
 /* Tablet large - 1024 */
 @media (max-width: 1024px) {
   .pillars { gap: 1.25rem; }
-  .tdn__grid { gap: 2rem; }
+  .tdxn__grid { gap: 2rem; }
 }
 
 /* Tablet - 768 */
@@ -1125,7 +1125,7 @@ code, kbd, pre {
   }
   .pillars--three { grid-template-columns: 1fr; }
   .pillars--four { grid-template-columns: 1fr 1fr; }
-  .tdn__grid {
+  .tdxn__grid {
     grid-template-columns: 1fr;
     gap: 2rem;
   }

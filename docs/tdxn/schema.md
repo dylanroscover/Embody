@@ -1,15 +1,15 @@
 # YAML Schema
 
-`.tdxn` files are YAML -- and so is this schema. `tdn.schema.yaml` follows the [draft 2020-12 schema standard](https://json-schema.org) for validating structure and driving editor auto-completion.
+`.tdxn` files are YAML -- and so is this schema. `tdxn.schema.yaml` follows the [draft 2020-12 schema standard](https://json-schema.org) for validating structure and driving editor auto-completion.
 
 ## Schema File
 
-The schema is available at [`tdn.schema.yaml`](../tdn.schema.yaml) in the repository.
+The schema is available at [`tdxn.schema.yaml`](../tdxn.schema.yaml) in the repository.
 
 You can reference it from the top of your `.tdxn` files for editor support:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdxn.schema.yaml
 format: tdxn
 version: '2.0'
 # ...
@@ -37,12 +37,12 @@ With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=re
     "*.tdn": "yaml"
   },
   "yaml.schemas": {
-    "./docs/tdn.schema.yaml": ["*.tdxn", "*.tdn"]
+    "./docs/tdxn.schema.yaml": ["*.tdxn", "*.tdn"]
   }
 }
 ```
 
-Both extensions are listed on purpose: networks externalized before Embody 6.1 keep the `.tdn` name and stay valid indefinitely, so a project can hold a mix. The schema **file** is still called `tdn.schema.yaml`, and its `$id` is unchanged -- that URL is a published contract, and renaming it would silently break every editor already configured against it.
+Both extensions are listed on purpose: networks externalized before Embody 6.1 keep the `.tdn` name and stay valid indefinitely, so a project can hold a mix. The schema file was renamed `tdn.schema.yaml` -> `tdxn.schema.yaml` in 6.2.30, and its `$id` moved with it. An editor still wired to the old raw URL gets a 404, not a stale schema -- repoint it at the URL above.
 
 ## Schema Overview
 

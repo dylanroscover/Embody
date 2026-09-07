@@ -84,10 +84,10 @@
         </p>
 
         <div class="hero__ctas">
-          <a class="btn btn--primary" href="https://dylanroscover.github.io/Embody/tdn/specification/">
+          <a class="btn btn--primary" href="https://dylanroscover.github.io/Embody/tdxn/specification/">
             Read the specification <span aria-hidden="true">&rarr;</span>
           </a>
-          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/tdn/examples/">
+          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/tdxn/examples/">
             See examples
           </a>
         </div>
@@ -119,7 +119,7 @@
               <li>Fixed size regardless of complexity</li>
             </ul>
           </article>
-          <article class="compare__col compare__col--tdn">
+          <article class="compare__col compare__col--tdxn">
             <h3 class="compare__heading">text <code>.tdxn</code></h3>
             <ul class="compare__list">
               <li>Readable in any text editor</li>
@@ -242,7 +242,7 @@
           Every design decision serves a single goal: the smallest possible output that remains fully readable. A network with 50 operators where you only changed a few parameters produces a file measured in kilobytes, not megabytes.
         </p>
 
-        <div class="tdn__grid">
+        <div class="tdxn__grid">
           <pre class="code" aria-label="TDXN shorthands"><code><span class="c-com">// expression — just prefix with =</span>
 <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
 
@@ -258,7 +258,7 @@
 <span class="c-com">// constant — no wrapper needed</span>
 <span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span></code></pre>
 
-          <ul class="tdn__bullets">
+          <ul class="tdxn__bullets">
             <li><strong>Non-default only</strong> — parameters at their default values are omitted entirely, often eliminating 90%+ of the parameter space.</li>
             <li><strong>Type defaults</strong> — properties shared across all operators of a given type are hoisted into a top-level section and removed from each operator.</li>
             <li><strong>Parameter templates</strong> — identical custom parameter pages appearing on 2+ operators are extracted into <code>par_templates</code> and referenced via <code>$t</code>. Definitions stored once, values per-operator.</li>
@@ -267,9 +267,9 @@
           </ul>
         </div>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">Round-trip safe.</span> Export a network, edit the JSON, import it back. Same network. Every time.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">Round-trip safe.</span> Export a network, edit the JSON, import it back. Same network. Every time.</p>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">And&nbsp;&mdash; this is where it earns its keep with AI.</span> The same compaction that keeps <code>.tdxn</code> files small on disk keeps them cheap in a context window. Envoy's <code>read_tdn</code> MCP tool returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network with <code>get_op</code> + <code>query_network</code>, with a conservative 5&times; floor verified in CI. Your agent reads the structure once and starts working.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">And&nbsp;&mdash; this is where it earns its keep with AI.</span> The same compaction that keeps <code>.tdxn</code> files small on disk keeps them cheap in a context window. Envoy's <code>read_tdn</code> MCP tool returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network with <code>get_op</code> + <code>query_network</code>, with a conservative 5&times; floor verified in CI. Your agent reads the structure once and starts working.</p>
 
       </div>
     </section>
@@ -339,7 +339,7 @@
           The first time you open a project on a new TD build, Embody scans every creatable operator type in the background, samples the <em>actual</em> creation values, and writes a per-build catalog. TDXN exports compare against those real values instead of the reported defaults. When you upgrade TD, the catalog detects which creation values shifted between builds and automatically patches your operators to preserve your intent. An elegant solution to a very obscure problem — but the kind that would otherwise cost you hours of debugging a parameter that "just changed" after an update.
         </p>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">Upgrade-proof.</span> Export on one build, open on another. Every parameter value survives.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">Upgrade-proof.</span> Export on one build, open on another. Every parameter value survives.</p>
       </div>
     </section>
 
@@ -380,7 +380,7 @@
           </article>
         </div>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">The substrate.</span> Tag a COMP. Save it as TDXN. Commit the file. Let your agent read it, modify it, import the result. All without touching a binary.</p>
+        <p class="tdxn__callout"><span class="tdxn__callout-lead">The substrate.</span> Tag a COMP. Save it as TDXN. Commit the file. Let your agent read it, modify it, import the result. All without touching a binary.</p>
       </div>
     </section>
 
@@ -416,7 +416,7 @@
           </div>
           <div class="detail">
             <span class="detail__label">JSON Schema</span>
-            <span class="detail__value"><a href="https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json">tdn.schema.json</a></span>
+            <span class="detail__value"><a href="https://github.com/dylanroscover/Embody/blob/main/docs/tdxn.schema.json">tdxn.schema.json</a></span>
           </div>
         </div>
       </div>
@@ -499,28 +499,28 @@
         <h2 class="section__title">go deeper.</h2>
 
         <div class="pillars pillars--four">
-          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/specification/">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/specification/">
             <h3 class="pillar__name">specification</h3>
             <p class="pillar__body">
               The complete field reference — every property, every inclusion condition, every default value.
             </p>
             <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
           </a>
-          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/schema/">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/schema/">
             <h3 class="pillar__name">JSON schema</h3>
             <p class="pillar__body">
               Machine-readable schema for validation and IDE auto-completion.
             </p>
             <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
           </a>
-          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/examples/">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/examples/">
             <h3 class="pillar__name">examples</h3>
             <p class="pillar__body">
               Complete, minimal, and annotated <code>.tdxn</code> files you can study and use as templates.
             </p>
             <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
           </a>
-          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/import-export/">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/import-export/">
             <h3 class="pillar__name">import &amp; export</h3>
             <p class="pillar__body">
               Keyboard shortcuts, MCP tools, the 8-phase import process, and error handling.
@@ -561,7 +561,7 @@
       <nav class="footer__col" aria-label="Reference">
         <h4 class="footer__h">Reference</h4>
         <ul>
-          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDXN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/tdxn/specification/">TDXN spec</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/#getting-started">get started</a></li>
           <li><a href="/for-ai">for AI agents</a></li>

@@ -237,9 +237,14 @@ def onCook(scriptOp):
 		oper = op(path)
 		is_comp = oper and oper.family == 'COMP'
 
-		# Get strategy -- derive from old schema if column missing
+		# Get strategy -- derive from old schema if column missing.
+		# The CELL reads 'tdxn'; every compare below is against the internal
+		# 'tdn' wire value, so normalize on the way in or the Strategy column
+		# renders blank for every TDXN row.
 		if has_strategy:
 			strategy = row.get('strategy', '')
+			if strategy.strip().lower() == 'tdxn':
+				strategy = 'tdn'
 		else:
 			row_type = row.get('type', '')
 			if row_type == 'tdn':

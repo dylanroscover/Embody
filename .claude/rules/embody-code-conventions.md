@@ -93,20 +93,20 @@ fourth; the rest are on you.
   is what the Python side deliberately abandoned. The ledger check fails both ways, so
   closing a gap requires deleting its `divergence` note in the same change.
 
-## Embody's Own COMP Is Edited Live, Never Through Its `.tdn`
+## Embody's Own COMP Is Edited Live, Never Through Its `.tdxn`
 
-`_getTDNStrategyComps` omits Embody, its ancestors and its descendants, so
-nothing reconstructs `/embody/Embody` from `dev/embody/Embody.tdn`. A hand edit
-to that file (or to `tagger.tdn`, `toolbar.tdn`, `list.tdn`, `manager.tdn`) is
+`_getTDXNStrategyComps` omits Embody, its ancestors and its descendants, so
+nothing reconstructs `/embody/Embody` from `dev/embody/Embody.tdxn`. A hand edit
+to that file (or to `tagger.tdxn`, `toolbar.tdxn`, `list.tdxn`, `manager.tdxn`) is
 **inert** -- no reload reads it, the next save overwrites it from the live COMP,
 and `git status` goes clean, so it looks applied and never was. Change the live
-network; treat the `.tdn` as the receipt. Externalized `.py` DATs are the
+network; treat the `.tdxn` as the receipt. Externalized `.py` DATs are the
 opposite and are edited on disk as normal.
 
-**Corollary: a descendant's own `.tdn` does NOT refresh on save.** The same
+**Corollary: a descendant's own `.tdxn` does NOT refresh on save.** The same
 exclusion that makes a hand edit inert also means the pre-save export never
-re-writes `tagger.tdn`, `toolbar.tdn`, `list.tdn` or `manager.tdn`. Only
-`Embody.tdn` moves, and it carries a `tdn_ref` rather than their contents. So
+re-writes `tagger.tdxn`, `toolbar.tdxn`, `list.tdxn` or `manager.tdxn`. Only
+`Embody.tdxn` moves, and it carries a `tdn_ref` rather than their contents. So
 after editing a live DAT inside one of them -- which is the sanctioned way to
 change that code -- the receipt on disk goes **stale and stays stale**, and it
 is committed. Re-export it explicitly:
@@ -114,7 +114,7 @@ is committed. Re-export it explicitly:
     save_externalization(op_path='/embody/Embody/tagger')
 
 Never `externalizeProject` (the Externalize Full Project pulse) for this (see `destructive-tests.md`). Verified
-2026-08-29: three live parexec DATs renamed in WP4 wave 4d left `tagger.tdn`
+2026-08-29: three live parexec DATs renamed in WP4 wave 4d left `tagger.tdxn`
 holding the old method names through a full save, until the per-COMP
 re-export.
 
