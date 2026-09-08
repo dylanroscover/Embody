@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.41
+
+The MCP SDK moves to 2.2.0.
+
+- **MCP SDK 2.2.0.** `_MCP_MIN_VERSION` bumps to `2.2.0`, so every existing venv upgrades itself on its next start and new installs resolve straight to it. Verified first in a throwaway venv against the exact surface Envoy uses -- `MCPServer`, `Image`, `TransportSecuritySettings`, and a typed `@tool()` registration -- then end to end: 68 tools advertised with intact schemas, and a fresh install that built its own venv from the new pin. TouchDesigner needs one restart to finish the swap; Envoy says so rather than running a half-upgraded stack.
+
 ## v6.2.40
 
 TDXN finishes its rename at the surfaces you actually touch: the tag on your COMPs, the strategy column, and the files on disk.

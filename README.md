@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.40-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.41-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.41** — the MCP SDK moves to 2.2.0; existing venvs upgrade themselves on the next start
 - **6.2.40** — the TDXN tag, the `strategy` column, the files on disk and the git diff driver all say TDXN; nine strategy reads that had silently stopped matching are fixed
 - **6.2.13** — vector custom parameter defaults survive the round trip (issue #96); six definition fields, three authored flags, and TDXN format 2.1
 - **6.2.8** — the TDXN rename completes across docs, skills, and embody.tools (`/tdn/` → `/tdxn/` with permanent redirects)
