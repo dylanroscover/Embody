@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.42
+
+Ship the whole project as one locked `.toe`, with Embody gone from it.
+
+- **`ExportReleaseToe`** inlines every tracked file into its operator, scrubs Embody's tags, colours and storage, deletes the Embody COMP and its table, optionally applies Project Privacy, saves and quits. One-way, `confirm=True`, dedicated instance. Docs: [Export Release Toe](embody/release-toe.md).
+- **`PreviewReleaseToe`** shows the plan and every refusal first.
+- **A `pre_release_toe` hook** runs your release recipe, then is destroyed so it never ships.
+
 ## v6.2.41
 
 The MCP SDK moves to 2.2.0.

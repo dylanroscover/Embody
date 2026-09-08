@@ -2935,6 +2935,30 @@ class EmbodyExt:
         ui.messageBox, then run Uninstall on Yes. See embody_admin."""
         return mod.embody_admin.uninstall_handler(self, target_dir=target_dir)
 
+    def PreviewReleaseToe(self, save_path=None, privacy_key=None,
+                          hook_name='pre_release_toe',
+                          ignore_op_errors=False):
+        """Log + return a NON-DESTRUCTIVE preview of an ExportReleaseToe:
+        the readiness verdict, the hook, what gets inlined, scrubbed and
+        destroyed. Nothing is run or changed. See embody_admin."""
+        return mod.embody_admin.preview_release_toe(
+            self, save_path=save_path, privacy_key=privacy_key,
+            hook_name=hook_name, ignore_op_errors=ignore_op_errors)
+
+    def ExportReleaseToe(self, save_path, privacy_key=None,
+                         hook_name='pre_release_toe', quit_after=True,
+                         confirm=False, ignore_op_errors=False):
+        """Save the whole project as a locked, self-contained release .toe.
+        DESTRUCTIVE and one-way -- requires confirm=True (review
+        PreviewReleaseToe() first) and a DEDICATED TouchDesigner instance:
+        Embody and its tracking table are deleted and the session quits.
+        ignore_op_errors logs operator errors instead of refusing on them.
+        See embody_admin."""
+        return mod.embody_admin.export_release_toe(
+            self, save_path, privacy_key=privacy_key, hook_name=hook_name,
+            quit_after=quit_after, confirm=confirm,
+            ignore_op_errors=ignore_op_errors)
+
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
     # in the Advanced-mode confirm.

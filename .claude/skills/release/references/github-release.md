@@ -6,7 +6,14 @@
 
 - Glob for a `release/` or `releases/` directory at the repo root.
 - If neither exists, skip this entire procedure silently.
-- List all files in the release directory. These are the assets to attach.
+- The assets are EXACTLY TWO files: `release/Embody-vX.Y.Z.tox` for the
+  version being released and `release/embody-release.json`. Never glob
+  `release/*`: the directory also holds a dozen archived `.tox` files from
+  older versions, and narrowing that glob by version string is how the
+  unversioned manifest got dropped from v6.2.40 and v6.2.41 (both releases
+  were created with no assets, the `.tox` uploaded ~20 minutes later, the
+  manifest never -- found by a consumer whose updater could not see the
+  release).
 - If the directory is empty, skip silently.
 - **The self-updater depends on `release/embody-release.json`** (written by
   the dev save hook alongside the `.tox`). Verify it is present, that its
@@ -53,7 +60,10 @@ gh release create TAG ASSET_FILES... \
 ```
 
 - **TAG**: Use the version string, prefixed with `v` if not already (e.g., `v1.2.3`). Match existing tag conventions if tags already exist in the repo.
-- **ASSET_FILES**: All files from the release directory. Glob `release/*` or `releases/*`.
+- **ASSET_FILES**: exactly `release/Embody-vX.Y.Z.tox release/embody-release.json`,
+  passed on the CREATE command so the release is never published without
+  them. Not `release/*` (archived toxes), and not a create-then-upload
+  split that filters by version (the manifest's name carries none).
 - **TITLE**: Derive from the project name + version. Use the repo name or `package.json` name if available.
 - **NOTES**: The extracted changelog section or generated commit log, passed via HEREDOC for safe formatting.
 - **BRANCH**: The branch that was just pushed.
@@ -61,6 +71,17 @@ gh release create TAG ASSET_FILES... \
 ## 6. Verify and Report
 
 - Run `gh release view TAG` to confirm creation.
+- **Verify the assets, not just the release** -- this is the step that was
+  missing when v6.2.40/v6.2.41 shipped without a manifest:
+  ```
+  gh release view TAG --json assets --jq '.assets[].name'
+  curl -sIL https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json | grep -i '^location' | head -1
+  ```
+  The first must list BOTH `Embody-vX.Y.Z.tox` and `embody-release.json`;
+  the second (the exact URL the self-updater fetches) must redirect into
+  `releases/download/TAG/`. Anything else: `gh release upload TAG <file>`
+  now, before reporting. A missing manifest makes the release invisible to
+  every installed Embody, and nothing local ever fails.
 - **The tag push triggers its own CI runs** (`gh run list --limit 5` will show
   runs on the tag ref alongside the branch runs). Watch those to completion
   too -- the v6.0.252 tag run went red on a windows-latest stall AFTER dev,

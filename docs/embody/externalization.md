@@ -309,6 +309,8 @@ So with auto-save on, a crash costs you at most the handful of operations since 
 
 Export any COMP as a **self-contained `.tox`** with all external file references and Embody tags stripped. The exported `.tox` works when loaded into any TouchDesigner project — no missing file errors and no Embody metadata.
 
+For the whole **project** — inlined, Embody deleted out of the network, optionally locked with Project Privacy — see [Export Release Toe](release-toe.md).
+
 ### How it works
 
 `ExportPortableTox()` temporarily strips all relative `file`/`syncfile` references from DATs, `externaltox`/`enableexternaltox` references from COMPs, and all Embody tags from every operator, saves the `.tox`, then restores everything. The strip/save/restore cycle is synchronous, so no timing issues arise. Author-supplied `pre_release`/`post_release` hook DATs automate the export — by default the pre-hook runs on a staged throwaway copy, so the live component is never touched — see [Script hooks](#script-hooks).

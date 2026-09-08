@@ -1,4 +1,4 @@
-"""EmbodyExt uninstall + settings persistence (module DAT).
+"""EmbodyExt uninstall + release .toe export + settings persistence (module DAT).
 
 Module DAT (mod.embody_admin) called by EmbodyExt on the MAIN THREAD only (the
 ext-diet WP7c + WP7d clusters C5 + C9). Holds:
@@ -9,6 +9,11 @@ ext-diet WP7c + WP7d clusters C5 + C9). Holds:
         strip_mcp_envoy) + the promoted Uninstall entry point. The uninstall
         marker constants (_UNINSTALL_MARKER_*) live at module scope -- their sole
         consumer is compute_uninstall_plan and nothing external reads them.
+  - C5b Release .toe export: the PURE planners (plan_release_*) and the
+        orchestrator (preview_release_toe / export_release_toe) behind
+        PreviewReleaseToe / ExportReleaseToe. Steps 4-6 leave this module
+        entirely -- they run from a generated run() script, because this
+        DAT lives inside the COMP they delete.
   - C9  Settings/config.json persistence: settings_path / find_settings_file /
         project_json_path / write_project_json / save_settings /
         defer_save_settings / restore_settings / show_tdxn_migration_nudge.
@@ -47,6 +52,9 @@ The run() deferral strings target the facade stubs (ext.Embody._saveSettings /
 from __future__ import annotations
 
 import json
+import os
+import posixpath
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -733,6 +741,1153 @@ def uninstall_handler(ext, target_dir=None):
         'to finish removing it from this .toe.',
         buttons=['OK'])
     return summary
+
+
+# ==========================================================================
+# RELEASE .toe EXPORT (C5b)
+# ==========================================================================
+# ExportPortableTox for the WHOLE project, one-way: tracked files inlined,
+# Embody's in-network footprint scrubbed, the Embody COMP + tracking table
+# destroyed, optional privacy, save, quit. Dedicated instance; the dev
+# .toe and its save series are refused, and from step 0 nothing Embody
+# does reaches the project folder (_release_quiet_session). PURE planners
+# (plan_release_*), ONE orchestrator; steps 4-6 run from a generated run()
+# script because this module is a DAT inside the COMP they delete.
+
+RELEASE_TOE_HOOK = 'pre_release_toe'
+# The startup restores land at frames 45-90 (execute.py onStart); a project
+# opened seconds ago still holds stripped shells. 120 is those 90 plus margin.
+# CAVEAT, stated rather than buried: absTime.frame counts frames since the
+# APPLICATION started, not since this project opened, so in an instance that
+# already had another project open it passes trivially. That is fine for the
+# only supported use (a dedicated instance launched on the project) and it is
+# why this is the belt, not the braces -- the per-COMP children census is the
+# direct evidence the restores actually ran.
+RELEASE_READY_FRAME = 120
+# Frames between the last live mutation and the destroy/save tail. Clearing
+# file/syncfile on a tracked extension DAT reinitializes that extension, so
+# the calling frame must be fully unwound before Embody is destroyed.
+RELEASE_FINISH_DELAY_FRAMES = 10
+_RELEASE_CLONE_TAG = 'clone'
+
+
+def release_product_path(embody_path: str) -> str:
+    """The COMP a release hook belongs to: Embody's TOP-LEVEL ancestor.
+
+    Not ext.my.parent() -- Embody is installed inside the product it
+    externalizes (moonshine: /moonshine/lib/Embody, table sibling
+    /moonshine/lib/externalizations), so the parent is a library shelf,
+    not the thing being released. Root itself when Embody is a direct
+    child of '/'.
+    """
+    parts = [p for p in str(embody_path or '').split('/') if p]
+    return '/' + parts[0] if len(parts) > 1 else '/'
+
+
+def plan_release_readiness(*, tdxn_comps, frame, op_errors, perform_mode,
+                           project_saved, save_path, project_toe='',
+                           project_folder='', save_dir_exists=None,
+                           save_path_exists=False, hook_touched=(),
+                           startup_done=False, ignore_op_errors=False,
+                           min_frame=RELEASE_READY_FRAME) -> dict:
+    """Every reason to refuse, computed from plain data. PURE.
+
+    tdxn_comps: [{'path', 'present', 'children', 'file_ops'}] -- the
+    table's TDXN rows against the live network plus the operator count in
+    each row's .tdxn. A childless COMP is a stripped shell (the frame
+    45-90 restores have not run; exporting ships it hollow) only when its
+    file has operators; empty on disk too it is simply empty; unreadable
+    file -> refused, nothing vouches for it. save_path is RESOLVED
+    (release_resolve_save_path); save_dir_exists / save_path_exists are
+    the caller's os.path checks; hook_touched: COMPs the hook destroyed or
+    emptied on purpose (neither 'missing' nor shells); ignore_op_errors
+    moves the error refusal to 'warnings'; startup_done waives only the
+    frame check.
+    """
+    refusals, warnings = [], []
+    if perform_mode:
+        refusals.append('Perform Mode is active')
+    if not project_saved:
+        refusals.append('project has never been saved -- tracked paths are '
+                        'relative to project.folder')
+    path = str(save_path or '').strip()
+    toe_name = posixpath.basename(str(project_toe or '').replace('\\', '/'))
+    if not path:
+        refusals.append('a save path is required')
+    elif not path.lower().endswith('.toe'):
+        refusals.append(f'save path must end in .toe: {path}')
+    elif project_toe and _release_same_path(path, project_toe):
+        refusals.append(f'save path is the running project itself: {path}')
+    elif _release_same_series(path, project_toe, project_folder):
+        refusals.append(
+            f"save path is in the running project's own folder and save "
+            f'series ({posixpath.basename(path)} beside {toe_name}) -- '
+            f'TouchDesigner and Embody would take it for the newest save of '
+            f'this project; write the release outside the project folder or '
+            f'under another base name')
+    elif save_dir_exists is False:
+        refusals.append(
+            f'save folder does not exist: {posixpath.dirname(path)}')
+    elif save_path_exists:
+        refusals.append(
+            f'save path already exists: {path} -- TouchDesigner would ask '
+            f'to overwrite it in a session with nothing left to answer; '
+            f'delete it or pick another name')
+    touched = set(hook_touched or ())
+    missing = sorted(c['path'] for c in tdxn_comps
+                     if not c.get('present') and c['path'] not in touched)
+    shells, unverifiable = [], []
+    for c in tdxn_comps:
+        if (not c.get('present') or c.get('children')
+                or c['path'] in touched):
+            continue
+        file_ops = c.get('file_ops')
+        if file_ops is None:
+            unverifiable.append(c['path'])
+        elif int(file_ops) > 0:
+            shells.append(c['path'])
+        # file_ops == 0: empty on disk as well -- legitimately empty.
+    shells.sort()
+    unverifiable.sort()
+    if missing:
+        refusals.append(
+            f'{len(missing)} tracked COMP(s) are not in the network: '
+            + ', '.join(missing))
+    if shells:
+        refusals.append(
+            f'{len(shells)} tracked COMP(s) are stripped shells (empty in '
+            f'the network, populated in their .tdxn -- the startup restore '
+            f'has not run): ' + ', '.join(shells))
+    if unverifiable:
+        refusals.append(
+            f'{len(unverifiable)} tracked COMP(s) are empty and their .tdxn '
+            f'could not be read to confirm that is intentional: '
+            + ', '.join(unverifiable))
+    if not startup_done and int(frame) <= int(min_frame):
+        refusals.append(
+            f'frame {int(frame)} is inside the startup window (<= '
+            f'{int(min_frame)}) -- the restores land at frames 45-90')
+    if op_errors:
+        line = (f'the project has {len(op_errors)} operator error(s): '
+                + '; '.join(list(op_errors)[:5]))
+        (warnings if ignore_op_errors else refusals).append(line)
+    return {'ready': not refusals, 'refusals': refusals, 'warnings': warnings,
+            'missing': missing, 'shells': shells,
+            'unverifiable': unverifiable, 'frame': int(frame),
+            'save_path': path}
+
+
+def _release_same_path(a, b) -> bool:
+    """Case- and separator-insensitive path comparison (Windows dev box,
+    posix CI). Never resolves -- these are compared, not opened."""
+    def _norm(v):
+        return str(v or '').replace('\\', '/').rstrip('/').lower()
+    return bool(_norm(a)) and _norm(a) == _norm(b)
+
+
+def release_resolve_save_path(save_path, project_folder) -> str:
+    """Absolute, forward-slash form of a save path. PURE.
+
+    A relative path is taken against project.folder: TD runs with that
+    folder as its cwd, and every tracked path is relative to it. Resolved
+    ONCE, up front, so the gate, the hook's args[0] and the finish script
+    all name the same file -- a bare 'MyShow.42.toe' used to slip past the
+    running-project refusal and overwrite the dev .toe.
+    """
+    path = str(save_path or '').strip().replace('\\', '/')
+    if not path:
+        return ''
+    folder = str(project_folder or '').replace('\\', '/').rstrip('/')
+    is_abs = path.startswith('/') or (len(path) > 1 and path[1] == ':')
+    if not is_abs and folder:
+        path = folder + '/' + path
+    return posixpath.normpath(path)
+
+
+def _release_series_base(name) -> str:
+    """'MyShow.42.toe' -> 'myshow': the increment series TD's save and
+    EmbodyExt._resolveProjectToe group a project's files by."""
+    stem = name[:-4] if name.lower().endswith('.toe') else name
+    return re.sub(r'\.\d+$', '', stem).lower()
+
+
+def _release_same_series(save_path, project_toe, project_folder) -> bool:
+    """True when the save would land in the project folder under the
+    running project's own series -- MyShow.toe beside MyShow.42.toe.
+    Neither TD's incremental save nor _resolveProjectToe can tell that
+    file from the project's next save."""
+    if not (save_path and project_toe and project_folder):
+        return False
+    path = str(save_path).replace('\\', '/')
+    folder = str(project_folder).replace('\\', '/').rstrip('/')
+    if posixpath.dirname(path).lower() != folder.lower():
+        return False
+    toe = posixpath.basename(str(project_toe).replace('\\', '/'))
+    return (_release_series_base(posixpath.basename(path))
+            == _release_series_base(toe))
+
+
+def release_storage_keys(skip_keys, control_keys) -> list:
+    """The storage keys the scrub may take off ANY operator. PURE.
+
+    Embody's own breadcrumbs by prefix (_tdn_*, _pending_tdn_*,
+    _pending_tox_*) plus the Embed-toggle control keys it stores on
+    tracked COMPs. The rest of TDXNExt.SKIP_STORAGE_KEYS ('hover',
+    'test_results', 'git_status', ...) are Embody-UI runtime names a
+    user's own component could carry too; they live on Embody's ops,
+    which are destroyed, and are never scrubbed.
+    """
+    owned = {k for k in (skip_keys or ())
+             if k.startswith(('_tdn', '_pending_tdn', '_pending_tox'))}
+    return sorted(owned | set(control_keys or ()))
+
+
+def plan_release_disarm(tdxn_mode, strip_on_save, filecleanup='keep') -> list:
+    """The parameter writes that stand Embody's disk writers down. PURE.
+
+    Tdxnmode off: onProjectPreSave short-circuits (execute.py:296-301) and
+    checkpoint() refuses -- no .tdxn export, no strip, no tsv restamp for
+    the rest of the session. Tdxnstriponsave off: belt and braces for the
+    strip (execute.py:395-399). Filecleanup keep: the continuity sweep's
+    cascade can never unlink a source file, even if suppression lapses.
+    """
+    writes = []
+    # Filecleanup FIRST: if a later write fails and the session is left
+    # standing, 'delete' must already be gone.
+    if str(filecleanup or 'keep') != 'keep':
+        writes.append(('Filecleanup', 'keep'))
+    if str(tdxn_mode or '') != 'off':
+        writes.append(('Tdxnmode', 'off'))
+    if strip_on_save:
+        writes.append(('Tdxnstriponsave', False))
+    return writes
+
+
+def plan_release_presave_hooks(execute_dats, embody_path) -> list:
+    """Execute DATs that would still fire onProjectPreSave at the release
+    save. PURE.
+
+    Anything inside the Embody COMP is omitted: step 4 destroys it before
+    the save, hook and all. What is left belongs to the product, and a
+    product pre-save hook running against a project whose Embody is gone
+    is exactly the half-initialized state this export exists to avoid --
+    so the caller refuses rather than silently disabling someone's DAT.
+    Fix it in the pre_release_toe hook (destroy it, or turn its
+    projectpresave off), which runs before this check.
+    """
+    prefix = str(embody_path or '').rstrip('/') + '/'
+    out = []
+    for d in execute_dats:
+        path = d.get('path', '')
+        if path == embody_path or path.startswith(prefix):
+            continue
+        if d.get('projectpresave') and d.get('active', True):
+            out.append(path)
+    return sorted(out)
+
+
+def plan_release_inline(tracked, *, embody_path, table_path,
+                        hook_path=None, extra_tables=()) -> dict:
+    """Which tracked operators lose their file bindings, and which do not.
+    PURE. tracked: [{'path', 'family', 'file', 'syncfile', 'externaltox',
+    'enableexternaltox'}] -- the live state of every table row.
+
+    Skipped, all load-bearing: the tracking table(s) -- a table DAT keeps
+    its TEXT when its file is cleared, i.e. the whole source manifest
+    (destroyed in step 4 instead); the pre_release_toe hook (destroyed in
+    step 2, it holds the recipe); everything inside the Embody COMP
+    (destroyed whole, and clearing EmbodyExt.py's binding reinits THIS
+    extension mid-call).
+    """
+    prefix = str(embody_path or '').rstrip('/') + '/'
+    tables = {t for t in [table_path, *(extra_tables or ())] if t}
+    plan = {'dats': [], 'comps': [], 'skipped': []}
+
+    def _skip(path, why):
+        plan['skipped'].append({'path': path, 'why': why})
+
+    for rec in tracked:
+        path = rec.get('path', '')
+        if path == embody_path or path.startswith(prefix):
+            _skip(path, 'inside the Embody COMP (destroyed in step 4)')
+            continue
+        if path in tables:
+            _skip(path, 'the externalizations table (destroyed in step 4 -- '
+                        'inlining it would ship the file manifest)')
+            continue
+        if hook_path and path == hook_path:
+            _skip(path, 'the release hook (destroyed in step 2)')
+            continue
+        if rec.get('family') == 'DAT':
+            if rec.get('file') or rec.get('syncfile'):
+                plan['dats'].append(path)
+            else:
+                _skip(path, 'no file binding')
+        elif rec.get('family') == 'COMP':
+            if rec.get('externaltox') or rec.get('enableexternaltox'):
+                plan['comps'].append(path)
+            else:
+                _skip(path, 'no external .tox binding')
+        else:
+            _skip(path, f'unsupported family {rec.get("family")!r}')
+    plan['dats'].sort()
+    plan['comps'].sort()
+    return plan
+
+
+def plan_release_reference_sweep(refs, inlined=()) -> dict:
+    """Bindings still standing after the inline pass. PURE.
+
+    refs: [{'path', 'par', 'value'}]; inlined: paths the inline plan
+    clears, skipped so a preview shows what WOULD remain. Absolute values
+    are called out separately -- a relative one is merely a dangling
+    reference in the artifact, an absolute one leaks the build machine's
+    filesystem. /sys/ paths are TouchDesigner's own and are neither.
+    """
+    skip = set(inlined or ())
+    remaining, absolute = [], []
+    for ref in refs:
+        value = str(ref.get('value') or '')
+        if not value or ref.get('path', '') in skip:
+            continue
+        entry = {'path': ref.get('path', ''), 'par': ref.get('par', ''),
+                 'value': value}
+        remaining.append(entry)
+        if value.startswith('/sys/'):
+            continue
+        if value.startswith('/') or (len(value) > 1 and value[1] == ':'):
+            absolute.append(entry)
+    return {'remaining': remaining, 'absolute': absolute}
+
+
+def release_tag_removals(tags, embody_tags, exclude_tags) -> list:
+    """Embody tags to strip off one operator. PURE.
+
+    Covers BOTH spellings of the boundary and exclude tags (the caller
+    unions the configured values with the legacy ones -- EmbodyExt._tdxnTags
+    / ._tdxnExcludeTags), the 'clone' marker Embody adds itself
+    (EmbodyExt.py:8968), and the per-parameter QUALIFIERS the exclude tag
+    takes: 'tdxn_exclude:play' is one tag, not two, and a plain membership
+    test never sees it.
+    """
+    drop = set()
+    for tag in tags:
+        if tag in embody_tags or tag in exclude_tags:
+            drop.add(tag)
+        elif tag == _RELEASE_CLONE_TAG:
+            drop.add(tag)
+        elif ':' in tag and tag.split(':', 1)[0] in exclude_tags:
+            drop.add(tag)
+    return sorted(drop)
+
+
+def plan_release_scrub(ops, *, embody_tags, exclude_tags, storage_keys,
+                       tracked_paths=(), embody_path='', table_path='',
+                       extra_tables=()) -> dict:
+    """Embody's IN-NETWORK footprint, per operator. PURE.
+
+    No manifest exists for it (_INSTALL_MANIFEST is files on disk), so it
+    is derived: tags (release_tag_removals), node colours (EmbodyExt.
+    Disable's rule: every tagged op, plus tracked ops whose tag was lost)
+    and storage_keys (release_storage_keys: Embody-owned names only, off
+    any op). The Embody COMP, its subtree and the table(s) are left alone,
+    destroyed whole in step 4.
+    """
+    tracked = set(tracked_paths or ())
+    embody_path = str(embody_path or '')
+    prefix = embody_path.rstrip('/') + '/'
+    tables = {t for t in [table_path, *(extra_tables or ())] if t}
+    tag_plan, storage_plan, colours = [], [], set()
+    keys = set(storage_keys or ())
+    for rec in ops:
+        path = rec.get('path', '')
+        if embody_path and (path == embody_path or path.startswith(prefix)):
+            continue
+        if path in tables:
+            continue
+        removals = release_tag_removals(
+            rec.get('tags') or (), embody_tags, exclude_tags)
+        if removals:
+            tag_plan.append({'path': path, 'remove': removals})
+            colours.add(path)
+        if path in tracked:
+            colours.add(path)
+        hit = sorted(keys.intersection(rec.get('storage_keys') or ()))
+        if hit:
+            storage_plan.append({'path': path, 'keys': hit})
+    tag_plan.sort(key=lambda e: e['path'])
+    storage_plan.sort(key=lambda e: e['path'])
+    return {'tags': tag_plan, 'storage': storage_plan,
+            'colours': sorted(colours)}
+
+
+def plan_release_footprint(embody_path, table_path, extra_tables=()) -> list:
+    """What step 4 destroys, in order. PURE.
+
+    The Embody COMP FIRST, its tracking table second: the table is
+    deliberately an undocked sibling so it survives the COMP's deletion
+    (that is what makes an accidental delete recoverable), which is
+    exactly why the release has to name it separately. A table INSIDE the
+    COMP goes with it and is dropped rather than destroyed twice.
+    extra_tables: sibling 'externalizations' tables the par no longer
+    links (createExternalizationsTable re-adopts one by name) -- their
+    text is the manifest all the same.
+    """
+    embody_path = str(embody_path or '')
+    prefix = embody_path.rstrip('/') + '/'
+    plan = [{'path': embody_path, 'what': 'Embody COMP'}]
+    for path, what in [(table_path, 'externalizations table')] + [
+            (t, 'externalizations table (unlinked sibling)')
+            for t in (extra_tables or ())]:
+        path = str(path or '')
+        if (not path or path == embody_path or path.startswith(prefix)
+                or any(e['path'] == path for e in plan)):
+            continue
+        plan.append({'path': path, 'what': what})
+    return plan
+
+
+def plan_release_privacy(privacy_key, is_pro) -> dict:
+    """Project privacy, and the licence that gates it. PURE.
+
+    project.addPrivacy needs Pro (docs.derivative.ca/Project_Class) and
+    only ever applies to a .toe that has none. Refusing here rather than
+    at the call site matters: by then Embody is deleted and there is
+    nothing left to report with.
+    """
+    key = str(privacy_key or '')
+    if not key:
+        return {'apply': False, 'key': '', 'refusal': ''}
+    if not is_pro:
+        return {'apply': False, 'key': key,
+                'refusal': 'project privacy needs a Pro licence '
+                           '(licenses.isPro is False) -- run the release on '
+                           'a Pro machine or export without a privacy key'}
+    return {'apply': True, 'key': key, 'refusal': ''}
+
+
+def plan_release_toe(state, *, save_path, privacy_key=None,
+                     hook_name=RELEASE_TOE_HOOK, ignore_op_errors=False,
+                     hook_touched=(), hook_ran=False) -> dict:
+    """Compose the whole plan from collected state. PURE -- `state` is not
+    mutated, nothing is applied, and this is what the dry run returns.
+
+    `state` is what _release_collect reads out of TouchDesigner; see it for
+    the shape of each key.
+    """
+    embody_path = state.get('embody_path', '')
+    table_path = state.get('table_path', '')
+    hook_path = state.get('hook_path') or None
+    extra_tables = tuple(state.get('orphan_tables') or ())
+    resolved = release_resolve_save_path(save_path,
+                                         state.get('project_folder', ''))
+    readiness = plan_release_readiness(
+        tdxn_comps=state.get('tdxn_comps') or (),
+        frame=state.get('frame', 0),
+        op_errors=state.get('op_errors') or (),
+        perform_mode=state.get('perform_mode', False),
+        project_saved=state.get('project_saved', False),
+        save_path=resolved,
+        project_toe=state.get('project_toe', ''),
+        project_folder=state.get('project_folder', ''),
+        save_dir_exists=state.get('save_dir_exists'),
+        save_path_exists=bool(state.get('save_path_exists')),
+        hook_touched=hook_touched,
+        startup_done=state.get('startup_done', False),
+        ignore_op_errors=ignore_op_errors)
+    privacy = plan_release_privacy(privacy_key, state.get('is_pro', False))
+    if privacy['refusal']:
+        readiness['refusals'] = list(readiness['refusals']) + [
+            privacy['refusal']]
+        readiness['ready'] = False
+    presave = plan_release_presave_hooks(state.get('execute_dats') or (),
+                                         embody_path)
+    if presave and not hook_path and not hook_ran:
+        # Nothing between the gate and the save could disarm them. After
+        # the hook ran (and was destroyed) the caller refuses on its own.
+        readiness['refusals'] = list(readiness['refusals']) + [
+            f'{len(presave)} Execute DAT(s) still fire onProjectPreSave and '
+            f'there is no {hook_name} hook to disarm them: '
+            + ', '.join(presave)]
+        readiness['ready'] = False
+    inline = plan_release_inline(
+        state.get('tracked') or (), embody_path=embody_path,
+        table_path=table_path, hook_path=hook_path,
+        extra_tables=extra_tables)
+    return {
+        'save_path': resolved,
+        'embody_path': embody_path,
+        'table_path': table_path,
+        'product_path': (state.get('product_path')
+                         or release_product_path(embody_path)),
+        'hook_name': hook_name,
+        'hook_path': hook_path or '',
+        'readiness': readiness,
+        'disarm': plan_release_disarm(state.get('tdxn_mode', ''),
+                                      state.get('strip_on_save', False),
+                                      state.get('filecleanup', 'keep')),
+        'presave_hooks': presave,
+        'inline': inline,
+        'references': plan_release_reference_sweep(
+            state.get('refs') or (),
+            inlined=set(inline['dats']) | set(inline['comps'])),
+        'scrub': plan_release_scrub(
+            state.get('ops') or (),
+            embody_tags=state.get('embody_tags') or (),
+            exclude_tags=state.get('exclude_tags') or (),
+            storage_keys=state.get('storage_keys') or (),
+            tracked_paths=state.get('tracked_paths') or (),
+            embody_path=embody_path, table_path=table_path,
+            extra_tables=extra_tables),
+        'footprint': plan_release_footprint(embody_path, table_path,
+                                            extra_tables),
+        'privacy': privacy,
+    }
+
+
+def release_finish_script(footprint, save_path, privacy_key='',
+                          quit_after=True) -> str:
+    """Steps 4-6 as a run() script. PURE (a string in, a string out).
+
+    It runs with NO Embody: this module, the extension and the log all
+    live in the COMP its first act destroys, so it interpolates literals,
+    reaches only TD globals, and reports through print(). It is a script
+    rather than a Text DAT at '/' because an operator holding the release
+    recipe would have to be destroyed before the save to avoid shipping --
+    a run() string cannot be saved into a .toe at all.
+
+    Fail-CLOSED: a target that survives, a refused addPrivacy or a failed
+    save all stop before the next step and leave the session standing for
+    inspection. Nothing is ever written half-locked.
+    """
+    lines = [
+        '# Embody ExportReleaseToe -- generated, runs after the Embody COMP is gone',
+        '_targets = %r' % ([e['path'] for e in footprint],),
+        '_path = %r' % (str(save_path),),
+        '_key = %r' % (str(privacy_key or ''),),
+        '_quit = %r' % (bool(quit_after),),
+        'for _p in _targets:',
+        '    _o = op(_p)',
+        '    if _o is not None:',
+        '        _o.destroy()',
+        '_left = [_p for _p in _targets if op(_p) is not None]',
+        'if _left:',
+        "    print('Embody > ExportReleaseToe ABORTED: still present: %s' % _left)",
+        'elif _key and not project.addPrivacy(_key):',
+        "    print('Embody > ExportReleaseToe ABORTED: addPrivacy refused "
+        "(Pro licence? already private?) -- nothing was saved')",
+        'elif not project.save(_path):',
+        "    print('Embody > ExportReleaseToe ABORTED: project.save failed: %s' % _path)",
+        'else:',
+        "    print('Embody > ExportReleaseToe: saved %s' % _path)",
+        '    if _quit:',
+        '        project.quit(force=True)',
+    ]
+    return '\n'.join(lines)
+
+
+# ---- orchestrator (reads TD, calls the planners, applies the plan) --------
+
+def _release_collect(ext, hook_name=RELEASE_TOE_HOOK, save_path=None) -> dict:
+    """Read everything the planners need out of TouchDesigner, as plain
+    data. The ONLY function here that touches the live network to decide
+    anything -- keeping it in one place is what makes the plan testable.
+
+    startup_done is always False: 6.2.41 has no restores-done flag (init()
+    stores _init_complete at onStart, long BEFORE the frame-45..90
+    restores, so reading it would defeat the gate). The frame ceiling plus
+    the per-COMP children census is the evidence instead.
+    """
+    embody = ext.my
+    embody_path = embody.path
+    table = ext.Externalizations
+    table_path = table.path if table else ''
+    product = op(release_product_path(embody_path))
+    if product is None:
+        product = ext.root
+
+    tdxn_comps = []
+    for comp_path, rel in ext._getTDXNStrategyComps():
+        comp = op(comp_path)
+        tdxn_comps.append({
+            'path': comp_path,
+            'present': comp is not None,
+            'children': (len(comp.findChildren(depth=1, includeUtility=True))
+                         if comp is not None else 0),
+            'file_ops': _release_tdxn_file_ops(ext, rel)})
+
+    tracked, tracked_paths = [], []
+    if table:
+        for i in range(1, table.numRows):
+            path = ext._cellVal(i, 'path', table=table)
+            # resolveOpIncludingUtility, not op(): a legacy row AT an
+            # annotate is invisible to a bare lookup (EmbodyExt:9830).
+            oper = ext.resolveOpIncludingUtility(path) if path else None
+            if oper is None:
+                continue
+            tracked_paths.append(path)
+            tracked.append({
+                'path': path,
+                'family': oper.family,
+                'file': _release_par(oper, 'file'),
+                'syncfile': bool(_release_par(oper, 'syncfile')),
+                'externaltox': _release_par(oper, 'externaltox'),
+                'enableexternaltox': bool(
+                    _release_par(oper, 'enableexternaltox'))})
+
+    ops = _release_ops_census(ext)
+
+    # A sibling table the Externalizations par no longer links: Embody
+    # re-adopts one by name (createExternalizationsTable), and its text
+    # is the manifest all the same.
+    orphan_tables = []
+    try:
+        for sib in embody.parent().findChildren(depth=1,
+                                                name='externalizations'):
+            if sib.family == 'DAT' and sib.path != table_path:
+                orphan_tables.append(sib.path)
+    except Exception:
+        pass
+
+    hook = ext._findReleaseHook(product, hook_name)
+    folder = str(project.folder or '')
+    dir_exists, path_exists = _release_save_path_state(save_path, folder)
+    return {
+        'embody_path': embody_path,
+        'table_path': table_path,
+        'product_path': product.path,
+        'hook_path': hook.path if hook is not None else '',
+        'tdxn_comps': tdxn_comps,
+        'tracked': tracked,
+        'tracked_paths': tracked_paths,
+        'ops': ops,
+        'orphan_tables': orphan_tables,
+        'refs': _release_remaining_refs(ext),
+        'execute_dats': _release_execute_dats(ext),
+        'op_errors': _release_op_errors(ext),
+        'frame': _release_frame(),
+        'startup_done': False,
+        'perform_mode': bool(ext._performMode),
+        'project_saved': bool(ext._projectSavedOnDisk()),
+        'project_toe': ext._resolveProjectToe() or '',
+        'project_folder': folder,
+        'save_dir_exists': dir_exists,
+        'save_path_exists': path_exists,
+        'tdxn_mode': ext._tdxnMode(),
+        'strip_on_save': bool(_release_par(embody, 'Tdxnstriponsave',
+                                           False)),
+        'filecleanup': str(_release_par(embody, 'Filecleanup', 'keep')
+                           or 'keep'),
+        'embody_tags': sorted(set(ext.getTags()) | set(ext._tdxnTags())),
+        'exclude_tags': sorted(ext._tdxnExcludeTags()),
+        'storage_keys': release_storage_keys(
+            ext._storageSkipKeys(),
+            getattr(ext, '_STORAGE_CONTROL_KEYS', ())),
+        'is_pro': _release_is_pro(),
+    }
+
+
+def _release_ops_census(ext) -> list:
+    """Tags and storage keys of every operator, root included."""
+    return [{'path': oper.path, 'tags': list(oper.tags),
+             'storage_keys': list(oper.storage.keys())}
+            for oper in [ext.root] + ext.root.findChildren(includeUtility=True)]
+
+
+def _release_tdxn_file_ops(ext, rel_path):
+    """Operator count in a tracked COMP's .tdxn on disk, None when it cannot
+    be read. What tells a stripped shell (empty live, populated on disk)
+    from a COMP that is simply empty."""
+    try:
+        doc = ext.my.ext.TDXN._read_existing_tdxn(
+            str(ext.buildAbsolutePath(rel_path)))
+    except Exception:
+        return None
+    if not isinstance(doc, dict):
+        return None
+    ops = doc.get('operators')
+    return len(ops) if isinstance(ops, (list, dict)) else 0
+
+
+def _release_save_path_state(save_path, project_folder):
+    """(folder exists, file exists) for the resolved save path; (None,
+    False) without a path so 'a save path is required' stays the only
+    word."""
+    resolved = release_resolve_save_path(save_path, project_folder)
+    if not resolved:
+        return None, False
+    return (os.path.isdir(posixpath.dirname(resolved)),
+            os.path.exists(resolved))
+
+
+def _release_par(oper, name, default=''):
+    """Evaluate a parameter that may not exist on this operator family."""
+    par = getattr(oper.par, name, None)
+    if par is None:
+        return default
+    try:
+        return par.eval()
+    except Exception:
+        return default
+
+
+def _release_execute_dats(ext) -> list:
+    """Every Execute DAT in the project with its pre-save arming.
+
+    Only the plain Execute DAT carries projectpresave -- the parameter /
+    dat / chop / panel exec families do not -- so the type filter is the
+    whole population, not an optimization.
+    """
+    return [{'path': d.path,
+             'projectpresave': bool(_release_par(d, 'projectpresave')),
+             'active': bool(_release_par(d, 'active', default=1))}
+            for d in ext.root.findChildren(type=DAT)
+            if getattr(d, 'type', '') == 'execute'
+            and not d.path.startswith(('/local/', '/sys/', '/ui/'))]
+
+
+def _release_frame():
+    """Frames since the APPLICATION started -- see RELEASE_READY_FRAME."""
+    try:
+        return int(absTime.frame)
+    except Exception:
+        return 0
+
+
+def _release_is_pro():
+    try:
+        return bool(licenses.isPro)
+    except Exception:
+        return False
+
+
+def _release_op_errors(ext) -> list:
+    """Project-wide operator + script errors, the shape
+    EmbodyExt._verifyReconstructedComp reads them in (:12420-12445).
+    Capped: the gate needs to know THAT the project is broken. Embody's own
+    subtree (destroyed) and /local (never saved) are not the project's."""
+    errors = []
+    embody_path = ext.my.path
+    prefix = embody_path + '/'
+    try:
+        for child in ext.root.findChildren():
+            path = child.path
+            if (path == embody_path or path.startswith(prefix)
+                    or path in ('/local', '/sys', '/ui')
+                    or path.startswith(('/local/', '/sys/', '/ui/'))):
+                continue
+            for text in (child.scriptErrors(), child.errors()):
+                if text:
+                    errors.append(f'{child.path}: {text.strip()}')
+            if len(errors) >= 50:
+                break
+    except Exception as e:
+        ext.Log(f'Release gate: operator error scan failed: {e}', 'WARNING')
+    return errors
+
+
+def preview_release_toe(ext, save_path=None, privacy_key=None,
+                        hook_name=RELEASE_TOE_HOOK,
+                        ignore_op_errors=False) -> dict:
+    """Log + return a NON-DESTRUCTIVE preview of a full ExportReleaseToe.
+    Nothing is run, nothing is disarmed, nothing is destroyed."""
+    plan = plan_release_toe(_release_collect(ext, hook_name, save_path),
+                            save_path=save_path, privacy_key=privacy_key,
+                            hook_name=hook_name,
+                            ignore_op_errors=ignore_op_errors)
+    ready = plan['readiness']
+    lines = [f'Release .toe preview -> {plan["save_path"] or "(no path)"}']
+    if not ready['ready']:
+        lines.append(f'  REFUSED ({len(ready["refusals"])}):')
+        lines.extend(f'    x {r}' for r in ready['refusals'])
+    lines.extend(f'  WARNING: {w}' for w in ready['warnings'])
+    lines.append(f'  hook: {plan["hook_path"] or "none"} (looked for '
+                 f'{plan["hook_name"]} under {plan["product_path"]}) -- the '
+                 f'export re-plans everything below AFTER it runs')
+    lines.append(f'  inline: {len(plan["inline"]["dats"])} DAT(s), '
+                 f'{len(plan["inline"]["comps"])} COMP(s), '
+                 f'{len(plan["inline"]["skipped"])} skipped')
+    lines.append(f'  scrub: {len(plan["scrub"]["tags"])} tagged, '
+                 f'{len(plan["scrub"]["colours"])} coloured, '
+                 f'{len(plan["scrub"]["storage"])} with storage')
+    lines.append('  destroy: '
+                 + ', '.join(f'{e["path"]} ({e["what"]})'
+                             for e in plan['footprint']))
+    if plan['presave_hooks']:
+        lines.append('  BLOCKING pre-save hooks: '
+                     + ', '.join(plan['presave_hooks']))
+    refs = plan['references']
+    lines.append(f'  references left after inlining: '
+                 f'{len(refs["remaining"])} ({len(refs["absolute"])} '
+                 f'absolute)')
+    absolute = {(e['path'], e['par']) for e in refs['absolute']}
+    lines.extend(f'    ! {e["path"]}.{e["par"]} = {e["value"]}'
+                 for e in refs['absolute'][:10])
+    lines.extend(f'    - {e["path"]}.{e["par"]} = {e["value"]}'
+                 for e in [r for r in refs['remaining']
+                           if (r['path'], r['par']) not in absolute][:10])
+    lines.append('  privacy: '
+                 + ('yes' if plan['privacy']['apply'] else 'no'))
+    ext.Log('\n'.join(lines), 'INFO')
+    return plan
+
+
+def export_release_toe(ext, save_path, privacy_key=None,
+                       hook_name=RELEASE_TOE_HOOK, quit_after=True,
+                       confirm=False, ignore_op_errors=False) -> dict:
+    """Export the project as a locked, self-contained release .toe.
+
+    DESTRUCTIVE and one-way -- requires confirm=True (review
+    PreviewReleaseToe() first). Quiets the session, inlines every tracked
+    externalization, runs the pre_release_toe hook, re-plans, scrubs
+    Embody's in-network footprint, then hands steps 4-6 (destroy Embody +
+    the table, privacy, save, quit) to a generated run() script because
+    this module lives inside the COMP those steps delete. The live session
+    does not survive; the dev .toe on disk is never written.
+    """
+    if not confirm:
+        ext.Log('ExportReleaseToe is destructive and one-way. Review '
+                'PreviewReleaseToe() first, then call '
+                'ExportReleaseToe(save_path, confirm=True). Nothing was '
+                'changed.', 'WARNING')
+        return {'ran': False, 'reason': 'confirm required'}
+
+    state = _release_collect(ext, hook_name, save_path)
+    plan = plan_release_toe(state, save_path=save_path,
+                            privacy_key=privacy_key, hook_name=hook_name,
+                            ignore_op_errors=ignore_op_errors)
+    if not plan['readiness']['ready']:
+        for reason in plan['readiness']['refusals']:
+            ext.Log(f'ExportReleaseToe refused: {reason}', 'ERROR')
+        return {'ran': False, 'reason': 'not ready',
+                'refusals': plan['readiness']['refusals'], 'plan': plan}
+    for line in plan['readiness']['warnings']:
+        ext.Log(f'ExportReleaseToe: {line}', 'WARNING')
+
+    # Step 0: nothing Embody does from here on may reach the project
+    # folder or block on a modal.
+    failed = _release_quiet_session(ext, plan['disarm'])
+    if failed:
+        ext.Log(f'ExportReleaseToe aborted: could not quiet the session '
+                f'({failed}) -- nothing was inlined or destroyed', 'ERROR')
+        return {'ran': False, 'reason': f'could not quiet the session: {failed}'}
+
+    # Step 1: inline every tracked externalization (EmbodyExt.Disable's
+    # strip half, :3606-3631 -- with no restore, because nothing returns).
+    # BEFORE the hook: a synced DAT the hook stamps would otherwise write
+    # straight through to the source file on disk.
+    inlined = _apply_release_inline(ext, plan['inline'])
+    if inlined['errors']:
+        ext.Log(f'ExportReleaseToe aborted: {inlined["errors"]} tracked '
+                f'operator(s) kept their file binding (see the warnings '
+                f'above) -- nothing was destroyed', 'ERROR')
+        return {'ran': False, 'reason': 'inline failed', 'inlined': inlined}
+
+    # Step 2: the author's hook, then destroy it -- it holds the recipe.
+    populated_before = {c['path'] for c in state['tdxn_comps']
+                        if c.get('present') and c.get('children')}
+    toe_before = _release_project_toe_state(ext)
+    product = op(plan['product_path'])
+    if plan['hook_path'] and product is not None:
+        version = str(ext.my.par.Version.eval())
+        # (found, ok) -- found is already known from the plan.
+        if not ext._runReleaseHook(
+                product, hook_name, (plan['save_path'], version))[1]:
+            ext.Log(f'ExportReleaseToe aborted: {hook_name} hook failed -- '
+                    f'the hook DAT is KEPT for inspection', 'ERROR')
+            return {'ran': False, 'reason': 'hook failed'}
+        if not getattr(ext.my, 'valid', True):
+            # The hook took Embody with it: no logger, no table, no tail.
+            return {'ran': False, 'reason': 'hook destroyed Embody'}
+        hook = op(plan['hook_path'])
+        if hook is not None:
+            hook.destroy()
+            ext.Log(f'ExportReleaseToe: destroyed {plan["hook_path"]}',
+                    'INFO')
+        if _release_project_toe_state(ext) != toe_before:
+            ext.Log(f'ExportReleaseToe aborted: the {hook_name} hook saved '
+                    f'the project -- the export never saves your project; '
+                    f'take the project.save() out of the hook', 'ERROR')
+            return {'ran': False, 'reason': 'hook saved the project'}
+    else:
+        ext.Log(f'ExportReleaseToe: no {hook_name} hook under '
+                f'{plan["product_path"]}', 'INFO')
+
+    # RE-PLAN against the post-hook network (ExportPortableTox runs
+    # pre_release before collection for the same reason). The gate is
+    # re-run too: a hook that breaks the project stops the release. A
+    # tracked COMP the hook destroyed or emptied keeps its row and is
+    # neither 'missing' nor a shell.
+    hook_ran = bool(plan['hook_path'])
+    state = _release_collect(ext, hook_name, save_path)
+    touched = sorted(populated_before - {
+        c['path'] for c in state['tdxn_comps']
+        if c.get('present') and c.get('children')})
+    plan = plan_release_toe(state, save_path=save_path,
+                            privacy_key=privacy_key, hook_name=hook_name,
+                            ignore_op_errors=ignore_op_errors,
+                            hook_touched=touched, hook_ran=hook_ran)
+    if not plan['readiness']['ready']:
+        for reason in plan['readiness']['refusals']:
+            ext.Log(f'ExportReleaseToe aborted after the {hook_name} hook: '
+                    f'{reason}', 'ERROR')
+        return {'ran': False, 'reason': 'not ready after the hook',
+                'refusals': plan['readiness']['refusals'], 'plan': plan}
+    for line in plan['readiness']['warnings']:
+        ext.Log(f'ExportReleaseToe (after the hook): {line}', 'WARNING')
+    # The hook is the place to deal with a product's own pre-save hook, so
+    # this check reads the post-hook network and blocks rather than
+    # switching someone else's DAT off.
+    if plan['presave_hooks']:
+        return _release_refuse_presave(ext, plan['presave_hooks'], hook_name)
+
+    sweep = plan_release_reference_sweep(_release_remaining_refs(ext))
+    if sweep['remaining']:
+        ext.Log(f'ExportReleaseToe: {len(sweep["remaining"])} file/'
+                f'externaltox binding(s) Embody never tracked remain: '
+                + ', '.join(f'{e["path"]}.{e["par"]}'
+                            for e in sweep['remaining'][:10]), 'INFO')
+    for entry in sweep['absolute']:
+        ext.Log(f'ExportReleaseToe: absolute path still bound -- '
+                f'{entry["path"]}.{entry["par"]} = {entry["value"]}',
+                'WARNING')
+
+    # Step 3: scrub the in-network footprint. Censused AGAIN here: clearing
+    # a tracked extension's source binding can reinit that extension, and
+    # what its __init__ stored or tagged is invisible to the gate's plan.
+    scrub_plan = plan_release_scrub(
+        _release_ops_census(ext),
+        embody_tags=state['embody_tags'],
+        exclude_tags=state['exclude_tags'],
+        storage_keys=state['storage_keys'],
+        tracked_paths=state['tracked_paths'],
+        embody_path=plan['embody_path'], table_path=plan['table_path'],
+        extra_tables=state.get('orphan_tables') or ())
+    scrubbed = _apply_release_scrub(ext, scrub_plan)
+    if scrubbed['errors']:
+        ext.Log(f'ExportReleaseToe aborted: {scrubbed["errors"]} operator(s) '
+                f'kept an Embody tag, colour or storage key (see the '
+                f'warnings above) -- nothing was destroyed', 'ERROR')
+        return {'ran': False, 'reason': 'scrub failed', 'inlined': inlined,
+                'scrubbed': scrubbed}
+    # Embot and the colour pulses are retired at every save by Embody's
+    # pre-save hook, which dies with the COMP: retire them here or they ship.
+    _release_retire_viz(ext)
+
+    # Steps 4-6, deferred so this frame unwinds first: clearing file/
+    # syncfile above reinitializes every extension whose source DAT it
+    # touched, and the COMP destroyed next is the one running this code.
+    script = release_finish_script(plan['footprint'], plan['save_path'],
+                                   plan['privacy']['key']
+                                   if plan['privacy']['apply'] else '',
+                                   quit_after)
+    ext.Log(f'ExportReleaseToe: inlined {inlined}, scrubbed {scrubbed}; '
+            f'destroying Embody and saving {plan["save_path"]} in '
+            f'{RELEASE_FINISH_DELAY_FRAMES} frames', 'SUCCESS')
+    run(script, delayFrames=RELEASE_FINISH_DELAY_FRAMES)
+    return {'ran': True, 'save_path': plan['save_path'],
+            'warnings': plan['readiness']['warnings'],
+            'touched_by_hook': touched,
+            'inlined': inlined, 'scrubbed': scrubbed,
+            'remaining_refs': sweep['remaining'],
+            'absolute_refs': sweep['absolute'],
+            'footprint': plan['footprint'],
+            'privacy': plan['privacy']['apply'],
+            'quit_after': bool(quit_after), 'plan': plan}
+
+
+def _release_refuse_presave(ext, blocking, hook_name) -> dict:
+    ext.Log('ExportReleaseToe aborted: these execute DATs still fire '
+            'onProjectPreSave and would run against a project with no '
+            'Embody -- destroy them or turn projectpresave off in the '
+            f'{hook_name} hook: ' + ', '.join(blocking), 'ERROR')
+    return {'ran': False, 'reason': 'pre-save hooks armed',
+            'presave_hooks': list(blocking)}
+
+
+def _release_project_toe_state(ext):
+    """(path, mtime) of the project's newest .toe on disk -- the receipt
+    that tells whether a hook saved the project."""
+    try:
+        path = ext._resolveProjectToe() or ''
+        return (path, os.path.getmtime(path) if path else None)
+    except Exception:
+        return ('', None)
+
+
+def _release_quiet_session(ext, writes):
+    """Step 0: nothing Embody does for the rest of this session may reach
+    the project folder or block on a modal. _suppress_dialogs: every
+    _messageBox returns its default and checkOpsForContinuity skips the
+    file-cleanup cascade (post-inline, every tracked op reads 'replaced').
+    _init_complete unstored + _restoring_settings: the save-window guards
+    parexec.onValueChange reads when it RUNS -- TD delivers it deferred,
+    and parexec.par.active=False only postpones it (measured 2026-09-08).
+    Status Disabled: Update() returns at once (a hook, a peer, Ctrl+S or
+    Ctrl+Shift+U would otherwise re-arm every TOX binding). Embody's
+    execute DAT inactive: no pre/post-save hooks. A chunked TDXN export
+    in flight is cancelled (as the pre-save path does): its batches run
+    on their own frames and honour no mode. Table syncfile off: no tsv
+    sync. Then the disarm writes. Fail-CLOSED: returns what failed (the
+    caller aborts), or None."""
+    try:
+        ext.my.store('_suppress_dialogs', True)
+        ext.my.unstore('_init_complete')
+        ext._restoring_settings = True
+    except Exception as e:
+        return f'suppress: {e}'
+    try:
+        cancel = getattr(ext.my.ext.TDXN, 'cancelExport', None)
+        if cancel is not None:
+            cancel()
+    except Exception as e:
+        return f'cancel TDXN export: {e}'
+    try:
+        ext.my.par.Status = 'Disabled'
+        execute = ext.my.op('execute')
+        if execute is not None:
+            execute.par.active = False
+    except Exception as e:
+        return f'Update/save hooks: {e}'
+    table = ext.Externalizations
+    if table is not None:
+        try:
+            table.par.syncfile = False
+        except Exception as e:
+            return f'table syncfile: {e}'
+    return _apply_release_disarm(ext, writes)
+
+
+def _apply_release_disarm(ext, writes):
+    """Write the disarm plan, every write attempted even after a failure
+    (Filecleanup comes first for the same reason). Only after
+    _release_quiet_session: with parexec live, Tdxnmode -> off raises the
+    Disable-TDXN modal (_onTdxnModeChanged) and, the pars being
+    _PERSISTED_PARAMS, rewrites .embody/config.json -- shared with the
+    editing instance on the same project folder. Returns the first
+    failing par name, or None."""
+    failed = None
+    for name, value in writes:
+        try:
+            setattr(ext.my.par, name, value)
+            ext.Log(f'ExportReleaseToe: {name} -> {value!r}', 'INFO')
+        except Exception as e:
+            ext.Log(f'ExportReleaseToe: could not set {name}: {e}', 'ERROR')
+            failed = failed or name
+    return failed
+
+
+def _release_retire_viz(ext) -> None:
+    """Retire Embot + colour pulses (EnvoyExt viz), as the save path does."""
+    envoy = getattr(ext.my.ext, 'Envoy', None)
+    if envoy is None:
+        return
+    try:
+        envoy._vizCleanup()
+        purged = envoy._purgeVizArtifacts()
+        if purged:
+            ext.Log(f'ExportReleaseToe: purged {purged} orphaned Embot '
+                    f'part(s)', 'WARNING')
+    except Exception as e:
+        ext.Log(f'ExportReleaseToe: viz cleanup failed: {e}', 'WARNING')
+
+
+def _apply_release_inline(ext, inline_plan) -> dict:
+    """Clear the file bindings the inline plan names. No restore phase --
+    this session ends at the save. syncfile first, as EmbodyExt.Disable
+    does: a synced DAT never sees its file par change while still armed."""
+    done = {'dats': 0, 'comps': 0, 'errors': 0}
+    for path in inline_plan['dats']:
+        oper = ext.resolveOpIncludingUtility(path)
+        if oper is None:
+            continue
+        try:
+            sync = getattr(oper.par, 'syncfile', None)
+            if sync is not None:
+                oper.par.syncfile = False
+            oper.par.file.readOnly = False
+            oper.par.file = ''
+            done['dats'] += 1
+        except Exception as e:
+            done['errors'] += 1
+            ext.Log(f'ExportReleaseToe: could not inline {path}: {e}',
+                    'WARNING')
+    for path in inline_plan['comps']:
+        oper = ext.resolveOpIncludingUtility(path)
+        if oper is None:
+            continue
+        try:
+            oper.par.externaltox.readOnly = False
+            oper.par.externaltox = ''
+            oper.par.enableexternaltox = False
+            done['comps'] += 1
+        except Exception as e:
+            done['errors'] += 1
+            ext.Log(f'ExportReleaseToe: could not inline {path}: {e}',
+                    'WARNING')
+    return done
+
+
+def _release_remaining_refs(ext) -> list:
+    """Every file / externaltox binding standing outside the Embody COMP
+    and its table -- both destroyed, neither shipped."""
+    embody_path = ext.my.path
+    prefix = embody_path + '/'
+    table = ext.Externalizations
+    table_path = table.path if table else ''
+    refs = []
+    for oper in ext.root.findChildren(includeUtility=True):
+        path = oper.path
+        if path == embody_path or path.startswith(prefix) or path == table_path:
+            continue
+        for name in ('file', 'externaltox'):
+            value = _release_par(oper, name)
+            if value:
+                refs.append({'path': oper.path, 'par': name,
+                             'value': str(value)})
+    return refs
+
+
+def _apply_release_scrub(ext, scrub_plan) -> dict:
+    """Remove Embody's tags, colours and storage breadcrumbs."""
+    done = {'tags': 0, 'colours': 0, 'storage': 0, 'errors': 0}
+    for entry in scrub_plan['tags']:
+        oper = ext.resolveOpIncludingUtility(entry['path'])
+        if oper is None:
+            continue
+        try:
+            for tag in entry['remove']:
+                if tag in oper.tags:
+                    oper.tags.remove(tag)
+            done['tags'] += 1
+        except Exception as e:
+            done['errors'] += 1
+            ext.Log(f'ExportReleaseToe: could not untag {entry["path"]}: {e}',
+                    'WARNING')
+    for path in scrub_plan['colours']:
+        oper = ext.resolveOpIncludingUtility(path)
+        if oper is None:
+            continue
+        try:
+            ext.resetOpColor(oper)
+            done['colours'] += 1
+        except Exception as e:
+            done['errors'] += 1
+            ext.Log(f'ExportReleaseToe: could not recolour {path}: {e}',
+                    'WARNING')
+    for entry in scrub_plan['storage']:
+        oper = ext.resolveOpIncludingUtility(entry['path'])
+        if oper is None:
+            continue
+        try:
+            for key in entry['keys']:
+                oper.unstore(key)
+            done['storage'] += 1
+        except Exception as e:
+            done['errors'] += 1
+            ext.Log(f'ExportReleaseToe: could not unstore on '
+                    f'{entry["path"]}: {e}', 'WARNING')
+    return done
 
 
 # ==========================================================================
