@@ -72,6 +72,29 @@ def _refresh_remote_manifest(mesh):
         != previous), timeout_s=8.0)
 
 
+def _live_b_rows(mesh, timeout_s=8.0):
+    """B's peer and node rows from A's directory, once B's nodes come from a
+    LIVE answer (they carry `compatibility`; last-known rows do not). The
+    first nodes query after a WSS swap can fail on a slow runner, and with no
+    last-known rows yet B's node list is empty (Windows CI, 2026-09-10)."""
+    rows = {}
+
+    def ready():
+        code, status = mesh.a.network_nodes(CONVOY)
+        peer = next((r for r in status["peers"]
+                     if r["host_id"] == mesh.b.host_id), None)
+        node = next((r for r in status["nodes"]
+                     if r["host_id"] == mesh.b.host_id
+                     and "compatibility" in r), None)
+        if code != 200 or peer is None or node is None:
+            return False
+        rows["peer"], rows["node"] = peer, node
+        return True
+
+    assert _wait_for(ready, timeout_s=timeout_s),         "B's live node row never appeared in A's directory"
+    return rows["peer"], rows["node"]
+
+
 class WssMesh:
     def __init__(self, tmp_path):
         self.a = hostapp.HostApp(str(tmp_path / "a"))
@@ -479,12 +502,7 @@ def test_wss_manifest_preflight_refuses_before_envelope(
     assert refusal["operation"] == "convoy_ping"
     assert envelope_calls == []
     if change == "protocol":
-        code, status = mesh.a.network_nodes(CONVOY)
-        assert code == 200
-        peer_status = next(row for row in status["peers"]
-                           if row["host_id"] == mesh.b.host_id)
-        node_status = next(row for row in status["nodes"]
-                           if row["host_id"] == mesh.b.host_id)
+        peer_status, node_status = _live_b_rows(mesh)
         assert peer_status["compatibility"] == "incompatible"
         assert node_status["compatibility"] == "incompatible"
 
@@ -505,12 +523,7 @@ def test_wss_manifest_cache_invalidates_on_capability_and_pin_change(
     assert code == 409 and refusal["reason"] == "incompatible_operation"
     new_keys = tuple(mesh.a._peer_manifest_cache)
     assert len(new_keys) == 1 and new_keys != old_keys
-    code, status = mesh.a.network_nodes(CONVOY)
-    assert code == 200
-    peer_status = next(row for row in status["peers"]
-                       if row["host_id"] == mesh.b.host_id)
-    node_status = next(row for row in status["nodes"]
-                       if row["host_id"] == mesh.b.host_id)
+    peer_status, node_status = _live_b_rows(mesh)
     assert peer_status["compatibility"] == "limited"
     assert node_status["compatibility"] == "limited"
 
