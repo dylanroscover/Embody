@@ -440,6 +440,45 @@ class TestTDXNYaml(EmbodyTestCase):
             mod.normalize(old), mod.normalize(new_),
             'the format bump must be invisible to git diff')
 
+    def test_textconv_stdout_is_lf(self):
+        """The driver must write LF on every platform. Text-mode stdout on
+        Windows turns each '\\n' into CRLF, so every textconv'd line carried a
+        CR: a whitespace error in every diff, baked into anything rebuilt from
+        that output (issue #106)."""
+        mod = self._load_textconv()
+        if mod is None:
+            self.skipTest('textconv template not found')
+        if not getattr(mod, '_HAVE_YAML', False):
+            self.skipTest('PyYAML unavailable in textconv module')
+        import io
+        import shutil
+        import sys
+        import tempfile
+
+        d = tempfile.mkdtemp()
+        fp = os.path.join(d, 'net.tdxn')
+        Path(fp).write_text(self.tdn.tdxn_dump({
+            'format': 'tdxn', 'version': '2.1', 'network_path': '/p',
+            'operators': [{'name': 'a', 'type': 'textDAT'},
+                          {'name': 'b', 'type': 'textDAT'}],
+        }), encoding='utf-8', newline='\n')
+        # newline=None translates '\n' to os.linesep on write -- the same
+        # stream a Windows git hands the driver.
+        buf = io.BytesIO()
+        out = io.TextIOWrapper(buf, encoding='cp1252', newline=None)
+        orig = sys.stdout
+        try:
+            sys.stdout = out
+            mod.main(['tdxn_textconv', fp])
+            out.flush()
+            data = buf.getvalue()
+        finally:
+            sys.stdout = orig
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertTrue(data.startswith(b'network_path: /p\n'),
+                        f'header stripped, LF-terminated: {data[:60]!r}')
+        self.assertNotIn(b'\r', data, 'textconv output must be LF-only')
+
     def test_content_equal_still_sees_the_format_bump(self):
         """The paired inverse: 'format' is deliberately NOT in
         TDXNExt._TDXN_VOLATILE_KEYS, so the first save after upgrading rewrites
