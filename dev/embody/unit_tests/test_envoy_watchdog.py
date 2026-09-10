@@ -37,6 +37,16 @@ Coverage:
   - 'Preparing Python environment...' (the fast-path import gate) is
     TRANSITIONAL: no dead-socket revive mid-warmup; a wedged gate still
     self-heals via the ~24s startup-grace restart.
+  - ORPHAN REAPING (issue #98): an abandoned uvicorn listener (startup
+    timeout, extension reinit, save-as) is force-closed instead of being
+    scanned past -- the +1 port drift that walked Envoy off its configured
+    port and eventually disabled it. Never touches a NEWER generation, a
+    start in flight, or a server we believe is serving.
+  - STARTUP TIMEOUT (issue #98): the timeout signals its worker down (it was
+    left running, to bind and hold the port later) and does NOT blacklist the
+    port -- slow is not broken. A real pre-bind death still blacklists.
+  - STARTUP BUDGET: warm imports get a short budget; a cold process gets one
+    that outlasts both the SDK import and the ~24s watchdog stuck-status nudge.
   - _run_tests Status stomp: the prior Status survives in COMP storage and
     _restoreStatusAfterTests is idempotent, never resurrecting 'Testing'.
   - PERFORM MODE (v6.0.169): Perform Mode is an idle condition -- no probe, no
@@ -1147,6 +1157,275 @@ class TestBindFailureBlacklistLifecycle(EnvoyWatchdogBase):
             self._FAKE_PORT, sys._envoy_bad_bind_ports,
             'A confirmed bind proves the port healthy -- a stale blacklist '
             'entry for it (late error from an older generation) must clear')
+
+
+class _FakeListenerSocket:
+    """Stand-in for a bound socket.socket held by a uvicorn listener."""
+
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeAsyncioServer:
+    def __init__(self, sockets):
+        self.sockets = tuple(sockets)
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeUvicornServer:
+    """The handle shape _reapStaleServers drives: should_exit / force_exit /
+    .servers[].sockets[]. No network, no thread."""
+
+    def __init__(self):
+        self.should_exit = False
+        self.force_exit = False
+        self.sock = _FakeListenerSocket()
+        self.servers = [_FakeAsyncioServer([self.sock])]
+
+
+class TestOrphanedServerReaping(EnvoyWatchdogBase):
+    """Orphaned uvicorn listeners are reaped instead of drifting the port.
+
+    Issue #98: sys._envoy_uvi_server names only the NEWEST worker, so a start
+    abandoned by the startup timeout, an extension reinit, or a save-as kept
+    its listener for the life of the process and _findAvailablePort simply
+    scanned past it -- +1 port drift on every restart until the range ran out
+    and Envoy disabled itself on a port no client was pointed at. Observed
+    live 2026-09-08: one TD process LISTENING on 9871 and 9872 at once.
+
+    Purely bookkeeping -- fake handles, fake port numbers, no socket is ever
+    bound. The live registry entries are snapshotted and restored.
+    """
+
+    _FAKE_PORT = 55561  # never bound by these tests
+
+    def setUp(self):
+        super().setUp()
+        _sentinel = object()
+        self._sentinel = _sentinel
+        self._saved_live = getattr(sys, '_envoy_uvi_servers', _sentinel)
+        self._saved_slot = getattr(sys, '_envoy_uvi_server', _sentinel)
+        self._saved_slot_gen = getattr(sys, '_envoy_uvi_gen', _sentinel)
+        self._saved_bad_ports = getattr(sys, '_envoy_bad_bind_ports', _sentinel)
+        # Reaping is gated on the live server NOT running; these tests drive
+        # the orphan case, so clear it (the base tearDown restores it).
+        self.embody.store('envoy_running', False)
+        self.envoy._starting = False
+
+    def tearDown(self):
+        for name, saved in (('_envoy_uvi_servers', self._saved_live),
+                            ('_envoy_uvi_server', self._saved_slot),
+                            ('_envoy_uvi_gen', self._saved_slot_gen),
+                            ('_envoy_bad_bind_ports', self._saved_bad_ports)):
+            if saved is self._sentinel:
+                try:
+                    delattr(sys, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(sys, name, saved)
+        super().tearDown()
+
+    def _seed(self, gen, port=None):
+        server = _FakeUvicornServer()
+        registry = getattr(sys, '_envoy_uvi_servers', None)
+        if not isinstance(registry, dict):
+            registry = {}
+        registry[gen] = (server, port if port is not None else self._FAKE_PORT)
+        sys._envoy_uvi_servers = registry
+        return server
+
+    def test_previous_generation_orphan_is_reaped(self):
+        """The common case: the worker from the last start, still listening."""
+        sys._envoy_uvi_servers = {}
+        orphan = self._seed(self.envoy._server_gen)
+
+        freed = self.envoy._reapStaleServers()
+
+        self.assertEqual(
+            freed, [self._FAKE_PORT],
+            'The abandoned listener must be reported as freed')
+        self.assertTrue(orphan.should_exit, 'The orphan must be told to exit')
+        self.assertTrue(
+            orphan.force_exit,
+            'force_exit is required -- a graceful drain lets a keep-alive '
+            'MCP client hold the port open indefinitely')
+        self.assertTrue(
+            orphan.sock.closed,
+            'The listener socket must be closed so the OS releases the port')
+        self.assertNotIn(
+            self.envoy._server_gen, sys._envoy_uvi_servers,
+            'A reaped generation must be dropped from the registry')
+
+    def test_older_generation_orphan_is_reaped(self):
+        sys._envoy_uvi_servers = {}
+        orphan = self._seed(self.envoy._server_gen - 3, port=self._FAKE_PORT + 1)
+
+        freed = self.envoy._reapStaleServers()
+
+        self.assertEqual(freed, [self._FAKE_PORT + 1])
+        self.assertTrue(orphan.sock.closed)
+
+    def test_newer_generation_is_never_reaped(self):
+        """A newer generation is somebody else's newborn -- closing it is the
+        2026-07-15 restart storm."""
+        sys._envoy_uvi_servers = {}
+        newborn = self._seed(self.envoy._server_gen + 1)
+
+        freed = self.envoy._reapStaleServers()
+
+        self.assertEqual(freed, [], 'A newer generation must not be reaped')
+        self.assertFalse(newborn.should_exit)
+        self.assertFalse(newborn.sock.closed)
+        self.assertIn(
+            self.envoy._server_gen + 1, sys._envoy_uvi_servers,
+            'A newer generation must stay registered')
+
+    def test_running_server_is_never_reaped(self):
+        """The hard stop that keeps a direct call from shooting down the LIVE
+        MCP socket."""
+        sys._envoy_uvi_servers = {}
+        live = self._seed(self.envoy._server_gen)
+        self.embody.store('envoy_running', True)
+
+        freed = self.envoy._reapStaleServers()
+
+        self.assertEqual(freed, [])
+        self.assertFalse(
+            live.sock.closed,
+            'A server we believe is serving must never be reaped')
+
+    def test_start_in_flight_is_never_reaped(self):
+        sys._envoy_uvi_servers = {}
+        newborn = self._seed(self.envoy._server_gen)
+        self.envoy._starting = True
+
+        freed = self.envoy._reapStaleServers()
+
+        self.assertEqual(freed, [])
+        self.assertFalse(
+            newborn.sock.closed,
+            'A start in flight owns its handle -- reaping it is the '
+            'dead-on-arrival restart storm')
+
+    def test_empty_registry_is_a_no_op(self):
+        sys._envoy_uvi_servers = {}
+        self.assertEqual(self.envoy._reapStaleServers(), [])
+        try:
+            del sys._envoy_uvi_servers
+        except AttributeError:
+            pass
+        self.assertEqual(self.envoy._reapStaleServers(), [])
+
+
+class TestStartupTimeoutDoesNotStrandItsWorker(EnvoyWatchdogBase):
+    """A startup TIMEOUT must kill its worker and leave the port eligible.
+
+    Issue #98: the timeout branch escalated to _onServerError but left the
+    worker running. It bound its port seconds later and held it for the life
+    of the process, while the port was ALSO blacklisted for 10 minutes -- so
+    the retry was guaranteed to land somewhere else. That pair is the engine
+    of the drift.
+    """
+
+    _FAKE_PORT = 55571
+
+    def setUp(self):
+        super().setUp()
+        _sentinel = object()
+        self._sentinel = _sentinel
+        self._saved_bad_ports = getattr(sys, '_envoy_bad_bind_ports', _sentinel)
+        self._saved_task = getattr(self.envoy, 'current_task', None)
+        sys._envoy_bad_bind_ports = {}
+        self._restarts = []
+        self._patch(self.envoy, '_scheduleRestart',
+                    lambda reason: self._restarts.append(reason))
+        # An unset startup event = the worker never confirmed a bind.
+        self._patch(self.envoy, '_startup_event', threading.Event())
+        self._patch(self.envoy, '_runtime_port', self._FAKE_PORT)
+        self._patch(self.envoy, '_starting', True)
+        self._patch(self.envoy, '_startup_deadline', time.time() - 1.0)
+
+    def tearDown(self):
+        self.envoy.current_task = self._saved_task
+        if self._saved_bad_ports is self._sentinel:
+            try:
+                del sys._envoy_bad_bind_ports
+            except AttributeError:
+                pass
+        else:
+            sys._envoy_bad_bind_ports = self._saved_bad_ports
+        super().tearDown()
+
+    def test_timeout_signals_the_workers_shutdown_event(self):
+        # The base fixture swapped in a throwaway shutdown_event, so the LIVE
+        # server is never signalled by this test.
+        self.assertFalse(self.envoy.shutdown_event.is_set())
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertTrue(
+            self.envoy.shutdown_event.is_set(),
+            'A timed-out start must signal its worker down -- left running it '
+            'binds later and orphans the port for the life of the process')
+
+    def test_timeout_does_not_blacklist_the_port(self):
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertNotIn(
+            self._FAKE_PORT, sys._envoy_bad_bind_ports,
+            'A slow start is no evidence the port is bad -- blacklisting it '
+            'forces the retry onto a different port (the +1 drift)')
+
+    def test_timeout_still_escalates_to_a_restart(self):
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertEqual(len(self._restarts), 1,
+                         'The timeout must still escalate, not go silent')
+        self.assertIn('did not bind', self._restarts[0])
+
+    def test_explicit_bind_failure_still_blacklists(self):
+        """The opt-out is scoped to the timeout -- a real pre-bind death must
+        still poison the port (the 2026-07-23 zombie-port defense)."""
+        self.envoy._onServerError('bind exploded (test)')
+
+        self.assertIn(
+            self._FAKE_PORT, sys._envoy_bad_bind_ports,
+            'A worker that DIED before binding must still blacklist its port')
+
+
+class TestStartupBudget(EnvoyWatchdogBase):
+    """The bind budget must outlast a cold import of the MCP stack."""
+
+    def test_warm_budget_is_short(self):
+        self.assertIn('mcp.server.mcpserver', sys.modules,
+                      'This suite runs inside a live Envoy -- the SDK is warm')
+        self.assertEqual(self.envoy._startupBudget(), 15.0)
+
+    def test_cold_budget_outlasts_the_watchdog_nudge(self):
+        """A cold process imports the SDK and registers the tool surface before
+        uvicorn binds; the old flat 10s abandoned workers that were seconds
+        from succeeding. The ~24s watchdog stuck-status nudge must not outrun
+        the budget either -- _reviveDeadServer defers to the same deadline.
+        """
+        mod = sys.modules.pop('mcp.server.mcpserver', None)
+        try:
+            cold = self.envoy._startupBudget()
+        finally:
+            if mod is not None:
+                sys.modules['mcp.server.mcpserver'] = mod
+        self.assertGreater(
+            cold, 24.0,
+            'A cold budget must outlast the ~24s stuck-status nudge, or the '
+            'nudge restarts a healthy slow start')
+        self.assertIn('mcp.server.mcpserver', sys.modules,
+                      'sys.modules must be restored exactly')
 
 
 class TestWatchdogStrandedTestingStatus(EnvoyWatchdogBase):

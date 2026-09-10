@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.2.43
+
+Envoy stops walking up the port range when a start is slow.
+
+- **Abandoned MCP servers are cleaned up.** A start left behind by a timeout, an extension reinit, or a save-as kept its listener for the life of the process, so every restart claimed the next port up and Envoy eventually gave up on one no client was pointed at ([#98](https://github.com/dylanroscover/Embody/issues/98)). It now reclaims its own strays before choosing.
+- **A slow start is no longer treated as a failed one.** A cold Python stack gets considerably longer to bind, a timed-out worker is shut down instead of left to bind late, and the preferred port stays eligible for the retry.
+
 ## v6.2.42
 
 Ship the whole project as one locked `.toe`, with Embody gone from it.

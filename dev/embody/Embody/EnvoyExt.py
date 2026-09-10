@@ -4665,6 +4665,17 @@ class EnvoyMCPServer:
         # if the old server thread is stuck and won't release the port.
         sys._envoy_uvi_server = uvi_server
         sys._envoy_uvi_gen = self.gen
+        # Per-generation registry BESIDE that single slot: the slot names only
+        # the NEWEST worker, so every earlier one became unreachable and its
+        # listener leaked for the life of the process -- +1 port drift on each
+        # restart (issue #98, 2026-09-08: one TD listening on 9871 AND 9872).
+        # _reapStaleServers walks this. Plain dict on sys -- same cross-thread
+        # channel as the slot, and it survives an extension reinit.
+        _live = getattr(sys, '_envoy_uvi_servers', None)
+        if not isinstance(_live, dict):
+            _live = {}
+        _live[self.gen] = (uvi_server, self.port)
+        sys._envoy_uvi_servers = _live
 
         # Monitor shutdown_event and tell uvicorn to exit
         def shutdown_monitor():
@@ -4707,6 +4718,11 @@ class EnvoyMCPServer:
             if getattr(sys, '_envoy_uvi_server', None) is uvi_server:
                 sys._envoy_uvi_server = None
                 sys._envoy_uvi_gen = 0
+            _live = getattr(sys, '_envoy_uvi_servers', None)
+            if isinstance(_live, dict):
+                _entry = _live.get(self.gen)
+                if _entry is not None and _entry[0] is uvi_server:
+                    _live.pop(self.gen, None)
             if sys.platform.startswith('win'):
                 asyncio.set_event_loop_policy(None)
 
@@ -5121,6 +5137,73 @@ class EnvoyExt:
             return True   # We actually closed a live socket of ours.
         return False  # Nothing of ours was holding any port.
 
+    def _reapStaleServers(self) -> list:
+        """Close every uvicorn listener of OURS left over from an abandoned
+        start; return the ports freed.
+
+        _forceCloseOldServer can only reach sys._envoy_uvi_server, which names
+        the NEWEST worker -- so a start abandoned by the startup timeout, an
+        extension reinit, or a save-as kept its socket for the life of the
+        process and _findAvailablePort just scanned past it (issue #98 port
+        drift). A reinit makes this the ONLY reachable handle: the previous
+        worker's shutdown event is replaced in sys._envoy_shutdown_events and
+        self.shutdown_event is a fresh object.
+
+        Never runs while a start of ours is in flight, and never touches a
+        generation NEWER than ours -- closing a healthy newborn is the
+        2026-07-15 restart storm.
+        """
+        live = getattr(sys, '_envoy_uvi_servers', None)
+        if not isinstance(live, dict) or not live:
+            return []
+        if self._starting:
+            self._log('Reap skipped -- a start of ours is in flight', 'DEBUG')
+            return []
+        # A server we believe is SERVING is never surplus. _continueStart is
+        # only ever reached with this False (Start() returns early otherwise),
+        # so this costs nothing on the real path -- it is the hard stop that
+        # keeps a direct call (a test driving _findAvailablePort, a stale
+        # queued Start) from shooting down the live MCP socket.
+        if self.ownerComp.fetch('envoy_running', False):
+            self._log('Reap skipped -- a server of ours is running', 'DEBUG')
+            return []
+        freed = []
+        for gen in sorted(live):
+            if gen > self._server_gen:
+                continue
+            entry = live.get(gen) or (None, None)
+            server, port = entry[0], entry[1]
+            live.pop(gen, None)
+            if server is None:
+                continue
+            try:
+                # force_exit skips the graceful drain: a keep-alive MCP client
+                # would otherwise hold the port open indefinitely.
+                server.should_exit = True
+                server.force_exit = True
+                for srv in getattr(server, 'servers', []):
+                    for sock in getattr(srv, 'sockets', ()) or ():
+                        try:
+                            sock.close()
+                        except Exception:
+                            pass
+                    try:
+                        srv.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            if port:
+                freed.append(port)
+        if freed:
+            self._log(
+                f'Reaped {len(freed)} orphaned Envoy listener(s) on port(s) '
+                f'{", ".join(str(p) for p in freed)}', 'WARNING')
+            if not live:
+                sys._envoy_uvi_server = None
+                sys._envoy_uvi_gen = 0
+        return freed
+
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
@@ -5183,6 +5266,18 @@ class EnvoyExt:
             return (_recent_bind_failure(port)
                     or not _port_bindable(port)
                     or _port_registered_by_other(port))
+
+        # Reap our own orphans BEFORE probing anything. Without this the scan
+        # below steps past our own abandoned listener and the port drifts +1 on
+        # every restart until the range runs out (issue #98). Cheap no-op when
+        # nothing is registered.
+        reaped = self._reapStaleServers()
+        if reaped:
+            import time as _reap_time
+            for _ in range(3):   # <=300ms for the OS to release; force_exit +
+                _reap_time.sleep(0.1)   # sock.close() frees it near-instantly
+                if all(_port_bindable(p) for p in reaped):
+                    break
 
         # Fast path: preferred port is free AND not claimed by another instance
         if not _port_taken(base_port):
@@ -5749,7 +5844,7 @@ class EnvoyExt:
         # the socket is bound; _pollStartup flips it to 'Running on port N' or
         # escalates on timeout/failure. When an AI client is selected its config
         # is written below; Convoy-only startup deliberately skips that work.
-        self._startup_deadline = time.time() + 10.0
+        self._startup_deadline = time.time() + self._startupBudget()
         run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
             fromOP=self.ownerComp, delayFrames=6)
 
@@ -5826,6 +5921,20 @@ class EnvoyExt:
             # done (the bounded timer in _enableEnvoyResolved is the backstop).
             Embody._consent_bulk = False
 
+    def _startupBudget(self) -> float:
+        """Seconds to allow the worker to reach a bound socket.
+
+        A COLD process imports the MCP SDK and registers the whole tool surface
+        before uvicorn binds; on a slow or AV-scanned venv that alone outruns a
+        flat 10s, and the timeout then abandons a worker that was seconds from
+        succeeding -- the engine of issue #98's port drift. Warm imports bind
+        in well under a second, so the generous budget costs nothing after the
+        first start. _reviveDeadServer's in-flight guard reads the same
+        deadline, so the ~24s watchdog nudge leaves a cold start alone.
+        """
+        warm = 'mcp.server.mcpserver' in sys.modules
+        return 15.0 if warm else 45.0
+
     def _pollStartup(self, gen: int) -> None:
         """Main-thread poll (H1): declare 'Running' only after the worker
         confirms the socket bound; escalate if it never binds in time.
@@ -5892,9 +6001,19 @@ class EnvoyExt:
             # Never bound within the readiness window -> route to the error path
             # so the restart/escalation logic engages (not a silent zombie).
             self._starting = False
+            # The worker is STILL ALIVE here -- it has not bound YET, which is
+            # not the same as having failed. Left running it binds seconds
+            # later and holds that port for the life of the process, so every
+            # retry scans past it and drifts +1 (issue #98). Signal it down,
+            # and do NOT blacklist the port: a slow start is no evidence the
+            # port is bad, and a 10-minute blacklist guarantees the drift.
+            try:
+                self.shutdown_event.set()
+            except Exception:
+                pass
             self._onServerError(
                 f'Envoy did not bind port {self._runtime_port} within the '
-                f'startup timeout')
+                f'startup timeout', blacklist_port=False)
             return
         # Not yet bound, not timed out -- keep polling.
         run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
@@ -7022,8 +7141,11 @@ class EnvoyExt:
             self._scheduleRestart('Server exited unexpectedly')
         # If Envoyenable is already off, Stop() set the status -- don't overwrite
 
-    def _onServerError(self, error):
-        """ExceptHook - Called when the thread task errors"""
+    def _onServerError(self, error, blacklist_port: bool = True):
+        """ExceptHook - Called when the thread task errors.
+
+        blacklist_port=False for a startup TIMEOUT: the port never proved bad,
+        the worker was merely slow (issue #98)."""
         self._log(f'Server error: {error}', 'ERROR')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
@@ -7036,7 +7158,7 @@ class EnvoyExt:
         bound = (self._startup_event is not None
                  and self._startup_event.is_set())
         port = getattr(self, '_runtime_port', None)
-        if not bound and port:
+        if blacklist_port and not bound and port:
             bad = getattr(sys, '_envoy_bad_bind_ports', {})
             bad[port] = time.time()
             sys._envoy_bad_bind_ports = bad

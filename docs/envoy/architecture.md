@@ -113,6 +113,8 @@ Envoy supports running multiple TouchDesigner instances simultaneously in the sa
 
 **Port allocation**: Each instance picks a port from a 10-port range starting at the configured Envoy Port (default: 9870). If the base port is occupied by another instance, Envoy scans ports `base+1` through `base+9` and claims the first available one. Up to 10 simultaneous instances are supported per base port.
 
+Before it picks, Envoy closes any listener **of its own** left behind by an abandoned start — a startup that timed out, an extension reinit, or a save-as. Without that step those strays looked like occupied ports, so each restart claimed the next one up and the instance drifted away from its configured port.
+
 **Bridge routing**: The STDIO bridge connects to **one active instance** at a time, and every Envoy tool also accepts an optional `instance` argument that routes **that one call** to another registered instance (the bridge strips the argument, forwards to the named instance's port, and never touches the pinned connection's state -- a failure there is that call's error alone). The `switch_instance` meta-tool is **session-local by default**: it re-pins only this session's bridge to the new instance's port in memory, leaving `.embody/envoy.json` and every peer session untouched. Pass `all_sessions=true` to also write the new `active` field (and bump `active_epoch`, which overrides peers' own pins) — that is how you move the whole-user default. Switching is instant — no reconnection delay.
 
 **Instance reachability**: The bridge verifies instances by checking both PID liveness and port responsiveness. An instance is only considered reachable when both checks pass. This filters out stale registry entries from crashed or closed instances.

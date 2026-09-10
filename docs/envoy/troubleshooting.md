@@ -10,6 +10,27 @@
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
 4. **TD version too old:** Envoy requires TouchDesigner **2025.33070** or later.
 
+## Port Climbs on Every Restart, Then Envoy Disables Itself
+
+**Symptoms:** The Textport repeats `Envoy did not bind port NNNN within the
+startup timeout`, each retry reports a higher port than the last (9870, 9871,
+9872...), and after 30 minutes Envoy gives up on a port your `.mcp.json` was
+never pointed at.
+
+**Cause:** A start that ran out of its budget was abandoned but not shut down.
+It bound its port moments later and held it for the life of the TouchDesigner
+process, so the next attempt read that port as occupied and stepped past it --
+repeatedly. A cold Python stack (first start after an install or upgrade, or a
+virtual environment on a slow or virus-scanned drive) can outrun the budget on
+its own, which is what starts the climb.
+
+**Fix:** Update to **6.2.43** or later. Envoy now reclaims its own abandoned
+listeners before choosing a port, shuts a timed-out start down instead of
+letting it bind late, allows a cold start considerably longer to come up, and
+keeps the preferred port eligible for the retry. Restart TouchDesigner once
+after updating -- listeners leaked by the older build live until the process
+exits.
+
 ## Restart Loop: "Unable to configure formatter 'default'"
 
 **Symptoms:** Envoy never comes up; the Textport repeats a traceback ending in
