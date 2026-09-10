@@ -8,6 +8,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # 7-day cooldown on version updates (zizmor dependabot-cooldown).
+    # Security updates are never delayed by cooldown.
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns:
@@ -23,6 +27,10 @@ updates:
     directory: /platform
     schedule:
       interval: weekly
+    # 7-day cooldown on version updates (zizmor dependabot-cooldown).
+    # Security updates are never delayed by cooldown.
+    cooldown:
+      default-days: 7
     groups:
       npm-minor-patch:
         update-types:
