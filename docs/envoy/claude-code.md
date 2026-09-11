@@ -154,6 +154,8 @@ With **Envoy Follow** off but **Embot** on, he appears only in the network you a
 
 It **yields the instant you pan, zoom, or navigate** the view yourself, and resumes only once you stop — it never yanks the view mid-interaction. The bot and pulse retire after a stretch of quiet.
 
+The agent never sees him either: Envoy's read tools (`get_annotations`, `get_network_layout`, `query_network`, `find_children`, `get_enclosed_ops`) filter his parts out and report how many they hid as `embot_hidden`, so nine annotations that belong to no `.tdxn` can't be mistaken for part of your network.
+
 This is purely a viewing aid: it writes only pane/view state (which TouchDesigner never externalizes), the bot is destroyed before every save, and it runs entirely on the main thread, so it adds nothing to your saved files and never affects a build. Leave it off if you'd rather your view never move on its own.
 
 ## Customization

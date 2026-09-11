@@ -81,6 +81,12 @@ resurrects the annotation with its pre-delete text.
   the parent TDXN COMP's semantic `annotations:` section. `externalize_op`
   refuses them, and tagging sweeps skip them and their internals (the
   widget internals are TD-managed stock content cloned from TDAnnotate).
+- **`envoy_bot_*` is reserved for Embot**, the mascot Envoy stands on the
+  operator it is working on (the `Embot` parameter). The read tools hide
+  those parts and report how many as `embot_hidden`; Embody strips them
+  from every saved file and deletes loose ones on save. Never create,
+  move, edit or delete an annotation with that prefix -- and never name
+  one of yours that way, or it will be deleted as an artifact.
 - `.type` returns `'annotate'` (not `'annotateCOMP'`)
 - `findChildren(type=annotateCOMP)` requires the class object, not the string
 - Cannot be reliably renamed after creation (TD also ignores a name passed

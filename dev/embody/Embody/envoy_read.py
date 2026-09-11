@@ -24,6 +24,47 @@ import math
 from typing import Optional
 
 
+def _hide_bot_parts(items) -> tuple:
+    """Drop Embot's live parts from a list of ops/annotations, returning
+    (kept, hidden_count).
+
+    Issue #94: the nine envoy_bot_* annotateCOMPs are ephemeral viz furniture
+    that the TDXN exporter already omits, so an agent comparing a .tdxn to the
+    live network saw annotations from nowhere -- nine overlapping boxes reading
+    as exactly the layout-rule violation it is told to go and fix. Every reader
+    tool filters them; callers surface the count as `embot_hidden` rather than
+    lying about the network being empty of them.
+
+    mod.envoy_viz owns the predicate. If it cannot be reached, nothing is
+    filtered (today's behavior) rather than guessing at the literals."""
+    try:
+        is_bot = mod.envoy_viz.isLiveBotPart
+    except Exception:
+        return list(items), 0
+    kept = []
+    hidden = 0
+    for item in items:
+        if is_bot(item):
+            hidden += 1
+            continue
+        kept.append(item)
+    return kept, hidden
+
+
+def _asks_for_bot_parts(name) -> bool:
+    """True when a find_children name pattern deliberately targets Embot's
+    parts, so an explicit query (debugging a stuck bot, auditing a cleanup)
+    still returns them. Tested by matching the pattern against a canonical
+    part name -- envoy_viz stays the only place the prefix is spelled."""
+    if not name:
+        return False
+    try:
+        import fnmatch
+        return fnmatch.fnmatch(mod.envoy_viz._VIZ_BOT_PREFIX + 'body', name)
+    except Exception:
+        return False
+
+
 def _op_summary(target, info) -> str:
     """One-line orientation for get_op: type, wiring, and what was folded.
 
@@ -163,12 +204,16 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
     if not hasattr(parent, 'children'):
         return {'error': f'{parent_path} is not a COMP'}
 
+    hidden_bot = [0]
+
     def get_ops(comp, depth=0):
         results = []
         if include_utility:
             children = comp.findChildren(includeUtility=True, depth=1)
         else:
             children = comp.children
+        children, hidden = _hide_bot_parts(children)
+        hidden_bot[0] += hidden
         for child in children:
             # Filter by type if specified
             if op_type and child.OPType != op_type and child.family != op_type:
@@ -197,6 +242,8 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
         'count': len(operators),
         'operators': operators
     }
+    if hidden_bot[0]:
+        result['embot_hidden'] = hidden_bot[0]
     return ext._maybe_offload_to_file(result, 'query_network')
 
 
@@ -1678,7 +1725,13 @@ def get_network_layout(ext, comp_path: str, include_annotations: bool = True) ->
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
 
-        for child in parent_op.children:
+        # Embot's parts are annotateCOMPs but NOT utility-flagged (probed
+        # 2026-09-10: all nine template parts report utility False), so they
+        # arrive in plain `.children` and land in this operators list and its
+        # bounding box -- not only in the annotations block below.
+        children, hidden_bot = _hide_bot_parts(parent_op.children)
+
+        for child in children:
             entry = {
                 'path': child.path,
                 'type': child.OPType,
@@ -1707,6 +1760,8 @@ def get_network_layout(ext, comp_path: str, include_annotations: bool = True) ->
             'count': len(operators),
             'operators': operators,
         }
+        if hidden_bot:
+            result['embot_hidden'] = hidden_bot
 
         if operators:
             result['bounding_box'] = {
@@ -1720,7 +1775,12 @@ def get_network_layout(ext, comp_path: str, include_annotations: bool = True) ->
 
         if include_annotations:
             annotations = []
-            for child in parent_op.findChildren(type=annotateCOMP, includeUtility=True, depth=1):
+            found = parent_op.findChildren(type=annotateCOMP, includeUtility=True, depth=1)
+            # Same parts as the operators pass above found (both enumerate
+            # direct children), so they are filtered again but NOT counted
+            # again -- embot_hidden is a count of ops, not of mentions.
+            found = _hide_bot_parts(found)[0]
+            for child in found:
                 text = child.par.text.eval() if hasattr(child.par, 'text') else ''
                 text = '' if text is None else str(text)
                 if len(text) > 160:
@@ -1763,6 +1823,8 @@ def get_annotations(ext, parent_path: str) -> dict:
         if ann_class is None:
             annotations = [c for c in annotations if c.type == 'annotate']
 
+        annotations, hidden_bot = _hide_bot_parts(annotations)
+
         results = []
         for ann in annotations:
             info = {
@@ -1781,15 +1843,19 @@ def get_annotations(ext, parent_path: str) -> dict:
                     ann.par.Backcolorg.eval(),
                     ann.par.Backcolorb.eval(),
                 ],
-                'enclosed_ops': [o.path for o in ann.enclosedOPs],
+                'enclosed_ops': [o.path
+                                 for o in _hide_bot_parts(ann.enclosedOPs)[0]],
             }
             results.append(info)
 
-        return {
+        payload = {
             'parent': parent_path,
             'count': len(results),
             'annotations': results,
         }
+        if hidden_bot:
+            payload['embot_hidden'] = hidden_bot
+        return payload
     except Exception as e:
         return {'error': f'Failed to get annotations: {e}'}
 
@@ -1874,8 +1940,8 @@ def get_enclosed_ops(ext, op_path: str) -> dict:
 
     try:
         if target.type == 'annotate':
-            enclosed = target.enclosedOPs
-            return {
+            enclosed, hidden_bot = _hide_bot_parts(target.enclosedOPs)
+            result = {
                 'path': op_path,
                 'is_annotation': True,
                 'enclosed_ops': [
@@ -1885,8 +1951,11 @@ def get_enclosed_ops(ext, op_path: str) -> dict:
                 'count': len(enclosed),
             }
         else:
-            enclosing = target.enclosedBy
-            return {
+            # Both directions, so no enclosure report can name a part: a
+            # user annotation spanning the network encloses whatever Embot
+            # left standing inside it (issue #94).
+            enclosing, hidden_bot = _hide_bot_parts(target.enclosedBy)
+            result = {
                 'path': op_path,
                 'is_annotation': False,
                 'enclosing_annotations': [
@@ -1895,6 +1964,9 @@ def get_enclosed_ops(ext, op_path: str) -> dict:
                 ],
                 'count': len(enclosing),
             }
+        if hidden_bot:
+            result['embot_hidden'] = hidden_bot
+        return result
     except Exception as e:
         return {'error': f'Failed to get enclosure info: {e}'}
 
@@ -1938,6 +2010,11 @@ def find_children(ext, op_path: str, name: Optional[str] = None, type: Optional[
         if type is not None and 'type' not in kwargs:
             children = [c for c in children if c.OPType == type or c.type == type]
 
+        if _asks_for_bot_parts(name):
+            hidden_bot = 0
+        else:
+            children, hidden_bot = _hide_bot_parts(children)
+
         results = []
         for child in children:
             results.append({
@@ -1946,11 +2023,14 @@ def find_children(ext, op_path: str, name: Optional[str] = None, type: Optional[
                 'type': child.OPType,
                 'family': child.family,
             })
-        return {
+        payload = {
             'parent': op_path,
             'count': len(results),
             'operators': results
         }
+        if hidden_bot:
+            payload['embot_hidden'] = hidden_bot
+        return payload
     except Exception as e:
         return {'error': f'Failed to find children: {e}'}
 

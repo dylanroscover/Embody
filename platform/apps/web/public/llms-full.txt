@@ -4,7 +4,7 @@
 > assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
 > externalizes the network to version-control-friendly text on disk; TDXN is the diffable
 > YAML network format that makes both possible. Free, MIT, runs entirely on the user's
-> machine. Requires TouchDesigner 2025.33070+ (Windows/macOS).
+> machine. Requires TouchDesigner 2025.33230+ (Windows/macOS).
 
 This file inlines the essential documentation in one place so an agent can read it in a
 single fetch. Curated index: https://embody.tools/llms.txt  -  For agents: https://embody.tools/for-ai
@@ -39,7 +39,7 @@ Embody itself is free, open source (MIT), and runs entirely on your own machine 
 
 You need two things installed before you start:
 
-- **TouchDesigner 2025.33070 or later** - Windows or macOS. [Download from Derivative](https://derivative.ca/download).
+- **TouchDesigner 2025.33230 or later** - Windows or macOS. [Download from Derivative](https://derivative.ca/download).
 - **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code.
 
 !!! note "Never used an AI coding tool?"
@@ -144,7 +144,7 @@ The tool keeps up with you, instead of the other way around. That's the whole id
 
 You'll need:
 
-- **TouchDesigner 2025.33070** or later
+- **TouchDesigner 2025.33230** or later
 - An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code
 
 Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled - no manual Python setup required. This first install (and any later dependency upgrade) runs **in a background thread** so TouchDesigner stays responsive; the Embody COMP shows `Installing deps... (one-time)` while it works and switches to `Running on port ...` once MCP is ready. After that, every startup takes the fast path and skips the install entirely. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).

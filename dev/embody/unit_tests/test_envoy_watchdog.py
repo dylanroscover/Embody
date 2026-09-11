@@ -45,6 +45,11 @@ Coverage:
   - STARTUP TIMEOUT (issue #98): the timeout signals its worker down (it was
     left running, to bind and hold the port later) and does NOT blacklist the
     port -- slow is not broken. A real pre-bind death still blacklists.
+  - PRE-BIND STALLS (issue #98 follow-up): the timeout names the phase the
+    worker stopped in and logs its live stack; a death before bind() does
+    not blacklist. _newEventLoopBounded fails a wedged socketpair build
+    fast, closes late loops, and yields a Selector loop usable cross-thread.
+    Giving up leaves the persisted Envoyenable on.
   - STARTUP BUDGET: warm imports get a short budget; a cold process gets one
     that outlasts both the SDK import and the ~24s watchdog stuck-status nudge.
   - _run_tests Status stomp: the prior Status survives in COMP storage and
@@ -133,6 +138,11 @@ class EnvoyWatchdogBase(EmbodyTestCase):
         # tearDown puts the live one back untouched.
         import threading as _threading
         self._patch(self.envoy, 'shutdown_event', _threading.Event())
+        # The instance _server_gen is restored below; the process-wide mirror
+        # must rewind with it, or a revive/timeout under test leaves the live
+        # instance behind sys (the next reinit adopts the sys value).
+        self._patch(sys, '_envoy_server_gen',
+                    getattr(sys, '_envoy_server_gen', self.envoy._server_gen))
 
     def tearDown(self):
         while self._patches:
@@ -1115,6 +1125,8 @@ class TestBindFailureBlacklistLifecycle(EnvoyWatchdogBase):
 
     def test_prebind_death_records_port(self):
         sys._envoy_bad_bind_ports = {}
+        # Unknown worker phase (no registry entry): the conservative branch.
+        self._patch(sys, '_envoy_startup_phase', {})
         never_bound = threading.Event()  # NOT set -> worker never bound
         self._patch(self.envoy, '_startup_event', never_bound)
         self._patch(self.envoy, '_runtime_port', self._FAKE_PORT)
@@ -1324,15 +1336,10 @@ class TestOrphanedServerReaping(EnvoyWatchdogBase):
         self.assertEqual(self.envoy._reapStaleServers(), [])
 
 
-class TestStartupTimeoutDoesNotStrandItsWorker(EnvoyWatchdogBase):
-    """A startup TIMEOUT must kill its worker and leave the port eligible.
-
-    Issue #98: the timeout branch escalated to _onServerError but left the
-    worker running. It bound its port seconds later and held it for the life
-    of the process, while the port was ALSO blacklisted for 10 minutes -- so
-    the retry was guaranteed to land somewhere else. That pair is the engine
-    of the drift.
-    """
+class _StartupTimeoutBase(EnvoyWatchdogBase):
+    """Fixture: a start in flight past its deadline, restarts recorded, and
+    an EMPTY worker-phase registry (seeded per test) so the live server's
+    own entry never decides a verdict."""
 
     _FAKE_PORT = 55571
 
@@ -1343,6 +1350,7 @@ class TestStartupTimeoutDoesNotStrandItsWorker(EnvoyWatchdogBase):
         self._saved_bad_ports = getattr(sys, '_envoy_bad_bind_ports', _sentinel)
         self._saved_task = getattr(self.envoy, 'current_task', None)
         sys._envoy_bad_bind_ports = {}
+        self._patch(sys, '_envoy_startup_phase', {})
         self._restarts = []
         self._patch(self.envoy, '_scheduleRestart',
                     lambda reason: self._restarts.append(reason))
@@ -1362,6 +1370,17 @@ class TestStartupTimeoutDoesNotStrandItsWorker(EnvoyWatchdogBase):
         else:
             sys._envoy_bad_bind_ports = self._saved_bad_ports
         super().tearDown()
+
+
+class TestStartupTimeoutDoesNotStrandItsWorker(_StartupTimeoutBase):
+    """A startup TIMEOUT must kill its worker and leave the port eligible.
+
+    Issue #98: the timeout branch escalated to _onServerError but left the
+    worker running. It bound its port seconds later and held it for the life
+    of the process, while the port was ALSO blacklisted for 10 minutes -- so
+    the retry was guaranteed to land somewhere else. That pair is the engine
+    of the drift.
+    """
 
     def test_timeout_signals_the_workers_shutdown_event(self):
         # The base fixture swapped in a throwaway shutdown_event, so the LIVE
@@ -1398,6 +1417,396 @@ class TestStartupTimeoutDoesNotStrandItsWorker(EnvoyWatchdogBase):
         self.assertIn(
             self._FAKE_PORT, sys._envoy_bad_bind_ports,
             'A worker that DIED before binding must still blacklist its port')
+
+
+class TestStartupTimeoutNamesTheStall(_StartupTimeoutBase):
+    """A timeout says WHERE the worker stopped (issue #98 follow-up).
+
+    Field 2026-09-10: workers wedged inside asyncio's new_event_loop() --
+    before bind() -- and the timeout read "did not bind port 9870", sending
+    every investigation after a free port. The worker now reports its phase
+    and the timeout names it, logs the live stack, and does not blacklist a
+    port a pre-bind stall never touched. Entries count only for the start
+    that wrote them (same startup_event).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._gate = threading.Event()
+
+        def parked_before_bind():
+            self._gate.wait(5)
+
+        self._parked = threading.Thread(target=parked_before_bind, daemon=True)
+        self._parked.start()
+
+    def tearDown(self):
+        self._gate.set()
+        self._parked.join(5)
+        super().tearDown()
+
+    def _seed(self, phase, owner=None):
+        sys._envoy_startup_phase[self.envoy._server_gen] = (
+            phase, self._parked.ident,
+            self.envoy._startup_event if owner is None else owner)
+
+    def test_pre_bind_stall_is_named_not_blamed_on_the_port(self):
+        self._seed(self.envoy_mod._PHASE_LOOP)
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertEqual(len(self._restarts), 1)
+        reason = self._restarts[0]
+        self.assertIn('stalled before binding', reason)
+        self.assertIn(self.envoy_mod._PHASE_LOOP, reason)
+        self.assertNotIn('did not bind', reason)
+
+    def test_timeout_logs_the_workers_live_stack(self):
+        self._seed(self.envoy_mod._PHASE_LOOP)
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        dumps = [m for m, lvl in self._logs
+                 if lvl == 'WARNING' and m.startswith('Startup worker')]
+        self.assertEqual(len(dumps), 1, 'One stack dump per timeout')
+        self.assertIn('parked_before_bind', dumps[0],
+                      'The dump must show the worker\'s own frames')
+
+    def test_post_bind_phase_keeps_the_bind_wording(self):
+        self._seed(self.envoy_mod._PHASE_SERVE)
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertIn('did not bind', self._restarts[0])
+
+    def test_timeout_stales_the_signalled_worker(self):
+        """Its late exit hook must not run a second restart or give-up."""
+        before = self.envoy._server_gen
+
+        self.envoy._pollStartup(before)
+
+        self.assertEqual(self.envoy._server_gen, before + 1)
+        self.assertEqual(sys._envoy_server_gen, before + 1)
+
+    def test_pre_bind_death_does_not_blacklist(self):
+        for phase in self.envoy_mod._PRE_BIND_PHASES:
+            sys._envoy_bad_bind_ports = {}
+            self._seed(phase)
+
+            self.envoy._onServerError('died before bind (test)')
+
+            self.assertNotIn(
+                self._FAKE_PORT, sys._envoy_bad_bind_ports,
+                f'A worker that died in {phase!r} never reached bind() -- '
+                f'blacklisting its port forces the +1 drift')
+
+    def test_death_while_serving_still_blacklists(self):
+        self._seed(self.envoy_mod._PHASE_SERVE)
+
+        self.envoy._onServerError('bind exploded (test)')
+
+        self.assertIn(self._FAKE_PORT, sys._envoy_bad_bind_ports)
+
+    def test_entry_from_another_start_is_ignored(self):
+        """Two EnvoyExt instances in one process can reuse a gen number; a
+        pre-bind entry written by the OTHER start must not skip our
+        blacklist or rename our timeout."""
+        self._seed(self.envoy_mod._PHASE_LOOP, owner=threading.Event())
+
+        self.envoy._onServerError('bind exploded (test)')
+
+        self.assertIn(self._FAKE_PORT, sys._envoy_bad_bind_ports)
+        self.assertEqual(
+            self.envoy._startupWorkerState(self.envoy._server_gen),
+            (None, []))
+
+
+class TestStartupPhaseReporting(EnvoyWatchdogBase):
+    """The worker side of the phase registry.
+
+    Every verdict above reads what _markStartupPhase wrote, so the marks
+    themselves are pinned: the right tuple, a bounded registry, never an
+    exception into a start, and _PHASE_SERVE marked only once the loop exists
+    and before uvicorn can bind.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._patch(sys, '_envoy_startup_phase', {})
+
+    def test_mark_records_phase_thread_and_owner(self):
+        owner = threading.Event()
+
+        self.envoy_mod._markStartupPhase(-3, 'x-phase', owner)
+
+        self.assertEqual(sys._envoy_startup_phase[-3],
+                         ('x-phase', threading.get_ident(), owner))
+
+    def test_registry_keeps_the_newest_sixteen(self):
+        for gen in range(1, 41):
+            self.envoy_mod._markStartupPhase(gen, 'p')
+
+        self.assertEqual(sorted(sys._envoy_startup_phase), list(range(25, 41)))
+
+    def test_mark_never_raises_into_a_start(self):
+        class _Hostile(dict):
+            def __setitem__(self, key, value):
+                raise TypeError('hostile registry (test)')
+
+        sys._envoy_startup_phase = _Hostile()
+
+        self.envoy_mod._markStartupPhase(1, 'p')   # must not raise
+
+    def test_serve_is_marked_between_loop_build_and_bind(self):
+        text = self.embody.op('EnvoyExt').text
+        run_body = text[text.index('class EnvoyMCPServer:'):
+                        text.index('class EnvoyExt:')]
+        build = run_body.index('_newEventLoopBounded(cancel=')
+        serve = run_body.index('_markStartupPhase(self.gen, _PHASE_SERVE')
+        bind = run_body.index('runner.run(uvi_server.serve())')
+        self.assertLess(build, serve)
+        self.assertLess(serve, bind,
+                        'A bind failure marked pre-bind would skip the '
+                        'zombie-port blacklist')
+
+    def test_init_is_marked_before_the_server_is_built(self):
+        text = self.embody.op('EnvoyExt').text
+        body = text[text.index('    def _runServer('):]
+        self.assertLess(body.index('_markStartupPhase(gen, _PHASE_INIT'),
+                        body.index('server = EnvoyMCPServer('))
+
+
+class TestEventLoopCreationIsBounded(EnvoyWatchdogBase):
+    """_newEventLoopBounded turns a wedged loop build into a fast failure.
+
+    Windows emulates socket.socketpair() with an accept() that has no timeout;
+    a silently failed loopback connect parked the non-daemon server thread
+    forever (issue #98 follow-up). The helper builds on daemon threads,
+    retries (OSError included), honors cancel, and closes any loop that
+    arrives after its attempt was abandoned. Wedges here are an Event the test
+    holds, so outcomes never depend on runner speed.
+    """
+
+    class _FakeLoop:
+        def __init__(self):
+            self.closed = threading.Event()
+
+        def close(self):
+            self.closed.set()
+
+    def setUp(self):
+        super().setUp()
+        self._gate = threading.Event()
+        # Simulated stalls must not reach the real log as WARNINGs.
+        self._worker_logs = []
+        self._patch(self.envoy_mod, '_queueWorkerLog',
+                    lambda message, level='WARNING':
+                        self._worker_logs.append(message))
+
+    def tearDown(self):
+        self._gate.set()
+        super().tearDown()
+
+    def _loop_logs(self):
+        # The patch is module-wide: the live server's own worker lines can
+        # land here during the window, so count only ours.
+        return [m for m in self._worker_logs
+                if m.startswith('Event loop creation')]
+
+    def _wedged_factory(self, made):
+        def factory():
+            loop = self._FakeLoop()
+            made.append(loop)
+            self._gate.wait(5)
+            return loop
+        return factory
+
+    def test_real_loop_is_usable_from_another_thread(self):
+        """The loop is built on one thread and run on another -- the exact
+        shape _runServer uses."""
+        import asyncio
+        loop = self.envoy_mod._newEventLoopBounded(timeout=10.0, attempts=1)
+        box = {}
+
+        async def probe():
+            await asyncio.sleep(0)
+            return 'ran'
+
+        def run_it():
+            try:
+                box['v'] = loop.run_until_complete(probe())
+            finally:
+                loop.close()
+
+        t = threading.Thread(target=run_it, daemon=True)
+        t.start()
+        t.join(10)
+        self.assertEqual(box.get('v'), 'ran')
+        if sys.platform.startswith('win'):
+            self.assertIsInstance(loop, asyncio.SelectorEventLoop,
+                                  'Proactor kills the listener on restart')
+
+    def test_wedged_build_fails_after_every_attempt(self):
+        made = []
+        with self.assertRaises(self.envoy_mod._EventLoopWedged) as ctx:
+            self.envoy_mod._newEventLoopBounded(
+                timeout=0.2, attempts=2, factory=self._wedged_factory(made))
+        self.assertEqual(len(made), 2, 'Each attempt gets a fresh builder')
+        self.assertIn('never tried', str(ctx.exception))
+        self.assertEqual(len(self._loop_logs()), 2,
+                         'Each abandoned attempt is reported')
+
+    def test_loop_arriving_after_give_up_is_closed(self):
+        made = []
+        with self.assertRaises(self.envoy_mod._EventLoopWedged):
+            self.envoy_mod._newEventLoopBounded(
+                timeout=0.2, attempts=1, factory=self._wedged_factory(made))
+        self._gate.set()
+        self.assertTrue(made[0].closed.wait(10),
+                        'An abandoned builder must close the loop it built')
+
+    def test_late_finisher_from_an_earlier_attempt_is_closed(self):
+        """Attempt 1 wedges, attempt 2 succeeds, THEN attempt 1 finishes: it
+        must close its own loop, not publish into attempt 2's state (the
+        late-binding closure the 2026-09-10 review caught)."""
+        made = []
+
+        def factory():
+            loop = self._FakeLoop()
+            made.append(loop)
+            if len(made) == 1:
+                self._gate.wait(5)
+            return loop
+
+        got = self.envoy_mod._newEventLoopBounded(
+            timeout=0.2, attempts=2, factory=factory)
+
+        self.assertIs(got, made[1])
+        self._gate.set()
+        self.assertTrue(made[0].closed.wait(10),
+                        'The late attempt-1 loop must be closed, not leaked')
+        self.assertFalse(made[1].closed.is_set(),
+                         'The returned loop must never be closed by the helper')
+
+    def test_os_error_is_retried_then_reported_as_wedge(self):
+        calls = []
+
+        def refused():
+            calls.append(1)
+            raise ConnectionError('Unexpected peer connection (test)')
+
+        with self.assertRaises(self.envoy_mod._EventLoopWedged) as ctx:
+            self.envoy_mod._newEventLoopBounded(
+                timeout=5.0, attempts=3, factory=refused)
+        self.assertEqual(len(calls), 3)
+        self.assertIsInstance(ctx.exception.__cause__, ConnectionError)
+        self.assertNotIn('failed on port', str(ctx.exception))
+
+    def test_os_error_then_success_recovers(self):
+        made = []
+
+        def flaky():
+            if not made:
+                made.append(None)
+                raise OSError('transient (test)')
+            loop = self._FakeLoop()
+            made.append(loop)
+            return loop
+
+        got = self.envoy_mod._newEventLoopBounded(
+            timeout=5.0, attempts=3, factory=flaky)
+        self.assertIs(got, made[1])
+
+    def test_non_os_error_propagates_without_retry(self):
+        calls = []
+
+        def broken():
+            calls.append(1)
+            raise ValueError('no selector (test)')
+
+        with self.assertRaises(ValueError):
+            self.envoy_mod._newEventLoopBounded(
+                timeout=5.0, attempts=3, factory=broken)
+        self.assertEqual(len(calls), 1)
+
+    def test_cancel_stops_before_building(self):
+        cancel = threading.Event()
+        cancel.set()
+        calls = []
+
+        got = self.envoy_mod._newEventLoopBounded(
+            timeout=5.0, attempts=3, cancel=cancel,
+            factory=lambda: calls.append(1))
+
+        self.assertIsNone(got)
+        self.assertEqual(calls, [])
+
+    def test_run_server_passes_the_wedge_through_untouched(self):
+        """_runServer's generic handlers wrap errors as 'failed on port N';
+        the wedge must reach the ExceptHook as itself."""
+        from queue import Queue
+        wedged = self.envoy_mod._EventLoopWedged
+
+        class _StubServer:
+            def __init__(self, **_kw):
+                pass
+
+            def run(self):
+                raise wedged('stub wedge (test)')
+
+        self._patch(self.envoy_mod, 'EnvoyMCPServer', _StubServer)
+        self._patch(sys, '_envoy_startup_phase', {})
+
+        with self.assertRaises(wedged) as ctx:
+            self.envoy_mod.EnvoyExt._runServer(
+                55599, Queue(), Queue(), threading.Event(),
+                threading.Event(), -7)
+        self.assertNotIn('failed on port', str(ctx.exception))
+
+
+class TestGiveUpKeepsEnvoyEnabled(EnvoyWatchdogBase):
+    """Giving up must not persist Envoyenable=False (issue #98 follow-up).
+
+    The par is saved to config.json, so the old give-up disabled Envoy in
+    every later TD session until the user re-ticked it. It now parks on an
+    'Error' status (the watchdog idles on it), schedules nothing, and stales
+    the storm's queued restarts. Runs against a FAKE owner: a regression that
+    wrote the live par would bounce the server every session relies on.
+    """
+
+    class _FakeOwner:
+        def __init__(self):
+            import types
+            self.path = '/fake/Embody'
+            self.par = types.SimpleNamespace(
+                Envoyenable=True, Envoystatus='Restarting...')
+
+    def setUp(self):
+        super().setUp()
+        now = time.time()
+        self._owner = self._FakeOwner()
+        self._patch(self.envoy, 'ownerComp', self._owner)
+        self._patch(self.envoy, '_last_start_time', now)
+        self._patch(self.envoy, '_restart_count', 7)
+        self._patch(self.envoy, '_restart_window_start',
+                    now - self.envoy._RESTART_WINDOW_SECONDS - 5)
+
+    def test_give_up_leaves_enable_on_and_parks_on_error(self):
+        before = self.envoy._server_gen
+
+        self.envoy._scheduleRestart('Server error: test')
+
+        self.assertIs(self._owner.par.Envoyenable, True,
+                      'Give-up must not touch the persisted master switch')
+        status = str(self._owner.par.Envoystatus)
+        self.assertTrue(status.startswith('Error'), status)
+        self.assertIn('gave up', status)
+        self.assertFalse(
+            [a for a, _kw in self._runs if a and '_restartFire' in str(a[0])],
+            'Give-up must not queue another restart')
+        self.assertEqual(self.envoy._server_gen, before + 1,
+                         'Give-up must stale queued restarts and late hooks')
+        self.assertEqual(sys._envoy_server_gen, before + 1)
 
 
 class TestStartupBudget(EnvoyWatchdogBase):

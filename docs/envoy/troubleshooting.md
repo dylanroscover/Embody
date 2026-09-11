@@ -8,7 +8,7 @@
 2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for the error in the Textport, then toggle Envoy off and on to rebuild. Never pip-install into `.venv` yourself — Embody owns that environment and rebuilds it (including your declared extras) on its own; see [Python Environment](../embody/python-environment.md).
    On Windows, also add `"pywin32>=311"`.
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
-4. **TD version too old:** Envoy requires TouchDesigner **2025.33070** or later.
+4. **TD version too old:** Envoy requires TouchDesigner **2025.33230** or later.
 
 ## Port Climbs on Every Restart, Then Envoy Disables Itself
 
@@ -31,6 +31,51 @@ keeps the preferred port eligible for the retry. Restart TouchDesigner once
 after updating -- listeners leaked by the older build live until the process
 exits.
 
+## Envoy Stops Answering and Stays Off Across Restarts
+
+**Symptoms:** The Textport shows `Watchdog: enabled but socket dead (status
+'Running on port 9870') -- reviving`, then `Envoy did not bind port 9870 within
+the startup timeout`, although the port is free. After enough retries Envoy
+stops, and relaunching TouchDesigner does not bring it back until you turn
+**Enable Envoy** on again.
+
+**Cause:** The restart never got as far as the port. Every Python event loop
+opens an internal loopback socket pair, and on Windows the connection inside
+that step can fail without anything noticing -- measured as a port collision
+on machines whose Windows dynamic (ephemeral) port range had been widened to
+start at 1024 instead of the default 49152. The new server thread then waited
+forever. Each hang also left a thread behind, and when Envoy finally gave up it
+switched **Enable Envoy** off -- a setting Embody saves, so it stayed off in
+every later session.
+
+**Fix:** Update to **6.2.46** or later. Envoy now builds its event loop with a
+deadline and retries a failed attempt, so the collision costs a second or two
+instead of the server; the Textport says `Event loop creation stalled ... in
+socket.socketpair()` when it happens. A startup timeout names the step the
+server stopped at (`Envoy worker stalled before binding port 9870 (creating
+event loop)`) and logs where it was stuck, instead of blaming the port. Giving
+up leaves **Enable Envoy** on, so the next TouchDesigner launch tries again.
+
+If an older build already switched Envoy off, turn **Enable Envoy** back on
+once after updating -- the update cannot tell that apart from you turning it
+off -- and restart TouchDesigner once to clear threads the old build left
+stuck. To make the collision rarer, check the range with `netsh int ipv4 show
+dynamicport tcp`; the Windows default starts at 49152 with 16384 ports, which
+also keeps Envoy's ports 9870-9879 out of the pool.
+
+To check a session, run these lines in the Textport:
+
+```python
+import sys, threading, traceback
+names = {t.ident: t.name for t in threading.enumerate()}
+print([(names[i], [f'{f.name}:{f.lineno}' for f in traceback.extract_stack(fr)[-4:]]) for i, fr in sys._current_frames().items() if names.get(i, '').startswith(('_runServer', 'envoy-loop-init'))])
+```
+
+More than one `_runServer` entry, or one ending in `accept`, is a worker stuck
+by an older build (restart TouchDesigner to clear it). An `envoy-loop-init`
+entry is an attempt the current build abandoned and retried; a few are
+harmless.
+
 ## Restart Loop: "Unable to configure formatter 'default'"
 
 **Symptoms:** Envoy never comes up; the Textport repeats a traceback ending in
@@ -47,7 +92,7 @@ every ~10–25 seconds, with noticeable freezes or frame drops as the watchdog k
 **Fix:**
 
 1. **Update Embody** to v6.0.116 or later — Envoy now passes `use_colors=False` to uvicorn, which skips the `isatty()` probe entirely.
-2. **Or update TouchDesigner** to 2025.33070 or later (the documented minimum) — those builds ship a stdout catcher that implements `isatty()`.
+2. **Or update TouchDesigner** to 2025.33230 or later (the documented minimum) — those builds ship a stdout catcher that implements `isatty()`.
 
 Do **not** patch `.venv/.../uvicorn/logging.py` by hand — the edit is lost whenever the virtual environment is rebuilt (TD upgrades, dependency floor bumps, venv repair).
 

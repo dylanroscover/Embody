@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.46
+
+Envoy survives a stalled restart, and TouchDesigner 2025.33230 is the new minimum.
+
+- **A restart can no longer hang Envoy.** A dropped loopback connection no longer stalls the server for good; it retries within seconds, and a failed start names the stuck step instead of blaming the port ([#98](https://github.com/dylanroscover/Embody/issues/98)).
+- **Giving up no longer switches Envoy off,** so the next launch tries again.
+- **Fixes.** Envoy read tools hide Embot's live parts ([#94](https://github.com/dylanroscover/Embody/issues/94)).
+
 ## v6.2.43
 
 Envoy stops walking up the port range when a start is slow.

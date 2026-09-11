@@ -9,6 +9,7 @@
 - **Every docked op hugs its host** -- a tight row ~30 units below (never a full grid step away). `create_op`/`copy_op`/`set_op_position` do this automatically; after any `execute_python` build, place and verify docks yourself.
 - **Nothing left at (0, 0); no overlaps; related ops sit near each other** (a MAT beside its Geometry COMP, a camera/light near their Render TOP, any referenced op visible without scrolling).
 - **Every operator sits inside exactly one annotation; annotations never overlap** (>= 400 units between edges) and expand when you add ops. **MUST load `/manage-annotations` before `create_annotation` or `set_annotation`** -- `nodeX`/`nodeY` is the bottom-left corner.
+- **Annotations named `envoy_bot_*` are Embot, not layout.** They are the mascot the `Embot` parameter draws on the operator Envoy is working on -- nine small overlapping boxes that appear and vanish on their own, and that Embody strips from every saved file. The read tools hide them (a count rides back as `embot_hidden`); if a raw `findChildren` turns them up, never move, delete, enclose or count them, and never read them as an overlap to fix.
 - **Y increases upward.** New rows/parallel chains go downward, >= 400 units apart (more when tiles are tall).
 
 ## Read first, verify last (mandatory gates)

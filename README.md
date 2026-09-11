@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.43-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.46-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -50,7 +50,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Quick Start
 
-**Requirements:** TouchDesigner **2025.33070 or later** (Windows / macOS). No Python setup needed — Embody builds a per-project Python environment (`.venv`) matched to TouchDesigner's own interpreter, and [your own packages can live in it too](https://dylanroscover.github.io/Embody/embody/python-environment/). No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
+**Requirements:** TouchDesigner **2025.33230 or later** (Windows / macOS). No Python setup needed — Embody builds a per-project Python environment (`.venv`) matched to TouchDesigner's own interpreter, and [your own packages can live in it too](https://dylanroscover.github.io/Embody/embody/python-environment/). No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
 
 ### 1. Install
 
@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **148 test suites** (4,650 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **148 test suites** (4,677 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
