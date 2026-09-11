@@ -95,6 +95,8 @@ return the shape and range instead.
 |------|-----------|-------------|
 | `execute_python` | `code` | Execute Python in TD. Set `result` variable to return values |
 
+**Envoy's own host**: `execute_python` refuses (nothing runs; `error_code` `envoy.embody.host_destroy_refused`) code that would destroy or reload the Embody COMP, an ancestor, `/` or Envoy's extension DAT in the same call -- `me` and `parent()` ARE the Embody COMP here. `delete_op`, destroy-class `exec_op_method` and reload pulses via `set_parameter` refuse the same targets. Stop and ask the user; only when they asked to move or remove Embody, follow the refusal text (one deferred `run()` string).
+
 ## Introspection & Diagnostics
 
 | Tool | Parameters | Description |
@@ -167,6 +169,8 @@ For visual work, success is verified by capturing and judging the output TOP, no
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
 **Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Warning cursors are **per session** (from the bridge's identity headers), so concurrent sessions each receive their own copy of a warning -- one session polling first no longer consumes it for the others.
+
+**Unattended sessions**: nothing answers a dialog, so preset the Embody parameter that decides it: `Tdxnpalettehandling` (palette Black Box vs Full Export), `Filecleanup` (deleted-file prompt), `Tdxnlockedwarn` (`quiet`) and `Tdxndatsafety` (save-time content report). Saves never prompt: save through `save_project` and read save warnings in `get_job_status(job_id)["warnings"]` -- the save's reinit can keep them out of `_logs`.
 
 **Auto-piggybacked peer advisories**: a `_peers` field rides along when your request touches territory another session modified recently (last ~10 min) -- one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer WROTE an overlapping scope within the last minute AND your operation is also a write -- **treat it as a hard stop**: check `get_sessions`, coordinate (or divide work by COMP subtree), and only then proceed. Non-conflict advisories are informational and deduped per (peer, scope) for ~5 min; conflicts always ride.
 

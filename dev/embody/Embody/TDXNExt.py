@@ -14,6 +14,7 @@ This extension lives on the Embody COMP and is callable via:
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -27,7 +28,7 @@ import yaml  # PyYAML (pre-installed in TD and shell python)
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
-from typing import Any, Optional, Union
+from typing import Any, Iterator, Optional, Union
 
 # CSafe is ~10x faster AND -- critically -- CSafeLoader reads legacy
 # tab-indented JSON .tdn that the pure-python SafeLoader REJECTS. Fall back
@@ -353,6 +354,53 @@ SKIP_STORAGE_KEYS = {
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
+# --- Locked non-DAT content (issue #108) ------------------------------------
+# A lock freezes cooked data the .tdxn cannot store (DATs round-trip via
+# dat_content). POP probed 2025.33230: a locked nullPOP kept 400 points
+# while its grid grew to 625, and a .tox round-trip kept them.
+_LOCKED_DATA_FAMILIES = ('TOP', 'CHOP', 'SOP', 'POP')
+# 'recooks' = unlocking THIS op alone yields output after a rebuild. No
+# label promises the frozen snapshot back (docs.derivative.ca/Lock_Flag).
+# Ordered most-at-risk first.
+_LOCKED_STATE_ORDER = {'none': 0, 'unknown': 1, 'recooks': 2}
+_LOCKED_SOURCE_LABELS = {
+	'recooks': ('re-cooks if unlocked (the frozen snapshot is replaced, '
+				'not restored)'),
+	'none': 'NO SOURCE (unlocking leaves it empty)',
+	'unknown': 'source not traced (treat as no source)',
+}
+_LOCKED_LOSS_TEXT = {
+	'export': ('The .toe keeps the frozen data; it is lost only when {what} '
+			   'is rebuilt from its .tdxn (Roundtrip mode, import_network '
+			   'clear_first, crash recovery, a checkout without the .toe).'),
+	'roundtrip': ('Roundtrip mode rebuilds {what} from its .tdxn on the next '
+				  'save, so the frozen data is lost then.'),
+	'reopen': ('Roundtrip reconstruction rebuilds {what} from its .tdxn on '
+			   'the next open, so the frozen data is lost then.'),
+}
+_LOCKED_LOSS_SHORT = {
+	'export': ('the .toe keeps the frozen data until this COMP is rebuilt '
+			   'from its .tdxn'),
+	'roundtrip': ('Roundtrip mode rebuilds this COMP from its .tdxn on the '
+				  'next save and loses the frozen data'),
+	'reopen': ('Roundtrip reconstruction rebuilds this COMP from its .tdxn '
+			   'on the next open and loses the frozen data'),
+}
+# Every CHOP's Auto Export Root points at its parent by default (probed
+# 2025.33230): context, not a data source.
+_LOCKED_REF_PAR_SKIP = frozenset({'autoexportroot'})
+_LOCKED_CLASSIFY_BUDGET_S = 0.030  # per scan; findings left read 'unknown'
+# ui.messageBox cannot scroll: taller than ~35 lines at 70 chars pushes its
+# buttons off-screen (the _MAX_TOXDROP_LISTED failure class).
+_LOCKED_DIALOG_MAX_LINES = 35
+_LOCKED_DIALOG_ROWS = 10
+_LOCKED_COMBINED_ROWS = 12
+_LOCKED_TARGETS_SHOWN = 4
+_LOCKED_SWITCH_BUTTON = 2  # 0 OK and 1 "Don't show again" stay fixed
+_LOCKED_SWITCH_DELAY_FRAMES = 5
+_LOCKED_SWITCH_REARM_FRAMES = 30
+_LOCKED_SWITCH_MAX_ATTEMPTS = 10
+
 
 # =============================================================================
 # C1 clipboard envelope (_embody_tdn) -- byte-parity with
@@ -543,6 +591,15 @@ class TDXNExt:
 		# (op_path, par_name) pairs already warned about bad tdn_omit
 		# tags; cleared per export so a standing typo warns once per run.
 		self._omit_warned: set = set()
+		# Palette clones whose unanswered prompt (outside a save) already
+		# WARNed; repeats log at DEBUG. Cleared per save (issue #109).
+		self._palette_unanswered_warned: set = set()
+		# Clones left unanswered inside a save window; the save logs them as
+		# ONE WARNING (flushPaletteUnanswered, issue #109 review).
+		self._palette_unanswered_pending: list = []
+		# (path, level) of dropped duplicate companions already logged: the
+		# drop runs on every export, read_tdxn and checkpoint (issue #109).
+		self._companion_drop_logged: set = set()
 		# Divergent defaults: params where TD's p.default lies (differs
 		# from the actual creation value). Loaded lazily from the
 		# divergent_defaults tableDAT inside the Embody COMP.
@@ -574,6 +631,10 @@ class TDXNExt:
 		# Session-scoped "Don't show again" fallback for .toes saved
 		# before the Tdxnlockedwarn parameter existed. Reset on reinit.
 		self._locked_warn_quiet: bool = False
+		# >0 inside suppressLockedDialogs (MCP exports, auto-externalize,
+		# Switch to TOX, a Perform Mode bail): the locked-content dialog
+		# then logs only (issue #108).
+		self._locked_dialog_suppress: int = 0
 		# Clipboard auto-paste watcher: prompt ONCE when a new _embody_tdn
 		# envelope appears on the OS clipboard. No keyboard shortcut -- TD's
 		# native Cmd/Ctrl+V paste cannot be suppressed, so a paste key always
@@ -1725,9 +1786,15 @@ class TDXNExt:
 				# (skip_cleanup). Reserved for explicit user/save exports.
 				if not skip_cleanup:
 					# Locked non-DAT operators whose frozen content won't
-					# survive a TDXN round-trip.
-					self._warnLockedNonDATs(
-						root_op, context='export' if interactive else 'import')
+					# survive a TDXN round-trip. Always the EXPORT text; never
+					# fails a written export, whose caller would roll the tag
+					# back (issue #108).
+					try:
+						self._warnLockedNonDATs(
+							root_op, context='export', interactive=interactive)
+					except Exception as e:
+						self._log(f'Locked-content scan failed for {root_path}: '
+								  f'{e}', 'WARNING')
 					# One-time warning for large monolithic TDXN files.
 					if not options.get('embed_all'):
 						self._warnLargeTDXN(filepath, root_path)
@@ -2685,9 +2752,6 @@ class TDXNExt:
 			# Phase 4: Set flags
 			self._setFlags(dest, op_defs)
 
-			# Phase 4a: Warn about locked non-DAT operators
-			self._warnLockedNonDATs(dest, context='import')
-
 			# Phase 5: Wire connections
 			self._wireConnections(dest, op_defs)
 
@@ -2893,6 +2957,17 @@ class TDXNExt:
 			except Exception:
 				pass
 
+			# Warn about locked non-DATs this import created, only now that
+			# every wire (external ones included) is back so sources trace;
+			# shells left unfilled make tracing untrustworthy (issue #108).
+			try:
+				self._warnLockedNonDATs(
+					dest, context='import', only=set(created),
+					trace=restore_tdxn_shells)
+			except Exception as e:
+				self._log(f'Locked-content scan failed for {target_path}: '
+						  f'{e}', 'WARNING')
+
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
 				'SUCCESS')
@@ -2989,9 +3064,29 @@ class TDXNExt:
 			if (child.dock is not None and sibling.dock is not None
 					and child.dock.path == sibling.dock.path):
 				skip.add(name)
-				self._log(
-					f'Skipping duplicate companion "{name}" '
-					f'(original: "{base}")', 'INFO')
+				# The drop is unchanged, but content no file keeps and the
+				# original does not share is then in no .tdxn either: WARNING
+				# (issue #109). A copy of the original stays INFO. Once per
+				# (path, level) per instance: this runs on every read too.
+				unique = (child.family == 'DAT'
+						  and self._datContentDisposition(child, False)
+						  == 'embedded'
+						  and TDXNExt._datHasContent(child)
+						  and not TDXNExt._datSameContent(child, sibling))
+				key = (child.path, 'WARNING' if unique else 'INFO')
+				if key in self._companion_drop_logged:
+					continue
+				self._companion_drop_logged.add(key)
+				if unique:
+					self._log(
+						f'Skipping duplicate companion {child.path} (original: '
+						f'"{base}") -- its content is saved nowhere else and '
+						f'will not be in the .tdxn; merge it into "{base}" or '
+						f'rename it to keep it', 'WARNING')
+				else:
+					self._log(
+						f'Skipping duplicate companion "{name}" '
+						f'(original: "{base}")', 'INFO')
 
 		# Keys that carry no user-meaningful data -- operators with only
 		# these keys are auto-created defaults (e.g. torus1 inside a
@@ -3133,33 +3228,16 @@ class TDXNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content -- include when the include_dat_content option is True,
-		# OR when the DAT lives inside an animationCOMP (keys, channels, graph,
-		# attributes tableDATs hold all keyframe data -- must always be saved),
-		# OR when the content exists NOWHERE ELSE on disk.
-		#
-		# include_dat_content=False means "skip content already saved
-		# elsewhere", never "throw authored code away". It is the DEFAULT, and
-		# it used to drop every unbacked DAT: a TDXN COMP could export 185
-		# operators and zero lines of code, so a crash took every shader and
-		# callback with it (fork field report, 2026-08-21). Mirrors
-		# EmbodyExt._findAtRiskDATs so the warning and the export cannot
-		# disagree about what counts as safe.
-		#
-		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
-		# TD auto-generates their content and rejects writes on import.
-		# tdn_exclude:dat_content opts a DAT's rows out entirely -- the one
-		# case where "saved nowhere else" is fine to lose, because the content
-		# is runtime state (a log ring buffer) rather than authored work.
-		if target.family == 'DAT' and not self._datContentExcluded(target) and (
-				options.get('include_dat_content', True) or
-				self._isInsideAnimationCOMP(target) or
-				not self._isDATContentSavedOnDisk(target)):
-			if self._isDATEditable(target):
+		# DAT content: _datContentDisposition is the one rule, shared with
+		# EmbodyExt's save-time check so the two cannot disagree (issue #109).
+		if target.family == 'DAT':
+			disposition = self._datContentDisposition(
+				target, options.get('include_dat_content', True))
+			if disposition == 'embedded':
 				content_data = self._exportDATContent(target)
 				if content_data:
 					data.update(content_data)
-			else:
+			elif disposition == 'generated':
 				data['dat_read_only'] = True
 
 		# Emit child-reference metadata for COMPs whose contents are
@@ -4598,13 +4676,51 @@ class TDXNExt:
 				'INFO')
 		return restored
 
+	def _datContentDisposition(self, dat: DAT, include_dat_content: bool) -> str:
+		"""What a TDXN export does with this DAT's content -- the one rule.
+
+		'excluded'  -> nothing: tdxn_exclude:dat_content opts its rows out.
+		'backed'    -> nothing: a file holds it and include_dat_content is off.
+		'embedded'  -> dat_content: the option is on, an animationCOMP table,
+		               or content saved nowhere else (dropping unbacked DATs
+		               lost every shader in a crash, fork field 2026-08-21).
+		'generated' -> dat_read_only: not editable; TD regenerates it on cook.
+		_exportSingleOp and EmbodyExt's save-time check both read this
+		(issue #109).
+		"""
+		if self._datContentExcluded(dat):
+			return 'excluded'
+		if not (include_dat_content or self._isInsideAnimationCOMP(dat)
+				or not self._isDATContentSavedOnDisk(dat)):
+			return 'backed'
+		return 'embedded' if self._isDATEditable(dat) else 'generated'
+
+	@staticmethod
+	def _datHasContent(dat: DAT) -> bool:
+		"""Non-empty text or at least one row; False when unreadable."""
+		try:
+			if dat.isTable:
+				return dat.numRows > 0
+			return bool((dat.text or '').strip())
+		except Exception:
+			return False
+
+	@staticmethod
+	def _datSameContent(a: DAT, b: DAT) -> bool:
+		"""Identical text (a table's is its tab-delimited rows); False when
+		unreadable, so a doubt reads as distinct content."""
+		try:
+			return a.text == b.text
+		except Exception:
+			return False
+
 	def _isDATContentSavedOnDisk(self, dat_op):
 		"""Does this DAT's content already live in a file on disk?
 
 		True = embedding it in the .tdn would DUPLICATE what a .py/.txt
 		already holds; False = the .tdn is the only place it can survive.
-		Backed means an externalization tag or a `file` par -- the same pair
-		EmbodyExt._findAtRiskDATs treats as safe.
+		Backed means an externalization tag or a `file` par (the 'backed'
+		case of _datContentDisposition).
 
 		Fail-safe: on any doubt return False, so the content gets embedded.
 		A redundant copy costs bytes; a missing one costs the user's code.
@@ -6591,7 +6707,43 @@ class TDXNExt:
 			except Exception:
 				pass
 			return 'fullexport'
+		# -1: suppressed or unanswered. Blackboxing drops a customized clone's
+		# interior, so never silently. Inside a save every clone is collected
+		# for ONE WARNING (flushPaletteUnanswered); otherwise WARNING once per
+		# clone, DEBUG after (issue #109).
+		if self.ownerComp.fetch('_suppress_dialogs', False, search=False):
+			if target.path not in self._palette_unanswered_pending:
+				self._palette_unanswered_pending.append(target.path)
+			self._log(f'Palette handling for {target.path} not answered in the '
+					  f'save window; exporting it as "blackbox"', 'DEBUG')
+			return 'blackbox'
+		first = target.path not in self._palette_unanswered_warned
+		self._palette_unanswered_warned.add(target.path)
+		self._log(
+			f'Palette handling for {target.path} was not answered (dialog '
+			f'closed, or nobody to answer it); using "blackbox": its internals '
+			f'export as a reference, so any changes made inside it are not in '
+			f'the .tdxn. Set Tdxnpalettehandling explicitly to choose.',
+			'WARNING' if first else 'DEBUG')
 		return 'blackbox'
+
+	def flushPaletteUnanswered(self) -> None:
+		"""Log the save's unanswered palette prompts as ONE WARNING, then
+		clear them. execute.onProjectPreSave calls it after every export
+		(issue #109 review); tier 2, for the COMP's own execute DAT."""
+		pending = list(self._palette_unanswered_pending)
+		self._palette_unanswered_pending.clear()
+		if not pending:
+			return
+		shown = ', '.join(pending[:5])
+		if len(pending) > 5:
+			shown += f', ... (+{len(pending) - 5} more)'
+		self._log(
+			f'Palette handling was not answered for {len(pending)} clone(s) '
+			f'during this save (dialogs are suppressed while saving): {shown}. '
+			f'Each exported as "blackbox", so changes made inside them are not '
+			f'in the .tdxn. Set Tdxnpalettehandling, or a per-COMP choice, to '
+			f'decide.', 'WARNING')
 
 	def _isPaletteClone(self, target):
 		"""Check if a COMP is a palette component from TD's shipped palette.
@@ -7848,85 +8000,259 @@ class TDXNExt:
 			self.ownerComp.par.Tdxncascadewarn = 'quiet'
 			self._log('Large TDXN warning silenced', 'INFO')
 
-	# Shared footer for the locked-content dialogs (single and combined).
-	_LOCKED_WARN_FOOTER = (
-		'TDXN preserves the lock flag but cannot store '
-		'frozen pixel, channel, or geometry data. '
-		'After reload these operators will be locked '
-		'but empty.\n\n'
-		'To preserve locked content, either:\n'
-		'  - Unlock the operator(s) (they will re-cook '
-		'from inputs)\n'
-		'  - Switch the affected COMP(s) to TOX strategy '
-		'instead of TDXN')
+	# --- Locked non-DAT content (issue #108) ---------------------------------
+	# TDXN keeps the lock flag, not the frozen data. Each finding gets a
+	# source state from a wire walk (_classifyLocked); ONE WARNING per root
+	# carries it for MCP callers, and the dialog adds Switch to TOX.
 
-	def _warnLockedNonDATs(self, root_op, context='export'):
+	def _warnLockedNonDATs(self, root_op: 'COMP', context: str = 'export',
+						   interactive: bool = True,
+						   only: Optional[set] = None,
+						   trace: bool = True) -> None:
 		"""Scan a network for locked non-DAT operators and warn.
 
-		Locked TOPs, CHOPs, and SOPs will have their lock flag preserved
-		in TDXN but their frozen content (pixels, channels, geometry) is
-		NOT stored. This warns users so they aren't surprised by data loss.
+		Locked TOPs, CHOPs, SOPs and POPs keep their lock flag in TDXN but
+		their frozen content (pixels, channels, geometry, points) is NOT
+		stored. Each finding is labeled with its source (_classifyLocked).
 
-		The export dialog honors the Tdxnlockedwarn preference (ask/quiet,
-		set by the dialog's "Don't show again" button). While a batch
-		sweep is active (beginLockedWarnBatch), findings are collected
-		and shown as ONE combined dialog at flushLockedWarnBatch -- a
-		full-project externalization must never pop one modal per COMP.
-		The log WARNING always fires regardless of dialog preference.
+		Export: ONE WARNING per root, always; then the dialog when
+		interactive and Tdxnlockedwarn is 'ask'. While a batch sweep is
+		active (beginLockedWarnBatch) findings are collected for ONE
+		combined dialog at flushLockedWarnBatch -- a full-project
+		externalization must never pop one modal per COMP.
+		Import: log only.
 
 		Args:
 			root_op: The COMP to scan (recursively)
 			context: 'export' shows a dialog + log; 'import' logs only
+			interactive: False logs the export text without a dialog (MCP)
+			only: Restrict findings to these op paths (an import's own ops)
+			trace: False skips source tracing (nested shells still empty)
 		"""
-		locked = self._findLockedNonDATs(root_op)
+		locked = self._findLockedNonDATs(root_op, only=only)
 		if not locked:
 			return
-
-		summary = self._lockedSummary(locked)
-
-		if context == 'export':
+		n = len(locked)
+		root = root_op.path
+		if context != 'export' and not trace:
 			self._log(
-				f'Locked non-DAT operators in {root_op.path}: {summary} '
-				f'-- frozen data will not persist through TDXN', 'WARNING')
-			if not self._lockedWarnEnabled():
-				return
-			if self._locked_warn_batch is not None:
-				# Batch sweep active -- collect for one combined dialog.
-				self._locked_warn_batch.append(
-					(root_op.path, len(locked),
-					 self._lockedSummary(locked, limit=4)))
-				return
-			self._showLockedWarnDialog(
-				f'{len(locked)} locked non-DAT operator(s) in '
-				f'{root_op.path}:\n\n{summary}\n\n'
-				f'{self._LOCKED_WARN_FOOTER}')
+				f'Restored lock flag on {n} non-DAT operator(s) in {root} '
+				f'-- the .tdxn holds no frozen data, so they are locked but '
+				f'empty (sources not traced while nested TDXN COMPs are '
+				f'still restoring)', 'WARNING')
+			return
+		try:
+			states = self._classifyLocked(locked, root_op)
+		except Exception:
+			states = {}  # a classifier bug must never suppress the warning
+		ordered = sorted(locked, key=lambda o: _LOCKED_STATE_ORDER.get(
+			states.get(o.id, 'unknown'), 1))
+		counts = {s: 0 for s in _LOCKED_STATE_ORDER}
+		for o in locked:
+			counts[states.get(o.id, 'unknown')] += 1
+		summary = self._lockedSummary(ordered, states=states)
+		tally = TDXNExt._lockedCountsText(counts)
+		if context != 'export':
+			self._log(
+				f'Restored lock flag on {n} non-DAT operator(s) in {root}: '
+				f'{summary} -- the .tdxn holds no frozen data, so they are '
+				f'locked but empty; {tally}.', 'WARNING')
+			return
+		try:
+			targets, uncovered = self._lockedSwitchTargets(locked, root_op)
+		except Exception:
+			targets, uncovered = [], n
+		root_label = (root if uncovered and self._lockedRootSwitchable(root_op)
+					  else None)
+		mode = self._lockedLossMode()
+		self._log(
+			f'Locked non-DAT operators in {root}: {summary} -- '
+			f'{_LOCKED_LOSS_SHORT[mode]}; {tally}.'
+			f'{TDXNExt._lockedKeepHint(targets, uncovered, root_label)}',
+			'WARNING')
+		if not interactive or not self._lockedWarnEnabled():
+			return
+		if self._locked_warn_batch is not None:
+			# Batch sweep active -- collect for one combined dialog.
+			self._locked_warn_batch.append(
+				(root, n, counts, tuple(targets), uncovered))
+			return
+		rows = [f'  - {o.path} ({o.family}): '
+				f'{_LOCKED_SOURCE_LABELS[states.get(o.id, "unknown")]}'
+				for o in ordered]
+		tail = TDXNExt._lockedAdvice(targets, uncovered, counts['recooks'],
+									 mode, single=True,
+									 root_label=root_label)
+		self._showLockedWarnDialog(
+			self._fitLockedDialog(
+				f'{n} locked non-DAT operator(s) in {root} '
+				f'({TDXNExt._lockedCountsText(counts, short=True)}):',
+				rows, tail,
+				'operator(s)', _LOCKED_DIALOG_ROWS),
+			switch_targets=tuple(targets))
+
+	def _lockedSummary(self, locked: list, limit: int = 10,
+					   states: Optional[dict] = None) -> str:
+		"""Comma summary of locked ops, truncated to `limit` entries;
+		with `states`, each entry names its source state."""
+		if states is None:
+			names = [f'{c.path} ({c.family})' for c in locked[:limit]]
 		else:
-			# Import context -- log only, no dialog (reconstruction is automated)
-			self._log(
-				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
-				f'in {root_op.path}: {summary} -- these operators have no '
-				f'frozen data and should be unlocked to re-cook', 'WARNING')
-
-	def _lockedSummary(self, locked, limit=10):
-		"""Comma summary of locked ops, truncated to `limit` entries."""
-		names = [f'{c.path} ({c.family})' for c in locked[:limit]]
+			names = [f'{c.path} ({c.family}, source: '
+					 f'{states.get(c.id, "unknown")})'
+					 for c in locked[:limit]]
 		summary = ', '.join(names)
 		if len(locked) > limit:
 			summary += f', ... and {len(locked) - limit} more'
 		return summary
 
-	def _lockedWarnEnabled(self):
+	@staticmethod
+	def _lockedCountsText(counts: dict, short: bool = False) -> str:
+		"""'1 no source, 2 not traced, 3 re-cook if unlocked' (nonzero)."""
+		labels = (('none', 'no source'), ('unknown', 'not traced'),
+				  ('recooks', 're-cook' if short else 're-cook if unlocked'))
+		return ', '.join(f'{counts[k]} {label}' for k, label in labels
+						 if counts.get(k))
+
+	def _lockedLossMode(self) -> str:
+		"""When frozen data dies, for this Embody's TDXN settings (see
+		_lockedLossModeFor)."""
+		try:
+			create = getattr(self.ownerComp.par, 'Tdxncreateonstart', None)
+			return TDXNExt._lockedLossModeFor(
+				self.ownerComp.ext.Embody._tdxnMode(),
+				bool(self.ownerComp.par.Tdxnstriponsave.eval()),
+				bool(create.eval()) if create is not None else True)
+		except Exception:
+			return 'export'
+
+	@staticmethod
+	def _lockedLossModeFor(mode: str, strip_on_save: bool,
+						   create_on_start: bool) -> str:
+		"""'roundtrip' (Full + strip: each save rebuilds the COMP), 'reopen'
+		(Full + create on start: the next open rebuilds it), else 'export'
+		(the .toe keeps the data). Mirrors EmbodyExt._storageLossConsequence
+		(issue #108 review). Pure."""
+		if mode == 'full' and strip_on_save:
+			return 'roundtrip'
+		if mode == 'full' and create_on_start:
+			return 'reopen'
+		return 'export'
+
+	def _lockedRootSwitchable(self, root_op: 'COMP') -> bool:
+		"""True when the export root itself could be switched to TOX."""
+		try:
+			return self._lockedSwitchRefusal(root_op, allow_tdxn=True) is None
+		except Exception:
+			return False
+
+	@staticmethod
+	def _lockedKeepHint(targets: list, uncovered: int,
+						root_label: Optional[str] = None) -> str:
+		"""Remedy clause of the export WARNING: the exact tox calls.
+		root_label names a root that could itself be switched. Lists EVERY
+		target: the dialog trims its list and points here."""
+		hint = ''
+		if len(targets) > _LOCKED_TARGETS_SHOWN:
+			hint += (f" Keep them: externalize_op('<COMP>', tag_type='tox') "
+					 f"for each of these {len(targets)} COMPs: "
+					 f"{', '.join(targets)}.")
+		elif targets:
+			hint += ' Keep them: ' + ', '.join(
+				f"externalize_op('{t}', tag_type='tox')" for t in targets) + '.'
+		if uncovered:
+			hint += (f' {uncovered} operator(s) have no child COMP that can '
+					 f"be switched: move them into one and tag it 'tox'")
+			hint += (f', or switch {root_label} itself to TOX.'
+					 if root_label else '.')
+		return hint
+
+	@staticmethod
+	def _lockedAdvice(targets: list, uncovered: int, recooks: int,
+					  mode: str, single: bool = False,
+					  root_label: Optional[str] = None) -> str:
+		"""Dialog tail: limitation, the .tox remedy, unlocking on its own.
+
+		Unlocking never restores a frozen snapshot, so it is never listed
+		as a way to keep data (issue #108).
+		"""
+		what = 'this COMP' if single else 'each COMP'
+		paras = ['TDXN stores the lock flag but not the frozen pixel, '
+				 'channel, geometry or point data. '
+				 + _LOCKED_LOSS_TEXT[mode].format(what=what)]
+		if targets:
+			one = targets[0] if len(targets) == 1 else '<child>'
+			keep = ["To keep the frozen data, store it in a .tox: Switch to "
+					f"TOX (button) or externalize_op('{one}', "
+					"tag_type='tox'); the TDXN parent then references it "
+					"(tox_ref)."]
+			# The button switches ALL targets, so say how many.
+			shown = targets[:_LOCKED_TARGETS_SHOWN]
+			line = (f'Switch to TOX tags {len(targets)} COMP(s): '
+					+ ', '.join(shown))
+			if len(targets) > len(shown):
+				line += (f', ... and {len(targets) - len(shown)} more (the '
+						 f'Embody log lists them all)')
+			keep.append(line)
+		else:
+			keep = ['To keep the frozen data, store it in a .tox.']
+		if uncovered:
+			line = (f'{uncovered} operator(s) have no child COMP that can be '
+					f"switched: move them into one and tag it 'tox'")
+			if root_label:
+				line += f', or switch {root_label} itself to TOX'
+			keep.append(line + '.')
+		paras.append('\n'.join(keep))
+		if recooks:
+			paras.append('If a fresh cook is acceptable, unlock the '
+						 'operators marked re-cooks.')
+		return '\n\n'.join(paras)
+
+	def _fitLockedDialog(self, head: str, rows: list, tail: str,
+						 noun: str, max_rows: int) -> str:
+		"""Drop rows until the wrapped dialog fits _LOCKED_DIALOG_MAX_LINES."""
+		shown = min(len(rows), max_rows)
+		while True:
+			body = list(rows[:shown])
+			if shown < len(rows):
+				body.append(f'  ... and {len(rows) - shown} more {noun} '
+							f'(see the Embody log)')
+			msg = f'{head}\n\n' + '\n'.join(body) + f'\n\n{tail}'
+			try:
+				wrapped = self.ownerComp.ext.Embody._wrapDialogText(msg)
+			except Exception:
+				wrapped = msg
+			if (wrapped.count('\n') + 1 <= _LOCKED_DIALOG_MAX_LINES
+					or shown <= 1):
+				return msg
+			shown -= 1
+
+	def _lockedWarnEnabled(self) -> bool:
 		"""True when the locked-content dialog should be shown.
 
 		Defensive getattr (unlike other known pars): a .toe saved before
 		the Tdxnlockedwarn parameter existed treats the missing par as
 		'ask' -- warn by default, with _locked_warn_quiet as the
-		session-scoped opt-out until the par exists.
+		session-scoped opt-out until the par exists. False while
+		suppressLockedDialogs is active.
 		"""
-		if self._locked_warn_quiet:
+		if self._locked_warn_quiet or self._locked_dialog_suppress > 0:
 			return False
 		pref = getattr(self.ownerComp.par, 'Tdxnlockedwarn', None)
 		return pref is None or pref.eval() == 'ask'
+
+	@contextlib.contextmanager
+	def suppressLockedDialogs(self) -> Iterator[None]:
+		"""Log-only locked-content warnings inside this block (issue #108):
+		MCP exports and the Switch to TOX re-export never raise the modal.
+		Tier 2: envoy_ops and EmbodyExt (its Envoy paths and the Perform
+		Mode bail of a deferred Update) enter it."""
+		self._locked_dialog_suppress += 1
+		try:
+			yield
+		finally:
+			self._locked_dialog_suppress = max(
+				0, self._locked_dialog_suppress - 1)
 
 	def beginLockedWarnBatch(self):
 		"""Collect locked-content warnings instead of showing per-export
@@ -7935,40 +8261,63 @@ class TDXNExt:
 		if self._locked_warn_batch is None:
 			self._locked_warn_batch = []
 
-	def flushLockedWarnBatch(self):
+	def flushLockedWarnBatch(self) -> None:
 		"""End a warning batch and show ONE combined dialog for every
 		finding collected since beginLockedWarnBatch. No-op when the
-		batch is empty or inactive. Always deactivates the batch, so a
-		caller can flush from a finally block without leaking state."""
+		batch is empty or inactive, log-only while dialogs are suppressed.
+		Always deactivates the batch, so a caller can flush from a
+		finally block without leaking state."""
 		batch = getattr(self, '_locked_warn_batch', None)
 		self._locked_warn_batch = None
 		if not batch:
 			return
-		MAX_COMP_ROWS = 12
-		lines = [f'  {path}: {count} ({summary})'
-				 for path, count, summary in batch[:MAX_COMP_ROWS]]
-		if len(batch) > MAX_COMP_ROWS:
-			lines.append(
-				f'  ... and {len(batch) - MAX_COMP_ROWS} more COMP(s)')
-		total = sum(count for _, count, _ in batch)
+		if self._locked_dialog_suppress > 0:
+			self._log(
+				f'Locked-content dialog skipped for {len(batch)} COMP(s) '
+				f'(locked-content dialogs suppressed) -- the WARNING '
+				f'lines above list them', 'INFO')
+			return
+		rows = [f'  {entry[0]}: {entry[1]} '
+				f'({TDXNExt._lockedCountsText(entry[2], short=True)})'
+				for entry in batch]
+		total = sum(entry[1] for entry in batch)
+		targets = TDXNExt._collapseNestedPaths(
+			[t for entry in batch for t in entry[3]])
+		tail = TDXNExt._lockedAdvice(
+			targets, sum(entry[4] for entry in batch),
+			sum(entry[2].get('recooks', 0) for entry in batch),
+			self._lockedLossMode())
 		self._showLockedWarnDialog(
-			f'{total} locked non-DAT operator(s) across {len(batch)} '
-			f'exported COMP(s):\n\n' + '\n'.join(lines) + '\n\n'
-			f'{self._LOCKED_WARN_FOOTER}')
+			self._fitLockedDialog(
+				f'{total} locked non-DAT operator(s) across {len(batch)} '
+				f'exported COMP(s):', rows, tail, 'COMP(s)',
+				_LOCKED_COMBINED_ROWS),
+			switch_targets=tuple(targets))
 
-	def _showLockedWarnDialog(self, message):
-		"""Locked-content modal with a "Don't show again" opt-out.
+	def _showLockedWarnDialog(self, message: str,
+							  switch_targets: tuple = ()) -> None:
+		"""Locked-content modal: OK, "Don't show again", and Switch to TOX
+		when there is a COMP to switch.
 
-		Routed through Embody's _messageBox so headless tests can seed
-		responses and the save-window suppression applies. Opting out
-		persists to the Tdxnlockedwarn parameter; if the par is missing
-		(pre-par .toe), falls back to a session-scoped flag."""
+		Indices 0 and 1 never move (seeded tests answer 1). Switch to TOX
+		(2) only schedules the deferred switch; a closed box returns -1
+		and does nothing (probed 2025.33230). Routed through Embody's
+		_messageBox so headless tests can seed responses and the
+		save-window suppression applies. Opting out persists to the
+		Tdxnlockedwarn parameter; if the par is missing (pre-par .toe),
+		falls back to a session-scoped flag."""
+		buttons = ['OK', "Don't show again"]
+		if switch_targets:
+			buttons.append('Switch to TOX')
 		try:
 			choice = self.ownerComp.ext.Embody._messageBox(
 				'Embody -- Locked Content Warning', message,
-				buttons=['OK', "Don't show again"])
+				buttons=buttons)
 		except Exception:
 			return  # Non-fatal if dialog fails
+		if choice == _LOCKED_SWITCH_BUTTON and switch_targets:
+			self._scheduleLockedSwitch(list(switch_targets))
+			return
 		if choice != 1:
 			return
 		self._locked_warn_quiet = True
@@ -7982,16 +8331,27 @@ class TDXNExt:
 				'(Tdxnlockedwarn parameter missing -- opt-out cannot '
 				'persist)', 'WARNING')
 
-	def _findLockedNonDATs(self, root_op):
-		"""Collect locked TOP/CHOP/SOP ops this export is responsible for.
+	def _findLockedNonDATs(self, root_op: 'COMP',
+						   only: Optional[set] = None) -> list:
+		"""Collect locked TOP/CHOP/SOP/POP ops this export is responsible for.
 
-		Skips ops inside clone/replicant interiors and ops below a nested
+		Skips system paths and Embody's own subtree (as the exporter
+		does), ops inside clone/replicant interiors, and ops below a nested
 		externalization boundary -- only locked content that THIS root's
 		TDXN export would actually serialize (and lose) is reported.
+		`only` narrows the result to those paths (an import's created ops).
 		"""
+		embody_prefix = self.ownerComp.path.rstrip('/') + '/'
 		locked = []
 		for child in root_op.findChildren():
-			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+			if child.lock and child.family in _LOCKED_DATA_FAMILIES:
+				path = child.path
+				if (path in SYSTEM_PATHS
+						or path.startswith(_SYSTEM_PATH_PREFIXES)
+						or path.startswith(embody_prefix)):
+					continue
+				if only is not None and path not in only:
+					continue
 				if self._isInsideCloneOrReplicant(child, root_op):
 					continue
 				if self._isInsideNestedExternalization(child, root_op):
@@ -7999,13 +8359,399 @@ class TDXNExt:
 				locked.append(child)
 		return locked
 
+	# --- Source classification -------------------------------------------
+	# Wires only. Per op, in order: an OP-type parameter reference ->
+	# 'unknown'; a generator (not isFilter) -> 'recooks'; else its inputs.
+	# CONSERVATIVE: a locked op upstream is a dead end (it comes back empty),
+	# so labels stand alone. Mixed inputs, cycles and a spent budget read
+	# 'unknown'. The walk leaves the root only through the root's In ops.
+
+	def _classifyLocked(self, locked: list, root_op: 'COMP',
+						budget_s: Optional[float] = None,
+						memo: Optional[dict] = None) -> dict:
+		"""op.id -> 'recooks' | 'none' | 'unknown' for one scan's findings.
+
+		One memo (op.id -> upstream state) is shared by every finding and
+		one wall-clock budget bounds the scan; findings still pending when
+		it runs out, or whose walk raised, read 'unknown'.
+		"""
+		budget = _LOCKED_CLASSIFY_BUDGET_S if budget_s is None else budget_s
+		deadline = time.perf_counter() + budget
+		memo = {} if memo is None else memo
+		states = {}
+		for finding in locked:
+			if time.perf_counter() >= deadline:
+				states[finding.id] = 'unknown'
+				continue
+			try:
+				states[finding.id] = self._lockedSourceState(
+					finding, root_op, memo, deadline)
+			except Exception:
+				states[finding.id] = 'unknown'
+		return states
+
+	def _lockedSourceState(self, target: 'OP', root_op: 'COMP',
+						   memo: Optional[dict] = None,
+						   deadline: Optional[float] = None) -> str:
+		"""State of one locked op: would unlocking it ALONE produce output
+		after a rebuild? Iterative DFS (no recursion limit); frames are
+		[op, collected states, pending links, is_target]."""
+		memo = {} if memo is None else memo
+		first = self._lockedOpen(target, root_op, memo, is_target=True)
+		if isinstance(first, str):
+			return first
+		stack = [first]
+		while True:
+			if deadline is not None and time.perf_counter() >= deadline:
+				for frame in stack:
+					if not frame[3]:
+						memo[frame[0].id] = 'unknown'
+				return 'unknown'
+			frame = stack[-1]
+			if frame[2]:
+				item = frame[2].pop()
+				nxt = (item if isinstance(item, str)
+					   else self._lockedOpen(item, root_op, memo))
+				if isinstance(nxt, str):
+					frame[1].append(nxt)
+				else:
+					stack.append(nxt)
+				continue
+			stack.pop()
+			seen = set(frame[1])
+			state = (seen.pop() if len(seen) == 1
+					 else 'none' if not seen else 'unknown')
+			if not frame[3]:
+				memo[frame[0].id] = state
+			if not stack:
+				return state
+			stack[-1][1].append(state)
+
+	def _lockedOpen(self, o: 'OP', root_op: 'COMP', memo: dict,
+					is_target: bool = False) -> Union[str, list]:
+		"""One walk step: a terminal state, or a new frame to expand.
+		memo None marks an op in progress, so a wire cycle reads 'unknown'."""
+		if not is_target:
+			if o.id in memo:
+				state = memo[o.id]
+				return 'unknown' if state is None else state
+			if o.lock:
+				memo[o.id] = 'none'
+				return 'none'
+		state = self._lockedRefState(o)
+		if state is None and not o.isFilter:
+			state = 'recooks'
+		if state is not None:
+			if not is_target:
+				memo[o.id] = state
+			return state
+		if not is_target:
+			memo[o.id] = None
+		return [o, [], self._lockedLinks(o, root_op), is_target]
+
+	def _lockedRefState(self, o: 'OP') -> Optional[str]:
+		"""'unknown' when an OP-type parameter points at an op (Select,
+		Object Merge, OP Viewer, Render, CHOP to, Feedback, callbacks):
+		parameter references are not traced. None otherwise."""
+		for p in o.pars():
+			if not p.isOP or p.name in _LOCKED_REF_PAR_SKIP:
+				continue
+			try:
+				val = p.eval()
+			except Exception:
+				return 'unknown'
+			if val is None or (isinstance(val, (str, list, tuple))
+							   and not val):
+				continue
+			return 'unknown'
+		return None
+
+	def _lockedLinks(self, o: 'OP', root_op: 'COMP') -> list:
+		"""Upstream items of one op: ops to walk, or terminal states.
+
+		An In op follows its host COMP's connector, found by Connector.inOP
+		identity (never by index); a wire into the root itself is a source.
+		An unwired host falls back to the In op's own input (all four
+		families probed 2025.33230; In_POP docs). A COMP link is a source
+		when its data survives the rebuild, 'unknown' with no Out op,
+		else walked through link.outOP.
+		"""
+		links = [c for conn in o.inputConnectors for c in conn.connections]
+		if o.type == 'in':
+			host = o.parent()
+			conn = None
+			if host is not None:
+				for c in host.inputConnectors:
+					if c.inOP is not None and c.inOP.id == o.id:
+						conn = c
+						break
+			if conn is not None and conn.connections:
+				if host.id == root_op.id:
+					return ['recooks']
+				links = list(conn.connections)
+			elif conn is None and not links:
+				return ['unknown']
+		items = []
+		for link in links:
+			owner = link.owner
+			if owner is None:
+				items.append('unknown')
+			elif not owner.isCOMP:
+				items.append(owner)
+			elif self._lockedCompKeepsData(owner):
+				items.append('recooks')
+			elif link.outOP is None:
+				items.append('unknown')
+			else:
+				items.append(link.outOP)
+		return items
+
+	def _lockedCompKeepsData(self, comp: 'COMP') -> bool:
+		"""A COMP whose output survives this root's rebuild: its own .tox
+		(TOX tag), the owning app (exclude tag), its master or replicator."""
+		return bool(self._hasTOXTag(comp) or self._hasExcludeTag(comp)
+					or getattr(comp, 'replicator', None) is not None
+					or self.ownerComp.ext.Embody.isClone(comp))
+
+	# --- Switch to TOX -----------------------------------------------------
+
+	def _tdxnTaggedAncestor(self, comp: 'COMP') -> Optional['COMP']:
+		"""Nearest strict ancestor carrying a TDXN tag, or None."""
+		p = comp.parent()
+		while p is not None and p.path != '/':
+			if self._hasTDXNTag(p):
+				return p
+			p = p.parent()
+		return None
+
+	def _lockedSwitchTargets(self, locked: list,
+							 root_op: 'COMP') -> tuple:
+		"""(targets, uncovered) for Switch to TOX.
+
+		A target is a finding's parent COMP strictly below the root, nested
+		targets collapsed to the outermost (its .tox holds the inner ones).
+		The root itself only when a TDXN-tagged ancestor will write its
+		tox_ref (the Tdxncascade shape); a top-level root never is.
+		"""
+		ok = {}
+		uncovered = 0
+		tracked = self._getTDXNExternalizedPaths()
+		for finding in locked:
+			host = finding.parent()
+			allow_tdxn = False
+			if host is None or host.id == root_op.id:
+				if self._tdxnTaggedAncestor(root_op) is None:
+					uncovered += 1
+					continue
+				host, allow_tdxn = root_op, True
+			if host.path not in ok:
+				ok[host.path] = self._lockedSwitchRefusal(
+					host, allow_tdxn=allow_tdxn, tracked=tracked) is None
+			if not ok[host.path]:
+				uncovered += 1
+		targets = TDXNExt._collapseNestedPaths(
+			[p for p, good in ok.items() if good])
+		return targets, uncovered
+
+	def _lockedSwitchRefusal(self, comp: Optional['OP'],
+							 allow_tdxn: bool = False,
+							 tracked: Optional[set] = None) -> Optional[str]:
+		"""Why Switch to TOX must not tag `comp`, or None when it may.
+
+		allow_tdxn admits the cascade root (its own TDXN tag goes, and its
+		TDXN-tagged ancestor then writes tox_ref). tracked: the TDXN-tracked
+		paths, read once by a caller checking many COMPs.
+		"""
+		if comp is None or not comp.valid:
+			return 'no longer exists'
+		if not comp.isCOMP:
+			return 'not a COMP'
+		path = comp.path
+		own = self.ownerComp.path
+		if (path == own or path.startswith(own + '/')
+				or own.startswith(path.rstrip('/') + '/')):
+			return "is Embody's own COMP, inside it, or contains it"
+		if path in SYSTEM_PATHS or path.startswith(_SYSTEM_PATH_PREFIXES):
+			return 'a TouchDesigner system COMP'
+		if not self.ownerComp.ext.Embody.isOpProcessable(comp):
+			return ('a clone, replicant, /local, engine, time or '
+					'annotation COMP')
+		if self.ownerComp.ext.Embody._isInsideAnnotate(comp):
+			return 'inside an annotation'
+		if self._isPaletteClone(comp):
+			return 'a TD palette component'
+		if self._hasTOXTag(comp):
+			return 'already TOX'
+		if self._hasExcludeTag(comp):
+			return 'excluded from TDXN'
+		if tracked is None:
+			tracked = self._getTDXNExternalizedPaths()
+		if self._hasTDXNTag(comp) or path in tracked:
+			if not allow_tdxn:
+				return 'has its own TDXN externalization'
+			configured = self.ownerComp.par.Tdxntag.val
+			if configured not in comp.tags or any(
+					t in comp.tags for t in self.tdxnTags()
+					if t != configured):
+				return ('tracked as TDXN without the configured tag -- '
+						'switch it from the Embody manager')
+		ext_tox = comp.par.externaltox.eval()
+		if ext_tox:
+			return f'already links an external .tox ({ext_tox})'
+		for d in comp.findChildren(type=COMP):
+			if (self._hasTOXTag(d) or self._hasTDXNTag(d)
+					or self._hasExcludeTag(d)):
+				return f'contains the externalized COMP {d.path}'
+		return None
+
+	@staticmethod
+	def _collapseNestedPaths(paths: list) -> list:
+		"""Outermost paths only: an outer .tox already holds inner ones."""
+		kept = []
+		for p in sorted(set(paths), key=len):
+			if not any(p == k or p.startswith(k.rstrip('/') + '/')
+					   for k in kept):
+				kept.append(p)
+		return sorted(kept)
+
+	def _scheduleLockedSwitch(self, paths: list, attempt: int = 0,
+							  delay: int = _LOCKED_SWITCH_DELAY_FRAMES
+							  ) -> None:
+		"""Run switchLockedCompsToTOX a few frames out, never inline: the
+		dialog fires inside an export whose caller stores the fingerprint
+		after it returns, and inside Update's batch flush -- a retag there
+		is absorbed into the baseline or re-enters the sweep."""
+		run('o = op(%r)\nif o and o.valid: '
+			'o.ext.TDXN.switchLockedCompsToTOX(%r, %d)'
+			% (self.ownerComp.path, list(paths), attempt),
+			fromOP=self.ownerComp, delayFrames=delay)
+		if attempt == 0:
+			self._log(f'Switch to TOX requested for {len(paths)} COMP(s): '
+					  f'{", ".join(paths)}', 'INFO')
+
+	def _lockedSwitchBusyReason(self) -> Optional[str]:
+		"""What a deferred Switch to TOX must wait out, or None."""
+		if self.ownerComp.fetch('_suppress_dialogs', False, search=False):
+			return 'a project save'
+		if getattr(self.ownerComp.ext.Embody, '_updd_state', None) is not None:
+			return 'an Update sweep'
+		state = self._export_state
+		if state is not None and not state.get('done'):
+			return 'an async TDXN export'
+		if self.ownerComp.ext.Embody._testRunnerActive():
+			return 'a test run'
+		return None
+
+	def switchLockedCompsToTOX(self, paths: list, attempt: int = 0) -> list:
+		"""Deferred target of the dialog's Switch to TOX (tier 2: reached
+		from the run() string in _scheduleLockedSwitch).
+
+		Skips at once when Embody is disabled or in Perform Mode (checked
+		first: waiting cannot help). Re-arms while a save, an Update sweep,
+		an async export or a test run is in flight (every 30 frames, 10
+		tries, then a WARNING with the manual command). Returns the paths
+		actually switched.
+		"""
+		paths = [str(p) for p in (paths or [])]
+		if not paths:
+			return []
+		manual = '; '.join(
+			f"externalize_op('{p}', tag_type='tox')" for p in paths)
+		if (self.ownerComp.par.Status.eval() == 'Disabled'
+				or self.ownerComp.ext.Embody._performMode):
+			self._log('Switch to TOX skipped: Embody is disabled or in '
+					  f'Perform Mode. Tag later: {manual}', 'WARNING')
+			return []
+		busy = self._lockedSwitchBusyReason()
+		if busy:
+			if attempt < _LOCKED_SWITCH_MAX_ATTEMPTS:
+				self._scheduleLockedSwitch(
+					paths, attempt + 1, delay=_LOCKED_SWITCH_REARM_FRAMES)
+			else:
+				self._log(f'Switch to TOX gave up: {busy} kept Embody busy. '
+						  f'Tag by hand: {manual}', 'WARNING')
+			return []
+		return self._switchLockedCore(paths)
+
+	def _switchLockedCore(self, paths: list) -> list:
+		"""Targeted switch, never a project-wide Update().
+
+		Per COMP: applyTagToOperator(tox) + handleAddition -- the per-op
+		path Update takes for a new TOX tag (.tox + row) -- then ONE
+		saveTDXN per nearest tracked TDXN ancestor so its .tdxn writes
+		tox_ref: the row, .tox and tox_ref externalize_op produces.
+		Runs detached from a run() string, so every target and ancestor
+		is guarded: a failure logs the manual command, never only the
+		textport, and the other targets still switch.
+		"""
+		tox_tag = self.ownerComp.par.Toxtag.val
+		tracked = self._getTDXNExternalizedPaths()
+		switched, parent_of, from_tdxn = [], {}, set()
+		for path in paths:
+			try:
+				comp = op(path)
+				allow = bool(comp is not None and comp.valid and comp.isCOMP
+							 and self._tdxnTaggedAncestor(comp) is not None)
+				reason = self._lockedSwitchRefusal(comp, allow_tdxn=allow,
+												   tracked=tracked)
+				if reason:
+					self._log(f'Switch to TOX skipped for {path}: {reason}',
+							  'WARNING')
+					continue
+				was_tdxn = self._hasTDXNTag(comp)
+				if not self.ownerComp.ext.Embody.applyTagToOperator(
+						comp, tox_tag):
+					self._log(f'Switch to TOX skipped for {path}: the tox '
+							  f'tag was refused', 'WARNING')
+					continue
+				self.ownerComp.ext.Embody.handleAddition(comp)
+				switched.append(path)
+				if was_tdxn:
+					from_tdxn.add(path)
+				anc = comp.parent()
+				while anc is not None and anc.path not in tracked:
+					anc = anc.parent() if anc.path != '/' else None
+				parent_of[path] = anc.path if anc is not None else None
+			except Exception as e:
+				self._log(f'Switch to TOX failed for {path}: {e}. Finish it '
+						  f"with externalize_op('{path}', tag_type='tox')",
+						  'WARNING')
+		for anc_path in sorted({a for a in parent_of.values() if a}):
+			if anc_path == '/':
+				continue  # the project-wide snapshot updates on a full export
+			try:
+				with self.suppressLockedDialogs():
+					self.ownerComp.ext.Embody.saveTDXN(anc_path)
+			except Exception as e:
+				self._log(f'Switch to TOX: re-exporting {anc_path} failed '
+						  f'({e}); the next Update writes its tox_ref',
+						  'WARNING')
+		for path in switched:
+			comp = op(path)
+			tox = comp.par.externaltox.eval() if comp is not None else ''
+			anc_path = parent_of.get(path)
+			# A TDXN -> TOX switch drops the old .tdxn per Filecleanup.
+			old = (' (its old .tdxn follows the Filecleanup preference)'
+				   if path in from_tdxn else '')
+			if not tox:
+				self._log(f"{path} is tagged 'tox' but no .tox was written "
+						  f'yet (project never saved?) -- the next Update '
+						  f'writes it', 'WARNING')
+			elif anc_path and anc_path != '/':
+				self._log(f'Switched {path} to TOX ({tox}){old}; {anc_path} '
+						  f'now references it (tox_ref)', 'SUCCESS')
+			else:
+				self._log(f'Switched {path} to TOX ({tox}){old}', 'SUCCESS')
+		return switched
+
 	def _isInsideCloneOrReplicant(self, child, root_op):
 		"""True if child is a descendant of a clone or replicant COMP.
 
 		Lock state inside clones is inherited from the master (user
 		should fix it there). Lock state inside replicants is
 		regenerated per-template by the replicatorCOMP. In both cases
-		warning the user is noise, not signal.
+		warning the user is noise, not signal. A self-referencing clone
+		par (clone=me) marks a master, as in EmbodyExt.isInsideClone.
 		"""
 		p = child.parent()
 		while p is not None and p is not root_op and p.path != '/':
@@ -8015,7 +8761,9 @@ class TDXNExt:
 			enable_par = getattr(p.par, 'enablecloning', None)
 			if clone_par is not None and enable_par is not None:
 				try:
-					if clone_par.eval() and enable_par.eval():
+					clone_val = clone_par.eval()
+					if (clone_val and clone_val is not p
+							and enable_par.eval()):
 						return True
 				except Exception:
 					pass

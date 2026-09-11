@@ -438,14 +438,29 @@ class TestTDXNExclude(EmbodyTestCase):
                          'reserved name leaked into the par-omission set')
 
     def test_dat_content_exclude_silences_the_at_risk_warning(self):
-        """The at-risk warner exists to mirror the exporter. If it still
-        flagged a deliberately excluded DAT the two would contradict."""
+        """The save-time check reads the exporter's rule. If it still
+        flagged -- or filed as its own file -- a deliberately excluded DAT,
+        the two would contradict (issue #109)."""
         d = self._table('dc_atrisk', [['z']], excluded=True)
-        flagged = [x.path
-                   for _c, dats in self.embody.ext.Embody._findAtRiskDATs()
-                   for x in dats]
-        self.assertNotIn(d.path, flagged,
-                         'excluded DAT still reported as at-risk')
+        loose = self._table('dc_loose', [['kept']])
+        ext = self.embody.ext.Embody
+        parent_path = self.sandbox.parent().path
+        prev_embed = self.embody.par.Embeddatsintdxns.eval()
+        self.embody.par.Embeddatsintdxns.val = False
+        # Scope the sweep to the sandbox's TDXN parent: no project state.
+        ext._getTDXNStrategyComps = lambda: [(parent_path, '')]
+        try:
+            listed = [x.path for _c, dats in ext._findUnbackedDATs()
+                      for x in dats]
+            self.assertIn(loose.path, listed,
+                          'positive control: an untagged table is listed')
+            flagged = [x.path for _c, dats in ext._findUnbackedDATs()
+                       for x in dats]
+            self.assertNotIn(d.path, flagged,
+                             'excluded DAT still listed as an externalize candidate')
+        finally:
+            del ext._getTDXNStrategyComps
+            self.embody.par.Embeddatsintdxns.val = prev_embed
 
     def test_untagged_dat_is_unaffected(self):
         """Guard the guard: the mechanism must be opt-in."""

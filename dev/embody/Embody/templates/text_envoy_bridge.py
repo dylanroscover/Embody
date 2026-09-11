@@ -101,6 +101,16 @@ TOOL_CACHE_TTL_S = 5         # How long a cached tool list counts as fresh
 BACKEND_PING_TIMEOUT_S = 2   # Per-ping timeout
 FETCH_TOOLS_TIMEOUT_S = 3    # One-shot tools/list forward timeout
 
+# Frozen-TD visibility (issue #110). A save blocks TD's main thread 15-30s,
+# so silence reads as a freeze only past ENVOY_SILENT_AFTER_S. The stdin
+# loop's in-flight forward is abandoned once that flag has held another
+# 120s. An answer can still be owed then (a synchronous run_tests waits up
+# to 300s), but abandoning needs 180s of FAILED heartbeats, and those tests
+# run deferred, one per frame, so the heartbeats keep answering.
+ENVOY_SILENT_AFTER_S = 60
+FORWARD_ABANDON_AFTER_S = ENVOY_SILENT_AFTER_S + 120
+MAIN_TICK_ROUTE = "/envoy/main_tick"   # worker-served; EnvoyExt _MAIN_TICK_ROUTE
+
 
 # ---------------------------------------------------------------------------
 # Bridge meta-tools -- handled locally, work even when TD is down
@@ -112,7 +122,9 @@ BRIDGE_TOOLS = [
         "description": (
             "Check if TouchDesigner is running and Envoy is reachable. "
             "Returns connection state, crash detection, process liveness, "
-            "and project config. Works even when TD is down."
+            "and project config. Works even when TD is down. "
+            "envoy_unresponsive / main_thread_stalled flag a TouchDesigner "
+            "that is alive but frozen."
         ),
         "inputSchema": {
             "type": "object",
@@ -841,6 +853,84 @@ def instance_error_result(name, reason, detail, available=None):
 _stdout_lock = threading.Lock()
 
 
+class ForwardAbandoned(ConnectionError):
+    """The stdin loop stopped waiting on a forward to a frozen TouchDesigner
+    (issue #110). A ConnectionError, so the main loop's connection-lost
+    branch answers the client; silence_s is how long Envoy was quiet."""
+
+    def __init__(self, silence_s):
+        super().__init__(
+            f"abandoned after Envoy was silent for {silence_s:.0f}s")
+        self.silence_s = silence_s
+
+
+class InflightForward:
+    """The one forward the stdin loop is parked in, releasable by the
+    reconciler once TD looks frozen (issue #110). run() moves the forward to
+    a helper thread and waits on an Event that either the answer or
+    abandon() sets. An abandoned forward ends on its own (answer or its own
+    timeout) and its answer is dropped; a progress notification it streams
+    meanwhile still reaches stdout, for an id already answered (harmless).
+    No socket is touched from outside: shutdown() does not wake a blocked
+    recv on Windows (probed 2026-09-11).
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._url = None
+        self._wake = None
+        self._silence_s = None
+
+    def busy_on(self, url):
+        """True while a forward to `url` is in flight."""
+        with self._lock:
+            return self._wake is not None and self._url == url
+
+    def abandon(self, silence_s):
+        """Release the waiting stdin loop; False when nothing is in flight."""
+        with self._lock:
+            wake = self._wake
+            if wake is None:
+                return False
+            self._silence_s = silence_s
+            self._wake = None
+        wake.set()
+        return True
+
+    def run(self, url, forward):
+        """Return forward()'s answer, re-raise its error, or raise
+        ForwardAbandoned once abandon() releases the wait."""
+        box = {}
+        wake = threading.Event()
+
+        def work():
+            try:
+                box["answer"] = forward()
+            except BaseException as e:  # noqa: BLE001 -- re-raised below
+                box["error"] = e
+            finally:
+                box["done"] = True
+                wake.set()
+
+        with self._lock:
+            self._url, self._wake, self._silence_s = url, wake, None
+        try:
+            threading.Thread(target=work, daemon=True,
+                             name="envoy-forward").start()
+            while not wake.wait(0.5):   # timed waits stay interruptible
+                pass
+        finally:
+            with self._lock:
+                if self._wake is wake:
+                    self._url, self._wake = None, None
+                silence_s = self._silence_s
+        if not box.get("done"):
+            raise ForwardAbandoned(silence_s or 0.0)
+        if "error" in box:
+            raise box["error"]
+        return box.get("answer")
+
+
 class BridgeState:
     """Thread-safe container for all bridge state.
 
@@ -888,6 +978,18 @@ class BridgeState:
         self.cached_tools_hash = None
         # Proactive PID discovery tracking (populated by reconciler phase 2)
         self.known_td_pids = set()
+        # Frozen-TD visibility (issue #110). main() arms main_tick_probe;
+        # unit fixtures leave it None and stay offline. The age is read on
+        # the heartbeat, and inflight is the forward the stdin loop is in.
+        self.main_tick_probe = None
+        self.main_tick_age_s = None
+        self.main_tick_read_at = None
+        self.inflight = InflightForward()
+        # The td_pid the heartbeat last saw alive, and when it CHANGED to
+        # it: floors Envoy's silence so a relaunched TD never inherits the
+        # old one's (see _silence_baseline).
+        self.silence_pid = None
+        self.silence_pid_seen_at = None
 
     def __enter__(self):
         self._lock.acquire()
@@ -3634,6 +3736,60 @@ def ping_envoy_port(port):
         return False
 
 
+def _url_port(url):
+    """The port of an Envoy URL, or None."""
+    try:
+        return urllib.parse.urlsplit(url).port
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _iso_utc(epoch_s):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch_s))
+
+
+def envoy_silence_s(last_contact, now, *, connected, pid_alive, port_open):
+    """Seconds Envoy has been silent while TouchDesigner's process lives and
+    its port still accepts, else None. The OS completes the TCP handshake
+    even while TD's main thread holds the GIL, so this triple tells a frozen
+    TD from a dropped socket (issue #110). Pure; now is injected."""
+    if connected or not pid_alive or not port_open or last_contact is None:
+        return None
+    return max(0.0, now - last_contact)
+
+
+def _silence_baseline(state):
+    """Epoch s Envoy's silence counts from: last_connected_time, floored at
+    when the heartbeat saw the tracked TD pid change, so a TD the user
+    relaunched never inherits the old one's silence (issue #110). None
+    when unknown, including a changed pid no heartbeat has seen yet.
+    Caller holds the state lock."""
+    last = state.last_connected_time
+    seen_pid = getattr(state, "silence_pid", None)
+    if last is None or seen_pid is None:
+        return last
+    if seen_pid != state.td_pid:
+        return None
+    return max(last, getattr(state, "silence_pid_seen_at", None) or last)
+
+
+def fetch_main_tick_age(url, timeout=BACKEND_PING_TIMEOUT_S):
+    """Seconds since TD's main thread last entered Envoy's request loop,
+    read from the worker-served MAIN_TICK_ROUTE; None when unknown (an
+    older Envoy, any error). issue #110"""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        probe = f"{parts.scheme}://{parts.netloc}{MAIN_TICK_ROUTE}"
+        with urllib.request.urlopen(probe, timeout=timeout) as resp:
+            data = json.loads(resp.read(4096).decode("utf-8"))
+        age = data.get("main_tick_age_s") if isinstance(data, dict) else None
+        if isinstance(age, (int, float)) and not isinstance(age, bool):
+            return float(age)
+    except Exception:
+        pass
+    return None
+
+
 def get_instance_status(config):
     """Read the instance registry from config and check reachability.
     Returns (instances_with_status: dict, active_name: str|None,
@@ -4080,6 +4236,10 @@ def handle_get_td_status(state):
         launch_timestamps = list(state.launch_timestamps)
         connected = state.connected
         config_path = state.config_path
+        url = state.url
+        tick_age = getattr(state, "main_tick_age_s", None)
+        tick_read_at = getattr(state, "main_tick_read_at", None)
+        silence_from = _silence_baseline(state)
 
     # Refresh process liveness. The PORT answering is the strongest
     # identity signal (the instance registered it itself); a verified
@@ -4108,10 +4268,32 @@ def handle_get_td_status(state):
     with state:
         crash_detected = state.crash_detected
 
+    # Frozen TD (issue #110), from existing state: pid alive + port accepting
+    # + MCP silent, dated from the last contact (_silence_baseline). The port
+    # is probed only once the silence already passes the threshold.
+    now = time.time()
+    unresponsive = False
+    if (not connected and alive and silence_from is not None
+            and now - silence_from >= ENVOY_SILENT_AFTER_S):
+        silence = envoy_silence_s(
+            silence_from, now, connected=False, pid_alive=True,
+            port_open=ping_envoy_port(_url_port(url)))
+        unresponsive = silence is not None
+    # The GIL-released variant: the worker answers ping, but the main
+    # thread has not entered Envoy's request loop (read on the heartbeat).
+    stalled = bool(connected and tick_age is not None
+                   and tick_read_at is not None
+                   and tick_age >= ENVOY_SILENT_AFTER_S)
+
     status = {
         "connected": connected,
         "td_process_alive": alive,
         "crash_detected": crash_detected,
+        "envoy_unresponsive": unresponsive,
+        "unresponsive_since": _iso_utc(silence_from) if unresponsive else None,
+        "main_thread_stalled": stalled,
+        "stalled_since": (_iso_utc(tick_read_at - tick_age)
+                          if stalled else None),
         "last_connected": last_ts,
         "td_executable": config.get("td_executable", ""),
         "restart_attempts_remaining": max(0, remaining),
@@ -5888,8 +6070,42 @@ def wait_for_envoy(url, deadline):
 # Connection loss error messages
 # ---------------------------------------------------------------------------
 
-def connection_lost_message(state):
-    """Generate an actionable error message when the connection to Envoy is lost."""
+def _frozen_td_note(state, error=None):
+    """Suffix naming a frozen TouchDesigner (issue #110), or '' unless Envoy
+    has been silent ENVOY_SILENT_AFTER_S while its port still accepts. The
+    caller has already found the TD process alive."""
+    with state:
+        last = state.last_connected_time
+        silence_from = _silence_baseline(state)
+        url = state.url
+    abandoned = isinstance(error, ForwardAbandoned)
+    if abandoned:
+        silence = error.silence_s
+    else:
+        now = time.time()
+        if silence_from is None or now - silence_from < ENVOY_SILENT_AFTER_S:
+            return ""
+        silence = envoy_silence_s(
+            silence_from, now, connected=False, pid_alive=True,
+            port_open=ping_envoy_port(_url_port(url)))
+        if silence is None:
+            return ""
+    since = f" (last answer {_iso_utc(last)})" if last is not None else ""
+    note = (f" Envoy has been silent for {silence:.0f}s{since} while its "
+            f"port still accepts connections: TouchDesigner's main thread "
+            f"looks frozen, or stuck in one very long call.")
+    if abandoned:
+        note += (" This call was abandoned; it may still complete inside "
+                 "TouchDesigner if TD recovers.")
+    return note + (" Call list_dialogs first; never kill TouchDesigner "
+                   "without the user (unsaved work would be lost).")
+
+
+def connection_lost_message(state, error=None):
+    """Generate an actionable error message when the connection to Envoy is lost.
+
+    `error` is the forward's exception; a ForwardAbandoned (issue #110)
+    says the call was released from a frozen TouchDesigner."""
     with state:
         pid = state.td_pid
     # Image-verified, like reconcile() and every other TD-pid site: the raw
@@ -5907,6 +6123,7 @@ def connection_lost_message(state):
         return (
             f"TouchDesigner is not responding but the process is still "
             f"running (PID {pid}). It may be frozen or handling a long operation."
+            + _frozen_td_note(state, error)
         )
     else:
         return (
@@ -5979,6 +6196,32 @@ def ping_backend_mcp(url, timeout=BACKEND_PING_TIMEOUT_S):
     except Exception:
         return False
     return isinstance(resp, dict) and ("result" in resp or "error" in resp)
+
+
+def _abandon_frozen_forward(state, url, *, is_up, pid_alive, td_pid,
+                            now=None):
+    """Release the stdin loop from a forward pinned on a frozen TD (issue
+    #110): the heartbeat failed, TD lives, Envoy has been silent
+    FORWARD_ABANDON_AFTER_S and its port still accepts. Otherwise that
+    session waits REQUEST_TIMEOUT_S. True when a forward was abandoned."""
+    if is_up or not pid_alive or not url:
+        return False
+    with state:
+        inflight = getattr(state, "inflight", None)
+        last = _silence_baseline(state)
+    if inflight is None or last is None or not inflight.busy_on(url):
+        return False
+    now = time.time() if now is None else now
+    if now - last < FORWARD_ABANDON_AFTER_S:
+        return False
+    silence = envoy_silence_s(last, now, connected=False, pid_alive=True,
+                              port_open=ping_envoy_port(_url_port(url)))
+    if silence is None or not inflight.abandon(silence):
+        return False
+    log(f"Abandoned the in-flight forward: Envoy at {url} silent "
+        f"{silence:.0f}s while TouchDesigner (PID {td_pid}) lives and its "
+        f"port accepts -- TD looks frozen")
+    return True
 
 
 def reconcile(state, on_tools_change, *, heartbeat):
@@ -6090,8 +6333,8 @@ def reconcile(state, on_tools_change, *, heartbeat):
             state.cached_tools_hash = None
             url_switched = True
 
-    # --- PHASE 2: Heartbeat (every N config ticks per the dynamic cadence
-    # in _current_heartbeat_interval_s, or right after a URL switch so the
+    # --- PHASE 2: Heartbeat (every HEARTBEAT_TICK_S, fixed -- see
+    # _current_heartbeat_interval_s -- or right after a URL switch so the
     # new backend gets probed immediately) ---
     if not heartbeat and not url_switched:
         return
@@ -6108,6 +6351,11 @@ def reconcile(state, on_tools_change, *, heartbeat):
     # 1289, 1500-1501, 2319): a raw is_process_alive can false-match an
     # OS-RECYCLED pid and suppress genuine crash detection.
     pid_alive = is_td_process_alive(td_pid) if td_pid else False
+    # Main-thread tick age (issue #110): the worker can answer ping while
+    # TD's main thread is stuck with the GIL released. Probe armed by main().
+    with state:
+        tick_probe = getattr(state, "main_tick_probe", None)
+    tick_age = tick_probe(url) if (is_up and callable(tick_probe)) else None
 
     became_connected = (not was_connected) and is_up
     became_disconnected = was_connected and not is_up
@@ -6142,6 +6390,14 @@ def reconcile(state, on_tools_change, *, heartbeat):
 
     with state:
         state.connected = is_up
+        state.main_tick_age_s = tick_age
+        state.main_tick_read_at = time.time() if tick_age is not None else None
+        if td_pid and pid_alive and state.silence_pid != td_pid:
+            # A CHANGED pid (TD relaunched) floors the silence at now; the
+            # first sighting has nothing to floor (see _silence_baseline).
+            state.silence_pid_seen_at = (
+                time.time() if state.silence_pid is not None else None)
+            state.silence_pid = td_pid
         if is_up:
             state.last_heartbeat_ok = time.time()
             state.last_connected_time = time.time()
@@ -6169,6 +6425,9 @@ def reconcile(state, on_tools_change, *, heartbeat):
         # already ran for the attributable cases, so this cannot undo it.
         if td_pid and not pid_alive and not recovered_pid:
             state.crash_detected = True
+
+    _abandon_frozen_forward(state, url, is_up=is_up, pid_alive=pid_alive,
+                            td_pid=td_pid)
 
     # Log on TRANSITIONS only. An unconditional log here would fire every
     # heartbeat tick for as long as the condition holds -- the same
@@ -6406,6 +6665,7 @@ def main():
     )
     with state:
         state.config_mtime = initial_mtime
+        state.main_tick_probe = fetch_main_tick_age   # issue #110
 
     my_pid = os.getpid()
     ppid = os.getppid()
@@ -6470,8 +6730,7 @@ def main():
     set_tools_cache_invalidator(drop_cached_tools)
 
     # Start the reconciler thread -- polls envoy.json every second,
-    # pings the backend on a dynamic cadence (fast while unstable,
-    # slow once the link has been stable for STABILITY_THRESHOLD_S),
+    # pings the backend every HEARTBEAT_TICK_S (fixed cadence),
     # switches URL on any active-instance drift.  This is the core v2
     # fix for the open-a-new-TD-instance-mid-session failure mode.
     start_reconciler(
@@ -6722,9 +6981,13 @@ def main():
             # Fall through to the forward path -- no blocking wait.
 
         # --- Forward to TD (single attempt -- reconciler handles recovery) ---
+        # Through state.inflight so the reconciler can release this loop
+        # from a forward pinned on a frozen TD (issue #110).
         response = None
         try:
-            response = forward_to_http(current_url, message)
+            response = state.inflight.run(
+                current_url,
+                lambda url=current_url, msg=message: forward_to_http(url, msg))
             with state:
                 state.last_connected_time = time.time()
         except urllib.error.HTTPError as e:
@@ -6753,7 +7016,7 @@ def main():
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             with state:
                 state.connected = False
-            msg = connection_lost_message(state)
+            msg = connection_lost_message(state, e)
             log(f"Lost connection to Envoy: {e}")
             if not is_notification:
                 send_error(request_id, -32000, msg)

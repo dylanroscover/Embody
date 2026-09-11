@@ -14,7 +14,7 @@ Responses are compact by default; opt-in flags such as `include_defaults` and `d
 |------|-----------|-------------|
 | `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
-| `delete_op` | `op_path`, `override?` | Delete an operator. Also purges its externalization tracking (any strategy) and the externalized file — unless the file is clone-owned or still referenced by another operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
+| `delete_op` | `op_path`, `override?` | Delete an operator. Also purges its externalization tracking (any strategy) and the externalized file — unless the file is clone-owned or still referenced by another operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses that gate. Refuses the Embody COMP, its ancestors, `/` and Envoy's own extension DAT (`envoy.embody.host_destroy_refused`); `override=True` does not bypass that check |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
 | `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdxn` for structure reads. `inputs` has one entry per input connector, `null` for an empty one — entry position IS the real connector index |
@@ -26,7 +26,7 @@ Responses are compact by default; opt-in flags such as `include_defaults` and `d
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`). Invalid Menu values are rejected with valid `menuNames`; sequence-block names auto-grow their sequence (`const5name` grows `numBlocks` to 6) |
+| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`). Invalid Menu values are rejected with valid `menuNames`; sequence-block names auto-grow their sequence (`const5name` grows `numBlocks` to 6). A reload or clone pulse (`enableexternaltoxpulse`, `reinitnet`, `enablecloningpulse`) on the Embody COMP, an ancestor, `/` or Envoy's extension DAT is refused (`envoy.embody.host_destroy_refused`) |
 | `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?`, `details?` | Get one parameter compactly, or search parameters by glob/substring across a subtree. Search fields: `name`, `value`, `expr`, or `any` |
 
 Search mode omits `par_name` and passes `search`. It scans the target operator and children to `depth` (default 2) using fnmatch glob semantics; patterns without `*?[` become contains searches. Results are `{root, pattern, search_in, count, results, truncated?}`, where each hit includes `op`, `par`, `value`, `mode`, and `expr` or `bindExpr` when present.
@@ -107,7 +107,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position). Also statically lints the submitted source (as do `set_dat_content` / `edit_dat_content` for Python written to DATs) and emits a **THREADING WARNING** when a thread target calls TD's `run()` -- worker-side `run()` silently corrupts TD state and crashes later (Derivative-confirmed 2026-08-17) |
+| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position). Also statically lints the submitted source (as do `set_dat_content` / `edit_dat_content` for Python written to DATs) and emits a **THREADING WARNING** when a thread target calls TD's `run()` -- worker-side `run()` silently corrupts TD state and crashes later (Derivative-confirmed 2026-08-17). Refused before anything runs (`envoy.embody.host_destroy_refused`) when the code would destroy or reload the Embody COMP, an ancestor, `/` or Envoy's extension DAT in the same call -- `me` and `parent()` are the Embody COMP here; see [Troubleshooting](troubleshooting.md#touchdesigner-freezes-after-deleting-or-moving-embody) |
 
 ## Introspection & Diagnostics
 
@@ -115,7 +115,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 |------|-----------|-------------|
 | `get_td_info` | _(none)_ | Get TD version, build, OS, and Envoy version |
 | `get_op_errors` | `op_path`, `recurse?` | Errors and warnings for an operator and its children. Covers all three surfaces TD reports red: cook errors, Python tracebacks from callbacks/DAT scripts/expressions (`OP.scriptErrors`, tagged `kind: "script"` in `errors[]`), and GLSL compile failures (separate `shaderErrors` key) |
-| `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
+| `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`). `destroy`, `reload`, `changeType` and `progressiveUnload` on the Embody COMP, an ancestor, `/` or Envoy's extension DAT are refused (`envoy.embody.host_destroy_refused`) |
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
@@ -127,10 +127,10 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted). Never shows the locked-content dialog: a TDXN export with locked TOP/CHOP/SOP/POP operators logs one WARNING (in `_logs`) naming each operator's source and the COMP to tag `tox` |
 | `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDXN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
-| `save_externalization` | `op_path` | Force save an externalized operator to disk. Refuses to overwrite a non-empty file with an operator-empty COMP and returns an error instead — untrack the operator or delete the file if the empty state is intended |
+| `save_externalization` | `op_path` | Force save an externalized operator to disk. Refuses to overwrite a non-empty file with an operator-empty COMP and returns an error instead — untrack the operator or delete the file if the empty state is intended. Like `externalize_op`, it logs locked-content findings instead of showing the dialog |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |
 
 ## TDXN Format
@@ -139,7 +139,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 |------|-----------|-------------|
 | `read_tdxn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDXN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDXN-tagged COMPs instead of skipping their children (self-contained export) |
-| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdxn` file. Nested externalized-TDXN children are rebuilt from their own `.tdxn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op` |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdxn` file. Nested externalized-TDXN children are rebuilt from their own `.tdxn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op`. `clear_first` into the Embody COMP, an ancestor or `/` is refused (`envoy.embody.host_destroy_refused`) |
 | `diff_tdxn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDXN networks** -- the live in-memory network vs the on-disk `.tdxn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDXN COMP, which changed + counts); pass a COMP path OR a `.tdxn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff`. Read-only, non-interactive |
 
 ## TOP Capture
@@ -178,11 +178,14 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 !!! info "Auto-piggybacked logs"
     When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
 
+!!! info "Unattended sessions"
+    Nobody answers a dialog in an unattended session, so preset the Embody parameter that decides it: `Tdxnpalettehandling` (palette Black Box vs Full Export), `Filecleanup` (deleted-file prompt), `Tdxnlockedwarn` (`quiet`) and `Tdxndatsafety` (the save-time content report). Saves never prompt. Save through `save_project` and read the save's warnings in `get_job_status(job_id)["warnings"]`: the save reinitializes extensions, so they may never ride `_logs`.
+
 !!! info "Auto-attached recovery hints"
     When a tool returns an `error`, Envoy attaches a `recovery_hints` list — each entry `{code, cause, action, next_tools}`, matched to the real error string (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Additive, never clobbers, never raises — follow the hint instead of retrying the same failing call.
 
 !!! info "Stable error codes"
-    Every error envelope also carries `error_code`, a machine id of the form `envoy.<area>.<condition>`: `envoy.op.not_found`, `envoy.par.not_found`, `envoy.parent.not_comp`, `envoy.op.wrong_family`, `envoy.top.empty`, `envoy.capture.failed`, `envoy.thread.violation`, `envoy.op.unknown_type`, `envoy.timeout`, `envoy.session.gated`, `envoy.dat.wipe_refused`, `envoy.project.unsaved`, `envoy.embody.unavailable`, `envoy.docs.lookup_failed`, `envoy.job.error` — and `envoy.error` when no rule matches. Branch on the code, not the message: messages may be reworded, codes may not.
+    Every error envelope also carries `error_code`, a machine id of the form `envoy.<area>.<condition>`: `envoy.op.not_found`, `envoy.par.not_found`, `envoy.parent.not_comp`, `envoy.op.wrong_family`, `envoy.top.empty`, `envoy.capture.failed`, `envoy.thread.violation`, `envoy.op.unknown_type`, `envoy.timeout`, `envoy.session.gated`, `envoy.dat.wipe_refused`, `envoy.project.unsaved`, `envoy.embody.unavailable`, `envoy.docs.lookup_failed`, `envoy.job.error`, `envoy.embody.host_destroy_refused` (a destroy or reload of Envoy's own host, refused -- see [Troubleshooting](troubleshooting.md#touchdesigner-freezes-after-deleting-or-moving-embody)) — and `envoy.error` when no rule matches. Branch on the code, not the message: messages may be reworded, codes may not.
 
 !!! info "Write effects and shader lint"
     Every write tool's response may carry `_effects`: errors and warnings that appeared after your write, a meaningful fps drop, and — for DAT writes — the compile state of every GLSL operator that consumes that DAT, whether it is the DAT's dock host or references it by parameter from anywhere in the project. `shaders_checked` lists what was linted (a quiet footer means compiled clean, not unchecked), `new_shader_errors` the failures your write introduced, and `shader_errors_persist` a shader still failing after a later write, so silence never reads as fixed.
@@ -193,8 +196,8 @@ Long operations that outlive the 30-second operation timeout run as disk-backed 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` |
-| `save_project` | `idempotency_key?` | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle, and the same `idempotency_key` extends that dedupe to a retry of any age, reconciling it to the original save instead of queuing a second one. The next call after a save may fail once while the bridge reconnects |
+| `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` and `warnings` (the WARNING/ERROR lines logged during the save: errors first, then oldest first, repeats collapsed, at most 8 plus a `(+N more)` entry; INFO lines stay in `get_logs`) |
+| `save_project` | `idempotency_key?` | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle, and the same `idempotency_key` extends that dedupe to a retry of any age, reconciling it to the original save instead of queuing a second one. The next call after a save may fail once while the bridge reconnects. The finished record lists the save's warnings (`warnings`) |
 | `update_embody` | `idempotency_key?` | Self-update Embody to the latest GitHub release as a tracked job -- bounded and non-interactive (sha256-pinned manifest, downgrade-refusing, TD-build-floor-gated), so it never needs the TD Python grant. Refused in Perform Mode and while a test run is active. A finished record carries `version_before`/`version_after`; an up-to-date node finishes `done` with them equal. The install restarts the MCP server -- expect one reconnect blip |
 
 ## Bridge Meta-Tools
@@ -203,7 +206,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining. `envoy_unresponsive` / `unresponsive_since` (process alive, port accepting, Envoy silent 60s or more) and `main_thread_stalled` / `stalled_since` (Envoy answers, but TD's main thread has not run its request loop for 60s or more) flag a frozen TouchDesigner |
 | `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
 | `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe`. Targets only the active instance's verified process — other running TouchDesigner instances are never touched |
 | `list_dialogs` | `instance?`, `screenshot?` | List the modal dialogs a TD instance shows (message boxes, missing-file and save-changes prompts, the license box, file pickers). Runs on the bridge, so it answers while TD's main thread is blocked. TouchDesigner draws its own dialogs, so their text is not readable through the OS: `screenshot=true` saves a PNG of each to the temp dir to Read. `blocked=true` when a dialog is up. macOS backend is unverified. |

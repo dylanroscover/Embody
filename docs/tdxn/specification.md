@@ -115,7 +115,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `startup_storage` | object | No | **Import-only.** Restored via `storeStartupValue()` on import; TouchDesigner exposes no read-back accessor for the startup dictionary, so the exporter never writes this field. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
-| `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true` (or the DAT is inside an `animationCOMP`). See [DAT Content](#dat-content). |
+| `dat_content` | string or array | No | Only for editable DAT-family operators when `include_dat_content` is `true`, the DAT is inside an `animationCOMP`, or its content is saved nowhere else on disk; never for a DAT tagged `tdxn_exclude:dat_content`. See [DAT Content](#dat-content). |
 | `dat_content_format` | string | No | `"text"` or `"table"`. Present whenever `dat_content` is present. |
 | `dat_read_only` | boolean | No | `true` for a DAT whose content is read-only (TD auto-generates it and rejects writes on import). Written in place of `dat_content`. See [DAT Content](#dat-content). |
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
@@ -769,15 +769,17 @@ flags:
 
 ### Lock Flag Limitation
 
-!!! warning "Locked content is NOT preserved for TOPs, CHOPs, or SOPs"
+!!! warning "Locked content is NOT preserved for TOPs, CHOPs, SOPs, or POPs"
 
-    TDXN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDXN round-trip (export + import), locked non-DAT operators will be locked but **empty** — no texture, no samples, no mesh.
+    TDXN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, geometry, or point data**. After a TDXN round-trip (export + import), locked non-DAT operators will be locked but **empty** — no texture, no samples, no mesh, no points.
 
     **This is by design, not a bug.** Storing binary data would defeat TDXN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdxn` file.
 
+    **When the data is lost.** In the default Export mode (`Tdxnmode` = `export`) the `.toe` keeps the frozen data. It is lost only when the COMP is rebuilt from its `.tdxn`: Roundtrip mode, `import_network` with `clear_first`, crash recovery of a missing COMP, or a checkout without the `.toe`. In Roundtrip mode (Full mode with strip on save) every save rebuilds the COMP from its `.tdxn`, so the data is lost at the next save.
+
     Embody warns you at save time if your network contains locked non-DAT operators. The warning covers only operators the export itself serializes — locked content inside a nested tox/tdn-tagged child COMP (exported separately as its own boundary) or an exclude-tagged subtree does not trigger it.
 
-The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDXN only persists the frozen data for DATs.
+The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, SOPs, and POPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDXN only persists the frozen data for DATs.
 
 | Family | Flag persisted? | Frozen data persisted? | Notes |
 |--------|:-:|:-:|---|
@@ -785,11 +787,26 @@ The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and 
 | **TOP** | Yes | **No** | Pixel data is not stored. On import, the lock flag is set but no texture data exists. The operator will appear black. |
 | **CHOP** | Yes | **No** | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
 | **SOP** | Yes | **No** | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+| **POP** | Yes | **No** | Point data is not stored. On import, the lock flag is set but no points exist. |
+
+#### Source labels
+
+The warning labels each locked operator with what unlocking it would do after a rebuild, traced along wires only:
+
+| Dialog label | Log token | Meaning |
+|---|---|---|
+| re-cooks if unlocked | `source: recooks` | Unlocking this operator alone produces output again. The frozen snapshot is **replaced, not restored**: unlocking never brings the locked data back. |
+| NO SOURCE | `source: none` | Nothing wired in survives a rebuild. Unlocking leaves it empty. |
+| source not traced | `source: unknown` | The source could not be traced. Treat it as no source. |
+
+A generator is a source. A filter follows its inputs. An In operator follows its COMP's input connector, and falls back to its own input when that connector is unwired; a wire into the exported COMP itself counts as a source. A locked operator upstream is a dead end, because it comes back empty too, unless it sits inside a TOX-tagged, exclude-tagged, clone, or replicant COMP whose data survives. Parameter references (Select, Object Merge, OP Viewer, Render, CHOP to, Feedback, Script callbacks), mixed sources and very large scans read **source not traced**. Expressions are not traced.
+
+Every export that writes a COMP's `.tdxn` file -- `externalize_op`, `save_externalization`, or a save that re-exports a changed COMP -- logs **one WARNING per exported COMP** with each operator's `source:` token and the exact `externalize_op(..., tag_type='tox')` call that keeps them, so MCP callers and scripted exports get the same answer as the dialog. A save that finds the COMP unchanged, autosave checkpoints, and ad-hoc snapshots of a tracked COMP skip the scan. Envoy's `externalize_op`, `save_externalization` and `export_network`, and the Autoexternalize step of `create_op`, `copy_op` and `create_extension`, never show the dialog; Python run through `execute_python` that calls Update or saveTDXN still can.
 
 **Workarounds:**
 
-- **Unlock before saving** — the operator will re-cook from its inputs on reload.
-- **Use TOX strategy** instead of TDXN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
+- **Keep the data in a .tox.** Click **Switch to TOX** in the dialog, or run `externalize_op('<child COMP>', tag_type='tox')`. The narrowest COMP below the TDXN COMP that holds the locked operators is stored as a `.tox`, and the parent `.tdxn` references it with `tox_ref`; a `.tox` keeps locked TOP, CHOP, SOP, and POP data. The switch runs a few frames after the dialog closes. Operators sitting directly in a top-level TDXN COMP have no narrower COMP: move them into a child COMP first (a TDXN COMP nested in another one, the Tdxncascade shape, can itself be switched).
+- **Unlock** only when a fresh cook is acceptable, and only operators marked **re-cooks**. An operator marked NO SOURCE has nothing to re-cook from, so unlocking leaves it empty; one marked source not traced may have none, so treat it the same.
 - **Store data externally** — write pixel data to image files, channel data to CSV, etc., and reference them from your network.
 
 ---
@@ -888,7 +905,7 @@ During import, the dock target is resolved by sibling name first, then full path
 
 ## DAT Content
 
-DAT-family operators can optionally include their text or table data. This is controlled by the `include_dat_content` option.
+DAT-family operators can include their text or table data. The `include_dat_content` option controls only content a file already holds; content saved nowhere else is always included (see [Inclusion Conditions](#inclusion-conditions)).
 
 ### Text Format
 
@@ -950,8 +967,10 @@ For table-based DATs (tableDAT, etc.):
 DAT content is only included when:
 
 1. The operator belongs to the DAT family
-2. The `include_dat_content` option is `true`, **OR** the DAT lives inside an `animationCOMP` (its keys/channels/graph/attributes tableDATs hold all keyframe data and are always saved regardless of the option)
-3. The DAT has content (non-empty text or at least one row)
+2. The DAT is not tagged `tdxn_exclude:dat_content` (the exclude-tag prefix plus the reserved name `dat_content`), which drops its rows while the operator still exports
+3. The `include_dat_content` option is `true`, **OR** the DAT lives inside an `animationCOMP` (its keys/channels/graph/attributes tableDATs hold all keyframe data and are always saved regardless of the option), **OR** its content is saved nowhere else on disk (no externalization tag, and no `file` parameter pointing at an existing file that is synced or holds the same text). With the option `false`, only content a file already holds is skipped; unbacked content is never dropped
+4. The DAT is editable (`DAT.isEditable`); otherwise it carries `dat_read_only: true` instead (below)
+5. The DAT has content (non-empty text or at least one row)
 
 **Read-only DATs.** When a DAT's content is read-only (e.g. `glsl1_info`, `popto1` — TD auto-generates their content and rejects writes on import), its text is **not** serialized. Instead the operator carries `dat_read_only: true` so the importer knows to skip content restoration for it.
 
@@ -1280,7 +1299,6 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
 | 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. |
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
-| 4a | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP operators are flagged — the lock is preserved but the frozen pixel/channel/geometry data is not (see [Lock Flag Limitation](#lock-flag-limitation)). |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
 | 6a | **Restore storage** | Storage key-value pairs are restored via `op.store()`. `$type` wrappers are deserialized to Python types (tuple, set, bytes). |
@@ -1291,6 +1309,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 8.5 | **Restore TOX content** | `.tox` content is loaded into `tox_ref` shells so their internals are present immediately after import. |
 | 8.6 | **Restore nested TDXN content** | `tdn_ref` shells are imported from their own `.tdxn` files (recursively, with an ancestor-chain cycle guard) so their internals are present immediately after import. Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDXN COMP exactly once. See [COMP References](#comp-references-tdn_ref). |
 | 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags, and comment are applied — last, so extension reinit triggered by recreating source DATs cannot overwrite them. |
+| 10 | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP/POP operators this import created are logged with their source, after every wire (the target COMP's own external wires included) is restored. The lock is preserved but the frozen data is not (see [Lock Flag Limitation](#lock-flag-limitation)). Startup reconstruction and the post-save restore log only the count, since nested shells are not filled yet. |
 
 The importer accepts either a full `.tdxn` document (with metadata) or just the `operators` array directly.
 
@@ -1407,7 +1426,7 @@ For most networks, export → import → re-export produces identical `.tdxn` ou
 
 **Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the YAML structure may differ.
 
-**Locked non-DAT data** — When a TOP, CHOP, or SOP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+**Locked non-DAT data** — When a TOP, CHOP, SOP, or POP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, geometry, or point data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
 
 **Virtual File System** — A COMP's embedded VFS files are never exported and do not survive reconstruction. This is deliberate and permanent; see [Virtual File System (VFS) — Not Supported](#virtual-file-system-vfs-not-supported).
 

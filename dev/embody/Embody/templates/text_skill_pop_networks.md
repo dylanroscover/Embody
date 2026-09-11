@@ -144,7 +144,7 @@ For `glsladvancedPOP`:
 - Use it only when `glslPOP` cannot express the output class, topology, index buffer, or output-count requirements.
 - Allocate output buffers explicitly. Point outputs need custom max points > 0; primitive/vertex/index outputs need custom max triangles > 0.
 - Custom attributes need both Create Attribs and the matching output attributes parameter (`ptoutputattrs`, `primoutputattrs`, or `vertoutputattrs`).
-- In cache feedback patterns, use `cachePOP -> locked nullPOP` to break cook dependency loops. Refresh with the unlock-cook-lock sequence: `null.lock = False; null.cook(force=True); null.lock = True`.
+- In cache feedback patterns, use `cachePOP -> locked nullPOP` to break cook dependency loops. Refresh with the unlock-cook-lock sequence: `null.lock = False; null.cook(force=True); null.lock = True`. A `.tdxn` does not store that null's points (Embody's locked-content warning names it): after the COMP is rebuilt from its `.tdxn`, run the refresh again.
 
 ## Conversion and Extraction
 

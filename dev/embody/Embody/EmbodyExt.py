@@ -398,6 +398,11 @@ class EmbodyExt:
         self.header = 'Embody >'
         self._log_buffer = deque(maxlen=200)
         self._log_counter = 0
+        # WARNING/ERROR entries again, same dicts and ids: a Roundtrip save's
+        # DEBUG churn can push 200+ entries through _log_buffer before
+        # save_project reads the save's warnings (EnvoyExt._save_warnings,
+        # issue #109).
+        self._notable_log_buffer = deque(maxlen=100)
         self._fifo = self.my.op('fifo1')
 
         # Enable file logging by default
@@ -1725,8 +1730,8 @@ class EmbodyExt:
         # the .toe is already open for writing, so showing a modal now would
         # risk freezing the save. Return the safe default QUIETLY -- this is
         # expected, not a test, so it must not log a misleading "[test]"
-        # warning on every Ctrl+S. The caller logs its own outcome (e.g. the
-        # TDXN at-risk skip summary names what was dropped).
+        # warning on every Ctrl+S. A caller whose -1 default drops or alters
+        # content logs that outcome at WARNING itself (issue #109).
         if self.my.fetch('_suppress_dialogs', False, search=False):
             self.Log(
                 f'Dialog "{title}" suppressed during save -- using default '
@@ -4005,7 +4010,20 @@ class EmbodyExt:
         phase is wrapped so a detached callback can never fail silently
         (the _sweepTDXNDirtyChunk lesson), and the locked-warn batch is
         flushed on the way out of any failure."""
-        if gen != getattr(self, '_updd_gen', None) or self._performMode:
+        if gen != getattr(self, '_updd_gen', None):
+            return
+        if self._performMode:
+            # A chain Perform Mode killed must not leave in-flight state: a
+            # deferred Switch to TOX waits on _updd_state, and a batch left
+            # open swallows every later locked-content dialog (issue #108).
+            st = getattr(self, '_updd_state', None)
+            self._updd_state = None
+            if st and st.get('batch_open'):
+                try:
+                    with self.my.ext.TDXN.suppressLockedDialogs():
+                        self.my.ext.TDXN.flushLockedWarnBatch()
+                except Exception:
+                    pass
             return
         st = getattr(self, '_updd_state', None)
         if st is None:
@@ -7224,6 +7242,10 @@ class EmbodyExt:
             # mark an excluded COMP for TDXN. (Explicit user tagging still works.)
             if self.my.ext.TDXN._hasExcludeTag(child):
                 continue
+            # An explicit TOX choice (a Switch to TOX result included) wins
+            # too: mutual exclusivity would delete its .tox (issue #108).
+            if self.my.par.Toxtag.val in child.tags:
+                continue
             if not self._hasTDXNTag(child):
                 self.applyTagToOperator(child, tdxn_tag)
 
@@ -8967,6 +8989,14 @@ class EmbodyExt:
             return 'dismiss'
         if choice == 1:
             return 'review'
+        if choice == -1:
+            # Suppressed (the pre-save Update sweep runs this) or unanswered:
+            # the fall-through re-tags operators, so say so (issue #109).
+            self.Log(
+                f'Duplicate Paths Detected was not answered (suppressed '
+                f'or dismissed); auto-resolving {n} '
+                f'group(s): the first operator in each stays master, the '
+                f'rest are tagged as clones.', 'WARNING')
         return 'auto'
 
     def _autoResolveFirstAsMaster(self, path: str, ops: list) -> None:
@@ -10039,7 +10069,12 @@ class EmbodyExt:
             tag = self._autoExternalizeTagFor(oper)
             if not tag:
                 return None
-            if not self.applyTagToOperator(oper, tag):
+            # Envoy-only path (create_op/copy_op/create_extension): a copied
+            # COMP's TDXN export logs locked content, never a modal
+            # (issue #108).
+            with self.my.ext.TDXN.suppressLockedDialogs():
+                applied = self.applyTagToOperator(oper, tag)
+            if not applied:
                 # Chokepoint refused (annotate guard / no color for tag) --
                 # report untagged rather than logging a false success.
                 return None
@@ -10141,7 +10176,10 @@ class EmbodyExt:
         if self.my.fetch('_suppress_dialogs', False, search=False):
             self._scheduleAutoExternalizeFlush()  # save window -- wait it out
             return
-        self.Update()
+        # Envoy-triggered sweep: locked content logs, never a modal
+        # (issue #108).
+        with self.my.ext.TDXN.suppressLockedDialogs():
+            self.Update()
 
     def autoExternalizeCopiedOp(self, oper: OP) -> Optional[str]:
         """Auto-externalize a COPIED op (copy_op), per the Autoexternalize
@@ -11965,16 +12003,12 @@ class EmbodyExt:
     # ------------------------------------------------------------------
 
     # DAT operator types whose `text`/table content is fully derived by
-    # TouchDesigner from inputs, parameters, or runtime state. The user
-    # cannot author this content -- TD regenerates it on cook -- so
-    # warning that it "will be lost on save" is noise. Compared against
-    # `dat.type` (short form, e.g. 'info' not 'infoDAT'), matching the
-    # convention used by self.supported_dat_types.
-    #
-    # Callback DATs (execute, parexec, chopexec, datexec, opexec,
-    # panelexec, pargroupexec, keyboardin, mousein, oscin, etc.) are
-    # NOT in this set -- their content IS user-authored Python and must
-    # continue to surface in the at-risk warning.
+    # TouchDesigner from inputs, parameters, or runtime state. Compared
+    # against `dat.type` (short form, e.g. 'info' not 'infoDAT'). A backstop
+    # behind DAT.isEditable (TDXNExt._datContentDisposition): it also keeps a
+    # LOCKED readout, which is editable, out of the Tdxndatsafety='externalize'
+    # filing. Callback DATs (execute, parexec, chopexec, datexec, opexec,
+    # panelexec, pargroupexec) hold authored Python and are never listed.
     _TD_MANAGED_DAT_TYPES = {
         'info',           # Info DAT -- introspection of another op
         'webrtc',         # Per-connection signaling state
@@ -11991,102 +12025,87 @@ class EmbodyExt:
         'examine',        # Inspector view of another op
         'mediafileinfo',  # Metadata extracted from a media file
         'tuioin',         # Inbound TUIO event table
-        'multitouchin',   # Inbound Windows multi-touch events
+        'mtouchin',       # Multi Touch In DAT (TD's type string, not 'multitouchin')
         'ndi',            # Discovered NDI sources
         'mpcdi',          # Calibration data parsed from .mpcdi
         'indices',        # Generated number series
     }
 
-    def _findAtRiskDATs(self) -> list:
-        """Find DATs inside TDXN COMPs that will lose content during save.
+    def _embedsDATContent(self, comp: COMP) -> bool:
+        """Embed DATs as the export resolves it: per-COMP key, then global."""
+        per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
+        return bool(per_comp if per_comp is not None
+                    else self.my.par.Embeddatsintdxns.eval())
 
-        Returns list of (comp_path, [dat_ops]) tuples for TDXN COMPs where
-        Embed DATs is OFF and unexternalized DATs have non-empty content.
+    def _embedsStorage(self, comp: COMP) -> bool:
+        """Embed Storage as the export resolves it: per-COMP key, then global."""
+        per_comp = comp.fetch('embed_storage_in_tdn', None, search=False)
+        return bool(per_comp if per_comp is not None
+                    else self.my.par.Embedstorageintdxns.eval())
+
+    def _isInTDXNExportScope(self, target: OP, comp: COMP, tdxn_paths: set,
+                             cache: Optional[dict] = None) -> bool:
+        """Is target serialized by comp's own .tdxn export?
+
+        No below a nested TDXN row, a TOX/TDXN/exclude-tagged COMP, a clone
+        or replicant (TDXNExt._isInsideNestedExternalization and
+        _isInsideCloneOrReplicant, the exporter-side walks), a palette clone,
+        or an annotate widget (its tables once got filed as bogus per-DAT
+        files). The one walk the externalize-candidate and storage finders share
+        (issue #109). `cache` memoizes by (comp, parent) within one sweep.
+        """
+        parent = target.parent()
+        key = (comp.path, parent.path if parent is not None else '')
+        if cache is not None and key in cache:
+            return cache[key]
+        outside = (self.my.ext.TDXN._isInsideNestedExternalization(target, comp)
+                   or self.my.ext.TDXN._isInsideCloneOrReplicant(target, comp))
+        p = parent
+        while (not outside and p is not None and p.path != comp.path
+               and p.path != '/'):
+            outside = (p.path in tdxn_paths or p.type == 'annotate'
+                       or self.my.ext.TDXN._isPaletteClone(p))
+            p = p.parent()
+        if cache is not None:
+            cache[key] = not outside
+        return not outside
+
+    def _findUnbackedDATs(self) -> list:
+        """Editable DATs whose only copy is their TDXN COMP's .tdxn.
+
+        The candidates Tdxndatsafety='externalize' files as their own files
+        after a save (_fileUnbackedDATs). Never lost -- the export embeds them
+        -- so 'ask' never reports them. Skips COMPs that embed DAT content by
+        choice, generated or TD-managed DATs, types Embody cannot tag
+        (supported_dat_types), animationCOMP tables (keyframes
+        stay in the .tdxn), DATs whose file par the user set, and anything
+        outside the COMP's own export scope. Returns [(comp_path, [dats])]
+        (issue #109).
         """
         tdxn_comps = self._getTDXNStrategyComps()
         if not tdxn_comps:
             return []
-
         tdxn_paths = {path for path, _ in tdxn_comps}
-        dat_tags = set(self.getTags('DAT'))
-        result = []
-
+        result, scope = [], {}
         for comp_path, _ in tdxn_comps:
             comp = op(comp_path)
-            if not comp:
+            if not comp or self._embedsDATContent(comp):
                 continue
-
-            # Resolve embed_dats: per-COMP override -> global parameter
-            per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
-            embed_on = (per_comp if per_comp is not None
-                        else self.my.par.Embeddatsintdxns.eval())
-            if embed_on:
-                continue  # Content will be preserved in TDXN
-
-            at_risk = []
+            unbacked = []
             for dat in comp.findChildren(type=DAT):
-                # Skip DATs inside a deeper TDXN COMP -- covered by that
-                # COMP's own settings
-                inside_nested = False
-                parent_op = dat.parent()
-                while parent_op and parent_op.path != comp_path:
-                    # Skip DATs inside a deeper TDXN COMP (its own settings
-                    # cover them), inside an excluded COMP (app-managed,
-                    # invisible to TDXN), inside ANY annotateCOMP (widget
-                    # internals are TD-managed stock content -- flagging the
-                    # color/i/help tables of a code-created annotation as
-                    # "at risk" is what externalized them as bogus per-DAT
-                    # files), or inside a palette clone -- a clone's
-                    # internal DATs are regenerable palette boilerplate (e.g. an
-                    # annotateCOMP's button help tables), never user content, so
-                    # they must never trip the content-safety warning.
-                    if (parent_op.path in tdxn_paths
-                            or parent_op.type == 'annotate'
-                            or self.my.ext.TDXN._hasExcludeTag(parent_op)
-                            or self.my.ext.TDXN._isPaletteClone(parent_op)):
-                        inside_nested = True
-                        break
-                    parent_op = parent_op.parent()
-                if inside_nested:
+                if (dat.type in self._TD_MANAGED_DAT_TYPES
+                        or dat.type not in self.supported_dat_types
+                        or self.my.ext.TDXN._isInsideAnimationCOMP(dat)
+                        or (hasattr(dat.par, 'file') and dat.par.file.eval())
+                        or not self._isInTDXNExportScope(
+                            dat, comp, tdxn_paths, scope)):
                     continue
-
-                # Skip DATs that already have an Embody tag
-                if dat.tags & dat_tags:
-                    continue
-
-                # Skip DATs with a file parameter already set
-                if hasattr(dat.par, 'file') and dat.par.file.eval():
-                    continue
-
-                # Skip DATs whose content TD generates and regenerates
-                # on cook (info, webrtc, folder, monitors, devices, etc.)
-                # The user did not author this content and cannot preserve
-                # it -- warning would be noise. Callback DATs (execute,
-                # parexec, etc.) are intentionally absent from this set.
-                if dat.type in self._TD_MANAGED_DAT_TYPES:
-                    continue
-
-                # Skip DATs whose content the project has deliberately opted
-                # out of (tdn_exclude:dat_content). Losing it IS the intent --
-                # warning here would contradict the export, and this warner
-                # exists to mirror it.
-                if self.my.ext.TDXN._datContentExcluded(dat):
-                    continue
-
-                # Check for non-empty content
-                try:
-                    if dat.isTable:
-                        if dat.numRows > 0:
-                            at_risk.append(dat)
-                    else:
-                        if dat.text and dat.text.strip():
-                            at_risk.append(dat)
-                except Exception:
-                    pass  # Unreadable DAT -- skip
-
-            if at_risk:
-                result.append((comp_path, at_risk))
-
+                if (self.my.ext.TDXN._datContentDisposition(dat, False)
+                        == 'embedded'
+                        and self.my.ext.TDXN._datHasContent(dat)):
+                    unbacked.append(dat)
+            if unbacked:
+                result.append((comp_path, unbacked))
         return result
 
     # Storage keys preserved even when Embedstorageintdxns is off
@@ -12116,7 +12135,7 @@ class EmbodyExt:
         Single source of truth is TDXNExt.SKIP_STORAGE_KEYS (what never
         serializes); this adds Embody-only runtime keys. Falls back to the
         extras alone if TDXNExt cannot be reached, which only makes the
-        at-risk prompt noisier -- never less safe.
+        save-time storage report noisier -- never less safe.
         """
         base = set()
         try:
@@ -12126,162 +12145,131 @@ class EmbodyExt:
         return base | self._STORAGE_SKIP_EXTRA
 
     def _findAtRiskStorage(self) -> list:
-        """Find operators inside TDXN COMPs whose comp.storage entries will
-        be lost on save. Mirrors _findAtRiskDATs.
+        """Storage a TDXN COMP's .tdxn will not hold (Embed Storage off).
 
-        Returns list of (comp_path, [(op_path, [keys])]) tuples for TDXN
-        COMPs where Embed Storage is OFF and any op inside has non-control,
-        non-runtime storage keys.
+        Returns [(comp_path, [(op_path, [keys])])], each op once. Walks the
+        DAT finders' export scope (_isInTDXNExportScope) and skips TOX-tagged
+        targets: a .tox keeps its own storage. A nested TDXN shell counts as
+        a descendant of its TDXN parent -- the parent's strip/restore rebuilds
+        it -- never as a root of its own row (issue #109).
         """
         tdxn_comps = self._getTDXNStrategyComps()
         if not tdxn_comps:
             return []
-
         tdxn_paths = {path for path, _ in tdxn_comps}
-        result = []
-
+        skip_keys = self._storageSkipKeys() | self._STORAGE_CONTROL_KEYS
+        result, seen, scope = [], set(), {}
         for comp_path, _ in tdxn_comps:
             comp = op(comp_path)
-            if not comp:
-                continue
-
-            # Resolve embed_storage: per-COMP override -> global parameter
-            per_comp = comp.fetch('embed_storage_in_tdn', None, search=False)
-            embed_on = (per_comp if per_comp is not None
-                        else self.my.par.Embedstorageintdxns.eval())
-            if embed_on:
+            if not comp or self._embedsStorage(comp):
                 continue  # Storage preserved in TDXN
-
             at_risk = []
-            # Check comp itself and all descendants (depth is unbounded;
-            # excluded descendants are only those inside a nested TDXN COMP,
-            # which that COMP's own settings handle).
-            candidates = [comp] + list(comp.findChildren())
-            for target in candidates:
-                # Skip excluded COMPs themselves -- app-managed, invisible
-                # to TDXN, never at risk.
-                if self.my.ext.TDXN._hasExcludeTag(target):
+            for target in [comp] + list(comp.findChildren()):
+                # Excluded COMPs are invisible to TDXN; a palette clone's
+                # storage is palette boilerplate, never user content.
+                if (target.path in seen
+                        or self.my.ext.TDXN._hasExcludeTag(target)
+                        or self.my.ext.TDXN._isPaletteClone(target)):
                     continue
-                # Skip palette clones -- their storage is palette-managed
-                # boilerplate (e.g. an annotateCOMP's AnnotateExtStored),
-                # never user content.
-                if self.my.ext.TDXN._isPaletteClone(target):
-                    continue
-                # Skip ops inside a nested TDXN COMP, an excluded COMP, or a
-                # palette clone (regenerable palette internals -- not authored).
-                if target is not comp:
-                    inside_nested = False
-                    parent_op = target.parent()
-                    while parent_op and parent_op.path != comp_path:
-                        # Mirror of _findAtRiskDATs' walk: annotate widget
-                        # internals are TD-managed, never user storage.
-                        if (parent_op.path in tdxn_paths
-                                or parent_op.type == 'annotate'
-                                or self.my.ext.TDXN._hasExcludeTag(parent_op)
-                                or self.my.ext.TDXN._isPaletteClone(parent_op)):
-                            inside_nested = True
-                            break
-                        parent_op = parent_op.parent()
-                    if inside_nested:
+                if target.path == comp_path:
+                    if self._isNestedTDXNShell(comp, tdxn_paths):
                         continue
-
+                elif (self.my.ext.TDXN._hasTOXTag(target)
+                        or (target.path in tdxn_paths
+                            and self._embedsStorage(target))
+                        or not self._isInTDXNExportScope(
+                            target, comp, tdxn_paths, scope)):
+                    # A nested shell that embeds storage restores its own
+                    # root keys from its own .tdxn.
+                    continue
                 try:
                     storage = target.storage
                 except Exception:
                     continue
                 if not storage:
                     continue
-
-                skip_keys = self._storageSkipKeys()
-                risky_keys = [
-                    k for k in storage.keys()
-                    if k not in self._STORAGE_CONTROL_KEYS
-                    and k not in skip_keys
-                ]
+                risky_keys = sorted(k for k in storage.keys()
+                                    if k not in skip_keys)
                 if risky_keys:
-                    at_risk.append((target.path, sorted(risky_keys)))
-
+                    seen.add(target.path)
+                    at_risk.append((target.path, risky_keys))
             if at_risk:
                 result.append((comp_path, at_risk))
-
         return result
 
-    def _promptTDXNContentSafety(
-            self, at_risk_dats: list, at_risk_storage: list) -> str:
-        """Show combined dialog for at-risk DATs + storage.
+    @staticmethod
+    def _isNestedTDXNShell(comp: COMP, tdxn_paths: set) -> bool:
+        """Does a tracked TDXN COMP sit above this one?"""
+        p = comp.parent()
+        while p is not None and p.path != '/':
+            if p.path in tdxn_paths:
+                return True
+            p = p.parent()
+        return False
 
-        Returns 'externalize' or 'skip'. Note: 'externalize' applies only
-        to DATs; storage has no externalization path, skip logs a summary.
+    @staticmethod
+    def _storageLossConsequence(mode: str, strip_on_save: bool,
+                                create_on_start: bool,
+                                comp_only: bool) -> tuple:
+        """(level, text) for storage its .tdxn does not hold (issue #109).
+
+        Pure. WARNING only when this save or the next open destroys it:
+        Roundtrip ('full') descendant storage with Tdxnstriponsave or
+        Tdxncreateonstart on. Root keys ride the COMP shell in the .toe in
+        every mode (strip and clear_first destroy children only).
         """
-        all_dats = [d for _, dats in at_risk_dats for d in dats]
-        dat_count = len(all_dats)
-        storage_entries = [
-            (op_path, keys)
-            for _, entries in at_risk_storage
-            for op_path, keys in entries
-        ]
-        storage_count = sum(len(keys) for _, keys in storage_entries)
+        if comp_only:
+            return ('INFO', 'it rides the COMP shell in the saved .toe; only '
+                            'a rebuild of the shell itself from its .tdxn '
+                            '(crash recovery, a fresh clone) loses it')
+        if mode == 'full' and strip_on_save:
+            return ('WARNING', 'Roundtrip strip-on-save rebuilds the COMP '
+                               'from its .tdxn, so it is gone from the live '
+                               'session after this save and on every reopen')
+        if mode == 'full' and create_on_start:
+            return ('WARNING', 'the live session keeps it, but Roundtrip '
+                               'reconstruction rebuilds the COMP from its '
+                               '.tdxn on the next open, without it')
+        return ('INFO', 'the live session and the saved .toe keep it; a COMP '
+                        'rebuilt from its .tdxn (crash recovery, a fresh '
+                        'clone) comes back without it')
 
-        sections = []
+    @staticmethod
+    def _summarizePaths(items: list, limit: int = 5) -> str:
+        """'a, b, ... (+N more)' -- ASCII, first `limit` items."""
+        shown = ', '.join(str(i) for i in items[:limit])
+        if len(items) > limit:
+            shown += f', ... (+{len(items) - limit} more)'
+        return shown
 
-        if dat_count:
-            noun = 'DAT' if dat_count == 1 else 'DATs'
-            lines = []
-            for dat in all_dats[:10]:
-                fmt = 'table' if dat.isTable else 'text'
-                lines.append(f'  \u2022 {dat.path} ({fmt})')
-            if dat_count > 10:
-                lines.append(f'  \u2026 and {dat_count - 10} more')
-            sections.append(
-                f'{dat_count} {noun} will lose content (Embed DATs OFF):\n'
-                + '\n'.join(lines))
+    def _reportAtRiskStorage(self, at_risk_storage: list) -> None:
+        """Log storage findings, one entry per consequence class.
 
-        if storage_count:
-            key_noun = 'key' if storage_count == 1 else 'keys'
-            lines = []
-            shown = 0
-            for op_path, keys in storage_entries:
-                for k in keys:
-                    if shown >= 10:
-                        break
-                    lines.append(f'  \u2022 {op_path} \u2192 "{k}"')
-                    shown += 1
-                if shown >= 10:
-                    break
-            if storage_count > 10:
-                lines.append(f'  \u2026 and {storage_count - 10} more')
-            sections.append(
-                f'{storage_count} storage {key_noun} will be lost '
-                f'(Embed Storage OFF):\n' + '\n'.join(lines))
-
-        body = '\n\n'.join(sections)
-        externalize_verb = 'Externalize DATs' if dat_count else 'Continue'
-        msg = (f'TDXN content will be dropped on next save.\n\n'
-               f'{body}\n\n'
-               f'Note: storage has no externalization path -- enable Embed '
-               f'Storage to preserve it, or dismiss to proceed.\n\n'
-               f'"Always" choices are remembered (revert anytime via the '
-               f'TDXN content-safety parameter on Embody).')
-
-        buttons = [externalize_verb, 'Always Externalize',
-                   'Skip Once', 'Always Skip']
-        choice = self._messageBox(
-            'TDXN Content at Risk', msg, buttons=buttons)
-
-        if choice == 0:
-            return 'externalize'
-        elif choice == 1:
-            self.my.par.Tdxndatsafety = 'externalize'
-            self.Log('TDXN content safety preference set to Always '
-                     'Externalize', 'INFO')
-            return 'externalize'
-        elif choice == 3:
-            self.my.par.Tdxndatsafety = 'ignore'
-            self.Log('TDXN content safety preference set to Always Skip '
-                     '-- save-time warnings disabled (re-enable via the '
-                     'TDXN content-safety parameter on Embody)', 'INFO')
-            return 'skip'
-        return 'skip'
+        Level and text come from _storageLossConsequence for the live TDXN
+        settings, so a deliberate Export-mode choice logs INFO rather than a
+        WARNING on every save (issue #109).
+        """
+        mode = self._tdxnMode()
+        strip_par = getattr(self.my.par, 'Tdxnstriponsave', None)
+        create_par = getattr(self.my.par, 'Tdxncreateonstart', None)
+        strip = bool(strip_par.eval()) if strip_par is not None else True
+        create = bool(create_par.eval()) if create_par is not None else True
+        groups = {}
+        for comp_path, entries in at_risk_storage:
+            for op_path, keys in entries:
+                verdict = self._storageLossConsequence(
+                    mode, strip, create, op_path == comp_path)
+                groups.setdefault(verdict, []).append((op_path, keys))
+        for (level, consequence), entries in sorted(
+                groups.items(), key=lambda g: g[0][0] != 'WARNING'):
+            total = sum(len(keys) for _, keys in entries)
+            shown = self._summarizePaths(
+                [f'{p}[{",".join(keys)}]' for p, keys in entries])
+            self.Log(
+                f"TDXN storage not in the .tdxn ({total} key(s), Embed "
+                f"Storage off): {shown} -- {consequence}. To keep it, turn on "
+                f"Embedstorageintdxns or the COMP's 'Embed storage in tdxn' "
+                f"toggle; Tdxndatsafety = 'ignore' silences this.", level)
 
     def _externalizeDATs(self, dats: list) -> int:
         """Bulk-externalize a list of DAT operators. Returns success count."""
@@ -12297,7 +12285,8 @@ class EmbodyExt:
                 if not tag_value:
                     continue
 
-                self.applyTagToOperator(dat, tag_value)
+                if not self.applyTagToOperator(dat, tag_value):
+                    continue  # refused (e.g. an unsupported type): write nothing
                 self.externalizeImmediate(dat)
                 count += 1
             except Exception as e:
@@ -12305,73 +12294,74 @@ class EmbodyExt:
         return count
 
     def _checkTDXNContentSafety(self) -> None:
-        """Check for at-risk DATs AND storage in TDXN COMPs.
+        """Save-time TDXN content report. Never opens a dialog (issue #109).
 
-        Called from onProjectPreSave() before the TDXN export/strip cycle.
-        Prompts user or auto-externalizes per Tdxndatsafety preference.
-        On skip, logs a SUCCESS summary naming what was dropped.
+        Called from onProjectPreSave before the export/strip cycle. Editable
+        DAT content needs no decision: the export embeds whatever no file
+        holds, and every TDXNExt._datContentDisposition value keeps the
+        content (pinned by test_every_content_disposition_keeps_the_content).
+        So this reports storage the .tdxn cannot hold and, under
+        'externalize', schedules the filing of unbacked DATs after the save.
+        'ignore' is silent. Each step has its own guard.
         """
         safety_par = getattr(self.my.par, 'Tdxndatsafety', None)
         preference = safety_par.eval() if safety_par else 'ask'
-
         if preference == 'ignore':
             return
-
-        at_risk_dats = self._findAtRiskDATs()
-        at_risk_storage = self._findAtRiskStorage()
-        if not at_risk_dats and not at_risk_storage:
-            return
-
-        all_dats = [d for _, dats in at_risk_dats for d in dats]
-
         if preference == 'externalize':
-            count = self._externalizeDATs(all_dats)
-            if count:
-                self.Log(f'Auto-externalized {count} at-risk DAT(s)',
-                         'SUCCESS')
-            if at_risk_storage:
-                self._logSkippedStorage(at_risk_storage)
-            return
-
-        # preference == 'ask'
-        choice = self._promptTDXNContentSafety(at_risk_dats, at_risk_storage)
-        if choice == 'externalize':
-            count = self._externalizeDATs(all_dats)
-            self.Log(f'Externalized {count} at-risk DAT(s)', 'SUCCESS')
-            if at_risk_storage:
-                self._logSkippedStorage(at_risk_storage)
-        else:
-            if all_dats:
-                self._logSkippedDATs(all_dats)
-            if at_risk_storage:
-                self._logSkippedStorage(at_risk_storage)
+            try:
+                self._scheduleUnbackedFiling()
+            except Exception as e:
+                self.Log(f'Could not schedule the unbacked DAT filing: {e}',
+                         'WARNING')
+        at_risk_storage = self._findAtRiskStorage()
+        if at_risk_storage:
+            self._reportAtRiskStorage(at_risk_storage)
 
     # Backwards-compatible alias (execute.py may still call the old name).
     _checkDATContentSafety = _checkTDXNContentSafety
 
-    def _logSkippedDATs(self, dats: list) -> None:
-        """Log a SUCCESS-level summary of DATs whose content was dropped."""
-        names = ', '.join(d.path for d in dats[:5])
-        if len(dats) > 5:
-            names += f', \u2026 (+{len(dats) - 5} more)'
-        self.Log(
-            f'Skipped externalization of {len(dats)} at-risk DAT(s): '
-            f'{names}', 'SUCCESS')
+    # Past execute.py's 120-frame _suppress_dialogs clear, so the filing lands
+    # after the save settles; the re-arm cap bounds a stuck flag (issue #109).
+    _UNBACKED_FILING_DELAY_FRAMES = 150
+    _UNBACKED_FILING_MAX_REARMS = 40
 
-    def _logSkippedStorage(self, at_risk_storage: list) -> None:
-        """Log a SUCCESS-level summary of storage keys that will be dropped."""
-        entries = []
-        total = 0
-        for _, op_entries in at_risk_storage:
-            for op_path, keys in op_entries:
-                total += len(keys)
-                entries.append(f'{op_path}[{",".join(keys)}]')
-        shown = ', '.join(entries[:5])
-        if len(entries) > 5:
-            shown += f', \u2026 (+{len(entries) - 5} more)'
-        self.Log(
-            f'Dropping {total} TDXN storage entr{"y" if total == 1 else "ies"} '
-            f'on save (Embed Storage OFF): {shown}', 'SUCCESS')
+    def _scheduleUnbackedFiling(self, attempt: int = 0) -> None:
+        """Arm _fileUnbackedDATs. String-form run() resolved by path at fire
+        time, so it survives the save's extension reinit."""
+        run(f"o = op({self.my.path!r})\n"
+            f"if o and o.valid: o.ext.Embody._fileUnbackedDATs({int(attempt)})",
+            delayFrames=self._UNBACKED_FILING_DELAY_FRAMES)
+
+    def _fileUnbackedDATs(self, attempt: int = 0) -> None:
+        """Tdxndatsafety='externalize': file unbacked DATs as their own files.
+
+        Deferred out of the save window, where table mutation is fatal (see
+        _purgeExternalizationTracking); waiting loses nothing, the .tdxn
+        already holds the content. Re-arms while dialogs stay suppressed and
+        recomputes the candidates at fire time (issue #109).
+        """
+        if self._suppressDialogs():
+            if attempt < self._UNBACKED_FILING_MAX_REARMS:
+                self._scheduleUnbackedFiling(attempt + 1)
+            else:
+                self.Log(
+                    "Tdxndatsafety = 'externalize': dialogs stayed "
+                    "suppressed, so unbacked DATs were not filed this time; "
+                    "their content stays in the .tdxn and the next save "
+                    "retries.", 'WARNING')
+            return
+        safety_par = getattr(self.my.par, 'Tdxndatsafety', None)
+        if safety_par is None or safety_par.eval() != 'externalize':
+            return
+        dats = [d for _, found in self._findUnbackedDATs() for d in found]
+        if not dats:
+            return
+        count = self._externalizeDATs(dats)
+        if count:
+            self.Log(
+                f"Externalized {count} unbacked DAT(s) as their own files "
+                f"(Tdxndatsafety = 'externalize')", 'INFO')
 
     def stripCompChildren(self, comp: OP) -> int:
         """Remove children from a TDXN-strategy COMP (for smaller .toe).
@@ -13454,7 +13444,7 @@ class EmbodyExt:
 
         # Append structured entry to ring buffer for MCP access (all levels)
         self._log_counter += 1
-        self._log_buffer.append({
+        entry = {
             'id': self._log_counter,
             'timestamp': datetime.now().isoformat(),
             'frame': current_frame,
@@ -13462,7 +13452,10 @@ class EmbodyExt:
             'source': caller_info,
             'message': message,
             'details': details,
-        })
+        }
+        self._log_buffer.append(entry)
+        if level in ('WARNING', 'ERROR'):
+            self._notable_log_buffer.append(entry)
 
         # Skip DEBUG output to FIFO/textport/file unless Verbose is enabled
         if level == 'DEBUG' and not self.my.par.Verbose:

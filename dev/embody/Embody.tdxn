@@ -1,10 +1,8 @@
 format: tdxn
 version: '2.1'
 build: 1233
-generator: Embody/6.2.46
+generator: Embody/6.2.47
 td_build: 099.2025.33230
-source_file: Embody-6.349.toe
-exported_at: '2026-09-11T07:26:29Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -230,7 +228,7 @@ custom_pars:
     style: Toggle
     label: Embed DATs (default)
     startSection: true
-    help: When enabled, DAT content (text and table data) is included in TDXN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
+    help: Also copy file-backed DAT content into TDXN exports; unexternalized, editable DAT content is always included.
   - name: Embedstorageintdxns
     style: Toggle
     label: Embed Storage (default)
@@ -240,7 +238,7 @@ custom_pars:
     style: Toggle
     label: Cascade to Children
     startSection: true
-    help: When tagging a COMP for TDXN, automatically tag all child COMPs so each gets its own .tdxn file.
+    help: When tagging a COMP for TDXN, automatically tag all child COMPs so each gets its own .tdxn file. Children already tagged TOX or tdxn_exclude (and everything below them) are skipped.
   - name: Tdxncascadewarn
     style: Menu
     label: Large TDXN Warning
@@ -262,7 +260,7 @@ custom_pars:
     menuLabels:
     - Ask
     - Quiet
-    help: Controls whether a dialog is shown when a TDXN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
+    help: Controls whether a dialog is shown when a TDXN export contains locked TOPs, CHOPs, SOPs, or POPs, whose frozen data a .tdxn cannot store. The dialog labels each operator's source and offers Switch to TOX when a child COMP can hold them. Batch sweeps show one combined dialog. The WARNING is logged either way; externalize_op, save_externalization, export_network and the Autoexternalize step of create_op, copy_op and create_extension only log it. Set automatically when dismissed with Don't show again.
   - name: Autosave
     style: Toggle
     label: Auto-Save Checkpoints
@@ -812,10 +810,10 @@ custom_pars:
     - externalize
     - ignore
     menuLabels:
-    - Ask Each Save
+    - Warn Each Save
     - Always Externalize
-    - Never Ask
-    help: What to do when TDXN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    - Never Warn
+    help: What a save does about TDXN content its .tdxn cannot hold. Warn Each Save logs a WARNING when a save or the next open would lose storage (Embed Storage off); Always Externalize also files unexternalized DATs as their own files after the save; Never Warn is silent. Saves never show a dialog.
   - name: Showbuiltinpars
     style: Toggle
     label: Show Built-in Pars
@@ -851,7 +849,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.46
+    value: 6.2.47
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1910,6 +1908,17 @@ operators:
     color: [0.9, 0.3, 0.4]
     tags:
     - py
+- name: envoy_guard
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_guard.py
+    syncfile: true
+    language: python
+  position: [-1000, 1000]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
 - name: envoy_setup
   type: textDAT
   parameters:

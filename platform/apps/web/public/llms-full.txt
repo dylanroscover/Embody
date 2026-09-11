@@ -1201,15 +1201,17 @@ flags:
 
 ### Lock Flag Limitation
 
-!!! warning "Locked content is NOT preserved for TOPs, CHOPs, or SOPs"
+!!! warning "Locked content is NOT preserved for TOPs, CHOPs, SOPs, or POPs"
 
-    TDXN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDXN round-trip (export + import), locked non-DAT operators will be locked but **empty** - no texture, no samples, no mesh.
+    TDXN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, geometry, or point data**. After a TDXN round-trip (export + import), locked non-DAT operators will be locked but **empty** - no texture, no samples, no mesh, no points.
 
     **This is by design, not a bug.** Storing binary data would defeat TDXN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdxn` file.
 
+    **When the data is lost.** In the default Export mode (`Tdxnmode` = `export`) the `.toe` keeps the frozen data. It is lost only when the COMP is rebuilt from its `.tdxn`: Roundtrip mode, `import_network` with `clear_first`, crash recovery of a missing COMP, or a checkout without the `.toe`. In Roundtrip mode (Full mode with strip on save) every save rebuilds the COMP from its `.tdxn`, so the data is lost at the next save.
+
     Embody warns you at save time if your network contains locked non-DAT operators.
 
-The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SOPs - freezing their cooked output so it no longer updates from inputs or parameters. However, TDXN only persists the frozen data for DATs.
+The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, SOPs, and POPs - freezing their cooked output so it no longer updates from inputs or parameters. However, TDXN only persists the frozen data for DATs.
 
 | Family | Flag persisted? | Frozen data persisted? | Notes |
 |--------|:-:|:-:|---|
@@ -1217,11 +1219,26 @@ The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SO
 | **TOP** | Yes | **No** | Pixel data is not stored. On import, the lock flag is set but no texture data exists. The operator will appear black. |
 | **CHOP** | Yes | **No** | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
 | **SOP** | Yes | **No** | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+| **POP** | Yes | **No** | Point data is not stored. On import, the lock flag is set but no points exist. |
+
+#### Source labels
+
+The warning labels each locked operator with what unlocking it would do after a rebuild, traced along wires only:
+
+| Dialog label | Log token | Meaning |
+|---|---|---|
+| re-cooks if unlocked | `source: recooks` | Unlocking this operator alone produces output again. The frozen snapshot is **replaced, not restored**: unlocking never brings the locked data back. |
+| NO SOURCE | `source: none` | Nothing wired in survives a rebuild. Unlocking leaves it empty. |
+| source not traced | `source: unknown` | The source could not be traced. Treat it as no source. |
+
+A generator is a source. A filter follows its inputs. An In operator follows its COMP's input connector, and falls back to its own input when that connector is unwired; a wire into the exported COMP itself counts as a source. A locked operator upstream is a dead end, because it comes back empty too, unless it sits inside a TOX-tagged, exclude-tagged, clone, or replicant COMP whose data survives. Parameter references (Select, Object Merge, OP Viewer, Render, CHOP to, Feedback, Script callbacks), mixed sources and very large scans read **source not traced**. Expressions are not traced.
+
+Every save or file export logs **one WARNING per exported COMP** with each operator's `source:` token and the exact `externalize_op(..., tag_type='tox')` call that keeps them, so MCP callers and scripted exports get the same answer as the dialog. Autosave checkpoints and ad-hoc snapshots of a tracked COMP skip the scan. Envoy's `externalize_op`, `save_externalization` and `export_network`, and the Autoexternalize step of `create_op`, `copy_op` and `create_extension`, never show the dialog; Python run through `execute_python` that calls Update or saveTDXN still can.
 
 **Workarounds:**
 
-- **Unlock before saving** - the operator will re-cook from its inputs on reload.
-- **Use TOX strategy** instead of TDXN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
+- **Keep the data in a .tox.** Click **Switch to TOX** in the dialog, or run `externalize_op('<child COMP>', tag_type='tox')`. The narrowest COMP below the TDXN COMP that holds the locked operators is stored as a `.tox`, and the parent `.tdxn` references it with `tox_ref`; a `.tox` keeps locked TOP, CHOP, SOP, and POP data. The switch runs a few frames after the dialog closes. Operators sitting directly in a top-level TDXN COMP have no narrower COMP: move them into a child COMP first (a TDXN COMP nested in another one, the Tdxncascade shape, can itself be switched).
+- **Unlock** only when a fresh cook is acceptable, and only operators marked **re-cooks**. An operator marked NO SOURCE has nothing to re-cook from, so unlocking leaves it empty; one marked source not traced may have none, so treat it the same.
 - **Store data externally** - write pixel data to image files, channel data to CSV, etc., and reference them from your network.
 
 ---
@@ -1748,7 +1765,7 @@ For most networks, export -> import -> re-export produces identical `.tdxn` outp
 
 **Type defaults recomputation** - Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the YAML structure may differ.
 
-**Locked non-DAT data** - When a TOP, CHOP, or SOP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+**Locked non-DAT data** - When a TOP, CHOP, SOP, or POP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, geometry, or point data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
 
 ### Intentionally Excluded
 

@@ -76,6 +76,98 @@ by an older build (restart TouchDesigner to clear it). An `envoy-loop-init`
 entry is an attempt the current build abandoned and retried; a few are
 harmless.
 
+## TouchDesigner Freezes After Deleting or Moving Embody
+
+**Symptoms:** An `execute_python` call destroyed or reloaded the Embody COMP
+(for example, to move it into another container), and TouchDesigner stopped
+responding: one CPU core pegged, no new log lines, no CrashAutoSave. The AI
+session that made the call waited, then reported TouchDesigner as not
+responding ([issue #110](https://github.com/dylanroscover/Embody/issues/110)).
+
+**Cause (leading hypothesis, not proven):** Envoy runs *inside* the Embody
+COMP. An Envoy call executes nested in Envoy's own request handling -- inside
+an open undo block, while Envoy's server waits for the answer. Destroying the
+COMP that hosts that code, from inside that call, stalled TouchDesigner's own
+code in the reported case. The same sequence, run a few frames later after the
+call had returned, completed.
+
+**What Envoy does now:** it refuses the synchronous form before anything
+changes, with `error_code` `envoy.embody.host_destroy_refused`:
+
+- `execute_python` code that would destroy or reload the Embody COMP, one of
+  its ancestors, `/`, or Envoy's own extension DAT (`EnvoyExt`) in the same
+  call. Inside `execute_python`, `me` and `parent()` *are* the Embody COMP.
+- `delete_op` on any of those. `override=True` does not bypass this check.
+- `exec_op_method` with `destroy`, `reload`, `changeType` or
+  `progressiveUnload` on any of those.
+- `set_parameter` of a reload or clone pulse (`enableexternaltoxpulse`,
+  `reinitnet`, `enablecloningpulse`) on any of those.
+- `import_network` with `clear_first=True` into any of those (the TDXN
+  importer also refuses it on its own).
+
+Everything else inside Embody stays allowed. The `execute_python` check reads
+the code without running it, so it cannot see targets computed at run time
+(`op(path_variable)`, loops over `.children`), code run through `exec`/`eval`
+strings, or helper modules; it also leaves `project.load()` / `project.quit()`
+and an extension re-init of Embody alone. It counts every assignment of a
+variable, so reusing one name for Embody and then for another operator can be
+refused -- use distinct names. When code destroys the host anyway, Envoy skips
+its own post-call work, so it never removes a replacement Embody.
+
+**Other responses from these checks:**
+
+- `HOST-DESTROY REFUSED ... could not reach a verdict ... fails closed`: the
+  check itself failed on a `delete_op`, `exec_op_method`, `set_parameter` or
+  `import_network` call, so nothing ran. Retry; if it persists, check
+  `get_op_errors` on the Embody COMP.
+- `Remaining sub-operations skipped`: a `batch_operations` sub-operation
+  destroyed or reloaded the Embody COMP, so the rest of the batch did not run.
+- `host_destroyed: true` on an `execute_python` result: the code destroyed the
+  Embody COMP through a form the check cannot see. Envoy skipped its post-call
+  work and this server stops; it comes back from a new Embody instance if one
+  loads.
+- `host_reloaded: true`: the code reloaded the Embody COMP or re-initialized
+  Envoy's extension. This Envoy instance stops and the new one restarts it.
+
+**If you really mean to move or remove Embody:** relocation is not a tested
+workflow, so save first (`save_project`, before the call that schedules the
+move) and be ready to reopen that save.
+
+- Put the whole sequence in ONE string and defer it:
+  `run(code_string, delayFrames=30)`.
+- Make `op.Embody.ext.Envoy.Stop()` the first line *inside* that string, not a
+  separate call beforehand: called on its own, it cuts the AI session's
+  channel before the deferred `run()` is sent.
+- Inside the string, refer to Embody as `op.Embody` or by resolved absolute
+  paths -- `me` and `parent()` mean something else there.
+- The externalizations table (`externalizations`) must stay a sibling of the
+  Embody COMP. Embody reconnects only to a sibling table; anywhere else it
+  starts a new, empty one.
+- Expect Envoy to come back from the new instance. Check with `get_td_status`,
+  then `op.Embody.path`, then `get_externalizations`.
+
+**Reading `get_td_status` during a freeze:**
+
+- `envoy_unresponsive: true` (with `unresponsive_since`): TouchDesigner's
+  process is alive and Envoy's port still accepts connections, but Envoy has
+  not answered for 60 seconds or more. A save blocks TouchDesigner for 15-30
+  seconds, so a shorter silence is not a freeze; a longer one means
+  TouchDesigner looks frozen, or is stuck in one very long call.
+- `main_thread_stalled: true` (with `stalled_since`): Envoy's server still
+  answers, but TouchDesigner's main thread has not come back to Envoy's
+  request loop for 60 seconds or more -- a blocking dialog, or a call that
+  never returned.
+- The session whose call froze TouchDesigner gets an answer once
+  `envoy_unresponsive` has held for another 120 seconds (3 minutes of silence
+  in all) instead of waiting out the 5-minute request limit. The message says
+  the call was abandoned and may still complete if TouchDesigner recovers.
+
+Call `list_dialogs` first. Never kill TouchDesigner without the user: unsaved
+work is lost. A freeze that writes no CrashAutoSave can also be a masked crash
+(see the td-recovery skill). Separately, deleting a live Web Client DAT that
+held an open connection was reported to crash TouchDesigner (issue #110);
+that is unrelated to Embody.
+
 ## Restart Loop: "Unable to configure formatter 'default'"
 
 **Symptoms:** Envoy never comes up; the Textport repeats a traceback ending in

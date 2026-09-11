@@ -9,7 +9,7 @@ Use the `read_tdxn` tool to return the live network as a TDXN dict **without wri
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `comp_path` | `"/"` | Starting COMP path |
-| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `include_dat_content` | Toggle setting | Also include file-backed DAT text/table content (content saved nowhere else is always included) |
 | `max_depth` | `null` (unlimited) | Cap recursion on large roots |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of skipping their children |
 
@@ -43,7 +43,7 @@ Use the `export_network` tool with these options:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `root_path` | `"/"` | Starting COMP path |
-| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `include_dat_content` | Toggle setting | Also include file-backed DAT text/table content (content saved nowhere else is always included) |
 | `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only). A path other than the COMP's tracked file writes a **snapshot**: the tracked file and its table row are left untouched, and no stale-file cleanup runs. A relative path is anchored at the project folder. |
 | `max_depth` | `null` (unlimited) | Maximum recursion depth |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export |
@@ -92,7 +92,6 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
 | 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. |
 | 4 | **Set flags** | Array entries without `-` → `true`; with `-` → `false`. |
-| 4a | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP operators are flagged (lock preserved, frozen data is not). |
 | 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
 | 6 | **Set DAT content** | Text or table data loaded into DATs. |
 | 6a | **Restore storage** | Storage key-value pairs restored via `op.store()`; `$type` wrappers deserialized. |
@@ -103,6 +102,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 8.5 | **Restore TOX content** | `.tox` content loaded into `tox_ref` shells. |
 | 8.6 | **Restore nested TDXN content** | `tdn_ref` shells filled from their own `.tdxn` files in the same import (recursive, with an ancestor-chain cycle guard). Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDXN COMP exactly once. |
 | 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags applied last. |
+| 10 | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP/POP operators this import created are logged with their source (lock preserved, frozen data is not), after every wire is restored. See [Lock Flag Limitation](specification.md#lock-flag-limitation). |
 
 ### Version Compatibility
 

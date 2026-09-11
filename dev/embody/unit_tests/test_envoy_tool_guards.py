@@ -2,11 +2,16 @@
 Test suite: Envoy tool guards and server-side safety behaviors.
 
 Covers undo wrapping, Menu/StrMenu parameter validation, sequence growth,
-parameter search mode, execute_python rollback, and documentation helper
-plumbing.
+parameter search mode, execute_python rollback, documentation helper
+plumbing, and the host-destroy guard (issue #110).
 """
 
+import ast
+import json
 import time
+import urllib.error
+import urllib.request
+from unittest.mock import patch
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
@@ -604,6 +609,274 @@ class TestEnvoyToolGuards(EmbodyTestCase):
         self.assertDictHasKey(result, 'error')
         self.assertIsNotNone(op(keeper.path))
         self.assertEqual(keeper.text, 'modified before failure')
+
+
+_HOST_CODE = 'envoy.embody.host_destroy_refused'
+
+
+def _exec_namespace():
+    """The namespace _execute_python builds, for the guard's resolver."""
+    namespace = op.Embody.ext.Envoy._execNamespace()
+    assert namespace['me'] is op.Embody.ext.Envoy.ownerComp
+    return namespace
+
+
+class TestHostDestroyGuard(EmbodyTestCase):
+    """issue #110: destroying or reloading the COMP hosting Envoy from inside
+    an Envoy request hung TouchDesigner, so Envoy refuses it.
+
+    SAFETY: every live call targets a sandbox STAND-IN host. _hostChain is
+    patched to [fake_host, fake_parent], both sandbox children, so a broken
+    guard can only destroy those. The real chain is checked read-only in
+    TestHostChainReadOnly, with no handler call.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.outer = self.sandbox.create(baseCOMP, 'fake_parent')
+        self.fake = self.outer.create(baseCOMP, 'fake_host')
+        self._chain = patch.object(
+            op.Embody.ext.Envoy, '_hostChain',
+            return_value=[self.fake.path, self.outer.path])
+        self._chain.start()
+        # Refusal WARNINGs must not ride other sessions' _logs piggyback.
+        self._quiet = patch.object(op.Embody.ext.Envoy, '_log')
+        self._quiet.start()
+
+    def tearDown(self):
+        try:
+            self._quiet.stop()
+            self._chain.stop()
+        finally:
+            super().tearDown()
+
+    def _run(self, operation, params):
+        return op.Embody.ext.Envoy._execute_operation(operation, params)
+
+    def _assert_refused(self, result, target):
+        self.assertEqual(result.get('error_code'), _HOST_CODE, repr(result))
+        self.assertEqual(result.get('refused_target'), target)
+        self.assertIn('HOST-DESTROY REFUSED', result.get('error', ''))
+
+    def test_delete_op_on_host_refused_and_host_survives(self):
+        self._assert_refused(
+            self._run('delete_op', {'op_path': self.fake.path}),
+            self.fake.path)
+        self.assertTrue(self.fake.valid)
+
+    def test_delete_op_on_ancestor_refused(self):
+        self._assert_refused(
+            self._run('delete_op', {'op_path': self.outer.path}),
+            self.outer.path)
+        self.assertTrue(self.outer.valid)
+
+    def test_override_does_not_bypass(self):
+        result = self._run('delete_op',
+                           {'op_path': self.fake.path, 'override': True})
+        self._assert_refused(result, self.fake.path)
+        self.assertTrue(self.fake.valid)
+
+    def test_exec_op_method_destroy_refused(self):
+        for method in ('destroy', 'reload'):
+            result = self._run('exec_op_method', {
+                'op_path': self.fake.path, 'method': method,
+                'args': [], 'kwargs': {}})
+            self._assert_refused(result, self.fake.path)
+        self.assertTrue(self.fake.valid)
+
+    def test_exec_op_method_nondestroy_allowed(self):
+        result = self._run('exec_op_method', {
+            'op_path': self.fake.path, 'method': 'cook',
+            'args': [], 'kwargs': {}})
+        self.assertTrue(result.get('success'), repr(result))
+
+    def test_set_parameter_reload_pulse_refused(self):
+        for par_name in ('enableexternaltoxpulse', 'reinitnet'):
+            result = self._run('set_parameter', {
+                'op_path': self.fake.path, 'par_name': par_name,
+                'value': '1'})
+            self._assert_refused(result, self.fake.path)
+        ok = self._run('set_parameter', {'op_path': self.fake.path,
+                                         'par_name': 'parentshortcut',
+                                         'value': 'Fakehost'})
+        self.assertTrue(ok.get('success'), repr(ok))
+
+    def test_import_network_clear_first_on_host_refused(self):
+        # The dispatcher routes import_network through the host guard, not
+        # just _host_destroy_shape (issue #110 review): clear_first would
+        # destroy the host's children.
+        keep = self.fake.create(baseCOMP, 'keep')
+        result = self._run('import_network', {
+            'target_path': self.fake.path, 'tdn': {'operators': []},
+            'clear_first': True})
+        self._assert_refused(result, self.fake.path)
+        self.assertTrue(keep.valid, 'nothing was cleared')
+        ok = self._run('import_network', {
+            'target_path': self.fake.path, 'tdn': {'operators': []},
+            'clear_first': False})
+        self.assertNotEqual(ok.get('error_code'), _HOST_CODE, repr(ok))
+        self.assertTrue(keep.valid)
+
+    def test_descendant_of_the_host_is_allowed(self):
+        child = self.fake.create(baseCOMP, 'child')
+        result = self._run('delete_op', {'op_path': child.path})
+        self.assertTrue(result.get('success'), repr(result))
+
+    def test_batch_subop_refused_and_nothing_ran(self):
+        result = self._run('batch_operations', {'operations': [
+            {'tool': 'create_op', 'params': {
+                'parent_path': self.sandbox.path, 'op_type': 'textDAT',
+                'name': 'batch_marker'}},
+            {'tool': 'delete_op', 'params': {'op_path': self.fake.path}}]})
+        self._assert_refused(result, self.fake.path)
+        self.assertIsNone(self.sandbox.op('batch_marker'),
+                          'the batch is refused whole, before any sub-op')
+        self.assertTrue(self.fake.valid)
+
+    def test_refusal_is_logged_as_a_warning(self):
+        with patch.object(op.Embody.ext.Envoy, '_log') as log:
+            self._run('delete_op', {'op_path': self.fake.path})
+        warnings = [c for c in log.call_args_list
+                    if len(c.args) > 1 and c.args[1] == 'WARNING'
+                    and 'HOST-DESTROY REFUSED' in str(c.args[0])]
+        self.assertLen(warnings, 1)
+
+    def test_structured_guard_fails_closed(self):
+        with patch.object(op.Embody.ext.Envoy, '_resolve_op',
+                          side_effect=RuntimeError('resolver down')):
+            result = self._run('delete_op', {'op_path': self.fake.path})
+            self.assertEqual(result.get('error_code'), _HOST_CODE, repr(result))
+            self.assertIn('could not reach a verdict', result['error'])
+            # get_op resolves through envoy_read directly: unaffected.
+            got = self._run('get_op', {'op_path': self.fake.path})
+            self.assertNotIn('error', got, repr(got))
+        self.assertTrue(self.fake.valid)
+
+    def test_execute_python_refuses_before_exec(self):
+        code = "op(%r).destroy()\nop(%r).create(baseCOMP, 'marker')" % (
+            self.fake.path, self.sandbox.path)
+        result = self._run('execute_python', {'code': code})
+        self._assert_refused(result, self.fake.path)
+        self.assertIn('nothing ran', result['error'])
+        self.assertTrue(self.fake.valid)
+        self.assertIsNone(self.sandbox.op('marker'), 'the code ran')
+
+    def test_execute_python_delayed_run_string_not_refused(self):
+        # A unique host: the deferred destroy fires a frame after this test,
+        # so it must never find a LATER test's fake_host at the same path.
+        unique = self.outer.create(
+            baseCOMP, 'deferred_host_%d' % int(time.time() * 1000))
+        script = ("o = op(%r)\nif o is not None and o.valid:\n    o.destroy()"
+                  % unique.path)
+        code = "run(%r, delayFrames=1)\nresult = 'scheduled'" % script
+        with patch.object(op.Embody.ext.Envoy, '_hostChain',
+                          return_value=[unique.path, self.outer.path]):
+            result = self._run('execute_python', {'code': code})
+        self.assertEqual(result.get('result'), 'scheduled', repr(result))
+        self.assertTrue(unique.valid, 'deferred work must not run inline')
+
+    def test_execute_python_lint_fails_open(self):
+        """The fault must be the chain's, not a missing envoy_guard DAT:
+        either fails open, and only the DEBUG line tells them apart."""
+        with patch.object(op.Embody.ext.Envoy, '_hostChain',
+                          side_effect=RuntimeError('chain down')), \
+             patch.object(op.Embody.ext.Envoy, '_log') as log:
+            result = self._run('execute_python',
+                               {'code': "note = 'destroy'\nresult = 2"})
+        self.assertEqual(result.get('result'), '2', repr(result))
+        skipped = [str(c.args[0]) for c in log.call_args_list
+                   if len(c.args) > 1 and c.args[1] == 'DEBUG'
+                   and 'fail-open' in str(c.args[0])]
+        self.assertLen(skipped, 1)
+        self.assertIn('chain down', skipped[0])
+
+    def test_batch_execute_python_sub_op_is_refused_before_any_sub_op(self):
+        code = "op(%r).destroy()" % self.fake.path
+        result = self._run('batch_operations', {'operations': [
+            {'tool': 'create_op', 'params': {
+                'parent_path': self.sandbox.path, 'op_type': 'textDAT',
+                'name': 'batch_py_marker'}},
+            {'tool': 'execute_python', 'params': {'code': code}}]})
+        self._assert_refused(result, self.fake.path)
+        self.assertIn('nothing ran', result['error'])
+        self.assertIsNone(self.sandbox.op('batch_py_marker'),
+                          'the batch is refused whole, before any sub-op')
+        self.assertTrue(self.fake.valid)
+
+    def test_resolver_matches_the_exec_context(self):
+        """TD resolves relative op()/parent() against the innermost DAT
+        frame, so the resolver must see what the exec sees."""
+        for expr in ("op('.')", "op('..')", 'parent()', 'parent(2)', 'me'):
+            via_guard = op.Embody.ext.Envoy._resolveLookupPath(
+                ast.parse(expr, mode='eval').body, _exec_namespace())
+            via_exec = op.Embody.ext.Envoy._execute_python(
+                'result = (%s).path' % expr).get('result')
+            self.assertEqual(via_guard, via_exec, expr)
+
+
+class TestHostChainReadOnly(EmbodyTestCase):
+    """The UNPATCHED host chain, read-only. Only the pure checks run here --
+    they resolve and compare, and never reach a handler or the code."""
+
+    def test_real_host_chain(self):
+        expected = []
+        node = op.Embody
+        while node is not None:
+            expected.append(node.path)
+            node = node.parent()
+        if '/' not in expected:
+            expected.append('/')
+        expected.append(op.Embody.op('EnvoyExt').path)
+        self.assertEqual(op.Embody.ext.Envoy._hostChain(), expected)
+
+    def test_real_host_is_refused_by_the_checks_alone(self):
+        """Lint-only: the code is never run. op('..') and parent() go the
+        whole way (envoy_guard frames on the stack, then the resolver), so
+        the relative-context equivalence is proven on the real chain too.
+        _log is patched: these refusals must not reach the live log."""
+        with patch.object(op.Embody.ext.Envoy, '_log'):
+            refusal = op.Embody.ext.Envoy._hostDestroyRefusal(
+                'delete_op', {'op_path': op.Embody.path})
+            self.assertEqual(refusal.get('error_code'), _HOST_CODE)
+            for code, target in (('op.Embody.destroy()', op.Embody.path),
+                                 ('me.destroy()', op.Embody.path),
+                                 ("op('..').destroy()", op.Embody.path),
+                                 ('parent().destroy()', op.Embody.path),
+                                 ("op('/').destroy()", '/')):
+                lint = op.Embody.ext.Envoy._hostDestroyLint(
+                    code, _exec_namespace())
+                self.assertIsNotNone(lint, code)
+                self.assertEqual(lint.get('refused_target'), target, code)
+
+    def test_worker_serves_the_main_tick_and_wires_direct_delivery(self):
+        """Read-only against the running server: the bridge's
+        main_thread_stalled signal, its loopback-Host check, and the
+        envoy_deliver hook _answerAfterHostDestroyed relies on. No age
+        bound: a synchronous run crosses no frame, so an old tick is
+        legitimate here."""
+        port = op.Embody.ext.Envoy.RuntimePort()
+        if port is None:
+            self.skipTest('Envoy is not running')
+        self.assertTrue(callable(
+            getattr(op.Embody.ext.Envoy.response_queue, 'envoy_deliver',
+                    None)),
+            'EnvoyMCPServer.__init__ did not wire envoy_deliver')
+        url = 'http://127.0.0.1:%d%s' % (port, _envoy_mod._MAIN_TICK_ROUTE)
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            age = json.loads(resp.read().decode('utf-8'))['main_tick_age_s']
+        self.assertTrue(
+            isinstance(age, (int, float)) and not isinstance(age, bool),
+            'no RefreshHook has stamped the tick: %r' % (age,))
+        foreign = urllib.request.Request(url, headers={'Host': 'evil.example'})
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(foreign, timeout=5)
+        self.assertEqual(caught.exception.code, 403)
+
+    def test_envoy_guard_module_dat_exists(self):
+        """Without this DAT the execute_python lint fails open, silently."""
+        guard = op.Embody.op('envoy_guard')
+        self.assertIsNotNone(guard, 'envoy_guard module DAT missing')
+        self.assertTrue(guard.module.has_destroy_token('x.destroy()'))
 
 
 class TestCaptureTopSampleGrid(EmbodyTestCase):

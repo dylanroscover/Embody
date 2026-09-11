@@ -52,7 +52,7 @@ No prefix means a constant value. This keeps the common case (constant parameter
 Use the `read_tdxn` MCP tool to return a live network as a TDXN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
 
 - `comp_path` — Starting COMP (default: `/`)
-- `include_dat_content` — Include DAT text/table content
+- `include_dat_content` — Also include file-backed DAT text/table content (content saved nowhere else is always included)
 - `max_depth` — Cap recursion on large roots
 - `embed_all` — Recurse into TDXN-tagged COMPs instead of skipping their children
 
@@ -70,7 +70,7 @@ Works in all three `Tdxnmode` values. See [Import & Export → Reading a Network
     Use the `export_network` tool:
 
     - `root_path` — Starting COMP (default: `/` for entire project)
-    - `include_dat_content` — Include DAT text/table content
+    - `include_dat_content` — Also include file-backed DAT text/table content (content saved nowhere else is always included)
     - `output_file` — File path to write (use `"auto"` for automatic naming)
     - `max_depth` — Maximum recursion depth
     - `embed_all` — Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export

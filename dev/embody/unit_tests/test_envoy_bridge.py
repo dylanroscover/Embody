@@ -2706,6 +2706,503 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
 
 
 # =====================================================================
+# Frozen TouchDesigner visibility (issue #110)
+# =====================================================================
+
+def _iso(epoch_s):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(epoch_s))
+
+
+class TestBridgeFrozenTouchDesigner(EmbodyTestCase):
+    """issue #110: a TouchDesigner frozen inside an Envoy call read as a
+    plain dropped socket (connected:false), and the session that froze it
+    sat out its 300s forward. The bridge now names the frozen state and
+    releases the pinned forward."""
+
+    URL = 'http://127.0.0.1:9870/mcp'
+
+    def _state(self, **attrs):
+        state = bridge.BridgeState(url=self.URL, td_pid=1234,
+                                   config_path='/tmp/envoy.json')
+        with state:
+            for key, value in attrs.items():
+                setattr(state, key, value)
+        return state
+
+    def _status(self, state, port_open=True, pid_alive=True):
+        with patch.object(bridge, 'is_td_process_alive',
+                          return_value=pid_alive), \
+             patch.object(bridge, 'ping_envoy_port',
+                          return_value=port_open) as ping, \
+             patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, '_list_live_sessions', return_value=[]):
+            return bridge.handle_get_td_status(state), ping
+
+    def _heartbeat(self, state, is_up, pid_alive=True, port_open=True):
+        with patch.object(bridge, 'ping_backend_mcp', return_value=is_up), \
+             patch.object(bridge, 'is_td_process_alive',
+                          return_value=pid_alive), \
+             patch.object(bridge, 'ping_envoy_port',
+                          return_value=port_open) as ping, \
+             patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        return ping
+
+    # --- get_td_status: envoy_unresponsive ---------------------------------
+
+    def test_silence_triple_is_pure(self):
+        f = bridge.envoy_silence_s
+        self.assertEqual(f(100.0, 190.0, connected=False, pid_alive=True,
+                           port_open=True), 90.0)
+        for kwargs in (dict(connected=True, pid_alive=True, port_open=True),
+                       dict(connected=False, pid_alive=False, port_open=True),
+                       dict(connected=False, pid_alive=True, port_open=False)):
+            self.assertIsNone(f(100.0, 190.0, **kwargs), kwargs)
+        self.assertIsNone(f(None, 190.0, connected=False, pid_alive=True,
+                            port_open=True))
+
+    def test_status_names_an_unresponsive_envoy(self):
+        last = time.time() - 90
+        state = self._state(connected=False, last_connected_time=last)
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+        self.assertEqual(status['unresponsive_since'], _iso(last))
+        self.assertTrue(status['td_process_alive'])
+        self.assertFalse(status['main_thread_stalled'])
+
+    def test_a_save_length_silence_is_not_a_freeze(self):
+        """A save blocks the main thread 15-30s: no flag, and no port probe."""
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 30)
+        status, ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'])
+        self.assertIsNone(status['unresponsive_since'])
+        ping.assert_not_called()
+
+    def test_refused_port_is_not_unresponsive(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        status, _ping = self._status(state, port_open=False)
+        self.assertFalse(status['envoy_unresponsive'])
+
+    def test_dead_process_is_not_unresponsive(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        status, _ping = self._status(state, pid_alive=False)
+        self.assertFalse(status['envoy_unresponsive'])
+        self.assertTrue(status['crash_detected'])
+
+    def test_frozen_fields_default_to_quiet(self):
+        state = self._state(connected=True, last_connected_time=time.time())
+        status, _ping = self._status(state)
+        for key in ('envoy_unresponsive', 'main_thread_stalled'):
+            self.assertIs(status[key], False, key)
+        for key in ('unresponsive_since', 'stalled_since'):
+            self.assertIsNone(status[key], key)
+
+    def test_status_description_names_the_frozen_fields(self):
+        tool = next(t for t in bridge.BRIDGE_TOOLS
+                    if t['name'] == 'get_td_status')
+        self.assertIn('envoy_unresponsive', tool['description'])
+        self.assertIn('main_thread_stalled', tool['description'])
+
+    # --- get_td_status: main_thread_stalled --------------------------------
+
+    def test_main_thread_stall_is_read_on_the_heartbeat(self):
+        state = self._state(connected=False)
+        state.main_tick_probe = MagicMock(return_value=75.0)
+        self._heartbeat(state, is_up=True)
+        state.main_tick_probe.assert_called_once_with(self.URL)
+        status, _ping = self._status(state)
+        self.assertTrue(status['connected'])
+        self.assertTrue(status['main_thread_stalled'])
+        with state:
+            since = state.main_tick_read_at - 75.0
+        self.assertEqual(status['stalled_since'], _iso(since))
+        self.assertFalse(status['envoy_unresponsive'])
+
+    def test_a_fresh_main_tick_is_not_a_stall(self):
+        state = self._state(connected=False)
+        state.main_tick_probe = MagicMock(return_value=5.0)
+        self._heartbeat(state, is_up=True)
+        status, _ping = self._status(state)
+        self.assertFalse(status['main_thread_stalled'])
+        self.assertIsNone(status['stalled_since'])
+
+    def test_heartbeat_skips_the_tick_probe_while_envoy_is_down(self):
+        state = self._state(connected=True, main_tick_age_s=99.0,
+                            main_tick_read_at=time.time())
+        state.main_tick_probe = MagicMock(return_value=75.0)
+        self._heartbeat(state, is_up=False)
+        state.main_tick_probe.assert_not_called()
+        with state:
+            self.assertIsNone(state.main_tick_age_s,
+                              'a reading from before the drop is not news')
+
+    def test_fixtures_without_a_probe_stay_offline(self):
+        """main() arms the probe; a bare BridgeState never makes the GET."""
+        state = self._state(connected=False)
+        self.assertIsNone(state.main_tick_probe)
+        with patch.object(bridge, 'fetch_main_tick_age') as fetch:
+            self._heartbeat(state, is_up=True)
+        fetch.assert_not_called()
+
+    def test_main_arms_the_tick_probe(self):
+        captured = []
+        stdin = io.StringIO('')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', io.StringIO()), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'start_reconciler',
+                          side_effect=lambda st, cb: captured.append(st)), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        self.assertLen(captured, 1)
+        self.assertIs(captured[0].main_tick_probe, bridge.fetch_main_tick_age)
+
+    def test_fetch_main_tick_age_reads_the_worker_route(self):
+        class _Resp:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self, _n=-1):
+                return self.body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        seen = []
+
+        def open_(url, timeout):
+            seen.append((url, timeout))
+            return _Resp(b'{"main_tick_age_s": 12.5}')
+
+        with patch.object(bridge.urllib.request, 'urlopen', side_effect=open_):
+            self.assertEqual(bridge.fetch_main_tick_age(self.URL), 12.5)
+        self.assertEqual(seen[0][0], 'http://127.0.0.1:9870/envoy/main_tick')
+        self.assertEqual(seen[0][1], bridge.BACKEND_PING_TIMEOUT_S)
+
+        for body in (b'{"main_tick_age_s": null}', b'garbage',
+                     b'{"main_tick_age_s": true}', b'[1, 2]'):
+            with patch.object(bridge.urllib.request, 'urlopen',
+                              return_value=_Resp(body)):
+                self.assertIsNone(bridge.fetch_main_tick_age(self.URL), body)
+        with patch.object(bridge.urllib.request, 'urlopen',
+                          side_effect=bridge.urllib.error.URLError('refused')):
+            self.assertIsNone(bridge.fetch_main_tick_age(self.URL))
+
+    # --- connection-lost messages ------------------------------------------
+
+    def test_connection_lost_message_names_a_frozen_td(self):
+        state = self._state(last_connected_time=time.time() - 90)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True):
+            msg = bridge.connection_lost_message(state)
+        self.assertIn('not responding', msg)
+        self.assertRegex(msg, r'silent for (8\d|9\d)s')
+        # 60s of silence is also one legitimately long main-thread call:
+        # never claim 'not busy' after 'handling a long operation'.
+        self.assertIn('or stuck in one very long call', msg)
+        self.assertNotIn('not busy', msg)
+        self.assertIn('list_dialogs', msg)
+        self.assertIn('never kill TouchDesigner', msg)
+        self.assertTrue(all(ord(ch) < 128 for ch in msg), msg)
+
+    def test_connection_lost_message_unchanged_while_envoy_is_fresh(self):
+        state = self._state(last_connected_time=time.time() - 5)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port') as ping:
+            msg = bridge.connection_lost_message(state)
+        self.assertNotIn('list_dialogs', msg)
+        ping.assert_not_called()
+
+    def test_abandoned_forward_says_the_call_may_still_complete(self):
+        state = self._state(last_connected_time=time.time() - 130)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port') as ping:
+            msg = bridge.connection_lost_message(
+                state, bridge.ForwardAbandoned(130.0))
+        self.assertIn('silent for 130s', msg)
+        self.assertIn('abandoned', msg)
+        self.assertIn('may still complete', msg)
+        ping.assert_not_called()
+
+    # --- the pinned forward ------------------------------------------------
+
+    def test_inflight_returns_the_answer_and_clears(self):
+        inflight = bridge.InflightForward()
+        self.assertEqual(inflight.run(self.URL, lambda: {'ok': 1}), {'ok': 1})
+        self.assertFalse(inflight.busy_on(self.URL))
+        self.assertFalse(inflight.abandon(130.0), 'nothing is in flight')
+
+    def test_inflight_reraises_the_forward_error(self):
+        def fail():
+            raise OSError('Connection refused')
+
+        with self.assertRaises(OSError):
+            bridge.InflightForward().run(self.URL, fail)
+
+    def test_abandon_releases_the_waiting_loop(self):
+        inflight = bridge.InflightForward()
+        release = threading.Event()
+        started = threading.Event()
+        out = {}
+
+        def forward():
+            started.set()
+            release.wait(10)
+            return {'late': True}
+
+        def stdin_loop():
+            try:
+                out['answer'] = inflight.run(self.URL, forward)
+            except BaseException as e:  # noqa: BLE001 -- asserted below
+                out['error'] = e
+
+        loop = threading.Thread(target=stdin_loop)
+        loop.start()
+        try:
+            self.assertTrue(started.wait(5))
+            self.assertTrue(inflight.busy_on(self.URL))
+            self.assertFalse(inflight.busy_on('http://127.0.0.1:9999/mcp'))
+            self.assertTrue(inflight.abandon(130.0))
+            loop.join(5)
+            self.assertFalse(loop.is_alive(), 'the stdin loop is still pinned')
+        finally:
+            release.set()
+        self.assertIsInstance(out.get('error'), bridge.ForwardAbandoned)
+        self.assertIsInstance(out['error'], ConnectionError,
+                              "the main loop's connection-lost branch")
+        self.assertEqual(out['error'].silence_s, 130.0)
+        self.assertNotIn('answer', out, 'a late answer is dropped')
+        self.assertFalse(inflight.busy_on(self.URL))
+
+    def test_a_real_silent_peer_is_released_without_touching_its_socket(self):
+        """The #110 wedge on a real socket: TCP accepts, nothing answers.
+        shutdown() does not wake a blocked recv on Windows; the helper
+        thread is what lets the loop go."""
+        import socket
+        server = socket.socket()
+        server.bind(('127.0.0.1', 0))
+        server.listen(4)
+        # A timed accept: close() from another thread does not reliably
+        # wake a blocked accept() on POSIX, so the loop polls a stop flag.
+        server.settimeout(0.2)
+        held = []
+        stop = threading.Event()
+
+        def accept():
+            while not stop.is_set():
+                try:
+                    held.append(server.accept()[0])
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return
+
+        acceptor = threading.Thread(target=accept, daemon=True)
+        acceptor.start()
+        url = 'http://127.0.0.1:%d/mcp' % server.getsockname()[1]
+        inflight = bridge.InflightForward()
+        out = {}
+
+        def stdin_loop():
+            try:
+                out['answer'] = inflight.run(url, lambda: bridge.forward_to_http(
+                    url, {'jsonrpc': '2.0', 'id': 1}, timeout=30))
+            except BaseException as e:  # noqa: BLE001 -- asserted below
+                out['error'] = e
+
+        loop = threading.Thread(target=stdin_loop)
+        loop.start()
+        try:
+            deadline = time.monotonic() + 5
+            while not held and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(held, 'the forward never connected')
+            self.assertTrue(inflight.abandon(185.0))
+            loop.join(5)
+            self.assertFalse(loop.is_alive())
+            self.assertIsInstance(out.get('error'), bridge.ForwardAbandoned)
+        finally:
+            stop.set()
+            acceptor.join(5)
+            server.close()
+            for conn in held:
+                conn.close()
+
+    def test_heartbeat_abandons_a_forward_pinned_on_a_frozen_td(self):
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(connected=False, inflight=stub,
+                            last_connected_time=time.time() - 200)
+        ping = self._heartbeat(state, is_up=False)
+        stub.busy_on.assert_called_with(self.URL)
+        stub.abandon.assert_called_once()
+        self.assertGreaterEqual(stub.abandon.call_args.args[0],
+                                bridge.FORWARD_ABANDON_AFTER_S)
+        ping.assert_called_once()
+
+    def test_heartbeat_leaves_the_forward_unless_td_is_frozen(self):
+        cases = (
+            # Flagged unresponsive (60s+) but not yet held another 120s.
+            ('young silence', dict(age=150), dict(is_up=False)),
+            ('port refuses', dict(age=200), dict(is_up=False,
+                                                 port_open=False)),
+            ('TD is dead', dict(age=200), dict(is_up=False,
+                                               pid_alive=False)),
+            ('Envoy answers', dict(age=200), dict(is_up=True)),
+        )
+        for label, state_kw, beat_kw in cases:
+            stub = MagicMock()
+            stub.busy_on.return_value = True
+            state = self._state(
+                connected=False, inflight=stub,
+                last_connected_time=time.time() - state_kw['age'])
+            self._heartbeat(state, **beat_kw)
+            stub.abandon.assert_not_called()
+
+    def test_abandon_threshold_on_an_injected_clock(self):
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(inflight=stub, last_connected_time=1000.0)
+        limit = bridge.FORWARD_ABANDON_AFTER_S
+        with patch.object(bridge, 'ping_envoy_port', return_value=True):
+            self.assertFalse(bridge._abandon_frozen_forward(
+                state, self.URL, is_up=False, pid_alive=True, td_pid=1,
+                now=1000.0 + limit - 0.1))
+            self.assertTrue(bridge._abandon_frozen_forward(
+                state, self.URL, is_up=False, pid_alive=True, td_pid=1,
+                now=1000.0 + limit))
+        stub.abandon.assert_called_once_with(limit)
+
+    def test_abandon_waits_for_the_flag_to_hold_another_120s(self):
+        """Orchestrator spec: abandon once envoy_unresponsive (60s of
+        silence) has held for 120s more -- 180s of silence in all."""
+        self.assertEqual(bridge.FORWARD_ABANDON_AFTER_S,
+                         bridge.ENVOY_SILENT_AFTER_S + 120)
+
+    # --- a TD the user relaunched ----------------------------------------
+
+    def test_silence_baseline_is_pure(self):
+        f = bridge._silence_baseline
+        self.assertEqual(f(self._state(last_connected_time=100.0)), 100.0)
+        self.assertIsNone(f(self._state()))
+        self.assertEqual(f(self._state(last_connected_time=100.0,
+                                       silence_pid=1234,
+                                       silence_pid_seen_at=None)), 100.0)
+        self.assertEqual(f(self._state(last_connected_time=100.0,
+                                       silence_pid=1234,
+                                       silence_pid_seen_at=500.0)), 500.0)
+        self.assertIsNone(f(self._state(last_connected_time=100.0,
+                                        silence_pid=999)),
+                          'the pid changed since the last heartbeat')
+
+    def test_a_relaunched_td_never_inherits_the_old_silence(self):
+        """Review find: last_connected_time is the OLD process's, so a TD the
+        user relaunched read as frozen at once and the in-flight forward
+        was abandoned on the first failed heartbeat of its load."""
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(connected=False, inflight=stub, silence_pid=999,
+                            last_connected_time=time.time() - 1000)
+        status, _ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'],
+                         'the heartbeat has not seen the new pid yet')
+        self._heartbeat(state, is_up=False)
+        stub.abandon.assert_not_called()
+        with state:
+            self.assertEqual(state.silence_pid, 1234)
+            seen_at = state.silence_pid_seen_at
+        self.assertGreater(seen_at, time.time() - 5)
+        status, _ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'])
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True):
+            self.assertNotIn('list_dialogs',
+                             bridge.connection_lost_message(state))
+        # Dated from the relaunch: frozen once IT has been silent 60s.
+        with state:
+            state.silence_pid_seen_at = time.time() - 90
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+        self.assertEqual(status['unresponsive_since'],
+                         _iso(state.silence_pid_seen_at))
+
+    def test_the_first_sighting_of_a_pid_does_not_floor_the_silence(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        self._heartbeat(state, is_up=False)
+        with state:
+            self.assertEqual(state.silence_pid, 1234)
+            self.assertIsNone(state.silence_pid_seen_at)
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+
+    def test_main_loop_forwards_through_the_inflight_holder(self):
+        names = []
+
+        def forward(url, msg, **kw):
+            names.append(threading.current_thread().name)
+            return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': 'ok'}
+
+        stdout = io.StringIO()
+        stdin = io.StringIO(json.dumps(
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        self.assertEqual(names, ['envoy-forward'])
+        self.assertEqual(json.loads(stdout.getvalue().strip())['result'], 'ok')
+
+    def test_main_loop_hands_the_forward_error_to_the_message(self):
+        err = bridge.ForwardAbandoned(130.0)
+
+        def forward(url, msg, **kw):
+            raise err
+
+        stdout = io.StringIO()
+        stdin = io.StringIO(json.dumps(
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'connection_lost_message',
+                          return_value='frozen-msg') as message, \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        message.assert_called_once()
+        self.assertIs(message.call_args.args[1], err)
+        reply = json.loads(stdout.getvalue().strip())
+        self.assertEqual(reply['error']['message'], 'frozen-msg')
+
+
+# =====================================================================
 # Bridge v2 - BridgeState, notify_stdout, reconciler, caching, hashing
 # =====================================================================
 #

@@ -28,7 +28,7 @@ op('deck_a').tags.add('tdxn_exclude:file')
 
 The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export - references are configuration). The bare `tdxn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdxn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdxn**, a drop-zone panel that toggles `tdxn_exclude:<par>` for dragged parameters and whole-COMP `tdxn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **x** to remove it.
 
-A third form targets a DAT's live **contents** instead of a parameter: `tdxn_exclude:dat_content` (a reserved name, so it never trips the unknown-parameter warning). Use it for DATs whose rows are runtime state with no authored value -- a log ring buffer, a status readout. Those are normally force-captured even when Embed DATs is OFF, because Embody refuses to drop content that exists nowhere else on disk; this tag is the only sanctioned way past that net, so apply it only where losing the content is the intent. The operator itself still exports in full (parameters, position, wiring, tags) and returns empty on reconstruction, and the at-risk content warning skips it so the check cannot contradict the export.
+A third form targets a DAT's live **contents** instead of a parameter: `tdxn_exclude:dat_content` (a reserved name, so it never trips the unknown-parameter warning). Use it for DATs whose rows are runtime state with no authored value -- a log ring buffer, a status readout. Those are normally force-captured even when Embed DATs is OFF, because Embody refuses to drop content that exists nowhere else on disk; this tag is the only sanctioned way past that net, so apply it only where losing the content is the intent. The operator itself still exports in full (parameters, position, wiring, tags) and returns empty on reconstruction, and the save-time content check reads the same rule, so it never flags the DAT or files it as its own file.
 
 ## Creating Python Files for TouchDesigner
 
@@ -64,3 +64,12 @@ When exporting a TDXN-strategy COMP whose network contains TD palette components
 - **Full Export**: export all children as if the COMP were a regular user COMP. Use only when palette internals have been heavily customized.
 
 Check and override programmatically: `op.Embody.par.Tdxnpalettehandling = 'blackbox' | 'fullexport' | 'ask'`, or force a specific COMP: `op('/path/to/comp').store('_tdn_palette_handling', 'fullexport')`.
+
+## TDXN Export - Locked Content
+
+A TDXN export keeps the lock flag of a locked TOP, CHOP, SOP or POP but not its frozen data. Each export that writes a COMP's `.tdxn` file (`externalize_op`, `save_externalization`, or a save that re-exports a changed COMP) logs ONE WARNING per exported COMP (it rides back in `_logs`; an unchanged COMP at save time, autosave checkpoints and ad-hoc `export_network` snapshots of a tracked COMP skip it) listing `path (FAMILY, source: none|unknown|recooks)` and the exact remedy call. `externalize_op`, `save_externalization`, `export_network`, and the Autoexternalize step of `create_op`/`copy_op`/`create_extension` never show the locked-content dialog; `execute_python` code that calls Update or saveTDXN still can.
+
+- `source: none`: nothing wired in survives a rebuild. Never unlock it - unlocking leaves it empty.
+- `source: unknown`: the source was not traced (a parameter reference, mixed inputs, a large scan). It may have none: treat it as `none`.
+- `source: recooks`: unlocking re-cooks it, but the frozen snapshot is replaced, not restored. Unlock only when a fresh cook is acceptable.
+- To keep the data, run the `externalize_op('<child COMP>', tag_type='tox')` the WARNING names: that child is stored as a `.tox` and the parent `.tdxn` references it (`tox_ref`). In TD, the dialog's **Switch to TOX** button does the same.
