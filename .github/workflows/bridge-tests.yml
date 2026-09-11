@@ -47,6 +47,9 @@ on:
       - 'dev/embody/unit_tests/test_project_saved_gate.py'
       - 'dev/embody/unit_tests/test_promoted_surface.py'
       - 'dev/embody/unit_tests/test_release_toe.py'
+      - 'dev/embody/unit_tests/test_release_preflight.py'
+      - 'dev/release_preflight.py'
+      - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
       # The promoted-surface census reads the extension sources and the
       # caller index, so a change to either must trigger it.
       - 'dev/embody/Embody/**/*.py'
@@ -104,6 +107,9 @@ on:
       - 'dev/embody/unit_tests/test_project_saved_gate.py'
       - 'dev/embody/unit_tests/test_promoted_surface.py'
       - 'dev/embody/unit_tests/test_release_toe.py'
+      - 'dev/embody/unit_tests/test_release_preflight.py'
+      - 'dev/release_preflight.py'
+      - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
       # The promoted-surface census reads the extension sources and the
       # caller index, so a change to either must trigger it.
       - 'dev/embody/Embody/**/*.py'
