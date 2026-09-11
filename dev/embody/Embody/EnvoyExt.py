@@ -34,7 +34,7 @@ import time
 from collections import deque
 from html import unescape
 from queue import Queue, Empty
-from threading import Lock, Event, Thread
+from threading import Lock, Event, Thread, get_ident
 from typing import Optional, Any, Callable, Literal
 
 ENVOY_VERSION = "1.4.0"
@@ -1198,6 +1198,111 @@ def _queueWorkerLog(message, level='WARNING'):
         _WORKER_LOG_LINES.append((level, str(message)))
     except Exception:
         pass
+
+
+# Startup phases a server worker reports through sys._envoy_startup_phase
+# ({gen: (phase, thread_ident, startup_event)}) so a startup timeout can say
+# WHERE the worker stopped instead of blaming the port. bind() happens only
+# after _PHASE_SERVE, so a worker that died before it is no evidence against
+# its port. The startup_event names the start: two EnvoyExt instances in one
+# process can reuse a gen number.
+_PHASE_INIT = 'building MCP server'
+_PHASE_LOOP = 'creating event loop'
+_PHASE_SERVE = 'starting uvicorn'
+_PRE_BIND_PHASES = (_PHASE_INIT, _PHASE_LOOP)
+
+
+def _markStartupPhase(gen: int, phase: str, owner: Any = None) -> None:
+    """Worker-side: record this worker's phase. Plain dict on sys, no TD.
+    Diagnostics only, so it never raises into a start."""
+    try:
+        reg = getattr(sys, '_envoy_startup_phase', None)
+        if not isinstance(reg, dict):
+            reg = {}
+            sys._envoy_startup_phase = reg
+        reg[gen] = (phase, get_ident(), owner)
+        for old in sorted(k for k in reg if isinstance(k, int))[:-16]:
+            reg.pop(old, None)
+    except Exception:
+        pass
+
+
+class _EventLoopWedged(RuntimeError):
+    """Event-loop construction never completed (see _newEventLoopBounded)."""
+
+
+def _newEventLoopBounded(timeout: float = 1.5, attempts: int = 4,
+                         factory: Optional[Callable[[], Any]] = None,
+                         cancel: Optional[Event] = None
+                         ) -> Optional[asyncio.AbstractEventLoop]:
+    """Build an event loop on a daemon thread, with a deadline per attempt.
+
+    Every asyncio loop opens a self-pipe via socket.socketpair(); on Windows
+    that is CPython's _fallback_socketpair, whose non-blocking connect can
+    fail silently (WSAEADDRINUSE on an ephemeral-port collision, measured
+    2026-09-10) and leave accept() waiting forever -- here, on the non-daemon
+    TDThread, before bind (issue #98 follow-up). A failed attempt never
+    recovers, so attempts are short. Each wedge leaks one daemon builder; a
+    late finisher closes its own loop. OSError from the build is retried.
+    Returns None once `cancel` is set; raises _EventLoopWedged after
+    `attempts`.
+    """
+    if factory is None:
+        # Selector, not Proactor: the IOCP proactor can permanently kill the
+        # listener on restart (WinError 64 in accept()). Built directly --
+        # never through a process-global set_event_loop_policy().
+        factory = (asyncio.SelectorEventLoop if sys.platform.startswith('win')
+                   else asyncio.new_event_loop)
+    last_err = None
+    for attempt in range(1, attempts + 1):
+        if cancel is not None and cancel.is_set():
+            return None
+        box = {}
+        lock = Lock()
+        done = Event()
+
+        # Per-attempt state binds as defaults: a closure would read the NEXT
+        # attempt's box once the for-loop rebinds it (review 2026-09-10).
+        def build(box: dict = box, lock: Any = lock,
+                  done: Event = done) -> None:
+            try:
+                loop = factory()
+            except BaseException as e:
+                with lock:
+                    box['err'] = e
+                done.set()
+                return
+            with lock:
+                late = box.get('abandoned', False)
+                if not late:
+                    box['loop'] = loop
+            if late:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+            done.set()
+
+        Thread(target=build, daemon=True,
+               name=f'envoy-loop-init-{attempt}').start()
+        done.wait(timeout)
+        with lock:
+            if 'loop' in box:
+                return box['loop']
+            err = box.get('err')
+            if err is None:
+                box['abandoned'] = True
+        if err is not None and not isinstance(err, OSError):
+            raise err
+        last_err = err
+        what = f'failed ({err})' if err is not None else f'stalled >{timeout:g}s'
+        _queueWorkerLog(
+            f'Event loop creation {what} in socket.socketpair() '
+            f'(attempt {attempt}/{attempts})')
+    raise _EventLoopWedged(
+        f'Event loop creation failed in socket.socketpair() on {attempts} '
+        f'attempts ({timeout:g}s each) -- a loopback connection never '
+        f'completed; the Envoy port was never tried') from last_err
 
 
 class EnvoyMCPServer:
@@ -4677,10 +4782,14 @@ class EnvoyMCPServer:
         _live[self.gen] = (uvi_server, self.port)
         sys._envoy_uvi_servers = _live
 
-        # Monitor shutdown_event and tell uvicorn to exit
+        # Monitor shutdown_event and tell uvicorn to exit. Both monitors also
+        # end with the worker (self.running): one that dies before serving
+        # (_EventLoopWedged) otherwise orphans them, polling for good.
         def shutdown_monitor():
-            self.shutdown_event.wait()
-            uvi_server.should_exit = True
+            while self.running:
+                if self.shutdown_event.wait(0.5):
+                    uvi_server.should_exit = True
+                    return
 
         Thread(target=shutdown_monitor, daemon=True).start()
 
@@ -4691,7 +4800,7 @@ class EnvoyMCPServer:
         # instant the task was enqueued (zombie status over a dead socket).
         def startup_monitor():
             import time as _t
-            while not self.shutdown_event.is_set():
+            while self.running and not self.shutdown_event.is_set():
                 if getattr(uvi_server, 'started', False):
                     if self.startup_event is not None:
                         self.startup_event.set()
@@ -4702,13 +4811,26 @@ class EnvoyMCPServer:
             Thread(target=startup_monitor, daemon=True).start()
 
         try:
-            # On Windows, use SelectorEventLoop instead of the default ProactorEventLoop.
-            # The IOCP proactor can permanently kill the listener socket on server restarts
-            # with "WinError 64: The specified network name is no longer available" during
-            # accept(). SelectorEventLoop handles TCP reliably without IOCP quirks.
-            if sys.platform.startswith('win'):
-                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            asyncio.run(uvi_server.serve())
+            # asyncio.run() minus its unbounded new_event_loop(): the loop is
+            # built by _newEventLoopBounded (Selector on Windows) and handed to
+            # a Runner, which keeps asyncio.run's shutdown sequence.
+            _markStartupPhase(self.gen, _PHASE_LOOP, self.startup_event)
+            loop = _newEventLoopBounded(cancel=self.shutdown_event)
+            if loop is None or self.shutdown_event.is_set():
+                # Signalled down mid-build (timeout, Stop, revive): serving now
+                # would bind a port the replacement start may already hold.
+                if loop is not None:
+                    loop.close()
+                return
+            _markStartupPhase(self.gen, _PHASE_SERVE, self.startup_event)
+            try:
+                asyncio.set_event_loop(loop)
+                with asyncio.Runner(loop_factory=lambda: loop) as runner:
+                    runner.run(uvi_server.serve())
+            finally:
+                asyncio.set_event_loop(None)
+                if not loop.is_closed():
+                    loop.close()
         finally:
             self.running = False
             # Clear the global handle so the next Start does not mistake
@@ -4723,8 +4845,6 @@ class EnvoyMCPServer:
                 _entry = _live.get(self.gen)
                 if _entry is not None and _entry[0] is uvi_server:
                     _live.pop(self.gen, None)
-            if sys.platform.startswith('win'):
-                asyncio.set_event_loop_policy(None)
 
 
 # ============================================================
@@ -5333,10 +5453,9 @@ class EnvoyExt:
     def Start(self) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
         # Envoyenable is the master switch. Queued restart fires (auto-restart
-        # backoff, watchdog revive) can land AFTER the user -- or the give-up
-        # path in _scheduleRestart -- disabled Envoy; without this gate they
-        # kept spawning servers for minutes after 'Envoy disabled'
-        # (2026-07-15 storm, issue #57 follow-up).
+        # backoff, watchdog revive) can land AFTER the user disabled Envoy;
+        # without this gate they kept spawning servers for minutes after
+        # 'Envoy disabled' (2026-07-15 storm, issue #57 follow-up).
         if not self.ownerComp.par.Envoyenable.eval():
             self._log('Start ignored -- Envoy is disabled', 'DEBUG')
             return
@@ -5837,7 +5956,9 @@ class EnvoyExt:
                 'Thread Manager could not start a standalone server worker.',
                 'ERROR')
             self._starting = False
-            self._onServerError('Thread Manager could not start server worker')
+            # No worker ever ran, so nothing touched the port.
+            self._onServerError('Thread Manager could not start server worker',
+                                blacklist_port=False)
             return
 
         # H1: status stays 'Starting...' (set above) until the worker confirms
@@ -6011,13 +6132,56 @@ class EnvoyExt:
                 self.shutdown_event.set()
             except Exception:
                 pass
-            self._onServerError(
-                f'Envoy did not bind port {self._runtime_port} within the '
-                f'startup timeout', blacklist_port=False)
+            # Say where the worker stopped: a pre-bind stall read as "did not
+            # bind port N" sent every investigation hunting port conflicts
+            # (issue #98 follow-up).
+            port = self._runtime_port
+            phase, stack = self._startupWorkerState(gen, with_stack=True)
+            if stack:
+                self._log(
+                    f'Startup worker (gen {gen}) at timeout, phase {phase!r}:\n  '
+                    + '\n  '.join(stack), 'WARNING')
+            if phase in _PRE_BIND_PHASES:
+                reason = (f'Envoy worker stalled before binding port {port} '
+                          f'({phase}) -- the port was never tried')
+            else:
+                reason = (f'Envoy did not bind port {port} within the '
+                          f'startup timeout')
+            # Stale the signalled worker: its late exit hook would otherwise
+            # run a second restart (or a second give-up) for this start.
+            self._server_gen += 1
+            sys._envoy_server_gen = self._server_gen
+            self._onServerError(reason, blacklist_port=False)
             return
         # Not yet bound, not timed out -- keep polling.
         run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
             fromOP=self.ownerComp, delayFrames=6)
+
+    def _startupWorkerState(self, gen: int, with_stack: bool = False
+                            ) -> tuple[Optional[str], list[str]]:
+        """(phase, innermost stack frames) that gen's worker last reported.
+
+        Reads the worker's _markStartupPhase entry -- only if it belongs to
+        THIS start (same startup_event) -- and, on request, its live frame via
+        sys._current_frames(): a main-thread read of Python frames, never a TD
+        object, and no source-line lookup. (None, []) when nothing matches.
+        """
+        reg = getattr(sys, '_envoy_startup_phase', None)
+        entry = reg.get(gen) if isinstance(reg, dict) else None
+        if (not isinstance(entry, tuple) or len(entry) < 3
+                or entry[2] is None or entry[2] is not self._startup_event):
+            return None, []
+        phase, ident = entry[0], entry[1]
+        if not with_stack:
+            return phase, []
+        import traceback
+        frame = sys._current_frames().get(ident)
+        if frame is None:
+            return phase, []
+        summary = traceback.StackSummary.extract(
+            traceback.walk_stack(frame), limit=8, lookup_lines=False)
+        return phase, [f'{os.path.basename(f.filename)}:{f.lineno} {f.name}'
+                       for f in reversed(summary)]
 
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
@@ -6238,13 +6402,10 @@ class EnvoyExt:
 
     def Stop(self) -> None:
         """Stop MCP server"""
-        # Always reset auto-restart counter on Stop, even when envoy_running
-        # is already False.  Without this, the restart-limit path in
-        # _scheduleRestart sets Envoyenable=False -> parexec -> Stop(), but
-        # envoy_running was already cleared by _onServerError, so the old
-        # code returned early and left _restart_count stuck above MAX.
-        # The next manual toggle would immediately hit the limit again,
-        # making Envoyenable appear to "do nothing."
+        # Always reset the restart window on Stop, even when envoy_running is
+        # already False: after _scheduleRestart gives up, the user's off/on
+        # toggle IS the retry, and a stale window would give up again on the
+        # first failure -- making Envoyenable appear to "do nothing".
         self._restart_count = 0
         self._restart_window_start = 0.0  # fresh retry window on the next storm
         if not self.ownerComp.fetch('envoy_running', False):
@@ -6303,6 +6464,7 @@ class EnvoyExt:
 
         preset = shutdown_event.is_set()
         t0 = time.monotonic()
+        _markStartupPhase(gen, _PHASE_INIT, startup_event)
         try:
             server = EnvoyMCPServer(
                 request_queue=None,  # Not used, we use InfoQueue
@@ -6330,6 +6492,8 @@ class EnvoyExt:
             # from the worker; read + cleared on the main thread.
             sys._envoy_exit_context = ctx
             return ctx
+        except _EventLoopWedged:
+            raise   # pre-bind; the generic wrappers below would blame the port
         except OSError as e:
             if e.errno == 48 or 'address already in use' in str(e).lower():
                 raise RuntimeError(
@@ -7152,13 +7316,15 @@ class EnvoyExt:
         self._starting = False
         # Worker died without ever confirming a bind -> blacklist its port so
         # the restart scans PAST it instead of re-picking the same poisoned
-        # port every attempt. Non-bind pre-startup failures land here too;
-        # blacklisting their port is harmless (entry expires after
-        # _BIND_FAIL_TTL_SECONDS, and a confirmed bind clears it).
+        # port every attempt. Not when it died BEFORE bind() (event-loop wedge,
+        # import failure): that is no evidence against the port, and a
+        # blacklist there forces the +1 drift. An unknown phase still
+        # blacklists; entries expire after _BIND_FAIL_TTL_SECONDS.
         bound = (self._startup_event is not None
                  and self._startup_event.is_set())
         port = getattr(self, '_runtime_port', None)
-        if blacklist_port and not bound and port:
+        pre_bind = self._startupWorkerState(self._server_gen)[0] in _PRE_BIND_PHASES
+        if blacklist_port and not bound and port and not pre_bind:
             bad = getattr(sys, '_envoy_bad_bind_ports', {})
             bad[port] = time.time()
             sys._envoy_bad_bind_ports = bad
@@ -7169,7 +7335,13 @@ class EnvoyExt:
         """Auto-restart the MCP server with exponential backoff, retrying for up
         to _RESTART_WINDOW_SECONDS (30 min) before giving up. Replaces the old
         3-strike / ~6-second cap, which a transient port-rebind race could trip
-        permanently -- then disable Envoy and force a manual toggle."""
+        permanently.
+
+        Giving up parks on an 'Error' status (the watchdog idles on it) and
+        leaves Envoyenable ON: the par persists to config.json, so switching
+        it off made one bad session disable Envoy for every later TD launch
+        (issue #98 follow-up). A TD restart, extension reinit (a save in Full
+        mode), Perform Mode exit, or off/on toggle starts a fresh window."""
         now = time.time()
         uptime = now - self._last_start_time
         # A NEW storm: either the very first failure, or the server had been
@@ -7184,9 +7356,12 @@ class EnvoyExt:
             self._log(
                 f'Server kept failing for over {mins} min '
                 f'({self._restart_count} attempts) -- giving up. Last: {reason}. '
-                f'Toggle Envoy off/on to retry.', 'ERROR')
+                f'Toggle Envoy off/on (or restart TD) to retry.', 'ERROR')
             self.ownerComp.par.Envoystatus = f'Error: {reason} (gave up after {mins} min)'
-            self.ownerComp.par.Envoyenable = False
+            # Stale queued restarts and late worker hooks of this storm, so
+            # none can overwrite the parked reason (review 2026-09-10).
+            self._server_gen += 1
+            sys._envoy_server_gen = self._server_gen
             return
 
         self._restart_count += 1

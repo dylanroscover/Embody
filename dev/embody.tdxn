@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 1253
-generator: Embody/6.2.43
-td_build: 099.2025.33070
-source_file: Embody-6.346.toe
-exported_at: '2026-09-09T15:51:17Z'
+build: 1260
+generator: Embody/6.2.46
+td_build: 099.2025.33230
+source_file: Embody-6.349.toe
+exported_at: '2026-09-11T07:26:29Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -900,13 +900,13 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.43
+      value: 6.2.46
     - name: Touchbuild
       style: Str
       label: Touch Build
       readOnly: true
       help: TouchDesigner build number this version was developed on (read-only).
-      value: '2025.33070'
+      value: '2025.33230'
     - name: Author
       style: Str
       readOnly: true

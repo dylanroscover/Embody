@@ -73,6 +73,9 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
             'request_queue': self.envoy.request_queue,
             'response_queue': self.envoy.response_queue,
             'server_gen': self.envoy._server_gen,
+            # _continueStart bumps the process-wide mirror too; rewinding only
+            # the instance leaves it behind sys, which the next reinit adopts.
+            'sys_server_gen': getattr(sys, '_envoy_server_gen', None),
             'current_task': self.envoy.current_task,
             'shutdown_event': self.envoy.shutdown_event,
             'sys_queues': dict(getattr(sys, '_envoy_queues', {})),
@@ -134,6 +137,8 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         self.envoy.request_queue = st['request_queue']
         self.envoy.response_queue = st['response_queue']
         self.envoy._server_gen = st['server_gen']
+        if st['sys_server_gen'] is not None:
+            sys._envoy_server_gen = st['sys_server_gen']
         self.envoy.current_task = st['current_task']
         self.envoy.shutdown_event = st['shutdown_event']
         sys._envoy_queues = st['sys_queues']

@@ -181,7 +181,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.2.31` | Embody version string (read-only). |
-| <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33070` | TouchDesigner build number this version was developed on (read-only). |
+| <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33230` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |
 | <a class="par-anchor" id="par-github" href="#par-github">GitHub (`Github`)</a> | Pulse | - | Opens the Embody GitHub repository in your web browser. |

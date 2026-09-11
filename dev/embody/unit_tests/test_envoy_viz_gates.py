@@ -1074,3 +1074,92 @@ class TestEnvoyVizGates(EmbodyTestCase):
         viz.highlightOp(ext, target)
         self.assertEqual(target.writes, [('selected', True)],
                          'the marker is restored -- and only the marker')
+
+    # ----- the parts are invisible to READERS too (issue #94) -------------
+
+    def test_is_live_bot_part_separates_furniture_from_content(self):
+        """The predicate every reader filter calls. A user operator carrying
+        the reserved name is content (same carve-out purgeVizArtifacts makes),
+        and so is the shipped template's part."""
+        host = self.sandbox.create(baseCOMP, 'viz_pred_host')
+        loose = _annotate(host, 'envoy_bot_body')
+        note = _annotate(host, 'ordinary_note')
+        decoy = host.create(nullTOP, 'envoy_bot_decoy')
+        tmpl = host.create(baseCOMP, viz._VIZ_TEMPLATE_COMP)
+        shipped = _annotate(tmpl, 'envoy_bot_body')
+        self.assertTrue(viz.isLiveBotPart(loose))
+        self.assertFalse(viz.isLiveBotPart(note))
+        self.assertFalse(viz.isLiveBotPart(decoy),
+                         'a TOP with the reserved name is a user operator')
+        self.assertFalse(viz.isLiveBotPart(shipped),
+                         'the shipped template asset stays visible')
+
+    def test_read_tools_hide_the_parts_and_report_the_count(self):
+        """Issue #94: agents saw nine annotations that are in no .tdxn (the
+        exporter already filters them), read them as the layout-rule violation
+        they resemble -- nine overlapping annotations around one op -- and went
+        hunting. Hidden, not silently: `embot_hidden` says how many, so the
+        tools never claim a network holds annotations it does not."""
+        read = self.embody.op('envoy_read').module
+        ext = self.embody.ext.Envoy
+        host = self.sandbox.create(baseCOMP, 'viz_read_host')
+        _annotate(host, 'envoy_bot_body')
+        _annotate(host, 'envoy_bot_head')
+        _annotate(host, 'ordinary_note')
+        host.create(nullTOP, 'viz_read_keep')
+
+        anns = read.get_annotations(ext, host.path)
+        self.assertEqual([a['name'] for a in anns['annotations']],
+                         ['ordinary_note'])
+        self.assertEqual(anns['embot_hidden'], 2)
+
+        # The parts are annotateCOMPs but NOT utility-flagged (probed
+        # 2026-09-10), so they arrive in plain `.children` -- get_network_layout
+        # listed them as OPERATORS, sizes and all, and stretched the bounding
+        # box the layout rules are checked against. Both passes are filtered,
+        # and the count is of ops, not of mentions.
+        layout = read.get_network_layout(ext, host.path)
+        self.assertEqual([a['name'] for a in layout['annotations']],
+                         ['ordinary_note'])
+        lnames = [o['path'].rsplit('/', 1)[-1] for o in layout['operators']]
+        self.assertNotIn('envoy_bot_body', lnames)
+        self.assertIn('viz_read_keep', lnames)
+        self.assertEqual(layout['embot_hidden'], 2,
+                         'counted once, though both passes see the parts')
+
+        net = read.query_network(ext, host.path, include_utility=True)
+        names = [o['path'].rsplit('/', 1)[-1] for o in net['operators']]
+        self.assertNotIn('envoy_bot_body', names)
+        self.assertIn('ordinary_note', names, 'user annotations still list')
+        self.assertIn('viz_read_keep', names)
+        self.assertEqual(net['embot_hidden'], 2)
+
+        kids = read.find_children(ext, host.path, include_utility=True)
+        knames = [o['name'] for o in kids['operators']]
+        self.assertNotIn('envoy_bot_head', knames)
+        self.assertIn('ordinary_note', knames)
+        self.assertEqual(kids['embot_hidden'], 2)
+
+    def test_read_tools_keep_the_shipped_template_visible(self):
+        """Hiding the asset would leave an agent unable to see -- or repair --
+        the nine parts that actually belong in Embody.tdxn."""
+        read = self.embody.op('envoy_read').module
+        tmpl = self.sandbox.create(baseCOMP, viz._VIZ_TEMPLATE_COMP)
+        _annotate(tmpl, 'envoy_bot_body')
+        anns = read.get_annotations(self.embody.ext.Envoy, tmpl.path)
+        self.assertEqual([a['name'] for a in anns['annotations']],
+                         ['envoy_bot_body'])
+        self.assertNotIn('embot_hidden', anns)
+
+    def test_find_children_yields_to_an_explicit_bot_query(self):
+        """Asking for the parts BY NAME is the one case where hiding them is
+        the wrong answer -- that query is someone debugging a stuck bot or
+        auditing a cleanup."""
+        read = self.embody.op('envoy_read').module
+        host = self.sandbox.create(baseCOMP, 'viz_read_explicit')
+        _annotate(host, 'envoy_bot_body')
+        kids = read.find_children(self.embody.ext.Envoy, host.path,
+                                  name='envoy_bot_*', include_utility=True)
+        self.assertEqual([o['name'] for o in kids['operators']],
+                         ['envoy_bot_body'])
+        self.assertNotIn('embot_hidden', kids)

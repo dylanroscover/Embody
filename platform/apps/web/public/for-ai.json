@@ -12,7 +12,7 @@
   "repository": "https://github.com/dylanroscover/Embody",
   "download": "https://github.com/dylanroscover/Embody/releases/latest",
   "version": "6.0.234",
-  "requirements": "TouchDesigner 2025.33070 or later. Windows or macOS.",
+  "requirements": "TouchDesigner 2025.33230 or later. Windows or macOS.",
   "ai_clients": [
     "Claude Code (recommended; auto-configured)",
     "OpenCode (auto-configured; local models via LM Studio/Ollama/llama.cpp)",

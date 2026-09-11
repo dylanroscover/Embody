@@ -268,6 +268,14 @@ class TestCatalogScanResume(EmbodyTestCase):
 
 	def tearDown(self):
 		import os
+		saved = getattr(self, '_run_saved', None)
+		if saved is not None:
+			g = type(self.cat).EnsureCatalogs.__globals__
+			had, fn = saved
+			if had:
+				g['run'] = fn
+			else:
+				g.pop('run', None)
 		for name in ('_getCatalogPath', '_ensurePalette',
 					 '_patchCrossBuildDefaults', '_getPaletteDir',
 					 '_finalizePaletteScan', '_inflightSentinelPath'):
@@ -297,6 +305,15 @@ class TestCatalogScanResume(EmbodyTestCase):
 	def _armEnsureCatalogs(self):
 		"""Shadow the collaborators EnsureCatalogs reaches so the test
 		neither rescans nor patches live operators."""
+		# EnsureCatalogs schedules the resume with a REAL run(delayFrames=60)
+		# that outlives the test: in a full run it fired inside a later suite
+		# and drove a live palette scan, stranding Status at 'Scanning
+		# palette (34/249)' (2026-09-11). Record it instead -- C03 fires the
+		# hop synchronously.
+		g = type(self.cat).EnsureCatalogs.__globals__
+		self._run_saved = ('run' in g, g.get('run'))
+		self._scheduled = []
+		g['run'] = lambda *a, **k: self._scheduled.append((a, k))
 		self.cat._getCatalogPath = lambda build: self._catalog_path
 		self.cat._patchCrossBuildDefaults = lambda catalog: None
 		self.cat._ensurePalette = (
@@ -354,6 +371,10 @@ class TestCatalogScanResume(EmbodyTestCase):
 		self.assertEqual(resume, {'compA': {'type': 'x', 'min_children': 0}})
 		self.assertTrue(self.cat._scan_in_flight,
 			'resume must mark the scan in flight')
+		self.assertTrue(
+			any('_resumePaletteScan' in str(a[0]) for a, _k in self._scheduled),
+			'the deferred resume must be recorded, never scheduled for real '
+			'-- a real one outlives the test and scans the live palette')
 
 		# Fire the deferred hop synchronously: it must consume the staged
 		# state and route into _ensurePalette (shadowed here).

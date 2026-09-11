@@ -17,6 +17,11 @@ Configured via:
     .gitattributes:  *.tdxn diff=tdxn   (and legacy *.tdn)
     git config:      diff.tdxn.textconv = python3 <this script>
 
+Output is for READING only (git's rule: a textconv diff cannot be applied).
+A patch built from `git diff` / `git show` recreates every NEW .tdxn without
+its header -- network_path becomes the first key (issue #106). Build patches
+with `git diff --no-textconv`, or move commits with `git cherry-pick`.
+
 Git invokes it as `<textconv> <path-to-blob>` for each side of a diff and
 compares the stdout. It reads BOTH legacy JSON .tdn (history blobs) and
 v2.0 YAML .tdn (working tree), normalizes them identically, and re-emits
@@ -154,8 +159,11 @@ def main(argv):
     # Git runs this with stdout in the console codepage (cp1252 on Windows);
     # .tdn is UTF-8 and user networks legitimately contain non-ASCII (button
     # labels, annotations). Reconfigure so unicode never crashes the diff.
+    # newline='\n': text-mode stdout on Windows wrote CRLF, a CR on every
+    # line -- git flagged each one as trailing whitespace (issue #106).
     if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace',
+                               newline='\n')
     try:
         with open(argv[1], 'r', encoding='utf-8') as f:
             raw = f.read()

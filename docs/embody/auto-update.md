@@ -174,8 +174,8 @@ writes `release/embody-release.json` beside it:
  "asset": "Embody-v6.0.143.tox",
  "size": 699178,
  "sha256": "…64 hex chars…",
- "td_build": "2025.33070",
- "min_td_build": "2025.33070",
+ "td_build": "2025.33230",
+ "min_td_build": "2025.33230",
  "build": 842,
  "date": "2026-07-21",
  "exported_at": "2026-07-21T12:00:00+00:00"

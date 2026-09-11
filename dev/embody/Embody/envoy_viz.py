@@ -428,6 +428,30 @@ def pathInsideSubtree(netpath, root_path) -> bool:
     return netpath.startswith(root_path + '/')
 
 
+def isLiveBotPart(target) -> bool:
+    """True if `target` is one of Embot's LIVE parts -- the nine ephemeral
+    annotateCOMPs he stands in a network, never the shipped template's.
+
+    The one definition of "bot furniture, not user content" for READERS:
+    envoy_read's MCP filters call this so agents never see the parts (issue
+    #94 -- agents asked where nine annotations came from, then tried to fix
+    the layout "violation" they looked like). TDXNExt's export filter mirrors
+    the two literals instead of calling this, because Envoy is optional.
+
+    Same carve-out as that exporter: a part parented to `embot_template` is
+    the shipped asset and stays visible. Type-checked like purgeVizArtifacts
+    so a user's TOP named envoy_bot_* is never mistaken for a part. Pure."""
+    try:
+        if getattr(target, 'type', None) != 'annotate':
+            return False
+        if not target.name.startswith(_VIZ_BOT_PREFIX):
+            return False
+        holder = target.parent()
+        return holder is None or holder.name != _VIZ_TEMPLATE_COMP
+    except Exception:
+        return False
+
+
 def noteWriteRetire(ext, path, now) -> None:
     """Remember that the COMP at `path` was just serialized with Embot retired
     out of it, so no spawn may re-enter that subtree for _VIZ_WRITE_SUPPRESS_S
