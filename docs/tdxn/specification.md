@@ -23,8 +23,6 @@ version: '2.1'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
-source_file: MyProject.toe
-exported_at: '2025-02-19T12:34:56Z'
 network_path: /
 type: containerCOMP
 options:
@@ -48,11 +46,11 @@ annotations: [ ... ]
 |-------|------|----------|-------------|
 | `format` | string | Yes | `"tdxn"` as of Embody 6.1; `"tdn"` in files written by 6.0 and earlier, and by any older Embody that re-exports one. Both are permanently valid on read. |
 | `version` | string | Yes | Format version. Currently `2.0`. See [Back-compatibility](#back-compatibility) for how older versions are read. |
-| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. |
+| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. Whether `build` is written also decides the provenance fields: a tracked file carries `build` and omits `source_file` / `exported_at`; an untracked one carries those two instead. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
-| `source_file` | string | No | Basename of the `.toe` project file the COMP was exported from (e.g., `"MyProject.toe"`). Informational provenance only; not used on import. |
-| `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
+| `source_file` | string | No | Basename of the `.toe` project file the COMP was exported from (e.g., `"MyProject.toe"`). Informational provenance only; not used on import. Written only when the export has no `build`; exports of tracked COMPs no longer record it. Older files may carry it either way. |
+| `exported_at` | string | No | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). Written only when the export has no `build`; for a tracked COMP the export time lives in the `externalizations.tsv` `timestamp` column and git history. Older files may carry it either way. |
 | `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). On paste/import as a *new* COMP, its basename names the new COMP (e.g., `"/specimen_lab/noise_terrain"` -> `noise_terrain`), sanitized via `tdu.validName`, collisions uniquified. |
 | `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
 | `options` | object | Yes | Export settings used when generating this file. |
@@ -147,6 +145,13 @@ This keeps the most common short vectors compact while longer arrays stay readab
 ---
 
 ## Back-compatibility
+
+### `exported_at` became optional (within 2.1)
+
+Exports of tracked COMPs stopped writing `exported_at` and `source_file`: both changed on every
+save and nothing read them. The schema therefore no longer requires `exported_at`; readers never
+required either field, so there is no format version bump. A vendored copy of
+`docs/tdxn.schema.yaml` from before this change rejects new tracked files -- refresh it.
 
 ### v2.1: widened definition fields
 
@@ -1461,8 +1466,6 @@ version: '2.1'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'
-source_file: MyProject.toe
-exported_at: '2026-02-19T14:30:00Z'
 network_path: /
 type: baseCOMP
 options:

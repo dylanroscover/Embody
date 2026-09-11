@@ -9448,12 +9448,12 @@ class EnvoyExt:
         return mod.envoy_setup.configure_gitignore(self, git_root)
 
     def _configureGitattributes(self, git_root):
-        """Ensure .gitattributes normalizes TD line endings + TDXN diffs -- see envoy_setup."""
+        """Ensure .gitattributes normalizes TD line endings -- see envoy_setup."""
         return mod.envoy_setup.configure_gitattributes(self, git_root)
 
-    def _configureTdxnDiffDriver(self, target_dir, python_cmd):
-        """Deploy the TDXN git textconv script and register the diff driver -- see envoy_setup."""
-        return mod.envoy_setup.configure_tdxn_diff_driver(self, target_dir, python_cmd)
+    def _retireTdxnDiffDriver(self, target_dir):
+        """Remove the git textconv diff driver older versions installed -- see envoy_setup."""
+        return mod.envoy_setup.retire_tdxn_diff_driver(self, target_dir)
 
     def _cleanupTempFiles(self):
         """Remove stale Envoy temp files from /tmp -- see envoy_setup."""

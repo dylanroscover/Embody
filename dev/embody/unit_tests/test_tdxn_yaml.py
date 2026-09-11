@@ -4,8 +4,8 @@ Test suite: TDXN v2.0 (JSON -> YAML) serialization.
 Covers the tdxn_dump / tdxn_load helpers on the TDXN ext: lossless round-trip,
 block-scalar chomping, tab-shader fallback, YAML typing safety, JSON
 back-compat (legacy tab-indented and BOM-prefixed), determinism, trailing
-newline, no-anchors, dumper isolation, post-write validation, the textconv
-driver's both-sides normalization, the save-path serializer, and
+newline, no-anchors, dumper isolation, post-write validation, the save-path
+serializer, and
 boilerplate-omission of default docked compute DATs.
 
 These exercise the v2.0 format end-to-end. Most are headless (pure-Python
@@ -13,7 +13,6 @@ through the ext helpers); the boilerplate-omission test builds a live glslTOP
 and skips gracefully if glsl docking is unavailable.
 """
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -43,7 +42,7 @@ def _specimen_root():
 def _v15_lists_to_strings(node):
     """Convert v1.5 array-of-lines dat_content to a plain string in place.
 
-    Mirrors the textconv driver's _normalize_dat_content: a list joined with
+    Mirrors TDXNExt._normalize_dat_content: a list joined with
     '\\n' is exactly what v2.0 stores, so this makes a re-dump faithful v2.0.
     """
     if isinstance(node, dict):
@@ -345,142 +344,8 @@ class TestTDXNYaml(EmbodyTestCase):
             import shutil
             shutil.rmtree(d, ignore_errors=True)
 
-    # =================================================================
-    # textconv driver: both-sides normalization + degrade
-    # =================================================================
-
-    def _load_textconv(self):
-        """Import the textconv driver template module from disk."""
-        fp = os.path.join(
-            project.folder, 'embody', 'Embody', 'templates',
-            'text_tdxn_textconv.py')
-        if not os.path.isfile(fp):
-            return None
-        spec = importlib.util.spec_from_file_location(
-            'tdxn_textconv_under_test', fp)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
-    def test_textconv_normalizes_both_sides(self):
-        """The textconv driver normalizes a v1.5 JSON history blob and a v2.0
-        YAML working-tree blob of the SAME network to IDENTICAL output
-        (requires array->string normalization AND 'version' in VOLATILE_KEYS),
-        and degrades to raw passthrough when yaml is unavailable."""
-        mod = self._load_textconv()
-        if mod is None:
-            self.skipTest('textconv template not found')
-        if not getattr(mod, '_HAVE_YAML', False):
-            self.skipTest('PyYAML unavailable in textconv module')
-
-        # Same network, two on-disk forms.
-        v15 = {
-            'format': 'tdn', 'version': '1.5',
-            'build': 100, 'generator': 'Embody/5.0.1', 'td_build': '2025',
-            'exported_at': '2026-06-09', 'source_file': 'Old.toe',
-            'operators': [
-                {'name': 'script', 'type': 'textDAT',
-                 'dat_content': ['print(1)', 'print(2)'],
-                 'dat_content_format': 'text'},
-            ],
-        }
-        v20 = {
-            'format': 'tdn', 'version': '2.0',
-            'build': 200, 'generator': 'Embody/6.0.4', 'td_build': '2025',
-            'exported_at': '2026-06-10', 'source_file': 'New.toe',
-            'operators': [
-                {'name': 'script', 'type': 'textDAT',
-                 'dat_content': 'print(1)\nprint(2)',
-                 'dat_content_format': 'text'},
-            ],
-        }
-        json_blob = json.dumps(v15, indent='\t')
-        yaml_blob = self.tdn.tdxn_dump(v20)
-
-        norm_json = mod.normalize(json_blob)
-        norm_yaml = mod.normalize(yaml_blob)
-        self.assertEqual(norm_json, norm_yaml,
-            'textconv must normalize both format sides identically')
-
-        # Degrade to raw passthrough when yaml is unavailable.
-        orig = mod._HAVE_YAML
-        try:
-            mod._HAVE_YAML = False
-            self.assertEqual(mod.normalize(json_blob), json_blob,
-                'driver must return raw input when yaml is unavailable')
-        finally:
-            mod._HAVE_YAML = orig
-
-    def test_textconv_hides_the_format_bump(self):
-        """v6.1 stamps `format: tdxn` where 6.0 stamped `format: tdn`.
-
-        The driver must strip it, or the one-time identity bump shows as a
-        one-line diff in EVERY tracked file. The test above cannot prove this
-        -- both of its blobs carry `format: tdn`, so it passes with or without
-        the key in VOLATILE_KEYS.
-        """
-        mod = self._load_textconv()
-        if mod is None:
-            self.skipTest('textconv template not found')
-        if not getattr(mod, '_HAVE_YAML', False):
-            self.skipTest('PyYAML unavailable in textconv module')
-
-        self.assertIn('format', mod.VOLATILE_KEYS,
-                      "'format' must be stripped or the 6.1 bump diffs "
-                      'one line in every tracked file')
-
-        net = {'version': '2.0', 'build': 7, 'generator': 'Embody/6.1.0',
-               'td_build': '2025', 'exported_at': '2026-08-27',
-               'source_file': 'P.toe',
-               'operators': [{'name': 'a', 'type': 'textDAT'}]}
-        old = self.tdn.tdxn_dump(dict(net, format='tdn'))
-        new_ = self.tdn.tdxn_dump(dict(net, format='tdxn'))
-        self.assertNotEqual(old, new_, 'fixture: the blobs must differ on disk')
-        self.assertEqual(
-            mod.normalize(old), mod.normalize(new_),
-            'the format bump must be invisible to git diff')
-
-    def test_textconv_stdout_is_lf(self):
-        """The driver must write LF on every platform. Text-mode stdout on
-        Windows turns each '\\n' into CRLF, so every textconv'd line carried a
-        CR: a whitespace error in every diff, baked into anything rebuilt from
-        that output (issue #106)."""
-        mod = self._load_textconv()
-        if mod is None:
-            self.skipTest('textconv template not found')
-        if not getattr(mod, '_HAVE_YAML', False):
-            self.skipTest('PyYAML unavailable in textconv module')
-        import io
-        import shutil
-        import sys
-        import tempfile
-
-        d = tempfile.mkdtemp()
-        fp = os.path.join(d, 'net.tdxn')
-        Path(fp).write_text(self.tdn.tdxn_dump({
-            'format': 'tdxn', 'version': '2.1', 'network_path': '/p',
-            'operators': [{'name': 'a', 'type': 'textDAT'},
-                          {'name': 'b', 'type': 'textDAT'}],
-        }), encoding='utf-8', newline='\n')
-        # newline=None translates '\n' to os.linesep on write -- the same
-        # stream a Windows git hands the driver.
-        buf = io.BytesIO()
-        out = io.TextIOWrapper(buf, encoding='cp1252', newline=None)
-        orig = sys.stdout
-        try:
-            sys.stdout = out
-            mod.main(['tdxn_textconv', fp])
-            out.flush()
-            data = buf.getvalue()
-        finally:
-            sys.stdout = orig
-            shutil.rmtree(d, ignore_errors=True)
-        self.assertTrue(data.startswith(b'network_path: /p\n'),
-                        f'header stripped, LF-terminated: {data[:60]!r}')
-        self.assertNotIn(b'\r', data, 'textconv output must be LF-only')
-
     def test_content_equal_still_sees_the_format_bump(self):
-        """The paired inverse: 'format' is deliberately NOT in
+        """'format' is deliberately NOT in
         TDXNExt._TDXN_VOLATILE_KEYS, so the first save after upgrading rewrites
         each tracked file once and then never again. Putting it there would
         leave 6.0-stamped headers on disk forever.

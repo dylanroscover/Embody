@@ -10,7 +10,6 @@ version: '2.0'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'
-exported_at: '2026-02-19T14:30:00Z'
 network_path: /
 options:
   include_dat_content: true

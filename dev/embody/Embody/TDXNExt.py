@@ -117,12 +117,13 @@ TDXN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
 # BOTH format tokens, permanently.
 #
 # NOT derived from these -- frozen 'tdn' identity/wire values, forever:
-#   externalizations `strategy` token, par.Tdxntag default, the diff=tdxn git
-#   driver name, the `tdn_ref` key, the _embody_tdn envelope marker, the
-#   MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
+#   externalizations `strategy` token, par.Tdxntag default, the diff=tdxn
+#   .gitattributes value (inert since the driver was retired), the
+#   `tdn_ref` key, the _embody_tdn envelope marker, the MCP tool names,
+#   and all 25 Tdn*/*tdn* parameter NAMES.
 #   Every one is PERSISTED somewhere Embody does not own and cannot
 #   rewrite: rows in a committed .tsv, tags/pars baked into saved .toe
-#   files, a key in the user's .gitattributes + git config, a key INSIDE
+#   files, a value in the user's .gitattributes, a key INSIDE
 #   committed .tdxn files, a clipboard payload crossing machines and
 #   versions. Changing any of them orphans that data.
 #   NOT on this list (v6.1.6): the backup directory. It was frozen here by
@@ -876,13 +877,12 @@ class TDXNExt:
 		'skipped': True.
 		"""
 		# Step 0: no-op guard. EVERY .tdn write funnels through here, so one
-		# check covers every caller. Without it an explicit save rewrites the
-		# file with a fresh exported_at even when the network is identical --
-		# the file reads modified in `git status` while `git diff` renders
-		# EMPTY, because textconv strips exactly those header keys. Equality
-		# ignores the volatile header (_TDXN_VOLATILE_KEYS) but NOT format or
-		# version, so the one-time tdn->tdxn convergence still writes.
-		# onProjectPreSave has always done this; here it covers all paths.
+		# check covers every caller. Without it an explicit save rewrites an
+		# identical network with fresh header values, and the file reads
+		# modified in `git status` over nothing. Equality ignores the volatile
+		# header (_TDXN_VOLATILE_KEYS) but NOT format or version, so the
+		# one-time tdn->tdxn convergence still writes. onProjectPreSave has
+		# always done this; here it covers all paths.
 		try:
 			existing = TDXNExt._read_existing_tdxn(tdxn_path)
 			if existing is not None:
@@ -981,11 +981,32 @@ class TDXNExt:
 
 	_TDXN_VOLATILE_KEYS = frozenset({
 		'build', 'generator', 'td_build', 'exported_at',
-		# source_file is project.name, rewritten on every export but not
-		# content. Dropping it keeps pre-save equality and diff_tdn aligned
-		# (_normalize_tdxn_for_compare reuses this set for diffing).
+		# source_file / exported_at are written only by untracked exports now
+		# (_applyHeaderProvenance) and linger in older files; volatile so
+		# neither side's presence counts as content. diff_tdn reuses this set
+		# (_normalize_tdxn_for_compare).
 		'source_file',
 	})
+
+	@staticmethod
+	def _applyHeaderProvenance(tdn: dict) -> None:
+		"""Pick the provenance fields a header carries, in place.
+
+		Any export of a COMP with a build number keeps `build` and drops
+		`source_file` and `exported_at` -- they changed on every write and
+		were most of every .tdxn diff (issue #106). The export time still
+		lives in the tsv `timestamp` and git; the source .toe name is simply
+		no longer recorded. Exports of COMPs without a build (untracked or
+		portable networks) keep both and omit `build` (never a noisy
+		`build: null`). All three stay in _TDXN_VOLATILE_KEYS, so this never
+		forces a rewrite: a file sheds the dropped keys on its next real
+		change.
+		"""
+		if tdn.get('build') is None:
+			tdn.pop('build', None)
+		else:
+			tdn.pop('source_file', None)
+			tdn.pop('exported_at', None)
 
 	@staticmethod
 	def _tdxn_content_equal(new_tdxn: dict, existing_tdxn: dict) -> bool:
@@ -1062,7 +1083,7 @@ class TDXNExt:
 	def _normalize_dat_content(node):
 		"""Convert legacy v1.5 array-of-lines dat_content to the v2.0 joined
 		string in place, so an unchanged DAT does not diff across the v1.5->v2.0
-		format bump. Mirrors tdxn_textconv._normalize_dat_content."""
+		format bump."""
 		if isinstance(node, dict):
 			if (node.get('dat_content_format') == 'text'
 					and isinstance(node.get('dat_content'), list)):
@@ -1342,9 +1363,8 @@ class TDXNExt:
 
 		This is the view git cannot provide: git only sees files on disk, never
 		TouchDesigner's live in-memory network. A save rewrites the .tdn, so the
-		result is empty right after saving. For committed/history diffs use git
-		(the .tdn git diff driver keeps those clean); for every TDXN COMP at once,
-		use DiffAllLiveVsDisk.
+		result is empty right after saving. For committed/history diffs use git;
+		for every TDXN COMP at once, use DiffAllLiveVsDisk.
 
 		Read-only and non-interactive: the live export suppresses
 		palette-handling prompts and never mutates TD state. Returns the diff
@@ -1558,12 +1578,7 @@ class TDXNExt:
 					'include_storage': include_storage,
 				},
 			}
-			# Omit `build` when there is no build number (untracked /
-			# portable networks -- e.g. a specimen with no TSV row and no
-			# Build par). Matches the format's omit-when-absent philosophy
-			# rather than emitting a noisy `build: null`.
-			if tdn['build'] is None:
-				del tdn['build']
+			TDXNExt._applyHeaderProvenance(tdn)
 			if type_defaults:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
@@ -1918,10 +1933,7 @@ class TDXNExt:
 						state['options'].get('include_storage', True),
 				},
 			}
-			# Omit `build` when absent (see sync path above) -- no noisy
-			# `build: null` for untracked/portable networks.
-			if tdn['build'] is None:
-				del tdn['build']
+			TDXNExt._applyHeaderProvenance(tdn)
 			if type_defaults:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:

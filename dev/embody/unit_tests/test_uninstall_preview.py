@@ -106,9 +106,57 @@ class TestUninstallPreview(EmbodyTestCase):
     def test_manifest_git_config_is_unset(self):
         self._embody_json('manifest.json',
                           {'version': 1, 'files_created': [], 'files_appended': [],
-                           'git_config': ['diff.tdxn.textconv'], 'venv': None,
+                           'git_config': ['example.embodykey'], 'venv': None,
                            'network_ops': []})
-        self.assertIn('diff.tdxn.textconv', self._plan()['unset'])
+        self.assertIn('example.embodykey', self._plan()['unset'])
+
+    def _git(self, *args):
+        import subprocess
+        return subprocess.run(['git', *args], cwd=self.d, capture_output=True,
+                              text=True, timeout=10, stdin=subprocess.DEVNULL,
+                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    def _our_driver_value(self, script='tdxn_textconv.py'):
+        return '"python" "' + self.d.replace('\\', '/') + '/.embody/' + script + '"'
+
+    def test_stale_driver_key_is_not_planned(self):
+        """A manifest still listing the retired .tdxn driver's keys plans no
+        unset once the repo no longer has them (issue #106)."""
+        self._git('init', '-q')
+        self._embody_json('manifest.json',
+                          {'version': 1, 'files_created': [], 'files_appended': [],
+                           'git_config': ['diff.tdxn.textconv',
+                                          'diff.tdxn.cachetextconv'],
+                           'venv': None, 'network_ops': []})
+        unset = self._plan()['unset']
+        self.assertNotIn('diff.tdxn.textconv', unset)
+        self.assertNotIn('diff.tdxn.cachetextconv', unset)
+
+    def test_live_driver_key_is_planned_even_if_manifest_omits_it(self):
+        """A key that still names our script is planned from the live repo --
+        here a legacy diff.tdn key the manifest never listed."""
+        self._git('init', '-q')
+        self._git('config', 'diff.tdn.textconv',
+                  self._our_driver_value('tdn_textconv.py'))
+        self._embody_json('manifest.json',
+                          {'version': 1, 'files_created': [], 'files_appended': [],
+                           'git_config': ['diff.tdxn.textconv',
+                                          'diff.tdxn.cachetextconv'],
+                           'venv': None, 'network_ops': []})
+        unset = self._plan()['unset']
+        self.assertIn('diff.tdn.textconv', unset)
+        self.assertNotIn('diff.tdxn.textconv', unset)
+
+    def test_driver_key_planned_only_while_it_is_ours(self):
+        """Pre-manifest probe: our retired driver's key is planned; a user's
+        own tool, even one named like ours, never is."""
+        self._git('init', '-q')
+        self._git('config', 'diff.tdxn.textconv', self._our_driver_value())
+        self._git('config', 'diff.tdn.textconv',
+                  '"python" "C:/tools/tdn_textconv.py"')
+        unset = self._plan()['unset']
+        self.assertIn('diff.tdxn.textconv', unset)
+        self.assertNotIn('diff.tdn.textconv', unset)
 
     def test_embody_dir_is_delete(self):
         os.makedirs(os.path.join(self.d, '.embody'), exist_ok=True)

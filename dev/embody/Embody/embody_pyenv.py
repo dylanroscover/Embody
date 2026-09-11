@@ -90,10 +90,10 @@ def venv_paths(project_dir, mcp_min_version, declared_extras=None,
     """
     venv_dir = os.path.join(project_dir, '.venv')
     python_exe = sys.executable  # current interpreter (cross-platform)
-    # pyyaml: powers the .tdn git textconv driver (the committed-diff
-    # counterpart to diff_tdn). git invokes that driver via THIS venv
-    # python, and v6 .tdn files are YAML, so the venv must carry yaml even
-    # though the Envoy bridge itself never imports it.
+    # pyyaml: installed for the .tdxn git diff driver, retired in issue
+    # #106; nothing in this venv imports it any more. Dropping it is its own
+    # change: remove it together with the yaml check in the needs-install
+    # probe below, or a yaml-less venv reinstalls on every start.
     ceiling_major = int(mcp_min_version.split('.')[0]) + 1
     # cryptography: the Convoy host app runs under THIS venv python and
     # needs Ed25519 + X.509 + TLS 1.3 for LAN peer identity/mutual-TLS.
@@ -238,9 +238,9 @@ def environment_needs_install(spec: dict) -> bool:
     site_packages = spec['site_packages']
     if not os.path.isdir(os.path.join(site_packages, 'mcp')):
         return True
-    # PyYAML powers the .tdn git textconv driver, which git runs via this
-    # venv python. An older venv built before that dependency lacks it, so
-    # treat its absence as "needs install" to upgrade existing venvs.
+    # PyYAML is still a required package (see the deps note above): a venv
+    # built before it was added lacks it, so its absence means "needs
+    # install". Remove this check only together with the dep.
     if not os.path.isdir(os.path.join(site_packages, 'yaml')):
         return True
     # The venv's OWN record of the interpreter that built it, checked

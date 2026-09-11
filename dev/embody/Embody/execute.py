@@ -310,7 +310,7 @@ def _runPreSaveExternalization():
 	# Phase 1: Export current in-memory state to .tdn files, but only
 	# if the content actually changed. Skipping unchanged COMPs avoids
 	# noisy git diffs from volatile header fields (build, generator,
-	# exported_at, td_build).
+	# td_build).
 	exported = []
 	for comp_path, rel_tdxn_path in tdxn_comps:
 		comp = op(comp_path)

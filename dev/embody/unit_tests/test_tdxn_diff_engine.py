@@ -209,7 +209,7 @@ class TestTDXNDiffEngine(EmbodyTestCase):
 class TestTDXNDiffDatContent(EmbodyTestCase):
     """v6-specific: the diff engine reconciles legacy v1.5 array-of-lines
     dat_content with the v2.0 joined-string form, so an unchanged DAT does not
-    show as modified across the format bump (mirrors tdxn_textconv)."""
+    show as modified across the format bump."""
 
     def test_v15_array_vs_v2_string_normalizes_equal(self):
         disk = {'operators': [{'name': 'd', 'type': 'textDAT',

@@ -1747,7 +1747,7 @@ class EmbodyExt:
             f'{self.my.par.Envoyport.eval()}\n'
             '  - AI config files: CLAUDE.md, AGENTS.md, .claude/ rules + skills\n'
             '  - .mcp.json + .embody/ (bridge, config, runtime state)\n'
-            '  - .gitignore / .gitattributes entries + a .tdn git diff driver\n\n'
+            '  - .gitignore / .gitattributes entries\n\n'
             'All Envoy MCP tools are auto-authorized for convenience\n'
             '(edit .claude/settings.local.json to tighten this).\n\n'
             'Fully reversible: run PreviewUninstall to see exactly what would\n'

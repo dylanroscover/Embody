@@ -17,7 +17,6 @@ required:
 - version
 - generator
 - td_build
-- exported_at
 - network_path
 - options
 - operators
@@ -47,11 +46,14 @@ properties:
   source_file:
     type: string
     description: Basename of the .toe project file the COMP was exported from (e.g., "MyProject.toe").
-      Informational provenance only; not used on import.
+      Informational provenance only; not used on import. Written only when the export has no build
+      number; exports of tracked COMPs no longer record it. Older files may carry it either way.
   exported_at:
     type: string
     format: date-time
-    description: ISO 8601 UTC timestamp of export.
+    description: ISO 8601 UTC timestamp of export. Written only when the export has no build number; for a
+      tracked COMP the export time lives in the externalizations.tsv timestamp column and git history.
+      Older files may carry it either way.
   network_path:
     type: string
     description: The COMP path represented by this file (e.g., "/" for the entire project). On paste/import

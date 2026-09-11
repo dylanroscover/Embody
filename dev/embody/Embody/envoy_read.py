@@ -2344,8 +2344,8 @@ def diff_tdxn(ext, target='', max_changed_ops=200, max_bytes=60000):
     COMP path OR a .tdn file path/bare filename (resolved via the
     externalizations table) -> that one COMP in full detail.
 
-    For committed/history diffs use git (the .tdn git diff driver keeps
-    those clean). Thin delegate to TDXN.DiffLiveVsDisk / DiffAllLiveVsDisk.
+    For committed/history diffs use git. Thin delegate to
+    TDXN.DiffLiveVsDisk / DiffAllLiveVsDisk.
     Read-only, non-interactive, pull-only.
     """
     if not getattr(ext.ownerComp.ext, 'TDXN', None):

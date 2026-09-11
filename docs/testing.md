@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **126 test suites** and **4,001 test methods** in the standard tiers (the three agent-tier suites are excluded from normal runs) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **126 test suites** and **4,022 test methods** in the standard tiers (the three agent-tier suites are excluded from normal runs) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -66,7 +66,7 @@ The tables below cover 123 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
-### Core Embody (36 suites, 697 tests)
+### Core Embody (36 suites, 695 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -78,7 +78,7 @@ AI-client connectivity tier, listed separately under
 | `test_crud_operators` | 21 | Create, read, update, delete operations |
 | `test_git_status` | 23 | Git status / uncommitted-file detection |
 | `test_param_tracker` | 20 | Parameter change tracking |
-| `test_v6_hardening` | 22 | v6 community-paste + strip/restore hardening |
+| `test_v6_hardening` | 20 | v6 community-paste + strip/restore hardening |
 | `test_ancestor_rename` | 19 | Ancestor-rename detection and folder migration |
 | `test_path_utils` | 20 | Path normalization and utilities |
 | `test_autosave` | 27 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
@@ -132,12 +132,12 @@ AI-client connectivity tier, listed separately under
 | `test_envoy_viz_gates` | 43 | Issue-57 viz activation gates in `envoy_viz` |
 | `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 
-### TDXN Format (20 suites, 696 tests)
+### TDXN Format (20 suites, 704 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdxn_reconstruction` | 209 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdxn_file_io` | 92 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdxn_file_io` | 100 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
 | `test_tdxn_helpers` | 67 | TDXN serialization utility functions |
 | `test_tdxn_export_import` | 48 | Network export/import + storage round-trip |
 | `test_tdxn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
@@ -206,21 +206,21 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
 
-### Install, Uninstall & Release (15 suites, 352 tests)
+### Install, Uninstall & Release (15 suites, 367 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_smoke_release` | 34 | Release smoke checks (extensions loaded, Envoy state, Uninstall pulse/handler shipped) |
 | `test_install_manifest` | 12 | Generated install manifest and packaged config coverage |
 | `test_uninstall_execute` | 11 | Uninstall execution path and cleanup safety |
-| `test_uninstall_preview` | 10 | Uninstall preview plan and protected-file handling |
+| `test_uninstall_preview` | 13 | Uninstall preview plan and protected-file handling |
 | `test_uninstall_handler` | 5 | Uninstall pulse confirm gate (cancel/suppress/confirm/review) |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
 | `test_catalog_palette_scan` | 39 | Palette scan time-state snapshot/restore |
 | `test_template_sync` | 6 | Template map, disk, release-table, and orphan allowlist sync |
 | `test_release_hooks` | 52 | `ExportPortableTox` release hooks (issue #74) |
 | `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
-| `test_config_migration` | 29 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`) |
+| `test_config_migration` | 41 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`), and retiring the old `.tdxn` git diff driver |
 | `test_embody_pyenv` | 63 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
