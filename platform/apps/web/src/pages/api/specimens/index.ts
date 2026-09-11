@@ -22,12 +22,12 @@ import { requireUser } from "../../../server/auth";
 import { notifyOwnerNewSpecimen } from "../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
 import { byteLength, putTdxn, putThumbnail } from "../../../server/r2";
-import { checkRateLimit } from "../../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled } from "../../../server/rateLimit";
 import { verifyTurnstile } from "../../../server/turnstile";
 import { MAX_TDXN_TEXT_CHARS } from "../../../server/tdxn";
 
 // Submit abuse cap: 10 submissions per 10 minutes per client IP. Enforced via
-// KV; with no KV (dev) the limiter allows everything (see rateLimit.ts).
+// KV in production; off in development (rateLimitDisabled, see rateLimit.ts).
 const SUBMIT_RATE_LIMIT = { limit: 10, windowSec: 600 } as const;
 
 export const prerender = false;
@@ -71,16 +71,19 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     // Per-IP fixed-window cap before any expensive work (parse/scan/R2/D1). The
     // CF-Connecting-IP header is set by Cloudflare's edge; "unknown" buckets
-    // callers we can't identify together. No KV (dev) -> always allowed.
-    const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    const rate = await checkRateLimit(env.KV, `submit:${clientIp}`, SUBMIT_RATE_LIMIT);
-    if (!rate.ok) {
-      return errorResponse(
-        429,
-        "rate_limited",
-        "Too many submissions. Please slow down and try again shortly.",
-        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
-      );
+    // callers we can't identify together. Skipped in development like every
+    // sibling limiter: miniflare has a KV, so e2e hit 429 at submit 11 (field 2026-09-11).
+    if (!rateLimitDisabled(env)) {
+      const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const rate = await checkRateLimit(env.KV, `submit:${clientIp}`, SUBMIT_RATE_LIMIT);
+      if (!rate.ok) {
+        return errorResponse(
+          429,
+          "rate_limited",
+          "Too many submissions. Please slow down and try again shortly.",
+          rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+        );
+      }
     }
 
     const body = await readSubmitRequest(request);

@@ -48,10 +48,60 @@ bash scripts/upload-seed-blobs.sh --remote
 wrangler d1 execute embody --remote --file ./src/server/seed.sql
 ```
 
+**Caution (2026-09-11):** `seed.sql` is written for a dev database. On a live D1 it
+drops and rebuilds `specimens_fts` with only the six first-party rows, so every
+community specimen drops out of search, and it deletes the `STALE_SLUGS` rows
+(`ev`, `clean2`, `ff`, `clean-net`, `evil`). Until a targeted re-seed exists,
+review it against production data before running the last command.
+
 In non-production environments, the submit endpoint accepts `turnstileToken: "dev-bypass"`. In
 production the Turnstile gate fails closed: the `dev-bypass` token is never honored, an unknown
 `ENVIRONMENT` is treated as production, and submissions are rejected unless a real Turnstile token
 verifies. See `src/server/turnstile.ts`.
+
+## E2E tests
+
+Playwright specs in `e2e/` run against `astro dev` on local miniflare D1/R2. Each
+run's `e2e/global.setup.ts` resets and reseeds local D1 and registers the e2e
+admin; the specimen blobs must already be in local R2 (see "Local API data").
+From `platform/apps/web/`, with a `.dev.vars` holding `ENVIRONMENT=development`
+and any `BETTER_AUTH_SECRET`:
+
+```sh
+npx playwright install chromium                     # once per Playwright version
+npx wrangler d1 migrations apply embody --local
+npx playwright test                                 # starts astro dev on 127.0.0.1:4321
+E2E_PORT=4461 npx playwright test e2e/auth.spec.ts  # another port, one spec
+```
+
+- `E2E_PORT` picks the port (default 4321); the server binds `127.0.0.1`. Outside
+  CI, a server already listening on that port is reused.
+- AI agents: Astro 7.3 backgrounds `astro dev` when it detects one, so the config
+  sets `ASTRO_DEV_BACKGROUND=1` on the server Playwright starts. An agent can
+  also start its own (`../../node_modules/.bin/astro dev --port P --host 127.0.0.1`
+  daemonizes), run with `E2E_PORT=P`, and stop it with `astro dev stop`.
+- A boot on a cold `node_modules/.vite` can die in Vite's dep optimizer ("The
+  file does not exist at .../deps_ssr/..."); so can the first boot after
+  switching between an agent-started and a Playwright-started server, since
+  their Vite config hashes differ. Start it again.
+
+**CI.** The `e2e` job in `.github/workflows/platform-ci.yml` runs the whole suite
+on every push and PR that touches `platform/**` or `specimens/**`, and `deploy`
+needs it, so a red e2e run never ships. Failures upload the HTML report and
+traces as the `playwright-results` artifact.
+
+**Specimen re-exports.** Every Embody re-export changes a specimen's bytes (the
+header carries `exported_at`), so its sha256 no longer matches `seed.sql` and
+the `Seed local R2` step fails. Regenerate and commit the seed data in the same
+commit: `python3 scripts/build-specimen-data.py`.
+
+**Production smoke.** Right after `wrangler deploy`, the deploy job checks
+`https://embody.tools`: `GET /api/auth/get-session` must return 200 with `null`,
+and a sign-in for an unknown address must return 401 `INVALID_EMAIL_OR_PASSWORD`.
+It waits for the new version to reach the edge, must pass twice 30 s apart, and
+never signs up or sends mail. If it fails, roll back
+with `npx wrangler rollback` (deploy token) or Cloudflare dashboard > Workers >
+embody-web > Deployments.
 
 ## Production environment / secrets
 
