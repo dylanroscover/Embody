@@ -1,11 +1,26 @@
 ---
 name: release
-description: MUST READ before preparing a release commit or GitHub release -- project.save() versioning, changelog, README, template sync verification, fresh-install smoke, and the post-push GitHub release procedure (references/github-release.md).
+description: MUST READ before preparing a release commit or GitHub release -- the blocking GitHub preflight (dev/release_preflight.py), project.save() versioning, changelog, README, template sync verification, fresh-install smoke, and the post-push GitHub release procedure (references/github-release.md).
 ---
 
 # Release Commit Procedure
 
 When the user asks to prepare a release commit (e.g., "prep a commit for v217"), follow these steps in order. After a successful push, follow `references/github-release.md` for the GitHub release.
+
+## Preflight: nothing outstanding on GitHub (blocking, before step 0)
+
+Run this from the release checkout (the repo root, on `dev`) before anything else, and again right before the push (`python3` on macOS):
+
+```
+python dev/release_preflight.py
+```
+
+- **BLOCKING:** open Dependabot, code-scanning or secret-scanning alerts; draft or triage security advisories (private vulnerability reports); open Dependabot PRs; a red latest push-CI run of any workflow on `main` or `dev`; a failed third-party check on either tip; real commits on `main` that the release checkout lacks (a hotfix never merged back: merge `origin/main` in and push). A check it cannot run also blocks, so a failed API call never reads as "nothing open".
+- **WARNING:** other open PRs, every open issue (tagged NEW since the last release), merged branches left on the remote.
+- **Exit 1 = STOP.** Show the user every item. Each blocker gets resolved (a Dependabot PR merged only after its platform e2e run is green, or closed; alerts fixed or dismissed with a reason; hotfixes back-merged) or the user explicitly accepts it. Only then re-run with `--ack "<key>"`, and only for keys the user named. Never ack on your own judgment.
+- **Report the warnings in the same message.** List any acked items in the release commit body so the decision is on record.
+
+Why: on 2026-09-11 embody.tools sign-in was down ~23h after a dependency bump (PR #105) and specimen submit had been broken 4 days by a rename; two hotfixes then sat on `main` without `dev`. The preflight keeps outstanding GitHub state from being skipped; the platform e2e gate is what catches a breaking bump.
 
 ## 0. Save the Project
 
@@ -238,7 +253,8 @@ with a red row is the failure mode this step exists to end.
   ```
   Embody vX.Y.Z: <comma-separated themes>
   ```
-- Do NOT push unless the user asks.
+- Add any preflight items the user accepted (`--ack`) to the commit body.
+- Do NOT push unless the user asks. Re-run the preflight immediately before the push; it must exit 0.
 
 ## 7. Publish the Docs (`main` only)
 
