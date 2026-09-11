@@ -97,7 +97,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
 </Base>
 
 <script>
-  import { authClient } from "../lib/authClient";
+  import { authClient, authErrorMessage, authUnavailable } from "../lib/authClient";
 
   const card = document.querySelector<HTMLDivElement>(".auth-card");
   const form = document.querySelector<HTMLFormElement>("[data-auth-form]");
@@ -226,7 +226,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
           callbackURL: "/signin?verified=1"
         });
         if (res.error) {
-          showError(res.error.message || "could not create the account.");
+          showError(authErrorMessage(res.error, "registration", "could not create the account."));
           return;
         }
         // When email verification is required, sign-up creates the account but
@@ -242,14 +242,15 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
         const res = await authClient.signIn.email({ email, password });
         if (res.error) {
           // An unverified account is hard-blocked by Better Auth with
-          // EMAIL_NOT_VERIFIED (403). Surface a helpful message + a resend, not
-          // the generic "invalid password".
-          if (res.error.code === "EMAIL_NOT_VERIFIED" || res.error.status === 403) {
+          // EMAIL_NOT_VERIFIED (403). Match the code only: any other 403 (a bad
+          // Origin, an edge block) is a server fault, not "verify your email"
+          // (field 2026-09-11).
+          if (res.error.code === "EMAIL_NOT_VERIFIED") {
             pendingEmail = email;
             showError("your email isn't verified yet -- check your inbox for the link.");
             showResend();
           } else {
-            showError(res.error.message || "invalid email or password.");
+            showError(authErrorMessage(res.error, "sign-in", "invalid email or password."));
           }
           return;
         }
@@ -258,7 +259,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       window.location.assign(destination());
     } catch (err) {
       console.error("auth submit failed", err);
-      showError("something went wrong. please try again.");
+      showError(authUnavailable(mode === "register" ? "registration" : "sign-in"));
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = original;
@@ -268,10 +269,13 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
   githubBtn?.addEventListener("click", async () => {
     clearError();
     try {
-      await authClient.signIn.social({
+      const res = await authClient.signIn.social({
         provider: "github",
         callbackURL: destination()
       });
+      if (res.error) {
+        showError(authErrorMessage(res.error, "GitHub sign-in", "GitHub sign-in failed. please try again."));
+      }
     } catch (err) {
       console.error("github sign-in failed", err);
       showError("GitHub sign-in failed. please try again.");
@@ -284,14 +288,20 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
     const original = resendBtn.textContent;
     resendBtn.textContent = "sending...";
     try {
-      await authClient.sendVerificationEmail({
+      const res = await authClient.sendVerificationEmail({
         email: pendingEmail,
         callbackURL: `${window.location.origin}/signin?verified=1`
       });
+      if (res.error) {
+        clearNotice(); // a stale "re-sent" notice must not sit beside the error
+        showError(authErrorMessage(res.error, "email verification", "could not resend right now. please try again."));
+        return;
+      }
       showNotice(`Verification link re-sent to ${pendingEmail}. Check your inbox.`);
       showResend();
     } catch (err) {
       console.error("resend verification failed", err);
+      clearNotice();
       showError("could not resend right now. please try again.");
     } finally {
       resendBtn.disabled = false;

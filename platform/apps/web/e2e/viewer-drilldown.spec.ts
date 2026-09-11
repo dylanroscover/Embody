@@ -30,7 +30,10 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   expect(compName, "an enterable COMP must have a name").toBeTruthy();
   const rootOps = await opNames();
 
-  // Double-click the COMP -> descend into its sub-network.
+  // Double-click the UNSELECTED COMP -> descend into its sub-network. Never
+  // select it first: the dblclick's 1st click must change the selection, which
+  // once rebuilt every node and hid the tiles for a frame, so the 2nd click
+  // missed the COMP (field 2026-09-11). A pre-click masks that regression.
   await enterable.dblclick();
 
   // Breadcrumb gains a second crumb naming the COMP we entered, and the visible
@@ -45,4 +48,9 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   await crumbs.first().click();
   await expect(crumbs).toHaveCount(1);
   await expect.poll(opNames).toEqual(rootOps);
+
+  // One click selects the COMP: the ring reads SelectedOpContext, not node data.
+  await expect(enterable).not.toHaveClass(/tdxn-operator--selected/);
+  await enterable.click();
+  await expect(enterable).toHaveClass(/tdxn-operator--selected/);
 });

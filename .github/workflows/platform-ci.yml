@@ -1,13 +1,18 @@
 name: Platform CI
 
+# specimens/** too: e2e seeds R2 from it and checks it against seed.sql, and an
+# Embody save re-exports it in commits that touch no platform/ file (field
+# 2026-09-11). Drift must fail on the commit that makes it, not a later PR.
 on:
   push:
     paths:
       - 'platform/**'
+      - 'specimens/**'
       - '.github/workflows/platform-ci.yml'
   pull_request:
     paths:
       - 'platform/**'
+      - 'specimens/**'
       - '.github/workflows/platform-ci.yml'
 
 permissions:
@@ -54,6 +59,165 @@ jobs:
         run: npm run test --workspace=@embody/scanner-ts
 
   # ---------------------------------------------------------------------------
+  # Playwright e2e against `astro dev` on local miniflare D1/R2 -- the only job
+  # that runs Better Auth against a real D1. A green typecheck + build shipped a
+  # 500 on every /api/auth/* for ~23h (field 2026-09-11); deploy now needs this
+  # job, so a dependency bump that breaks auth (or any e2e flow) never ships.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: platform/apps/web
+    env:
+      E2E_PORT: '4321'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      - name: Install dependencies
+        working-directory: platform
+        run: npm ci
+
+      # Browsers are cached per Playwright version. The apt packages are not,
+      # so a cache hit still installs the system deps.
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # .dev.vars is gitignored. ENVIRONMENT=development turns off Turnstile,
+      # both rate limiters and Secure-only cookies (plain http here). The auth
+      # secret is random per run and never printed.
+      - name: Write .dev.vars
+        run: |
+          umask 077
+          printf 'ENVIRONMENT=development\nBETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" > .dev.vars
+
+      # --local needs no Cloudflare login; under CI wrangler auto-confirms.
+      - name: Apply D1 migrations (local)
+        run: npx wrangler d1 migrations apply embody --local
+
+      # global.setup.ts reseeds D1 only. The collection and viewer specs also
+      # need the specimen .tdxn blobs in local R2, keyed by sha256 (= tdn_r2_key
+      # in seed.sql). Reads specimens/manifest.json: the committed
+      # scripts/.seed-blobs.manifest.json holds absolute Windows paths.
+      - name: Seed local R2 with specimen blobs
+        run: |
+          count=0
+          while read -r rel; do
+            f="../../../specimens/$rel"
+            sha="$(sha256sum "$f" | cut -d' ' -f1)"
+            if ! grep -q "'$sha'" src/server/seed.sql; then
+              echo "::error::specimens/$rel hashes to $sha, which seed.sql does not reference. Rerun scripts/build-specimen-data.py."
+              exit 1
+            fi
+            npx wrangler r2 object put "embody-blobs/$sha" --file="$f" --local < /dev/null
+            count=$((count + 1))
+          done < <(node -e 'for (const s of require("../../../specimens/manifest.json").specimens) console.log(s.tdxn_path)')
+          if [ "$count" -eq 0 ]; then
+            echo "::error::specimens/manifest.json listed no specimens"
+            exit 1
+          fi
+          echo "seeded $count specimen blobs"
+
+      # A cold node_modules/.vite can kill the first `astro dev` boot: the SSR
+      # optimizer finds a late dep, reloads, and workerd imports a chunk that was
+      # just replaced (field 2026-09-11). Boot until the auth + collection pages
+      # serve, retrying, so Playwright's own webServer starts on a warm cache.
+      - name: Warm the Vite dep cache
+        timeout-minutes: 12
+        env:
+          ASTRO_DEV_BACKGROUND: '1'
+        run: |
+          base="http://127.0.0.1:$E2E_PORT"
+          log="$RUNNER_TEMP/astro-warm.log"
+          serves() {
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$base$1" || true)"
+            [ "$code" -ge 200 ] && [ "$code" -lt 500 ]
+          }
+          for attempt in 1 2 3; do
+            ../../node_modules/.bin/astro dev --port "$E2E_PORT" --host 127.0.0.1 > "$log" 2>&1 &
+            pid=$!
+            ok=0
+            for _ in $(seq 1 60); do
+              kill -0 "$pid" 2>/dev/null || break
+              if serves /; then
+                ok=1
+                for path in /signin /forgot-password /collection /c/murmuration /contribute /api/auth/get-session; do
+                  serves "$path" || ok=0
+                done
+                break
+              fi
+              sleep 2
+            done
+            kill -0 "$pid" 2>/dev/null || ok=0
+            kill "$pid" 2>/dev/null || true
+            for _ in $(seq 1 15); do
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 1
+            done
+            kill -9 "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            for _ in $(seq 1 30); do
+              curl -s -o /dev/null --max-time 2 "$base/" || break
+              sleep 1
+            done
+            if [ "$ok" = 1 ]; then
+              echo "astro dev served every warm-up page on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::astro dev warm-up attempt $attempt failed; log tail follows"
+            tail -n 40 "$log"
+          done
+          echo "::error::astro dev never served the warm-up pages in 3 attempts"
+          exit 1
+
+      # Serial run (workers: 1, retries: 1 under CI) against a fresh astro dev
+      # started by playwright.config.ts's webServer; global.setup.ts resets D1.
+      - name: Run Playwright
+        env:
+          CI: 'true'
+        run: npx playwright test
+
+      # Report + traces for triage, failures only. .dev.vars never rides along:
+      # it is outside these paths, and hidden files are excluded by default.
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-results
+          path: |
+            platform/apps/web/playwright-report/
+            platform/apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Gate the Cloudflare deploy on its secret actually being configured, so a repo
   # that has NOT set CLOUDFLARE_API_TOKEN yet gets a GREEN run (deploy skipped +
   # a warning annotation) instead of a red one. Secrets cannot be read in a
@@ -77,17 +241,17 @@ jobs:
             echo "::warning title=Cloudflare deploy skipped::Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID repo secrets to enable auto-deploy of embody-web to embody.tools."
           fi
 
-  # Cloudflare deploy. Runs ONLY on push to main, after build-and-test passes
-  # (a red typecheck/build never ships) AND the deploy secret is set. wrangler
-  # deploy reads platform/apps/web/wrangler.jsonc (name: embody-web), so it always
-  # targets the correct Worker and its embody.tools custom domain.
+  # Cloudflare deploy. Runs ONLY on push to main, after build-and-test AND e2e
+  # pass (a red typecheck/build/e2e never ships) AND the deploy secret is set.
+  # wrangler deploy reads platform/apps/web/wrangler.jsonc (name: embody-web), so
+  # it always targets the correct Worker and its embody.tools custom domain.
   #
   # Requires two repo secrets (Settings -> Secrets and variables -> Actions):
   #   CLOUDFLARE_API_TOKEN   - token with the "Edit Cloudflare Workers" template
   #                            (Workers Scripts:Edit + the embody.tools zone).
   #   CLOUDFLARE_ACCOUNT_ID  - the account that owns the embody-web Worker.
   deploy:
-    needs: [build-and-test, check-deploy-secrets]
+    needs: [build-and-test, e2e, check-deploy-secrets]
     if: needs.check-deploy-secrets.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     defaults:
@@ -118,3 +282,80 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: platform/apps/web
+
+      # Post-deploy smoke: e2e runs on miniflare, prod runs on real D1 (field
+      # 2026-09-11). One read-only GET + one bogus sign-in: never a sign-up, never
+      # an email. Retries ride out edge propagation; the 15 s gap keeps our POSTs
+      # under Better Auth's /sign-in limit (3 per 10 s) and ours (10 per 300 s).
+      - name: Smoke-test production auth
+        timeout-minutes: 10
+        env:
+          SMOKE_BASE: https://embody.tools
+        run: |
+          attempts=6
+          gap=15
+          body="$RUNNER_TEMP/smoke-body"
+          hdrs="$RUNNER_TEMP/smoke-headers"
+          snippet() { head -c 300 "$body" 2>/dev/null | tr -d '\r\n'; }
+          fail() {
+            echo "::error title=Production auth smoke failed::$1"
+            echo "::error title=Roll back embody-web::Run 'npx wrangler rollback' from platform/apps/web, or Cloudflare dashboard > Workers > embody-web > Deployments."
+            exit 1
+          }
+
+          probe() {
+            # $1 expected status, $2 label, rest: curl args. Bounded retries.
+            want="$1"
+            label="$2"
+            shift 2
+            code=000
+            for i in $(seq 1 "$attempts"); do
+              code="$(curl -sS -o "$body" -D "$hdrs" -w '%{http_code}' --max-time 20 \
+                -A 'embody-ci-smoke (+github actions)' "$@" || true)"
+              if [ "$code" = "$want" ]; then
+                echo "ok: $label -> $code (attempt $i)"
+                return 0
+              fi
+              if grep -qi '^cf-mitigated:' "$hdrs" 2>/dev/null; then
+                # Not a deploy fault, so no rollback advice -- but still unverified.
+                echo "::error title=Production auth smoke blocked::$label was challenged by Cloudflare (cf-mitigated, HTTP $code), so auth is UNVERIFIED. Let the smoke through WAF / Bot Fight Mode, then check embody.tools by hand."
+                exit 1
+              fi
+              echo "attempt $i/$attempts: $label -> HTTP $code, want $want. Body: $(snippet)"
+              if [ "$i" -lt "$attempts" ]; then
+                sleep "$gap"
+              fi
+            done
+            fail "$label never returned HTTP $want (last: $code, body: $(snippet)). Auth is likely down on $SMOKE_BASE."
+          }
+
+          check_auth() {
+            # Anonymous get-session is 200 + JSON null. Every auth route runs the
+            # adapter first, so a D1 fault shows up here as a 500.
+            probe 200 "GET /api/auth/get-session" \
+              -H 'Accept: application/json' \
+              "$SMOKE_BASE/api/auth/get-session"
+            if [ "$(tr -d '[:space:]' < "$body")" != "null" ]; then
+              fail "get-session returned 200 but not the anonymous null body: $(snippet)"
+            fi
+            # Unknown address -> 401 INVALID_EMAIL_OR_PASSWORD. Nothing is created
+            # or emailed (Better Auth hashes a dummy password and answers 401).
+            probe 401 "POST /api/auth/sign-in/email (unknown user)" \
+              -X POST \
+              -H 'Content-Type: application/json' \
+              -H "Origin: $SMOKE_BASE" \
+              --data '{"email":"ci-smoke@example.invalid","password":"ci-smoke-not-a-real-password"}' \
+              "$SMOKE_BASE/api/auth/sign-in/email"
+            if ! grep -q 'INVALID_EMAIL_OR_PASSWORD' "$body"; then
+              fail "sign-in returned 401 without INVALID_EMAIL_OR_PASSWORD: $(snippet)"
+            fi
+          }
+
+          # Until the new version reaches every edge the OLD one answers, so a probe
+          # right after deploy can pass a broken release. Settle, then pass twice
+          # (field 2026-09-11).
+          sleep 45
+          check_auth
+          sleep 30
+          check_auth
+          echo "ok: production auth passed twice, 30 s apart"

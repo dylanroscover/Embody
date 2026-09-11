@@ -191,7 +191,8 @@ def main() -> int:
                 "name": spec["name"],
                 "description": spec["description"],
                 "category": spec["category"],
-                "difficulty": spec["difficulty"],
+                # manifest.json keeps `difficulty`; D1 + fixtures say `level` (0008).
+                "level": spec["difficulty"],
                 # requires is a JSON array in D1 (post-0009_requires_multi). Keep
                 # it a clean list here; the legacy scalar 'none'/'' -> []. The SQL
                 # emitter json.dumps it so json_each(requires) never sees invalid
@@ -274,6 +275,10 @@ def write_seed_sql(rows: list[dict]) -> None:
         "DELETE FROM specimen_versions WHERE specimen_id IN "
         f"(SELECT id FROM specimens WHERE slug IN ({slug_list}));"
     )
+    a(
+        "DELETE FROM specimen_categories WHERE specimen_id IN "
+        f"(SELECT id FROM specimens WHERE slug IN ({slug_list}));"
+    )
     a(f"DELETE FROM specimens WHERE slug IN ({slug_list});")
     a("")
     # Also purge any row whose deterministic id we are about to (re)insert, so a
@@ -286,6 +291,7 @@ def write_seed_sql(rows: list[dict]) -> None:
     )
     a(f"DELETE FROM specimen_tags WHERE specimen_id IN ({real_sp_ids});")
     a(f"DELETE FROM specimen_versions WHERE specimen_id IN ({real_sp_ids});")
+    a(f"DELETE FROM specimen_categories WHERE specimen_id IN ({real_sp_ids});")
     a(f"DELETE FROM specimens WHERE id IN ({real_sp_ids});")
     a("")
 
@@ -307,7 +313,7 @@ def write_seed_sql(rows: list[dict]) -> None:
     a("-- Specimens (real first-party metadata from specimens/manifest.json).")
     a(
         "INSERT OR REPLACE INTO specimens (\n"
-        "  id, slug, author_id, title, description, category, difficulty, requires, op_count,\n"
+        "  id, slug, author_id, title, description, category, level, requires, op_count,\n"
         "  family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,\n"
         "  capability_json, likes_count, views_count, copies_count\n"
         ") VALUES"
@@ -322,7 +328,7 @@ def write_seed_sql(rows: list[dict]) -> None:
             f"    {sql_str(r['name'])},\n"
             f"    {sql_str(r['description'])},\n"
             f"    {sql_str(r['category'])},\n"
-            f"    {sql_str(r['difficulty'])},\n"
+            f"    {sql_str(r['level'])},\n"
             f"    {sql_str(json.dumps(r['requires']))},\n"
             f"    {r['op_count']},\n"
             f"    {sql_str(r['family_summary'])},\n"
@@ -401,6 +407,15 @@ def write_seed_sql(rows: list[dict]) -> None:
         )
         a(f"FROM specimens WHERE id = {sql_str('sp-' + r['slug'])};")
         a("")
+
+    # The level rename (0008) and this join table (0010) were hand edits to
+    # seed.sql, lost when the 2026-08-30 regen rewrote it from this script;
+    # the setup then died on "no column named difficulty" (field 2026-09-11).
+    a("-- Category membership (multi). Seed the join table from each specimen's primary")
+    a("-- category so the collection facet filter (which reads specimen_categories) and")
+    a("-- the category facets list include the seeded rows. Mirrors migration 0010.")
+    a("INSERT OR IGNORE INTO specimen_categories (specimen_id, category)")
+    a("SELECT id, category FROM specimens WHERE category IS NOT NULL AND category <> '';")
 
     SEED_SQL_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
@@ -505,7 +520,7 @@ def write_fixtures(rows: list[dict]) -> None:
             "slug": r["slug"],
             "name": r["name"],
             "category": r["category"],
-            "difficulty": r["difficulty"],
+            "level": r["level"],
             "description": r["description"],
             "tags": r["tags"],
             "requires": r["requires"],

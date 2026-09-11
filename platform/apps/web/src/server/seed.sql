@@ -22,12 +22,14 @@ CREATE VIRTUAL TABLE specimens_fts USING fts5(
 DELETE FROM scans WHERE version_id IN (SELECT v.id FROM specimen_versions v JOIN specimens s ON s.id = v.specimen_id WHERE s.slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil'));
 DELETE FROM specimen_tags WHERE specimen_id IN (SELECT id FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil'));
 DELETE FROM specimen_versions WHERE specimen_id IN (SELECT id FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil'));
+DELETE FROM specimen_categories WHERE specimen_id IN (SELECT id FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil'));
 DELETE FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil');
 
 -- Purge any prior copy of these real specimens (clean re-run).
 DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march'));
 DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march');
 DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march');
+DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march');
 DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march');
 
 -- Tags (deduped across all specimens).
@@ -58,7 +60,7 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
-  id, slug, author_id, title, description, category, difficulty, requires, op_count,
+  id, slug, author_id, title, description, category, level, requires, op_count,
   family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,
   capability_json, likes_count, views_count, copies_count
 ) VALUES
@@ -278,3 +280,9 @@ FROM specimens WHERE id = 'sp-plasma-interference';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'mandelbulb-march', 'Mandelbulb March', 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.', 'raymarching sdf glsl fractal 3d mandelbulb', 'envoy', 'glslTOP'
 FROM specimens WHERE id = 'sp-mandelbulb-march';
+
+-- Category membership (multi). Seed the join table from each specimen's primary
+-- category so the collection facet filter (which reads specimen_categories) and
+-- the category facets list include the seeded rows. Mirrors migration 0010.
+INSERT OR IGNORE INTO specimen_categories (specimen_id, category)
+SELECT id, category FROM specimens WHERE category IS NOT NULL AND category <> '';
