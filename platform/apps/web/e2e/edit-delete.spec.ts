@@ -46,6 +46,22 @@ test("owner sees edit/delete controls and can edit metadata", async ({ page }) =
   ).toBeVisible();
 });
 
+test("owner can replace the network from the edit page", async ({ page }) => {
+  const { slug } = await registerAndSubmit(page);
+  await expect(page.locator("[data-owner-actions]")).toBeVisible();
+
+  await page.goto(`/c/${slug}/edit`);
+  await fillTdxn(page, "name: e2e_replaced\ntype: baseCOMP\noperators: []\n");
+  await page.locator("[data-edit-go]").click();
+  await expect(page).toHaveURL(new RegExp(`/c/${slug}$`), { timeout: 15_000 });
+  await expect(page.locator("[data-owner-actions]")).toBeVisible();
+
+  // Edit prefills the STORED network. A drifted payload key once saved the
+  // metadata and silently dropped the network (field 2026-09-11).
+  await page.goto(`/c/${slug}/edit`);
+  await expect(page.locator('textarea[name="tdn"]')).toHaveValue(/e2e_replaced/);
+});
+
 test("owner can delete a specimen", async ({ page, request }) => {
   const { slug } = await registerAndSubmit(page);
 

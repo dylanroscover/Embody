@@ -20,7 +20,7 @@ import {
   type NodeTypes,
   type ReactFlowInstance
 } from "@xyflow/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
 import { operatorsAtLevel, parseTDXN, parseTDXNLevel } from "./parseTDXN";
@@ -122,8 +122,6 @@ type OperatorNodeData = {
   /** True when this is a COMP with a sub-network to drill into (navigable view
       only). Drives the clickable cursor + hover state. */
   canEnter: boolean;
-  /** True when this op is the current selection (drives the highlight ring). */
-  selected: boolean;
 };
 
 // Fallback node footprint, used only when an operator (and its type default)
@@ -162,6 +160,12 @@ const FAMILY_COLORS: Record<string, string> = {
   COMP: "#9aa1a8", // TD #303030 -- neutral grey (lifted for legibility)
   OBJECT: "#b9b09d" // fallback for any unrecognized family
 };
+
+// Selected op id, read by OperatorTile for the highlight ring. Kept OUT of node
+// data: a new node object drops React Flow's measured size, hiding every tile
+// for a frame, so the 2nd click of a double-click fell through to the
+// annotation behind and never entered the COMP (field 2026-09-11).
+const SelectedOpContext = createContext<string | null>(null);
 
 const NODE_TYPES: NodeTypes = {
   annotation: memo(AnnotationBox),
@@ -343,17 +347,6 @@ export function TdxnViewer({
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
-
-  // Tag the selected operator so OperatorTile can draw the highlight ring.
-  const selectedNodes = useMemo(
-    () =>
-      nodes.map((node) =>
-        node.type === "operator"
-          ? { ...node, data: { ...node.data, selected: node.id === selectedId } }
-          : node
-      ),
-    [nodes, selectedId]
-  );
 
   const style = useMemo<CSSProperties>(
     () => ({
@@ -547,50 +540,52 @@ export function TdxnViewer({
           ))}
         </nav>
       )}
-      <ReactFlow
-        nodes={selectedNodes}
-        edges={edges}
-        nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
-        proOptions={{ hideAttribution: true }}
-        onInit={(instance) => {
-          rfRef.current = instance;
-        }}
-        onNodeClick={navigable ? handleNodeClick : undefined}
-        onNodeDoubleClick={navigable ? handleNodeDoubleClick : undefined}
-        onPaneClick={navigable ? handlePaneClick : undefined}
-        fitView
-        fitViewOptions={{ padding: fitPadding }}
-        minZoom={0.12}
-        maxZoom={1.8}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        selectNodesOnDrag={false}
-        panOnDrag
-        panOnScroll
-        zoomOnScroll
-        zoomOnPinch
-        zoomOnDoubleClick={false}
-        onlyRenderVisibleElements
-        preventScrolling
-      >
-        {/* A single, very faint line grid -- subtle/minimalist, and (being a
-            React Flow Background) it pans AND zooms with the network like TD. */}
-        <Background
-          variant={BackgroundVariant.Lines}
-          gap={32}
-          lineWidth={1}
-          color="rgba(200, 208, 201, 0.035)"
-        />
-        {!fullscreen && (
-          <Controls position="top-right" showZoom={false} showFitView={false} showInteractive={false}>
-            <ControlButton onClick={() => setFullscreen(true)} title="View fullscreen" aria-label="View fullscreen">
-              {expandIcon}
-            </ControlButton>
-          </Controls>
-        )}
-      </ReactFlow>
+      <SelectedOpContext.Provider value={selectedId}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
+          proOptions={{ hideAttribution: true }}
+          onInit={(instance) => {
+            rfRef.current = instance;
+          }}
+          onNodeClick={navigable ? handleNodeClick : undefined}
+          onNodeDoubleClick={navigable ? handleNodeDoubleClick : undefined}
+          onPaneClick={navigable ? handlePaneClick : undefined}
+          fitView
+          fitViewOptions={{ padding: fitPadding }}
+          minZoom={0.12}
+          maxZoom={1.8}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          selectNodesOnDrag={false}
+          panOnDrag
+          panOnScroll
+          zoomOnScroll
+          zoomOnPinch
+          zoomOnDoubleClick={false}
+          onlyRenderVisibleElements
+          preventScrolling
+        >
+          {/* A single, very faint line grid -- subtle/minimalist, and (being a
+              React Flow Background) it pans AND zooms with the network like TD. */}
+          <Background
+            variant={BackgroundVariant.Lines}
+            gap={32}
+            lineWidth={1}
+            color="rgba(200, 208, 201, 0.035)"
+          />
+          {!fullscreen && (
+            <Controls position="top-right" showZoom={false} showFitView={false} showInteractive={false}>
+              <ControlButton onClick={() => setFullscreen(true)} title="View fullscreen" aria-label="View fullscreen">
+                {expandIcon}
+              </ControlButton>
+            </Controls>
+          )}
+        </ReactFlow>
+      </SelectedOpContext.Provider>
       {fullscreen && (
         <button
           type="button"
@@ -605,14 +600,15 @@ export function TdxnViewer({
   );
 }
 
-function OperatorTile({ data }: NodeProps<OperatorNode>) {
+function OperatorTile({ id, data }: NodeProps<OperatorNode>) {
+  const selected = useContext(SelectedOpContext) === id;
   const inputHandles = Array.from({ length: Math.max(data.inputCount, 1) }, (_, index) => index);
   const compHandles = Array.from({ length: data.compInputCount }, (_, index) => index);
 
   const className = [
     "tdxn-operator",
     data.canEnter ? "tdxn-operator--enterable" : "",
-    data.selected ? "tdxn-operator--selected" : ""
+    selected ? "tdxn-operator--selected" : ""
   ]
     .filter(Boolean)
     .join(" ");
@@ -777,9 +773,7 @@ function toFlowElements(
         isRefTarget: refTargets.has(node.id),
         // childCount is only set by the single-level parse, so canEnter is
         // naturally false in the flattened (non-navigable) view.
-        canEnter: (node.childCount ?? 0) > 0,
-        // Set per-render by the selectedNodes memo in TdxnViewer.
-        selected: false
+        canEnter: (node.childCount ?? 0) > 0
       },
       draggable: false,
       selectable: false

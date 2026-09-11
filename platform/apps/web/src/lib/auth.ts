@@ -74,7 +74,14 @@ function buildAuth(env: AuthEnv, secret: string) {
     // the inference falls through to false -> a session cookie with NO Secure
     // flag in production. Pin it to our own ENVIRONMENT var instead (which is
     // "development" only via .dev.vars for local http dev).
-    advanced: { useSecureCookies: env.ENVIRONMENT === "production" },
+    advanced: {
+      useSecureCookies: env.ENVIRONMENT === "production",
+      // better-auth 1.7 introspects the schema on first use; D1 refuses
+      // pragma_table_info on its internal _cf_METADATA table (SQLITE_AUTH),
+      // so every auth request returned 500 (field 2026-09-11). Migrations
+      // and the e2e suite guard the schema instead.
+      database: { validateSchema: false }
+    },
     database: {
       dialect: new D1Dialect({ database: env.DB }),
       type: "sqlite"

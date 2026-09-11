@@ -558,7 +558,9 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       level: String(data.get("level") || "intermediate"),
       categories: categoriesSel,
       requires: data.getAll("requires").map(String),
-      tdxn: tdxnRaw,
+      // Wire key stays `tdn` (frozen C4, SubmitRequest.tdn); the TDXN rename
+      // sent `tdxn` and every submit 400'd "tdn is required." (field 2026-09-11).
+      tdn: tdxnRaw,
       thumbnail,
       visibility: data.get("visibility") === "public" ? "public" : "private",
       turnstileToken

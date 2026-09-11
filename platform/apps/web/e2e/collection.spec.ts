@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Read path: the Collection is the public core of the site. These assert the
 // seeded first-party specimens render and their TDXN blobs are served.
@@ -10,6 +14,25 @@ const SPECIMENS = [
   "plasma-interference",
   "mandelbulb-march",
 ];
+
+// First-party author handle: AUTHOR_HANDLE in scripts/build-specimen-data.py
+// ('envoy' since 9fb23435; the test still said embody.tools, field 2026-09-11).
+const FIRST_PARTY_HANDLE = "envoy";
+
+// Expected blob for a seeded slug, read from the generated seed.sql version row
+// (tdn_r2_key, tdn_sha256, size_bytes) so a specimen regen cannot strand a
+// hard-coded size here again (20494 went stale on 2026-08-30).
+function seededBlob(slug: string): { sha256: string; size: number } {
+  const seed = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../src/server/seed.sql"),
+    "utf8"
+  );
+  const row = new RegExp(
+    `[(]'ver-${slug}', 'sp-${slug}', [0-9]+, '([0-9a-f]{64})', '([0-9a-f]{64})', ([0-9]+),`
+  ).exec(seed);
+  if (!row) throw new Error(`seed.sql has no version row for ${slug}`);
+  return { sha256: row[2], size: Number(row[3]) };
+}
 
 test("homepage renders hero + real featured cards", async ({ page }) => {
   await page.goto("/");
@@ -33,17 +56,17 @@ test("collection lists the seeded specimens", async ({ page }) => {
 });
 
 test("collection ?author= filters the grid to one author (SSR)", async ({ page }) => {
-  // The first-party seed specimens are all authored by embody.tools. The SSR
-  // author facet (?author=<handle>) must apply on first paint -- the seeded
+  // The first-party seed specimens are all authored by FIRST_PARTY_HANDLE. The
+  // SSR author facet (?author=<handle>) must apply on first paint -- the seeded
   // specimens stay visible and every card on the page is by that author.
-  await page.goto("/collection?author=embody.tools");
+  await page.goto(`/collection?author=${FIRST_PARTY_HANDLE}`);
   for (const slug of SPECIMENS) {
     await expect(page.locator(`[data-specimen][data-slug="${slug}"]`)).toBeVisible();
   }
   const handles = await page
     .locator("[data-card-grid] a.specimen-card__author .specimen-card__author-handle")
     .evaluateAll((els) => [...new Set(els.map((e) => (e.textContent || "").trim()))]);
-  expect(handles).toEqual(["@embody.tools"]);
+  expect(handles).toEqual([`@${FIRST_PARTY_HANDLE}`]);
 });
 
 test("cover network graph fits the cover (no min-height clipping)", async ({ page }) => {
@@ -75,9 +98,12 @@ test("specimen page renders + TDXN blob downloads", async ({ page, request }) =>
   await expect(page.getByRole("heading", { level: 1, name: /murmuration/i })).toBeVisible();
 
   const res = await request.get("/api/specimens/murmuration/tdn");
-  expect(res.status()).toBe(200);
+  expect(res.status(), "local R2 needs the seed blobs (scripts/upload-seed-blobs.sh)").toBe(200);
   const body = await res.body();
-  expect(body.byteLength).toBe(20494); // content-addressed: matches seed.sql size
+  // Content-addressed: the bytes served are exactly the blob the version row names.
+  const expected = seededBlob("murmuration");
+  expect(body.byteLength).toBe(expected.size);
+  expect(createHash("sha256").update(body).digest("hex")).toBe(expected.sha256);
 });
 
 test("card copy puts the _embody_tdn envelope on the clipboard", async ({ page, context }) => {

@@ -88,4 +88,5 @@ gh release create TAG ASSET_FILES... \
   the PR ref, and main had all passed the same code, and it went unnoticed
   until the user asked. A red tag run needs the same immediate triage as a
   red branch run.
+- **Re-run `python dev/release_preflight.py` once the branch runs finish** (it reads `main`/`dev` push runs, not the tag runs watched above). It must exit 0, and its warnings go in the report too.
 - Report the release URL to the user.
