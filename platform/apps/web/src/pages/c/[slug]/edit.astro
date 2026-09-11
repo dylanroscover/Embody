@@ -615,7 +615,9 @@ const currentLicenseLabel =
       level: String(data.get("level") || "intermediate"),
       categories: categoriesSel,
       requires: data.getAll("requires").map(String),
-      tdxn: String(data.get("tdn") || ""),
+      // Wire key stays `tdn` (frozen C4); the server ignores any other key, so
+      // a renamed key saved metadata but silently dropped the network (field 2026-09-11).
+      tdn: String(data.get("tdn") || ""),
       ...(thumbnail ? { thumbnail } : {})
     };
 
