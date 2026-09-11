@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fillTdxn } from "./editor";
 
 // The core write path: a signed-in user submits a Specimen. In dev,
@@ -37,6 +40,26 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
   // On success the client redirects to /c/<new-slug>.
   await expect(page).toHaveURL(/\/c\/e2e-net-/, { timeout: 25_000 });
   await expect(page.getByRole("heading", { level: 1, name: new RegExp(`E2E Net ${stamp}`, "i") })).toBeVisible();
+});
+
+// A real Embody export (TDXN v2.1 YAML, GLSL DATs), not a toy fixture: guards
+// the YAML parse + capability scan a dependency bump could break (field 2026-09-11).
+const realTdxn = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../../../specimens/generative/plasma-interference.tdxn"),
+  "utf8"
+);
+
+test("signed-in user submits a real Embody-exported .tdxn", async ({ page }) => {
+  await register(page);
+
+  const stamp = Date.now();
+  await page.goto("/contribute");
+  await page.locator('input[name="title"]').fill(`E2E Real ${stamp}`);
+  await fillTdxn(page, realTdxn);
+  await page.locator("[data-submit-go]").click();
+
+  await expect(page).toHaveURL(/\/c\/e2e-real-/, { timeout: 25_000 });
+  await expect(page.getByRole("heading", { level: 1, name: new RegExp(`E2E Real ${stamp}`, "i") })).toBeVisible();
 });
 
 test("signed-in user submits with multiple categories", async ({ page }) => {
