@@ -32,14 +32,23 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
   ) : (
     <div class="admin-table-wrap" role="region" aria-label="Specimens table" tabindex="0">
     <table class="admin-table">
+      <colgroup>
+        <col style="width: 26%" />
+        <col style="width: 13%" />
+        <col style="width: 11%" />
+        <col style="width: 13%" />
+        <col style="width: 12%" />
+        <col style="width: 7%" />
+        <col style="width: 18%" />
+      </colgroup>
       <thead>
         <tr><th>title</th><th>by</th><th>scan</th><th>visibility</th><th>tier</th><th>likes</th><th>action</th></tr>
       </thead>
       <tbody>
         {specimens.map((s) => (
           <tr data-row data-id={s.id} data-slug={s.slug}>
-            <td><a href={`/c/${s.slug}`}>{s.title}</a></td>
-            <td>{s.author_handle ?? "-"}</td>
+            <td class="trunc" title={s.title}><a href={`/c/${s.slug}`}>{s.title}</a></td>
+            <td class="trunc" title={s.author_handle ?? "-"}>{s.author_handle ?? "-"}</td>
             <td><span class="admin-pill">{s.scan_status}</span></td>
             <td>
               <div class="dd" data-dd>
@@ -75,8 +84,10 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
             </td>
             <td>{s.likes_count}</td>
             <td>
-              <button type="button" class="admin-btn" data-save>save</button>
-              <button type="button" class="admin-btn admin-btn--danger" data-delete>delete</button>
+              <div class="admin-actions">
+                <button type="button" class="admin-btn" data-save>save</button>
+                <button type="button" class="admin-btn admin-btn--danger" data-delete>delete</button>
+              </div>
             </td>
           </tr>
         ))}

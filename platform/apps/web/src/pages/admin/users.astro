@@ -33,19 +33,27 @@ const meId = Astro.locals.user?.id ?? "";
   ) : (
     <div class="admin-table-wrap" role="region" aria-label="Users table" tabindex="0">
     <table class="admin-table">
+      <colgroup>
+        <col style="width: 17%" />
+        <col style="width: 22%" />
+        <col style="width: 8%" />
+        <col style="width: 17%" />
+        <col style="width: 14%" />
+        <col style="width: 22%" />
+      </colgroup>
       <thead>
         <tr><th>handle</th><th>email</th><th>verified</th><th>joined</th><th>trust</th><th>action</th></tr>
       </thead>
       <tbody>
         {users.map((u) => (
           <tr data-row data-id={u.id} data-self={u.id === meId ? "1" : undefined}>
-            <td>
+            <td class="trunc" title={u.handle}>
               <a href={`/u/${u.handle}`}>{u.handle}</a>
               {u.banned ? <span class="admin-pill admin-pill--banned" title={u.banned_reason ?? "banned"}>banned</span> : null}
             </td>
-            <td>{u.email ?? "-"}</td>
+            <td class="trunc" title={u.email ?? "-"}>{u.email ?? "-"}</td>
             <td>{u.email_verified ? "yes" : "no"}</td>
-            <td>{u.created_at}</td>
+            <td class="trunc" title={u.created_at}>{u.created_at}</td>
             <td>
               <div class="dd" data-dd>
                 <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Trust level">
@@ -221,11 +229,6 @@ const meId = Astro.locals.user?.id ?? "";
 </script>
 
 <style>
-  .admin-actions {
-    display: inline-flex;
-    gap: 0.4rem;
-    align-items: center;
-  }
   .admin-pill--banned {
     margin-left: 0.5rem;
     border-color: rgba(214, 90, 90, 0.5);

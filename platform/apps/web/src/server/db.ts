@@ -1943,7 +1943,10 @@ export async function listSpecimensForAdmin(
 ): Promise<AdminSpecimenRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const q = (opts.q ?? "").trim();
-  const where = q ? "WHERE s.title LIKE ? OR s.slug LIKE ?" : "";
+  // D1 caps a LIKE pattern at 50 chars ("LIKE or GLOB pattern too complex"),
+  // so a long query errored the whole page. instr has no cap, and treats % and
+  // _ as literal text rather than wildcards (field 2026-09-11).
+  const where = q ? "WHERE instr(lower(s.title), lower(?)) > 0 OR instr(lower(s.slug), lower(?)) > 0" : "";
   const stmt = db.prepare(
     `SELECT s.id, s.slug, s.title, u.handle AS author_handle,
             s.visibility, s.tier, s.scan_status, s.likes_count, s.views_count, s.created_at
@@ -1953,8 +1956,7 @@ export async function listSpecimensForAdmin(
       ORDER BY s.created_at DESC
       LIMIT ?`
   );
-  const like = `%${q}%`;
-  const bound = q ? stmt.bind(like, like, limit) : stmt.bind(limit);
+  const bound = q ? stmt.bind(q, q, limit) : stmt.bind(limit);
   const rows = await bound.all<AdminSpecimenRow>();
   return rows.results ?? [];
 }
@@ -2005,7 +2007,9 @@ export async function listUsersForAdmin(
 ): Promise<AdminUserRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const q = (opts.q ?? "").trim();
-  const where = q ? "WHERE p.handle LIKE ? OR u.email LIKE ?" : "";
+  // Same 50-char D1 LIKE cap as listSpecimensForAdmin: searching a full email
+  // address errored the page instead of finding the account (field 2026-09-11).
+  const where = q ? "WHERE instr(lower(p.handle), lower(?)) > 0 OR instr(lower(u.email), lower(?)) > 0" : "";
   const stmt = db.prepare(
     `SELECT p.id, p.handle, u.email AS email, u.emailVerified AS email_verified,
             p.trust_level, p.created_at, p.banned, p.banned_reason
@@ -2015,8 +2019,7 @@ export async function listUsersForAdmin(
       ORDER BY p.created_at DESC
       LIMIT ?`
   );
-  const like = `%${q}%`;
-  const bound = q ? stmt.bind(like, like, limit) : stmt.bind(limit);
+  const bound = q ? stmt.bind(q, q, limit) : stmt.bind(limit);
   const rows = await bound.all<AdminUserRow>();
   return rows.results ?? [];
 }
