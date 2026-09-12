@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.48
+
+`.tdxn` headers stay visible, saves say what they cannot keep, and Envoy can no longer freeze TouchDesigner by deleting its own host.
+
+- **Quieter `.tdxn` diffs without hiding the header.** Embody retires the git diff driver that hid headers in VS Code and could stage files without one; exports of tracked COMPs drop the per-save time and source-file fields instead ([#106](https://github.com/dylanroscover/Embody/issues/106)).
+- **Saves no longer skip content silently.** Unexternalized, editable DAT content is always written, *Warn Each Save* logs a WARNING when a save or the next open would lose storage, and the `save_project` job record carries those warnings ([#109](https://github.com/dylanroscover/Embody/issues/109)).
+- **Locked-content advice names each operator's source** and offers *Switch to TOX* when a COMP can hold the content; POPs are covered ([#108](https://github.com/dylanroscover/Embody/issues/108)).
+- **Envoy refuses a call that would destroy or reload its own host** (the Embody COMP, an ancestor, `/`) instead of hanging TouchDesigner, and `get_td_status` reports a stalled main thread ([#110](https://github.com/dylanroscover/Embody/issues/110)).
+
 ## v6.2.46
 
 Envoy survives a stalled restart, and TouchDesigner 2025.33230 is the new minimum.

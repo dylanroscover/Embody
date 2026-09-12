@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.46-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.48-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **148 test suites** (4,677 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **151 test suites** (4,916 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.48** — saves say what a `.tdxn` cannot hold, headers stay visible in VS Code, and Envoy can no longer freeze TouchDesigner by deleting its own host (issues #106, #108–#110)
 - **6.2.42** — `ExportReleaseToe`: ship the whole project as one locked `.toe` with Embody removed, preview first
 - **6.2.41** — the MCP SDK moves to 2.2.0; existing venvs upgrade themselves on the next start
 - **6.2.40** — the TDXN tag, the `strategy` column, the files on disk and the git diff driver all say TDXN; nine strategy reads that had silently stopped matching are fixed
