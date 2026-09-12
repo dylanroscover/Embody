@@ -1,38 +1,38 @@
 [
   {
     "slug": "murmuration",
-    "sha256": "f1bd80f7ac4dee6462727e57bf0e59027a70faf5e8e34a76fa44e4cfd1708dbe",
-    "size": 13994,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\simulation\\murmuration.tdxn"
+    "sha256": "5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d",
+    "size": 13697,
+    "tdxn_path": "specimens/simulation/murmuration.tdxn"
   },
   {
     "slug": "reaction-diffusion",
-    "sha256": "7955ea411ffafa720cf5242cc20612c5c754eba0ccf2976da27a3e9928a2c765",
-    "size": 7311,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\generative\\reaction-diffusion.tdxn"
+    "sha256": "bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76",
+    "size": 6850,
+    "tdxn_path": "specimens/generative/reaction-diffusion.tdxn"
   },
   {
     "slug": "kaleidoscope",
-    "sha256": "e7c89fa19c9ec8ae12b99b5411e5521e419aca12e20c99871c1c7da03420ce05",
-    "size": 8296,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\compositing\\kaleidoscope.tdxn"
+    "sha256": "295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103",
+    "size": 8005,
+    "tdxn_path": "specimens/compositing/kaleidoscope.tdxn"
   },
   {
     "slug": "noise-terrain",
-    "sha256": "03d3ce29102a24b2ee983c73cafbcc95a4c5d04bbd2795679c86a4ed8c946366",
-    "size": 24142,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\3d\\noise-terrain.tdxn"
+    "sha256": "12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5",
+    "size": 23789,
+    "tdxn_path": "specimens/3d/noise-terrain.tdxn"
   },
   {
     "slug": "plasma-interference",
-    "sha256": "65983a202aa64ccd913ee6cff153b88df09004d48db528caa59310116b3d9c33",
-    "size": 7149,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\generative\\plasma-interference.tdxn"
+    "sha256": "532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63",
+    "size": 6980,
+    "tdxn_path": "specimens/generative/plasma-interference.tdxn"
   },
   {
     "slug": "mandelbulb-march",
-    "sha256": "e8d8904c95e0e298a1e3bf2f47330d1756b62b94dfdbe8ad0576d811fa3b1b67",
-    "size": 10428,
-    "tdxn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\raymarching-sdf\\mandelbulb-march.tdxn"
+    "sha256": "9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d",
+    "size": 10257,
+    "tdxn_path": "specimens/raymarching-sdf/mandelbulb-march.tdxn"
   }
 ]

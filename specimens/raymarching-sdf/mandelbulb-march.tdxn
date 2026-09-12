@@ -13,7 +13,6 @@ type_defaults:
   textDAT:
     parameters:
       language: glsl
-      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -162,7 +161,6 @@ operators:
 - name: glsl_mandelbulb_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_pixel.glsl
     extension: frag
   position: [550, -120]
   dock: glsl_mandelbulb
@@ -302,8 +300,6 @@ operators:
   dat_content_format: text
 - name: glsl_mandelbulb_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_compute.glsl
   flags:
   - viewer
   - -showDocked
