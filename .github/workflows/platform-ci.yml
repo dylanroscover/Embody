@@ -14,17 +14,30 @@ on:
       - 'platform/**'
       - 'specimens/**'
       - '.github/workflows/platform-ci.yml'
+  # Manual first-party specimen sync (job sync-specimens only; main only).
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Probe the token and plan the specimen sync without writing to production'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref to save CI minutes.
+# Cancel superseded runs on the same ref to save CI minutes. The event is in the
+# key so a manual sync never cancels a push run's deploy, or the reverse.
 concurrency:
-  group: platform-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: platform-ci-${{ github.ref }}-${{ github.event_name }}
+  # Superseded PR/branch runs are cancelled, but a push to main is NOT: that
+  # run deploys and then syncs prod, and a second merge landing 31 s later
+  # cancelled the first one's deploy mid-flight (field 2026-09-12). Main runs
+  # queue behind each other instead.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' || github.event_name != 'push' }}
 
 jobs:
   build-and-test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,6 +77,7 @@ jobs:
   # 500 on every /api/auth/* for ~23h (field 2026-09-11); deploy now needs this
   # job, so a dependency bump that breaks auth (or any e2e flow) never ships.
   e2e:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -122,10 +136,21 @@ jobs:
       - name: Apply D1 migrations (local)
         run: npx wrangler d1 migrations apply embody --local
 
+      # The production sync SQL, on a real D1 engine, before it can ever point at
+      # prod: seed, apply, and require the plan to come back clean. global.setup
+      # reseeds before the specs, so this leaves the suite untouched.
+      - name: Rehearse first-party-sync.sql on the local D1
+        run: |
+          npx wrangler d1 execute embody --local --file=src/server/seed.sql > /dev/null
+          npx wrangler d1 execute embody --local --file=src/server/first-party-sync.sql > /dev/null
+          sql="$(grep -v '^--' src/server/first-party-plan.sql)"
+          npx wrangler d1 execute embody --local --json --command="$sql" > "$RUNNER_TEMP/plan-local.json"
+          python3 scripts/first-party-sync-report.py plan "$RUNNER_TEMP/plan-local.json" after
+
       # global.setup.ts reseeds D1 only. The collection and viewer specs also
       # need the specimen .tdxn blobs in local R2, keyed by sha256 (= tdn_r2_key
-      # in seed.sql). Reads specimens/manifest.json: the committed
-      # scripts/.seed-blobs.manifest.json holds absolute Windows paths.
+      # in seed.sql). Reads specimens/manifest.json directly, so the check below
+      # hashes the files themselves, not the generated blob manifest.
       - name: Seed local R2 with specimen blobs
         run: |
           count=0
@@ -359,3 +384,348 @@ jobs:
           sleep 30
           check_auth
           echo "ok: production auth passed twice, 30 s apart"
+
+  # ---------------------------------------------------------------------------
+  # First-party specimen sync. Prod was seeded once (2026-06-15) and then served
+  # those blobs for months: the only documented path was seed.sql, which wipes
+  # search and purges slugs (field 2026-09-11). Applies the targeted, idempotent
+  # first-party-sync.sql after a deploy that touched a specimen input, or on
+  # demand (dry_run defaults on). README: "Updating the specimens on embody.tools".
+  # The token needs Account > D1 > Edit and Account > Workers R2 Storage > Edit.
+  sync-specimens:
+    needs: [deploy]
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+         needs.deploy.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # One sync at a time across runs; never cancel one mid-write.
+    concurrency:
+      group: specimen-sync-production
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+        working-directory: platform/apps/web
+    env:
+      WRANGLER_TARGET: --remote
+      SITE_BASE: https://embody.tools
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every main deploy runs the read-only plan against prod and syncs only
+      # what differs, rather than diffing this push: a cancelled or failed sync
+      # must not leave prod stale until someone notices (field 2026-09-12).
+      # Dispatch: main only, since it publishes the checked-out ref's specimens.
+      - name: Decide whether to sync
+        id: gate
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          run=true
+          dry=false
+          if [ "$EVENT" = workflow_dispatch ]; then
+            if [ "$REF" != refs/heads/main ]; then
+              echo "::error title=Specimen sync::Run it from main, not $REF: it publishes the checked-out specimens to embody.tools."
+              exit 1
+            fi
+            dry="$DRY_RUN_INPUT"
+          fi
+          case "$dry" in true|false) ;; *) echo "::error::dry_run must be true or false, got '$dry'"; exit 1;; esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
+          echo "run=$run dry_run=$dry"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: '22'
+
+      # No npm cache: this job writes to production, so it restores nothing
+      # another run could have written to the Actions cache.
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        working-directory: platform
+        run: npm ci
+
+      # The committed SQL must carry every specimen file's sha256, or the sync
+      # would publish an older export. Also stages the LF bytes for upload.
+      # Regenerate from specimens/ + manifest.json and require no diff: a sha-only
+      # check passes a metadata-only manifest edit, which would sync stale titles
+      # and tags (field 2026-09-12).
+      - name: Check the generated sync matches specimens/
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml
+          python3 scripts/build-specimen-data.py > /dev/null
+          if ! git -C ../../.. diff --exit-code --stat -- \
+               platform/apps/web/src/server/seed.sql \
+               platform/apps/web/src/server/first-party-sync.sql \
+               platform/apps/web/src/server/first-party-plan.sql \
+               platform/apps/web/src/fixtures/specimens.json \
+               platform/apps/web/src/fixtures/specimen-graphs.ts \
+               platform/apps/web/scripts/.seed-blobs.manifest.json; then
+            echo "::error title=Stale generated specimen data::Run python3 platform/apps/web/scripts/build-specimen-data.py and commit the result."
+            exit 1
+          fi
+          python3 scripts/first-party-sync-report.py blobs "$RUNNER_TEMP/blobs" | tee "$RUNNER_TEMP/blobs.tsv"
+
+      # A zero-row UPDATE proves D1 write access without writing. R2 access is
+      # proven by the blob check (read) and the upload (write).
+      - name: Probe the Cloudflare token
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "$WRANGLER_TARGET" = --remote ] && [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error title=Specimen sync::The CLOUDFLARE_API_TOKEN repo secret is not set."
+            exit 1
+          fi
+          probe() {
+            label="$1"; perm="$2"; shift 2
+            if out="$("$@" 2>&1 < /dev/null)"; then echo "ok: $label"; return 0; fi
+            if printf '%s' "$out" | grep -qiE 'authenticat|unauthori[sz]ed|not authori[sz]ed|forbidden|permission|code: (10000|10001|9109|7403)'; then
+              echo "::error title=Cloudflare token needs $perm::$label was refused. Add $perm to the API token behind the CLOUDFLARE_API_TOKEN secret (dash.cloudflare.com > My Profile > API Tokens > Edit), then re-run this workflow."
+            else
+              echo "::error title=Token probe failed::$label failed, and not with an obvious permission error. It needs $perm."
+            fi
+            printf '%s\n' "$out" | tail -n 20
+            exit 1
+          }
+          probe "D1 read (SELECT 1)" "Account > D1 > Edit" \
+            npx wrangler d1 execute embody "$WRANGLER_TARGET" --json --command="SELECT 1 AS ok"
+          probe "D1 write (zero-row UPDATE)" "Account > D1 > Edit" \
+            npx wrangler d1 execute embody "$WRANGLER_TARGET" --json --command="UPDATE specimens SET slug = slug WHERE 0"
+          if [ "$WRANGLER_TARGET" = --remote ]; then
+            probe "D1 Time Travel (bookmark read)" "Account > D1 > Edit" \
+              npx wrangler d1 time-travel info embody --json
+          fi
+
+      # yargs reads a --command value that starts with "--" as flags, so the
+      # plan's comment lines are stripped and the value is passed with "=".
+      - name: Plan the sync (read-only)
+        id: plan
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          sql="$(grep -v '^--' src/server/first-party-plan.sql)"
+          if ! npx wrangler d1 execute embody "$WRANGLER_TARGET" --json --command="$sql" \
+               > "$RUNNER_TEMP/plan-before.json" < /dev/null; then
+            cat "$RUNNER_TEMP/plan-before.json"
+            exit 1
+          fi
+          python3 scripts/first-party-sync-report.py plan "$RUNNER_TEMP/plan-before.json" before
+
+      - name: Check the blobs in R2
+        id: blobs
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=0
+          : > "$RUNNER_TEMP/missing.tsv"
+          while IFS=$'\t' read -r slug sha size file; do
+            got="$RUNNER_TEMP/r2-$sha"
+            if npx wrangler r2 object get "embody-blobs/$sha" "$WRANGLER_TARGET" --pipe > "$got" 2> "$got.err" < /dev/null; then
+              if [ "$(sha256sum < "$got" | cut -d' ' -f1)" = "$sha" ]; then
+                echo "present: $slug $sha"
+                continue
+              fi
+              echo "::warning::embody-blobs/$sha does not hash to its key; uploading it again"
+            elif grep -qiE 'does not exist|NoSuchKey|code: 10007' "$got.err"; then
+              echo "missing: $slug $sha"
+            else
+              echo "::error title=Cloudflare token needs Account > Workers R2 Storage > Edit::Reading embody-blobs/$sha failed. If the output below is an authorization error, add that permission to the API token behind CLOUDFLARE_API_TOKEN."
+              tail -n 20 "$got.err"
+              exit 1
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$slug" "$sha" "$size" "$file" >> "$RUNNER_TEMP/missing.tsv"
+            missing=$((missing + 1))
+          done < "$RUNNER_TEMP/blobs.tsv"
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+
+      - name: Decide the writes
+        id: todo
+        if: steps.gate.outputs.run == 'true'
+        env:
+          DRY: ${{ steps.gate.outputs.dry_run }}
+          STALE: ${{ steps.plan.outputs.stale }}
+          FTS: ${{ steps.plan.outputs.fts }}
+          MISSING: ${{ steps.blobs.outputs.missing }}
+        run: |
+          echo "stale first-party rows: $STALE; blobs to upload: $MISSING; search rows: $FTS"
+          write=false
+          if [ "$STALE" = 0 ] && [ "$MISSING" = 0 ]; then
+            echo "Production D1 and R2 already match the repo; nothing to write."
+          elif [ "$DRY" = true ]; then
+            echo "::notice title=Dry run::Would upload $MISSING blob(s) and update $STALE first-party row(s). Re-run with dry_run off to apply."
+            echo "::group::SQL a real run applies (src/server/first-party-sync.sql)"
+            cat src/server/first-party-sync.sql
+            echo "::endgroup::"
+          else
+            write=true
+          fi
+          echo "write=$write" >> "$GITHUB_OUTPUT"
+
+      # Time Travel keeps 30 days (paid plan). Restoring reverts EVERY D1 write
+      # since, so the summary offers the targeted rollback first.
+      - name: Record a D1 Time Travel bookmark
+        id: bookmark
+        if: steps.todo.outputs.write == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "$WRANGLER_TARGET" != --remote ]; then
+            echo "Local D1 has no Time Travel; nothing to record."
+            exit 0
+          fi
+          npx wrangler d1 time-travel info embody --json > "$RUNNER_TEMP/bookmark.json" < /dev/null
+          bookmark="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("bookmark") or "")' "$RUNNER_TEMP/bookmark.json")"
+          if [ -z "$bookmark" ]; then
+            echo "::error title=Specimen sync::No D1 Time Travel bookmark came back; refusing to write without a rollback point."
+            cat "$RUNNER_TEMP/bookmark.json"
+            exit 1
+          fi
+          echo "bookmark=$bookmark" >> "$GITHUB_OUTPUT"
+          echo "::notice title=D1 rollback point::npx wrangler d1 time-travel restore embody --bookmark=$bookmark"
+
+      # Content-addressed keys: a blob changes nothing until D1 points at it, so
+      # blobs go first and are read back before any SQL runs.
+      - name: Upload missing blobs to R2
+        if: steps.todo.outputs.write == 'true' && steps.blobs.outputs.missing != '0'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          while IFS=$'\t' read -r slug sha size file; do
+            if ! out="$(npx wrangler r2 object put "embody-blobs/$sha" --file="$file" \
+                  --content-type application/json "$WRANGLER_TARGET" 2>&1 < /dev/null)"; then
+              echo "::error title=Cloudflare token needs Account > Workers R2 Storage > Edit::Uploading embody-blobs/$sha ($slug) failed. If the output below is an authorization error, add that permission to the API token behind CLOUDFLARE_API_TOKEN."
+              printf '%s\n' "$out" | tail -n 20
+              exit 1
+            fi
+            back="$(npx wrangler r2 object get "embody-blobs/$sha" "$WRANGLER_TARGET" --pipe < /dev/null | sha256sum | cut -d' ' -f1)"
+            if [ "$back" != "$sha" ]; then
+              echo "::error title=Specimen sync::embody-blobs/$sha reads back as $back after the upload."
+              exit 1
+            fi
+            echo "uploaded: $slug $sha ($size bytes)"
+          done < "$RUNNER_TEMP/missing.tsv"
+
+      # --file runs through the D1 import API: one atomic unit, so a failure
+      # leaves the database as it was. Every statement is gated on a difference.
+      - name: Apply first-party-sync.sql
+        id: apply
+        if: steps.todo.outputs.write == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! npx wrangler d1 execute embody "$WRANGLER_TARGET" --yes --json \
+               --file=src/server/first-party-sync.sql > "$RUNNER_TEMP/apply.json" < /dev/null; then
+            cat "$RUNNER_TEMP/apply.json"
+            exit 1
+          fi
+          # Recorded BEFORE the summary parse: a parse hiccup must not skip the
+          # post-write verification below (field 2026-09-12).
+          echo "applied=true" >> "$GITHUB_OUTPUT"
+          python3 - "$RUNNER_TEMP/apply.json" <<'PY' || echo "::warning title=Apply summary::could not parse the apply output; the write itself succeeded"
+          import json, sys
+          res = json.load(open(sys.argv[1]))
+          head = (res[0].get("results") or [{}])[0] if res else {}
+          if "Rows written" in head:
+              print(f"applied: {head['Total queries executed']} queries, {head['Rows written']} rows written")
+          else:
+              print(f"applied: {len(res)} statements (local D1 reports no row counts)")
+          PY
+
+      - name: Check D1 matches the repo
+        if: ${{ !cancelled() && steps.apply.outputs.applied == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          sql="$(grep -v '^--' src/server/first-party-plan.sql)"
+          if ! npx wrangler d1 execute embody "$WRANGLER_TARGET" --json --command="$sql" \
+               > "$RUNNER_TEMP/plan-after.json" < /dev/null; then
+            cat "$RUNNER_TEMP/plan-after.json"
+            exit 1
+          fi
+          python3 scripts/first-party-sync-report.py plan "$RUNNER_TEMP/plan-after.json" after
+
+      # The release preflight's own check: sha256 of each live /tdn (cache-
+      # busted) against the repo file. A dry run only reports.
+      - name: Verify embody.tools serves the repo specimens
+        if: ${{ !cancelled() && (steps.apply.outputs.applied == 'true' || steps.todo.outputs.write == 'false') }}
+        env:
+          DRY: ${{ steps.gate.outputs.dry_run }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if python3 ../../../dev/release_preflight.py --specimens-only --site "$SITE_BASE"; then
+              exit 0
+            fi
+            if [ "$DRY" = true ]; then
+              echo "::warning title=Specimens are stale on $SITE_BASE::Dry run: nothing was written. Re-run with dry_run off to sync."
+              exit 0
+            fi
+            echo "attempt $attempt/6: $SITE_BASE does not serve the repo specimens yet"
+            sleep 10
+          done
+          # A challenged runner is UNVERIFIED, not stale -- say which (field 2026-09-12).
+          if curl -sS -D "$RUNNER_TEMP/verify-headers" -o /dev/null --max-time 20 \
+               "$SITE_BASE/api/specimens/murmuration/tdn" &&
+             grep -qi '^cf-mitigated:' "$RUNNER_TEMP/verify-headers"; then
+            echo "::error title=Specimen check blocked::Cloudflare challenged the runner (cf-mitigated), so the live bytes are UNVERIFIED. Let it through WAF / Bot Fight Mode, then check by hand."
+            exit 1
+          fi
+          echo "::error title=Stale specimens on $SITE_BASE::The live /tdn bytes still differ from specimens/ after the sync. Roll back with the SQL in the job summary, then investigate."
+          exit 1
+
+      - name: Summarize the sync
+        if: always() && steps.gate.outputs.run == 'true'
+        env:
+          DRY: ${{ steps.gate.outputs.dry_run }}
+          STALE: ${{ steps.plan.outputs.stale }}
+          FTS: ${{ steps.plan.outputs.fts }}
+          MISSING: ${{ steps.blobs.outputs.missing }}
+          WRITE: ${{ steps.todo.outputs.write }}
+          APPLIED: ${{ steps.apply.outputs.applied }}
+          BOOKMARK: ${{ steps.bookmark.outputs.bookmark }}
+        run: |
+          {
+            echo "## First-party specimen sync"
+            echo ""
+            echo "- dry run: ${DRY:-?}; writes planned: ${WRITE:-false}; D1 sync applied: ${APPLIED:-false}"
+            echo "- stale first-party rows before: ${STALE:-?}; blobs to upload: ${MISSING:-?}; search rows: ${FTS:-?}"
+            if [ "$APPLIED" = true ] && [ -s "$RUNNER_TEMP/rollback.sql" ]; then
+              echo ""
+              echo "### Roll back"
+              echo "Preferred: repoint the six to their previous versions (the old blobs stay in R2)."
+              echo "Save this as rollback.sql and run \`npx wrangler d1 execute embody --remote --file=rollback.sql\` from platform/apps/web with the deploy token:"
+              echo ""
+              echo '```sql'
+              cat "$RUNNER_TEMP/rollback.sql"
+              echo '```'
+            fi
+            if [ -n "$BOOKMARK" ]; then
+              echo ""
+              echo "Last resort, database-wide (reverts EVERY D1 write since, likes and sign-ups included):"
+              echo "\`npx wrangler d1 time-travel restore embody --bookmark=$BOOKMARK\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

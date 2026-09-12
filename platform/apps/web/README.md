@@ -30,7 +30,7 @@ all GENERATED from those by `scripts/build-specimen-data.py` -- never hand-edit
 them. From `platform/apps/web/`:
 
 ```sh
-python3 scripts/build-specimen-data.py          # regenerate seed.sql + fixtures + blob manifest
+python3 scripts/build-specimen-data.py          # regenerate seed.sql, first-party-sync/plan SQL, fixtures, blob manifest
 wrangler d1 migrations apply embody --local
 wrangler d1 execute embody --local --file ./src/server/seed.sql
 bash scripts/upload-seed-blobs.sh               # real .tdxn blobs -> local R2, keyed by sha256
@@ -39,20 +39,42 @@ bash scripts/upload-seed-blobs.sh               # real .tdxn blobs -> local R2, 
 The blobs are content-addressed: the R2 key IS the sha256 of the `.tdxn` bytes
 (it equals `tdn_r2_key` in `seed.sql`), so `/api/specimens/:slug/tdn` resolves.
 
-To seed **production** (deployed D1 + R2), run the generator, then target the
-remote resources:
+`seed.sql` is **local only**. Never run it with `--remote`: it drops and rebuilds
+`specimens_fts` (every community specimen falls out of search), deletes the
+`STALE_SLUGS` rows (`ev`, `clean2`, `ff`, `clean-net`, `evil`), and re-creates the
+six specimens with a new `created_at` and zeroed likes/copies/views.
 
-```sh
-python3 scripts/build-specimen-data.py
-bash scripts/upload-seed-blobs.sh --remote
-wrangler d1 execute embody --remote --file ./src/server/seed.sql
-```
+### Updating the specimens on embody.tools
 
-**Caution (2026-09-11):** `seed.sql` is written for a dev database. On a live D1 it
-drops and rebuilds `specimens_fts` with only the six first-party rows, so every
-community specimen drops out of search, and it deletes the `STALE_SLUGS` rows
-(`ev`, `clean2`, `ff`, `clean-net`, `evil`). Until a targeted re-seed exists,
-review it against production data before running the last command.
+Production gets `src/server/first-party-sync.sql`, generated from the same
+manifest. It touches only the six first-party rows (matched by slug and the
+`envoy` author), adds a version row for a new blob, and preserves ids,
+`created_at`, likes/copies/views, reactions, comments, reports and every
+community specimen with its search row. When prod already matches it writes 0
+rows. It runs only in Platform CI, job `sync-specimens`:
+
+- **Automatically** after every successful deploy on `main`. It asks prod what it
+  holds (a read-only plan) and writes only what differs, rather than diffing the
+  push, so a cancelled or failed sync heals on the next deploy instead of leaving
+  prod stale until someone notices.
+- **On demand:** GitHub > Actions > Platform CI > Run workflow, branch `main`.
+  `dry_run` defaults to on (token probe + plan, no writes); turn it off to sync.
+
+The job probes the deploy token (it needs **Account > D1 > Edit** and
+**Account > Workers R2 Storage > Edit**), uploads missing blobs, records a D1
+Time Travel bookmark, then applies the SQL. Every statement is gated on a
+difference, so a re-run converges from any interrupted point (wrangler reports
+the import as all-or-nothing, but Cloudflare does not document that, so the SQL
+does not rely on it). It then checks that every
+`https://embody.tools/api/specimens/<slug>/tdn` hashes to the repo file.
+Its run summary prints the targeted rollback SQL and the
+`wrangler d1 time-travel restore embody --bookmark=...` command.
+`python dev/release_preflight.py` blocks a release while embody.tools serves a
+stale specimen.
+
+Locally the sync is a no-op right after `seed.sql`; to exercise it on a changed
+database: `wrangler d1 execute embody --local --file ./src/server/first-party-sync.sql`
+(`src/server/first-party-plan.sql` is the read-only status query).
 
 In non-production environments, the submit endpoint accepts `turnstileToken: "dev-bypass"`. In
 production the Turnstile gate fails closed: the `dev-bypass` token is never honored, an unknown

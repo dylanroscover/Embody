@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -80,9 +82,57 @@ class FakeRunner:
         return val if isinstance(val, str) else json.dumps(val)
 
 
-def _main(capsys, runner, *extra):
-    code = rp.main(["--repo", REPO, *extra], runner=runner)
+def _serve_repo(url):
+    """A live site that matches the repo: each slug's specimen bytes, LF as git stores them."""
+    slug = url.split("/api/specimens/")[1].split("/")[0]
+    specs = json.loads((rp.REPO_ROOT / "specimens" / "manifest.json").read_text(encoding="utf-8"))["specimens"]
+    rel = next(s["tdxn_path"] for s in specs if s["slug"] == slug)
+    return (rp.REPO_ROOT / "specimens" / rel).read_bytes().replace(b"\r\n", b"\n")
+
+
+def _main(capsys, runner, *extra, fetch=_serve_repo, root=None):
+    code = rp.main(["--repo", REPO, *extra], runner=runner, fetch=fetch, root=root or rp.REPO_ROOT)
     return code, capsys.readouterr().out
+
+
+def _git(root, *args):
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.test",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.test"}
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+
+
+def _specimen_root(tmp_path, blobs, commit=True):
+    """A repo root holding specimens/manifest.json and one .tdxn per slug.
+
+    Committed to a real origin/main by default: release mode compares prod
+    with what main holds, not with this checkout.
+    """
+    (tmp_path / "specimens" / "cat").mkdir(parents=True)
+    specs = []
+    for slug, data in blobs.items():
+        (tmp_path / "specimens" / "cat" / f"{slug}.tdxn").write_bytes(data)
+        specs.append({"slug": slug, "tdxn_path": f"cat/{slug}.tdxn"})
+    (tmp_path / "specimens" / "manifest.json").write_text(json.dumps({"specimens": specs}), encoding="utf-8")
+    if commit:
+        _git(tmp_path, "init", "-q")
+        _git(tmp_path, "add", "-A")
+        _git(tmp_path, "commit", "-qm", "specimens")
+        _git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return tmp_path
+
+
+class FakeSite:
+    """Serves /api/specimens/<slug>/tdn from a dict; an Exception value raises."""
+
+    def __init__(self, pages):
+        self.pages, self.urls = pages, []
+
+    def __call__(self, url):
+        self.urls.append(url)
+        val = self.pages[url.split("/api/specimens/")[1].split("/")[0]]
+        if isinstance(val, Exception):
+            raise val
+        return val
 
 
 def test_all_clear_exits_zero(capsys):
@@ -225,3 +275,81 @@ def test_no_release_yet_only_drops_the_new_tags(capsys):
 def test_ack_that_matches_nothing_is_reported(capsys):
     code, out = _main(capsys, FakeRunner(), "--ack", "pr:999")
     assert code == 0 and "--ack pr:999 matched nothing" in out
+
+
+# embody.tools served the June specimens for months (field 2026-09-11).
+def test_stale_live_specimen_blocks_until_user_acks(capsys, tmp_path):
+    root = _specimen_root(tmp_path, {"a": b"new: 1\n", "b": b"same: 1\n"})
+    site = FakeSite({"a": b"old: 1\n", "b": b"same: 1\n"})
+    code, out = _main(capsys, FakeRunner(), fetch=site, root=root)
+    assert code == 1 and "[specimen:a]" in out and "[specimen:b]" not in out
+    assert "sync-specimens" in out
+    code, out = _main(capsys, FakeRunner(), "--ack", "specimen:a", fetch=site, root=root)
+    assert code == 0 and "ACKED [specimen:a]" in out
+
+
+def test_live_specimens_matching_the_repo_pass(capsys, tmp_path):
+    root = _specimen_root(tmp_path, {"a": b"x: 1\n", "b": b"y: 2\n"})
+    code, out = _main(capsys, FakeRunner(), fetch=FakeSite({"a": b"x: 1\n", "b": b"y: 2\n"}), root=root)
+    assert code == 0 and "specimen" not in out
+
+
+def test_unreachable_site_fails_closed(capsys, tmp_path):
+    root = _specimen_root(tmp_path, {"a": b"x: 1\n"})
+    site = FakeSite({"a": rp.CheckError("GET u: HTTP Error 503: Service Unavailable")})
+    code, out = _main(capsys, FakeRunner(), fetch=site, root=root)
+    assert code == 1 and "[verify:specimen:a]" in out and "503" in out
+
+
+def test_crlf_checkout_hashes_as_git_stores_it(capsys, tmp_path):
+    root = _specimen_root(tmp_path, {"a": b"x: 1\r\ny: 2\r\n"})
+    code, _ = _main(capsys, FakeRunner(), fetch=FakeSite({"a": b"x: 1\ny: 2\n"}), root=root)
+    assert code == 0
+
+
+def test_unreadable_specimen_manifest_fails_closed(capsys, tmp_path):
+    code, out = _main(capsys, FakeRunner(), fetch=FakeSite({}), root=tmp_path)
+    assert code == 1 and "[verify:specimens]" in out
+
+
+def test_release_compares_prod_with_main_not_the_release_checkout(capsys, tmp_path):
+    # A release re-exports the specimens before it merges, so the checkout holds
+    # bytes prod cannot serve yet. Comparing against them blocked the very push
+    # that would fix it (field 2026-09-12); compare against origin/main instead.
+    root = _specimen_root(tmp_path, {"a": b"main: 1\n"})
+    (root / "specimens" / "cat" / "a.tdxn").write_bytes(b"release: 2\n")  # uncommitted
+    code, out = _main(capsys, FakeRunner(), fetch=FakeSite({"a": b"main: 1\n"}), root=root)
+    assert code == 0 and "[specimen:a]" not in out
+
+
+def test_specimens_only_uses_the_checkout_not_origin_main(capsys, tmp_path):
+    # CI runs it ON the deployed commit, often with no origin/main ref at all.
+    root = _specimen_root(tmp_path, {"a": b"main: 1\n"})
+    (root / "specimens" / "cat" / "a.tdxn").write_bytes(b"deployed: 2\n")
+    code = rp.main(["--specimens-only"], runner=FakeRunner(), fetch=FakeSite({"a": b"deployed: 2\n"}), root=root)
+    assert code == 0, capsys.readouterr().out
+    code = rp.main(["--specimens-only"], runner=FakeRunner(), fetch=FakeSite({"a": b"main: 1\n"}), root=root)
+    assert code == 1 and "[specimen:a]" in capsys.readouterr().out
+
+
+def test_specimens_only_skips_github_and_reads_the_given_site(capsys, tmp_path):
+    def no_gh(cmd):
+        raise AssertionError(f"--specimens-only ran {cmd}")
+
+    root = _specimen_root(tmp_path, {"a": b"x: 1\n"})
+    site = FakeSite({"a": b"x: 1\n"})
+    code = rp.main(["--specimens-only", "--site", "http://127.0.0.1:4999"], runner=no_gh, fetch=site, root=root)
+    out = capsys.readouterr().out
+    assert code == 0 and "RESULT: CLEAR" in out
+    assert site.urls[0].startswith("http://127.0.0.1:4999/api/specimens/a/tdn?cb=")
+    code = rp.main(["--specimens-only"], runner=no_gh, fetch=FakeSite({"a": b"x: 2\n"}), root=root)
+    assert code == 1 and "[specimen:a]" in capsys.readouterr().out
+
+
+def test_http_get_turns_a_bad_url_into_a_check_error():
+    try:
+        rp.http_get("not-a-url")
+    except rp.CheckError as exc:
+        assert "not-a-url" in str(exc)
+    else:
+        raise AssertionError("expected CheckError")
