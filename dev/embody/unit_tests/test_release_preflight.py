@@ -7,11 +7,14 @@ is pinned without network access (field 2026-09-11).
 """
 from __future__ import annotations
 
+import atexit
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _PATH = Path(__file__).resolve().parents[2] / "release_preflight.py"
@@ -82,16 +85,9 @@ class FakeRunner:
         return val if isinstance(val, str) else json.dumps(val)
 
 
-def _serve_repo(url):
-    """A live site that matches the repo: each slug's specimen bytes, LF as git stores them."""
-    slug = url.split("/api/specimens/")[1].split("/")[0]
-    specs = json.loads((rp.REPO_ROOT / "specimens" / "manifest.json").read_text(encoding="utf-8"))["specimens"]
-    rel = next(s["tdxn_path"] for s in specs if s["slug"] == slug)
-    return (rp.REPO_ROOT / "specimens" / rel).read_bytes().replace(b"\r\n", b"\n")
-
-
-def _main(capsys, runner, *extra, fetch=_serve_repo, root=None):
-    code = rp.main(["--repo", REPO, *extra], runner=runner, fetch=fetch, root=root or rp.REPO_ROOT)
+def _main(capsys, runner, *extra, fetch=None, root=None):
+    code = rp.main(["--repo", REPO, *extra], runner=runner,
+                   fetch=fetch or _serve_default, root=root or _default_root())
     return code, capsys.readouterr().out
 
 
@@ -119,6 +115,30 @@ def _specimen_root(tmp_path, blobs, commit=True):
         _git(tmp_path, "commit", "-qm", "specimens")
         _git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
     return tmp_path
+
+
+_DEFAULT = []
+_DEFAULT_BLOBS = {"alpha": b"alpha: 1\n"}
+
+
+def _default_root():
+    """The root every non-specimen test runs against -- NEVER this repo.
+
+    The specimens check reads `git show origin/main:specimens/...`, so pointing
+    these tests at REPO_ROOT made them depend on the developer's git state: a CI
+    checkout has no origin/main ref, so all of them gained a verify:specimens
+    blocker and failed on macOS and Windows only (field 2026-09-12).
+    """
+    if not _DEFAULT:
+        tmp = Path(tempfile.mkdtemp(prefix="preflight-root-"))
+        atexit.register(shutil.rmtree, tmp, ignore_errors=True)
+        _DEFAULT.append(_specimen_root(tmp, _DEFAULT_BLOBS))
+    return _DEFAULT[0]
+
+
+def _serve_default(url):
+    """A live site serving exactly what _default_root committed: nothing stale."""
+    return _DEFAULT_BLOBS[url.split("/api/specimens/")[1].split("/")[0]]
 
 
 class FakeSite:
