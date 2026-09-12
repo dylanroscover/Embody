@@ -377,11 +377,27 @@ const items = [
   }
   .admin-body :global(table.admin-table) {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.88rem;
   }
-  .admin-body :global(.admin-table-wrap table.admin-table) { min-width: max-content; }
   .admin-body :global(.admin-table :is(th, td)) { white-space: nowrap; }
+  /* Long values (emails, titles, detail) clip to an ellipsis and carry the full
+     text in a title tooltip, so the table fits its container instead of forcing
+     a horizontal scrollbar (field 2026-09-11). Column widths come from each
+     page's colgroup. Cells holding the trust dropdown or the action buttons are
+     NOT truncated: overflow:hidden would clip the open menu. */
+  .admin-body :global(.admin-table :is(th, td).trunc) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-body :global(.admin-table .trunc > a) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
   .admin-body :global(.admin-table th) {
     text-align: left;
     font-family: var(--font-mono);
@@ -536,6 +552,14 @@ const items = [
   .admin-body :global(.admin-btn:hover) { color: var(--text); border-color: var(--accent); }
   .admin-body :global(.admin-btn--danger:hover) { color: #ff9b9b; border-color: rgba(220, 80, 80, 0.5); }
   .admin-body :global(.admin-btn:disabled) { opacity: 0.5; cursor: default; }
+  /* Action cells: buttons need air between them, and may wrap in a narrow
+     column rather than overflow it (field 2026-09-11). */
+  .admin-body :global(.admin-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
 
   .admin-body :global(.admin-email-form) {
     display: flex;

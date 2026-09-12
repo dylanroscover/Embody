@@ -23,7 +23,6 @@ type_defaults:
   textDAT:
     parameters:
       language: glsl
-      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -233,7 +232,6 @@ operators:
 - name: glsl_source_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/kaleidoscope/glsl_source_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -258,7 +256,6 @@ operators:
 - name: glsl_kaleido_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/kaleidoscope/glsl_kaleido_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -291,8 +288,6 @@ operators:
   dat_content_format: text
 - name: glsl_source_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/kaleidoscope/glsl_source_compute.glsl
   flags:
   - viewer
   - -showDocked
@@ -300,8 +295,6 @@ operators:
   dock: glsl_source
 - name: glsl_kaleido_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/kaleidoscope/glsl_kaleido_compute.glsl
   flags:
   - viewer
   - -showDocked

@@ -23,7 +23,6 @@ type_defaults:
   textDAT:
     parameters:
       language: glsl
-      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -285,7 +284,6 @@ operators:
 - name: sprite_dot_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/murmuration/sprite_dot_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -316,8 +314,6 @@ operators:
   - particle_pop
 - name: glsl_color_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/murmuration/glsl_color_compute.glsl
   flags:
   - viewer
   position: [3150, -120]
@@ -342,8 +338,6 @@ operators:
   dat_content_format: text
 - name: glsl_flock_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/murmuration/glsl_flock_compute.glsl
   flags:
   - viewer
   position: [1950, -120]
@@ -440,8 +434,6 @@ operators:
   dat_content_format: text
 - name: sprite_dot_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/murmuration/sprite_dot_compute.glsl
   flags:
   - viewer
   - -showDocked

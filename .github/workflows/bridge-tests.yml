@@ -52,6 +52,9 @@ on:
       - 'dev/embody/unit_tests/test_promoted_surface.py'
       - 'dev/embody/unit_tests/test_release_toe.py'
       - 'dev/embody/unit_tests/test_release_preflight.py'
+      - 'dev/embody/unit_tests/test_specimen_bindings.py'
+      - 'dev/specimen_bindings.py'
+      - 'dev/specimen_publish.py'
       - 'dev/release_preflight.py'
       - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
       # The promoted-surface census reads the extension sources and the
@@ -116,6 +119,9 @@ on:
       - 'dev/embody/unit_tests/test_promoted_surface.py'
       - 'dev/embody/unit_tests/test_release_toe.py'
       - 'dev/embody/unit_tests/test_release_preflight.py'
+      - 'dev/embody/unit_tests/test_specimen_bindings.py'
+      - 'dev/specimen_bindings.py'
+      - 'dev/specimen_publish.py'
       - 'dev/release_preflight.py'
       - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
       # The promoted-surface census reads the extension sources and the

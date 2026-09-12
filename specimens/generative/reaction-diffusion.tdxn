@@ -23,7 +23,6 @@ type_defaults:
   textDAT:
     parameters:
       language: glsl
-      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -128,7 +127,6 @@ operators:
 - name: glsl_seed_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/reaction_diffusion/glsl_seed_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -157,8 +155,6 @@ operators:
   dat_read_only: true
 - name: glsl_seed_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/reaction_diffusion/glsl_seed_compute.glsl
   flags:
   - viewer
   - -showDocked
@@ -174,7 +170,6 @@ operators:
 - name: glsl_rd_step_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/reaction_diffusion/glsl_rd_step_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -210,7 +205,6 @@ operators:
 - name: glsl_colorize_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/reaction_diffusion/glsl_colorize_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -234,8 +228,6 @@ operators:
   dat_content_format: text
 - name: glsl_rd_step_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/reaction_diffusion/glsl_rd_step_compute.glsl
   flags:
   - viewer
   - -showDocked
@@ -243,8 +235,6 @@ operators:
   dock: glsl_rd_step
 - name: glsl_colorize_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/reaction_diffusion/glsl_colorize_compute.glsl
   flags:
   - viewer
   - -showDocked

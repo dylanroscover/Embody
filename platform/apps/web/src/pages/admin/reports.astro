@@ -28,6 +28,14 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
   ) : (
     <div class="admin-table-wrap" role="region" aria-label="Reports table" tabindex="0">
     <table class="admin-table">
+      <colgroup>
+        <col style="width: 14%" />
+        <col style="width: 20%" />
+        <col style="width: 22%" />
+        <col style="width: 12%" />
+        <col style="width: 10%" />
+        <col style="width: 22%" />
+      </colgroup>
       <thead>
         <tr><th>when</th><th>specimen</th><th>reason</th><th>by</th><th>status</th><th>action</th></tr>
       </thead>
@@ -40,19 +48,19 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
             data-author-id={r.author_id ?? undefined}
             data-author-handle={r.author_handle ?? undefined}
           >
-            <td>{r.created_at}</td>
-            <td>
+            <td class="trunc" title={r.created_at}>{r.created_at}</td>
+            <td class="trunc" title={r.specimen_title ?? r.specimen_slug ?? "deleted"}>
               {r.specimen_slug ? (
                 <a href={`/c/${r.specimen_slug}`}>{r.specimen_title ?? r.specimen_slug}</a>
               ) : (
                 <span class="admin-pill">deleted</span>
               )}
             </td>
-            <td>
+            <td class="trunc" title={r.details ? `${r.reason}: ${r.details}` : r.reason}>
               {r.reason}
               {r.details && <div class="report-note" title={r.details}>{r.details}</div>}
             </td>
-            <td>{r.reporter_handle ?? "-"}</td>
+            <td class="trunc" title={r.reporter_handle ?? "-"}>{r.reporter_handle ?? "-"}</td>
             <td><span class="admin-pill" data-status-cell>{r.status}</span></td>
             <td>
               <div class="dd" data-dd>

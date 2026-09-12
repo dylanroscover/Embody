@@ -51,6 +51,14 @@ function shortMeta(raw: string | null): { text: string; full: string } {
   ) : (
     <div class="admin-table-wrap" role="region" aria-label="Activity log" tabindex="0">
       <table class="admin-table">
+        <colgroup>
+          <col style="width: 15%" />
+          <col style="width: 14%" />
+          <col style="width: 16%" />
+          <col style="width: 18%" />
+          <col style="width: 25%" />
+          <col style="width: 12%" />
+        </colgroup>
         <thead>
           <tr><th>when</th><th>actor</th><th>action</th><th>target</th><th>detail</th><th>ip</th></tr>
         </thead>
@@ -59,12 +67,12 @@ function shortMeta(raw: string | null): { text: string; full: string } {
             const meta = shortMeta(e.metadata);
             return (
               <tr>
-                <td class="mono">{e.ts}</td>
-                <td>{e.actor_handle ? `@${e.actor_handle}` : e.actor_id ? <span class="mono">{e.actor_id.slice(0, 8)}</span> : <span class="admin-pill">system</span>}</td>
+                <td class="mono trunc" title={e.ts}>{e.ts}</td>
+                <td class="trunc" title={e.actor_handle ? `@${e.actor_handle}` : (e.actor_id ?? "system")}>{e.actor_handle ? `@${e.actor_handle}` : e.actor_id ? <span class="mono">{e.actor_id.slice(0, 8)}</span> : <span class="admin-pill">system</span>}</td>
                 <td><span class="admin-pill">{e.action}</span></td>
-                <td class="mono">{e.target_type ? `${e.target_type}:${(e.target_id ?? "").slice(0, 8)}` : "-"}</td>
-                <td class="mono admin-meta" title={meta.full}>{meta.text}</td>
-                <td class="mono">{e.ip ?? "-"}</td>
+                <td class="mono trunc" title={e.target_type ? `${e.target_type}:${e.target_id ?? ""}` : "-"}>{e.target_type ? `${e.target_type}:${(e.target_id ?? "").slice(0, 8)}` : "-"}</td>
+                <td class="mono admin-meta trunc" title={meta.full}>{meta.text}</td>
+                <td class="mono trunc" title={e.ip ?? "-"}>{e.ip ?? "-"}</td>
               </tr>
             );
           })}

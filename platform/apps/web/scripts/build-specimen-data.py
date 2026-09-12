@@ -4,17 +4,23 @@
 Reads specimens/manifest.json (authoritative metadata) and each
 <category>/<slug>.tdxn (YAML network blob). For each specimen it computes the
 content-addressed R2 key (sha256 hex of the raw .tdxn bytes) and byte size, then
-emits three artifacts under apps/web:
+emits these artifacts under apps/web, all from the SAME rows:
 
-  1. src/server/seed.sql       - re-runnable local D1 seed with REAL metadata.
-  2. src/fixtures/specimen-graphs.ts - parsed-and-trimmed TDXN objects per slug,
+  1. src/server/seed.sql       - LOCAL-ONLY destructive D1 reset + seed (dev, e2e).
+  2. src/server/first-party-sync.sql - targeted, idempotent, non-destructive
+     sync of the six first-party rows; the only SQL that may touch production
+     (Platform CI job sync-specimens).
+  3. src/server/first-party-plan.sql - read-only status report for that sync.
+  4. src/fixtures/specimen-graphs.ts - parsed-and-trimmed TDXN objects per slug,
      shaped for TdxnViewer (operators + annotations; heavy DAT/shader text
      stripped) so the interactive covers render with no runtime YAML parse and
      no per-card API call.
-  3. .seed-blobs.manifest.json - {slug, sha256, size, tdxn_path} list used by the
-     companion uploader to push each .tdxn into local R2 under key=sha256.
+  5. scripts/.seed-blobs.manifest.json - {slug, sha256, size, tdxn_path} list
+     (tdxn_path repo-relative) for the uploaders; R2 key = sha256.
+  6. src/fixtures/specimens.json - homepage featured-card fixtures.
 
-ASCII punctuation only. Deterministic ids: sp-<slug>, ver-<slug>, scan-<slug>.
+ASCII punctuation only. Every file is written with LF line endings.
+Seed ids: sp-<slug>, ver-<slug>, scan-<slug>; sync ids: ver-/scan-<slug>-<sha16>.
 
 Run from anywhere; all paths are resolved relative to the repo root.
 """
@@ -23,7 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import re
 from pathlib import Path
 
 import yaml
@@ -36,6 +42,8 @@ SPECIMENS_DIR = REPO_ROOT / "specimens"
 MANIFEST_PATH = SPECIMENS_DIR / "manifest.json"
 
 SEED_SQL_PATH = WEB_DIR / "src" / "server" / "seed.sql"
+SYNC_SQL_PATH = WEB_DIR / "src" / "server" / "first-party-sync.sql"
+PLAN_SQL_PATH = WEB_DIR / "src" / "server" / "first-party-plan.sql"
 GRAPHS_TS_PATH = WEB_DIR / "src" / "fixtures" / "specimen-graphs.ts"
 BLOB_MANIFEST_PATH = WEB_DIR / "scripts" / ".seed-blobs.manifest.json"
 FIXTURES_PATH = WEB_DIR / "src" / "fixtures" / "specimens.json"
@@ -94,6 +102,17 @@ def sql_str(value: str | None) -> str:
     if value is None:
         return "NULL"
     return "'" + value.replace("'", "''") + "'"
+
+
+def write_lf(path: Path, text: str) -> None:
+    """Write UTF-8 with LF on every OS (Path.write_text emits CRLF on Windows)."""
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+
+
+# The sync matches tags by slug, so a manifest tag must already BE its slug
+# (the app's slugify is lowercase [a-z0-9] runs joined by '-').
+TAG_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def family_summary(key_ops: list[str]) -> str:
@@ -184,6 +203,10 @@ def main() -> int:
         size = len(raw_bytes)
         parsed = yaml.safe_load(raw_bytes.decode("utf-8"))
         graphs[slug] = build_graph(parsed)
+        tags = list(dict.fromkeys(spec.get("tags", [])))
+        bad = [t for t in tags if not TAG_SLUG_RE.match(t)]
+        if bad:
+            raise SystemExit(f"{slug}: tags must be lowercase slugs (a-z, 0-9, '-'): {bad}")
 
         rows.append(
             {
@@ -209,20 +232,24 @@ def main() -> int:
                 "op_count": spec["operator_count"],
                 "family_summary": family_summary(spec.get("key_ops", [])),
                 "license": spec.get("license", "CC-BY-4.0"),
-                "tags": spec.get("tags", []),
+                "tags": tags,
                 "key_ops": spec.get("key_ops", []),
                 "sha256": sha256,
                 "size": size,
-                "tdxn_path": str(tdxn_path),
+                # Repo-relative, POSIX: the committed manifest once carried
+                # absolute Windows paths no other machine could use.
+                "tdxn_path": tdxn_path.relative_to(REPO_ROOT).as_posix(),
             }
         )
 
     write_seed_sql(rows)
+    write_sync_sql(rows)
+    write_plan_sql(rows)
     write_graphs_ts(rows, graphs)
     write_blob_manifest(rows)
     write_fixtures(rows)
 
-    print(f"Generated seed for {len(rows)} specimens:")
+    print(f"Generated seed + first-party sync for {len(rows)} specimens:")
     for r in rows:
         print(f"  {r['slug']:<22} sha256={r['sha256'][:12]}... size={r['size']}")
     return 0
@@ -233,7 +260,11 @@ def write_seed_sql(rows: list[dict]) -> None:
     lines: list[str] = []
     a = lines.append
 
-    a("-- Local development seed for the first-party Specimen collection.")
+    a("-- LOCAL-ONLY development seed for the first-party Specimen collection.")
+    a("-- NEVER run this with --remote: it drops and rebuilds specimens_fts (every")
+    a("-- community specimen falls out of search), purges slugs, and re-creates the")
+    a("-- six specimens (new created_at, zeroed counters). Production is updated only")
+    a("-- by first-party-sync.sql through Platform CI (job sync-specimens).")
     a("-- GENERATED by scripts/build-specimen-data.py from REPO/specimens/. Do not edit by hand.")
     a("-- Re-runnable: purges fictional/test rows, then INSERT OR REPLACE the six real specimens.")
     a("-- Apply to the local D1 (matching the astro-dev miniflare persist path):")
@@ -417,7 +448,209 @@ def write_seed_sql(rows: list[dict]) -> None:
     a("INSERT OR IGNORE INTO specimen_categories (specimen_id, category)")
     a("SELECT id, category FROM specimens WHERE category IS NOT NULL AND category <> '';")
 
-    SEED_SQL_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    write_lf(SEED_SQL_PATH, "\n".join(lines).rstrip() + "\n")
+
+
+# --- First-party sync (production-safe) ---------------------------------------
+# Prod was seeded once (2026-06-15) and never again because the only documented
+# path was seed.sql, which wipes search and purges slugs (field 2026-09-11).
+# These two files touch ONLY the six first-party rows, resolved by slug + the
+# 'envoy' author, and every write is gated on a difference, so re-runs are no-ops.
+
+FTS_IS_CONTENTLESS_DELETE = (
+    "EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts'"
+    " AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)"
+)
+
+
+def first_party_guard(slug: str, alias: str = "s") -> str:
+    """Row filter matching only the slug's specimen authored by AUTHOR_HANDLE."""
+    return (
+        f"{alias}.slug = {sql_str(slug)} AND {alias}.author_id IN "
+        f"(SELECT id FROM users_profile WHERE handle = {sql_str(AUTHOR_HANDLE)})"
+    )
+
+
+def stale_predicate(r: dict, cap_json: str, alias: str = "s") -> str:
+    """True while the D1 row, its tag/category sets or its current blob differ
+    from the repo. Must be evaluated before the UPDATE it gates."""
+    s = alias
+    sha = sql_str(r["sha256"])
+    tag_list = ", ".join(sql_str(t) for t in r["tags"])
+    n_tags = len(r["tags"])
+    clauses = [
+        f"{s}.title IS NOT {sql_str(r['name'])}",
+        f"{s}.description IS NOT {sql_str(r['description'])}",
+        f"{s}.category IS NOT {sql_str(r['category'])}",
+        f"{s}.level IS NOT {sql_str(r['level'])}",
+        f"{s}.requires IS NOT {sql_str(json.dumps(r['requires']))}",
+        f"{s}.op_count IS NOT {r['op_count']}",
+        f"{s}.family_summary IS NOT {sql_str(r['family_summary'])}",
+        f"{s}.license IS NOT {sql_str(r['license'])}",
+        f"{s}.scan_status IS NOT 'clean'",
+        f"{s}.capability_json IS NOT {sql_str(cap_json)}",
+        f"(SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = {s}.current_version_id) IS NOT {sha}",
+        f"(SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = {s}.id) <> {n_tags}",
+        f"(SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id"
+        f" WHERE st.specimen_id = {s}.id AND t.slug IN ({tag_list})) <> {n_tags}",
+        f"(SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = {s}.id) <> 1",
+        f"NOT EXISTS (SELECT 1 FROM specimen_categories AS sc"
+        f" WHERE sc.specimen_id = {s}.id AND sc.category = {sql_str(r['category'])})",
+    ]
+    return "(\n      " + "\n   OR ".join(clauses) + "\n  )"
+
+
+def write_sync_sql(rows: list[dict]) -> None:
+    cap_json = json.dumps(CLEAN_CAPABILITY, separators=(",", ":"))
+    lines: list[str] = []
+    a = lines.append
+
+    a("-- First-party Specimen sync. GENERATED by scripts/build-specimen-data.py from")
+    a("-- REPO/specimens/. Do not edit by hand. ASCII only.")
+    a("-- Production-safe: touches only the six first-party specimens (slug + author")
+    a(f"-- '{AUTHOR_HANDLE}'), never deletes a specimen, never changes ids, created_at,")
+    a("-- likes/views/copies, reactions, thumbnail/video, visibility or tier, and every")
+    a("-- statement is gated on a difference, so a second run writes 0 rows.")
+    a("-- Production runs it ONLY via Platform CI (job sync-specimens), after the blobs")
+    a("-- are in R2 and a D1 Time Travel bookmark is recorded. Local:")
+    a("--   npx wrangler d1 execute embody --local --file=src/server/first-party-sync.sql")
+    a("")
+    a("-- 1. FTS mirror rows, FIRST: the gate reads the pre-update row. Only on the")
+    a("--    contentless_delete=1 table (migration 0005); on a plain content='' table")
+    a("--    INSERT OR REPLACE keeps the old tokens, so it is skipped there.")
+    for r in rows:
+        guard = first_party_guard(r["slug"])
+        a(
+            "INSERT OR REPLACE INTO specimens_fts "
+            "(rowid, slug, title, description, tags, author_handle, dat_text)"
+        )
+        a(
+            f"SELECT s.rowid, s.slug, {sql_str(r['name'])}, {sql_str(r['description'])}, "
+            f"{sql_str(' '.join(r['tags']))}, u.handle, {sql_str(' '.join(r['key_ops']))}"
+        )
+        a("FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id")
+        a(f"WHERE {guard}")
+        a(f"  AND {FTS_IS_CONTENTLESS_DELETE}")
+        a(f"  AND {stale_predicate(r, cap_json)};")
+        a("")
+
+    a("-- 2. Tags the six need (an existing tag row is never rewritten).")
+    seen_tags: list[str] = []
+    for r in rows:
+        for tag in r["tags"]:
+            if tag not in seen_tags:
+                seen_tags.append(tag)
+    a("INSERT OR IGNORE INTO tags (id, name, slug) VALUES")
+    a(",\n".join(f"  ({sql_str('tag-' + t)}, {sql_str(t)}, {sql_str(t)})" for t in seen_tags) + ";")
+    a("")
+
+    for r in rows:
+        slug = r["slug"]
+        sha = sql_str(r["sha256"])
+        ver_id = sql_str(f"ver-{slug}-{r['sha256'][:16]}")
+        scan_id = sql_str(f"scan-{slug}-{r['sha256'][:16]}")
+        guard = first_party_guard(slug)
+        tag_list = ", ".join(sql_str(t) for t in r["tags"])
+        cat = sql_str(r["category"])
+        a(f"-- {slug}: {r['tdxn_path']} sha256={r['sha256']} size={r['size']}")
+        a("-- Version row for the repo blob, unless this specimen already has one.")
+        a(
+            "INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256,"
+            " size_bytes, op_count, scan_id, signature_ref, changelog)"
+        )
+        a(
+            f"SELECT {ver_id}, s.id,"
+            " (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id),"
+            f" {sha}, {sha}, {r['size']}, {r['op_count']}, {scan_id}, NULL,"
+            f" {sql_str('First-party sync of ' + r['tdxn_path'])}"
+        )
+        a("FROM specimens AS s")
+        a(f"WHERE {guard}")
+        a(
+            "  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v"
+            f" WHERE v.specimen_id = s.id AND v.tdn_sha256 = {sha});"
+        )
+        a("INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)")
+        a(f"SELECT {scan_id}, {ver_id}, 'seed', 'clean', {sql_str(cap_json)}, '[]'")
+        a(
+            f"WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = {ver_id})"
+            f" AND NOT EXISTS (SELECT 1 FROM scans WHERE id = {scan_id});"
+        )
+        a("-- Metadata + current version. Engagement, visibility, tier, media untouched.")
+        a("UPDATE specimens AS s")
+        a(
+            f"SET title = {sql_str(r['name'])}, description = {sql_str(r['description'])},"
+            f" category = {cat}, level = {sql_str(r['level'])},"
+            f" requires = {sql_str(json.dumps(r['requires']))}, op_count = {r['op_count']},"
+            f" family_summary = {sql_str(r['family_summary'])}, license = {sql_str(r['license'])},"
+            f" scan_status = 'clean', capability_json = {sql_str(cap_json)},"
+        )
+        a(
+            "    current_version_id = (SELECT v.id FROM specimen_versions AS v"
+            f" WHERE v.specimen_id = s.id AND v.tdn_sha256 = {sha} ORDER BY v.version_num DESC LIMIT 1),"
+        )
+        a("    updated_at = datetime('now')")
+        a(f"WHERE {guard}")
+        a(
+            "  AND EXISTS (SELECT 1 FROM specimen_versions AS v"
+            f" WHERE v.specimen_id = s.id AND v.tdn_sha256 = {sha})"
+        )
+        a(f"  AND {stale_predicate(r, cap_json)};")
+        a("-- Tag and category sets: drop links the repo no longer lists, add missing ones.")
+        a(
+            f"DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE {guard})"
+            f" AND tag_id NOT IN (SELECT t.id FROM tags AS t WHERE t.slug IN ({tag_list}));"
+        )
+        a(
+            "INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id)"
+            f" SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ({tag_list}) WHERE {guard};"
+        )
+        a(
+            f"DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE {guard})"
+            f" AND category NOT IN ({cat});"
+        )
+        a(
+            "INSERT OR IGNORE INTO specimen_categories (specimen_id, category)"
+            f" SELECT s.id, {cat} FROM specimens AS s WHERE {guard};"
+        )
+        a("")
+
+    write_lf(SYNC_SQL_PATH, "\n".join(lines).rstrip() + "\n")
+
+
+def write_plan_sql(rows: list[dict]) -> None:
+    cap_json = json.dumps(CLEAN_CAPABILITY, separators=(",", ":"))
+    lines: list[str] = []
+    a = lines.append
+    a("-- First-party Specimen sync status. GENERATED by scripts/build-specimen-data.py.")
+    a("-- READ-ONLY. Result 1: the specimens_fts DDL and its delete trigger. Then one")
+    a("-- result per first-party slug: found, first_party, live vs repo sha, stale")
+    a("-- (1 = first-party-sync.sql would write). One statement per slug: D1 refuses a")
+    a("-- 6-term UNION ALL (too many terms in compound SELECT). CI runs it via")
+    a("-- --command with these comment lines stripped, never --file (the import path).")
+    a("SELECT type, name, sql FROM sqlite_master")
+    a("WHERE name IN ('specimens_fts', 'specimens_fts_ad') ORDER BY name;")
+    parts = []
+    for r in rows:
+        slug = sql_str(r["slug"])
+        sha = sql_str(r["sha256"])
+        parts.append(
+            f"SELECT {slug} AS slug, {sha} AS repo_sha, {r['size']} AS repo_size,\n"
+            "  s.id AS specimen_id, u.handle AS author_handle,\n"
+            "  CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,\n"
+            f"  CASE WHEN u.handle = {sql_str(AUTHOR_HANDLE)} THEN 1 ELSE 0 END AS first_party,\n"
+            "  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,\n"
+            "  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,\n"
+            "  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id\n"
+            f"     AND v.tdn_sha256 = {sha} ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,\n"
+            f"  CASE WHEN s.id IS NULL THEN NULL WHEN {stale_predicate(r, cap_json)} THEN 1 ELSE 0 END AS stale\n"
+            "FROM (SELECT 1) AS one\n"
+            f"LEFT JOIN specimens AS s ON s.slug = {slug}\n"
+            "LEFT JOIN users_profile AS u ON u.id = s.author_id\n"
+            "LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;"
+        )
+    a("\n".join(parts))
+    write_lf(PLAN_SQL_PATH, "\n".join(lines).rstrip() + "\n")
 
 
 def write_graphs_ts(rows: list[dict], graphs: dict) -> None:
@@ -455,7 +688,7 @@ def write_graphs_ts(rows: list[dict], graphs: dict) -> None:
     body_parts.append("  return specimenGraphs[slug];")
     body_parts.append("}")
     body_parts.append("")
-    GRAPHS_TS_PATH.write_text("\n".join(body_parts), encoding="utf-8")
+    write_lf(GRAPHS_TS_PATH, "\n".join(body_parts))
 
 
 def to_ts_literal(value, indent: int) -> str:
@@ -501,9 +734,7 @@ def write_blob_manifest(rows: list[dict]) -> None:
         }
         for r in rows
     ]
-    BLOB_MANIFEST_PATH.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
-    )
+    write_lf(BLOB_MANIFEST_PATH, json.dumps(payload, indent=2, ensure_ascii=True) + "\n")
 
 
 def write_fixtures(rows: list[dict]) -> None:
@@ -529,9 +760,7 @@ def write_fixtures(rows: list[dict]) -> None:
         }
         for r in rows
     ]
-    FIXTURES_PATH.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
-    )
+    write_lf(FIXTURES_PATH, json.dumps(payload, indent=2, ensure_ascii=True) + "\n")
 
 
 if __name__ == "__main__":
