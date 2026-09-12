@@ -106,14 +106,17 @@ def cmd_plan(path: str, stage: str) -> None:
 
     if stale and stage == "before":
         if mode == "skip":
-            # Prod runs the June seed's plain content='' mirror: REPLACE there stacks
-            # stale tokens and DELETE errors, so the sync never writes it (field 2026-09-11).
-            print("::warning title=Specimen search rows not updated::specimens_fts is not contentless_delete=1 "
-                  "(the 2026-06-15 seed re-created it as a plain content='' table). The sync leaves the six "
-                  "first-party search rows as they are; rebuilding the mirror is a separate owner decision.")
-        if mode == "skip" and any(d.get("name") == "specimens_fts_ad" for d in ddl):
-            print("::warning title=Specimen deletes are broken::trigger specimens_fts_ad deletes from a plain "
-                  "contentless specimens_fts, which SQLite refuses, so deleting any indexed specimen fails.")
+            # The mirror was rebuilt as contentless_delete=1 on 2026-09-12. A plain
+            # content='' table means something re-created it (seed.sql --remote is the
+            # known way), which stacks stale tokens on REPLACE and, with the 0005
+            # trigger, makes deleting any indexed specimen fail site-wide.
+            print("::warning title=Specimen search rows not updated::specimens_fts is not contentless_delete=1, "
+                  "so the sync leaves the six first-party search rows as they are.")
+    # Deletes are broken whenever the trigger meets a plain contentless mirror,
+    # whatever this sync is doing, so say so loudly rather than syncing past it.
+    if mode == "skip" and any(d.get("name") == "specimens_fts_ad" for d in ddl):
+        fail("specimens_fts is not contentless_delete=1 while trigger specimens_fts_ad deletes from it: deleting any indexed specimen fails. Rebuild the mirror (README: Updating the specimens) first.")
+
     if stage == "before":
         rollback = [
             f"UPDATE specimens SET current_version_id = '{r['current_version_id']}', updated_at = datetime('now') "

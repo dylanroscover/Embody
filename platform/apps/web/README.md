@@ -46,6 +46,15 @@ six specimens with a new `created_at` and zeroed likes/copies/views.
 
 ### Updating the specimens on embody.tools
 
+**The search mirror.** `specimens_fts` must be the migration-0005 form
+(`content='', contentless_delete=1`). Production was seeded in June with a plain
+`content=''` table, so the 0005 delete trigger could not remove its rows and
+deleting any indexed specimen failed with "cannot DELETE from contentless fts5
+table"; it was rebuilt and repopulated on 2026-09-12 (search text re-extracted
+from each blob). Never run `seed.sql` against `--remote`: it re-creates the
+mirror in the wrong form. The sync plan step and the e2e job both fail loudly if
+the wrong form ever comes back.
+
 Production gets `src/server/first-party-sync.sql`, generated from the same
 manifest. It touches only the six first-party rows (matched by slug and the
 `envoy` author), adds a version row for a new blob, and preserves ids,

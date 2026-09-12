@@ -146,6 +146,15 @@ jobs:
           sql="$(grep -v '^--' src/server/first-party-plan.sql)"
           npx wrangler d1 execute embody --local --json --command="$sql" > "$RUNNER_TEMP/plan-local.json"
           python3 scripts/first-party-sync-report.py plan "$RUNNER_TEMP/plan-local.json" after
+          # A plain content='' mirror + the 0005 delete trigger = deleting any
+          # indexed specimen fails. Prod sat that way from June until 2026-09-12;
+          # catch a seed/migration regression here, not in production.
+          ddl="$(npx wrangler d1 execute embody --local --json \
+            --command="SELECT sql FROM sqlite_master WHERE name='specimens_fts'")"
+          case "$ddl" in
+            *contentless_delete=1*) echo 'specimens_fts: contentless_delete=1' ;;
+            *) echo "::error title=specimens_fts is the wrong form::A plain contentless mirror breaks specimen deletes. $ddl"; exit 1 ;;
+          esac
 
       # global.setup.ts reseeds D1 only. The collection and viewer specs also
       # need the specimen .tdxn blobs in local R2, keyed by sha256 (= tdn_r2_key
