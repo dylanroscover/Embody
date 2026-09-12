@@ -9,6 +9,20 @@ import json
 from pathlib import Path
 
 
+def _strip_dev_bindings(doc):
+    """Lab DATs are externalized, so a live export carries file/syncfile
+    bindings into specimen_lab/. Published Specimens must not: Sync to File
+    writes into whoever pasted them (field 2026-09-11). Loaded by path, and a
+    failure aborts the publish rather than shipping a binding.
+    """
+    import importlib.util
+    path = Path(project.folder).resolve() / 'specimen_bindings.py'
+    spec = importlib.util.spec_from_file_location('specimen_bindings', str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.strip_bindings(doc)
+
+
 def _publish():
     emb = op.Embody
     if not emb:
@@ -35,6 +49,7 @@ def _publish():
             missing.append(slug + ' (export failed)')
             continue
         new = res['tdn']
+        _strip_dev_bindings(new)
         old = TDN._read_existing_tdxn(str(out)) if out.exists() else None
         if old and TDN._tdxn_content_equal(new, old):
             skipped.append(slug)

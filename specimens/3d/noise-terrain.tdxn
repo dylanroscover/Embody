@@ -35,7 +35,6 @@ type_defaults:
   textDAT:
     parameters:
       language: glsl
-      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -262,8 +261,6 @@ operators:
     dat_read_only: true
   - name: glsl_terrain_compute
     type: textDAT
-    parameters:
-      file: specimen_lab/noise_terrain/geo/glsl_terrain_compute.glsl
     flags:
     - viewer
     position: [335, -120]
@@ -685,7 +682,6 @@ operators:
 - name: glsl_sky_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/noise_terrain/glsl_sky_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -716,7 +712,6 @@ operators:
 - name: glsl_snow_pixel
   type: textDAT
   parameters:
-    file: specimen_lab/noise_terrain/glsl_snow_pixel.glsl
     extension: frag
   flags:
   - viewer
@@ -771,8 +766,6 @@ operators:
   dat_content_format: text
 - name: glsl_sky_compute
   type: textDAT
-  parameters:
-    file: specimen_lab/noise_terrain/glsl_sky_compute.glsl
   flags:
   - viewer
   - -showDocked
@@ -781,7 +774,6 @@ operators:
 - name: glsl_snow_vertex
   type: textDAT
   parameters:
-    file: specimen_lab/noise_terrain/glsl_snow_vertex.glsl
     extension: vert
   flags:
   - viewer
