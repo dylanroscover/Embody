@@ -2964,6 +2964,19 @@ class EmbodyExt:
             quit_after=quit_after, confirm=confirm,
             ignore_op_errors=ignore_op_errors)
 
+    def CreateReleaseToeHook(self, hook_name: str = 'pre_release_toe') -> dict:
+        """Generate the pre_release_toe hook for this project, pre-filled
+        from the release gate: real disarm lines for the Execute DATs that
+        block the export, a checklist of absolute paths that would ship, and
+        commented stubs. NEVER overwrites an existing hook. See embody_admin."""
+        return mod.embody_admin.create_release_toe_hook(self,
+                                                        hook_name=hook_name)
+
+    def _onExportreleasetoePulse(self, par: 'Par') -> dict:
+        """Export Release .toe pulse -> choose a path, preview, confirm.
+        Tier 3: the parexec DAT reaches it by name. See embody_admin."""
+        return mod.embody_admin.export_release_toe_handler(self)
+
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
     # in the Advanced-mode confirm.

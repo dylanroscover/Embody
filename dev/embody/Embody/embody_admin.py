@@ -51,7 +51,9 @@ The run() deferral strings target the facade stubs (ext.Embody._saveSettings /
 
 from __future__ import annotations
 
+import datetime
 import json
+import math
 import os
 import posixpath
 import re
@@ -829,27 +831,33 @@ def plan_release_readiness(*, tdxn_comps, frame, op_errors, perform_mode,
                         'relative to project.folder')
     path = str(save_path or '').strip()
     toe_name = posixpath.basename(str(project_toe or '').replace('\\', '/'))
+    # Kept apart so a caller can ask what is true REGARDLESS of
+    # destination: the pulse handler prompts before its file dialog,
+    # and 'a save path is required' must not read as a blocker when
+    # no path has been picked yet.
+    path_refusals = []
     if not path:
-        refusals.append('a save path is required')
+        path_refusals.append('a save path is required')
     elif not path.lower().endswith('.toe'):
-        refusals.append(f'save path must end in .toe: {path}')
+        path_refusals.append(f'save path must end in .toe: {path}')
     elif project_toe and _release_same_path(path, project_toe):
-        refusals.append(f'save path is the running project itself: {path}')
+        path_refusals.append(f'save path is the running project itself: {path}')
     elif _release_same_series(path, project_toe, project_folder):
-        refusals.append(
+        path_refusals.append(
             f"save path is in the running project's own folder and save "
             f'series ({posixpath.basename(path)} beside {toe_name}) -- '
             f'TouchDesigner and Embody would take it for the newest save of '
             f'this project; write the release outside the project folder or '
             f'under another base name')
     elif save_dir_exists is False:
-        refusals.append(
+        path_refusals.append(
             f'save folder does not exist: {posixpath.dirname(path)}')
     elif save_path_exists:
-        refusals.append(
+        path_refusals.append(
             f'save path already exists: {path} -- TouchDesigner would ask '
             f'to overwrite it in a session with nothing left to answer; '
             f'delete it or pick another name')
+    refusals.extend(path_refusals)
     touched = set(hook_touched or ())
     missing = sorted(c['path'] for c in tdxn_comps
                      if not c.get('present') and c['path'] not in touched)
@@ -889,6 +897,7 @@ def plan_release_readiness(*, tdxn_comps, frame, op_errors, perform_mode,
                 + '; '.join(list(op_errors)[:5]))
         (warnings if ignore_op_errors else refusals).append(line)
     return {'ready': not refusals, 'refusals': refusals, 'warnings': warnings,
+            'path_refusals': path_refusals,
             'missing': missing, 'shells': shells,
             'unverifiable': unverifiable, 'frame': int(frame),
             'save_path': path}
@@ -1513,10 +1522,23 @@ def preview_release_toe(ext, save_path=None, privacy_key=None,
                             hook_name=hook_name,
                             ignore_op_errors=ignore_op_errors)
     ready = plan['readiness']
-    lines = [f'Release .toe preview -> {plan["save_path"] or "(no path)"}']
-    if not ready['ready']:
-        lines.append(f'  REFUSED ({len(ready["refusals"])}):')
-        lines.extend(f'    x {r}' for r in ready['refusals'])
+    # With no path this is a PRE-FLIGHT: report only what is true regardless
+    # of destination. Listing 'a save path is required' as a refusal when the
+    # caller deliberately asked without one reads as a failure and buries the
+    # blocker that matters (field note 2026-09-12).
+    path_refusals = list(ready.get('path_refusals', ()))
+    pre_flight = not str(plan['save_path'] or '').strip()
+    shown = ([r for r in ready['refusals'] if r not in path_refusals]
+             if pre_flight else list(ready['refusals']))
+    lines = ['Release .toe pre-flight -> no path chosen yet' if pre_flight
+             else f'Release .toe preview -> {plan["save_path"]}']
+    if shown:
+        lines.append(f'  {"BLOCKED" if pre_flight else "REFUSED"} '
+                     f'({len(shown)}):')
+        lines.extend(f'    x {r}' for r in shown)
+    elif pre_flight:
+        lines.append('  ready -- nothing blocks the export except choosing '
+                     'a save path')
     lines.extend(f'  WARNING: {w}' for w in ready['warnings'])
     lines.append(f'  hook: {plan["hook_path"] or "none"} (looked for '
                  f'{plan["hook_name"]} under {plan["product_path"]}) -- the '
@@ -1711,6 +1733,368 @@ def export_release_toe(ext, save_path, privacy_key=None,
             'footprint': plan['footprint'],
             'privacy': plan['privacy']['apply'],
             'quit_after': bool(quit_after), 'plan': plan}
+
+
+# A modal PUMPS TouchDesigner's frame loop, so the pending parexec pulse is
+# re-delivered while the first dialog is still up and the handler re-enters --
+# one click, two stacked dialogs (measured 2026-09-12: two _messageBox calls
+# 7 frames apart from a single pulse). Module-level, reset by a DAT reload,
+# which is the right default.
+_RELEASE_HANDLER_ACTIVE = False
+
+
+def _release_hook_ref(path, product_path) -> str:
+    """How the generated hook should name `path`. Relative to the product
+    COMP wherever it can be -- the hook runs with parent() == that COMP, so
+    a relative reference survives the product being renamed or renested."""
+    path = str(path or '')
+    product = str(product_path or '').rstrip('/')
+    if product and path.startswith(product + '/'):
+        return "p.op('%s')" % path[len(product) + 1:]
+    # Outside the product COMP: nothing relative can reach it. A release
+    # recipe is project-specific, so an absolute path is legitimate here --
+    # flagged so the author sees it rather than inherits it silently.
+    return "op('%s')  # outside %s -- check this path" % (path, product or '/')
+
+
+def build_release_toe_hook_script(plan, version='', today='') -> str:
+    """The pre_release_toe script Embody generates for a project. PURE.
+
+    Written from THIS project's gate results: every Execute DAT the export
+    refuses on becomes a real disarm line, and every absolute binding that
+    would ship becomes a comment to deal with. Everything else is a
+    commented stub -- the hook is the author's release recipe, and guessing
+    at its content would be worse than leaving it blank.
+    """
+    product = plan.get('product_path') or ''
+    presave = list(plan.get('presave_hooks') or ())
+    absolute = list((plan.get('references') or {}).get('absolute') or ())
+    stamp = (' on ' + today) if today else ''
+    out = [
+        '# %s -- release recipe for this project.' % (
+            plan.get('hook_name') or RELEASE_TOE_HOOK),
+        '# Generated by Embody %s%s. Edit freely; it is yours now.' % (
+            version or '', stamp),
+        '#',
+        '# ExportReleaseToe runs this on the real network AFTER every tracked',
+        '# file binding has been cleared and BEFORE anything is scrubbed, then',
+        '# destroys this DAT so it never ships. args[0] is the resolved save',
+        '# path, args[1] is Embody version. Inside here `me` is this DAT and',
+        '# parent() is the product COMP.',
+        '#',
+        '# A raise ABORTS the export and keeps this DAT for inspection -- that',
+        '# is the supported way to guard a release.',
+        '# Do NOT save, refresh or externalize from here.',
+        '',
+        'save_path, embody_version = args[0], args[1]',
+        'p = parent()',
+        '',
+    ]
+    out += ['# --- Required: disarm pre-save hooks ' + '-' * 36]
+    if presave:
+        out += [
+            '# These Execute DATs still have projectpresave on. They would fire',
+            '# during the release save against a project that no longer has an',
+            '# Embody, so the export REFUSES until they are disarmed. Turning',
+            '# the flag off here affects only the doomed export session.',
+        ]
+        out += ['%s.par.projectpresave = False' % _release_hook_ref(d, product)
+                for d in presave]
+    else:
+        out += [
+            '# None right now -- no Execute DAT outside Embody has',
+            '# projectpresave on. If you add one later, disarm it here.',
+        ]
+    out += ['']
+    out += ['# --- Review: absolute paths that would ship ' + '-' * 29]
+    if absolute:
+        out += [
+            '# These bindings survive the inline pass and point at THIS',
+            '# machine. They will be broken on a customer machine. Repoint them',
+            '# at project-relative files, or embed the assets, here or before',
+            '# you export. Embody cannot guess the right target, so this is a',
+            '# checklist, not generated code.',
+        ]
+        out += ['#   %s.%s = %s' % (e.get('path'), e.get('par'), e.get('value'))
+                for e in absolute[:20]]
+        if len(absolute) > 20:
+            out += ['#   ... and %d more (see the preview in the log)'
+                    % (len(absolute) - 20)]
+    else:
+        out += ['# None found -- no absolute file binding survives inlining.']
+    out += ['']
+    out += [
+        '# --- Optional: your release recipe ' + '-' * 38,
+        '# Uncomment what applies. This is the ONE place where changes cannot',
+        '# write through to your source files on disk.',
+        '#',
+        '# Ship straight into Perform Mode:',
+        "# project.performOnStart = True",
+        "# project.performWindowPath = '/perform'",
+        '#',
+        '# Stamp a version the running product can show:',
+        "# p.op('network/release_info')[1, 'version'] = '1.0.0'",
+        '#',
+        '# Refuse to ship a build that is still in demo mode:',
+        "# if p.par.Demomode.eval():",
+        "#     raise Exception('demo mode is still on')",
+        '',
+    ]
+    return '\n'.join(out) + '\n'
+
+
+def create_release_toe_hook(ext, hook_name=RELEASE_TOE_HOOK) -> dict:
+    """Generate the pre_release_toe hook DAT for this project.
+
+    The 'prep it' half of the release flow: the gate can only say WHY it
+    refuses, and every fix it names belongs in a hook the author does not
+    have yet. This writes that hook, pre-filled from the same plan the
+    preview logs -- real disarm lines for the Execute DATs that block the
+    export, a checklist of the absolute paths that would ship, and
+    commented stubs for the rest.
+
+    NEVER overwrites an existing hook: it holds the author's release
+    recipe. Returns {'created': bool, ...}.
+    """
+    plan = plan_release_toe(_release_collect(ext, hook_name, None),
+                            save_path=None, hook_name=hook_name)
+    product = op(plan['product_path']) if plan['product_path'] else None
+    if product is None:
+        ext.Log(f'Create {hook_name}: product COMP '
+                f'{plan["product_path"]!r} not found -- nothing was created.',
+                'ERROR')
+        return {'created': False, 'reason': 'no product comp'}
+    existing = ext._findReleaseHook(product, hook_name)
+    if existing is not None:
+        ext.Log(f'Create {hook_name}: {existing.path} already exists -- it '
+                f'holds your release recipe and is never overwritten. Edit '
+                f'it, or delete it first to regenerate.', 'WARNING')
+        return {'created': False, 'reason': 'already exists',
+                'path': existing.path}
+
+    version = ''
+    try:
+        version = str(ext.my.par.Version.eval())
+    except Exception:
+        pass
+    script = build_release_toe_hook_script(
+        plan, version=version,
+        today=datetime.date.today().isoformat())
+
+    dat = product.create(textDAT, hook_name)
+    dat.text = script
+    # Never (0, 0), never on top of a sibling: park it to the right of
+    # whatever the product COMP already holds (network-layout.md).
+    others = [c for c in product.children if c is not dat]
+    if others:
+        right = max(c.nodeX + c.nodeWidth for c in others)
+        dat.nodeX = int(math.ceil((right + 200) / 200.0) * 200)
+        dat.nodeY = max(c.nodeY for c in others)
+    else:
+        dat.nodeX, dat.nodeY = 200, 200
+
+    ext.Log(f'Created {dat.path}: {len(plan["presave_hooks"])} pre-save hook(s) '
+            f'disarmed, {len(plan["references"]["absolute"])} absolute path(s) '
+            f'listed to review. Read it before you export -- it is your '
+            f'release recipe now.', 'SUCCESS')
+    return {'created': True, 'path': dat.path,
+            'presave_hooks': list(plan['presave_hooks']),
+            'absolute_refs': len(plan['references']['absolute'])}
+
+
+def _release_plan_summary(plan) -> list:
+    """The three counts and the hook, for either confirm dialog."""
+    return [
+        'INLINE %d DAT(s) and %d COMP(s) -- every tracked file binding '
+        'cleared, content kept.' % (len(plan['inline']['dats']),
+                                    len(plan['inline']['comps'])),
+        'SCRUB %d tagged, %d coloured, %d with storage.' % (
+            len(plan['scrub']['tags']), len(plan['scrub']['colours']),
+            len(plan['scrub']['storage'])),
+        'DESTROY ' + (', '.join(e['path'] for e in plan['footprint'])
+                      or '(nothing)') + '.',
+        'HOOK ' + (plan['hook_path'] or 'none found (%s under %s)' % (
+            plan['hook_name'], plan['product_path'])),
+    ]
+
+
+def export_release_toe_handler(ext, save_path=None) -> dict:
+    """Export Release .toe pulse handler. Three stages, in this order:
+
+    1. EXPLAIN, before any file dialog -- what the artifact will be, what
+       this session loses, and whether the project is exportable at all.
+       A blocker here dead-ends without making anyone name a file first.
+    2. CHOOSE the path (ui.chooseFile).
+    3. CONFIRM against that path -- the destination-specific verdict, and
+       the last stop before TouchDesigner quits.
+
+    Cancel at stage 1 or 3 IS the dry run -- the plan is logged and nothing
+    is touched -- which is why there is no separate Preview parameter.
+    privacy_key and ignore_op_errors stay Python-only: a passphrase must not
+    persist into the .toe and .embody/config.json, and ignoring cook errors
+    is a dormant-template escape hatch, not a button.
+
+    save_path skips stage 2 (and only stage 2) -- the seam tests drive,
+    because ui.chooseFile is a native modal no test can answer.
+    """
+    global _RELEASE_HANDLER_ACTIVE
+    if _RELEASE_HANDLER_ACTIVE:
+        # Re-entered from inside our own dialog (see _RELEASE_HANDLER_ACTIVE).
+        return {'ran': False, 'reason': 'already running'}
+    _RELEASE_HANDLER_ACTIVE = True
+    try:
+        return _export_release_toe_handler(ext, save_path)
+    finally:
+        _RELEASE_HANDLER_ACTIVE = False
+
+
+def _export_release_toe_handler(ext, save_path=None) -> dict:
+    """The handler body. Guarded by export_release_toe_handler."""
+    # ui.chooseFile is a NATIVE modal -- nothing can auto-answer it, so a
+    # save or test run would freeze TD where ext._messageBox would have
+    # returned its -1 default. Refuse before the dialog, not after. An
+    # explicit save_path opens no dialog, so it is not gated.
+    if save_path is None and (
+            ext._testRunnerActive()
+            or ext.my.fetch('_suppress_dialogs', False, search=False)):
+        ext.Log('Export Release .toe: refused -- a save or test run is in '
+                'flight and a file dialog cannot be answered. Call '
+                'ExportReleaseToe(save_path, confirm=True) instead.',
+                'WARNING')
+        return {'ran': False, 'reason': 'dialogs suppressed'}
+
+    # --- Stage 1: what is true regardless of destination ----------------
+    # A pathless preview answers "is this project exportable, and what will
+    # the artifact be" without anyone choosing a file first. Its own path
+    # refusals are not blockers yet -- that is what path_refusals is for.
+    pre = preview_release_toe(ext, save_path=save_path)
+    gate = pre['readiness']
+    blockers = [r for r in gate['refusals']
+                if r not in gate.get('path_refusals', ())]
+    if blockers:
+        # Every fix the gate names belongs in a pre_release_toe hook. Offer to
+        # write one rather than leaving the user to find that out from a doc.
+        offer_hook = bool(pre['presave_hooks']) and not pre['hook_path']
+        if offer_hook:
+            tail = ('\n\nNothing was changed, and no file was written.\n\n'
+                    'Embody can write a %s hook for you, pre-filled to disarm '
+                    'the pre-save hook(s) above and listing anything else this '
+                    'project needs before it ships. It is an ordinary Text DAT '
+                    'afterwards -- yours to edit, and never overwritten.'
+                    % pre['hook_name'])
+        else:
+            tail = ('\n\nNothing was changed, and no file was written. Fix '
+                    'what is listed above and pulse again; the full preview '
+                    'is in the log.')
+        choice = ext._messageBox(
+            'Embody -- Export Release .toe',
+            'This project cannot be exported as a release .toe yet:\n\n'
+            + '\n'.join('- ' + r for r in blockers) + tail,
+            buttons=(['Cancel', 'Create the hook for me']
+                     if offer_hook else ['OK']))
+        out = {'ran': False, 'reason': 'not ready', 'stage': 'pre',
+               'refusals': blockers, 'plan': pre}
+        if offer_hook and choice == 1:
+            out['hook'] = create_release_toe_hook(ext,
+                                                  hook_name=pre['hook_name'])
+            if out['hook'].get('created'):
+                ext._messageBox(
+                    'Embody -- Export Release .toe',
+                    'Created %s.\n\nRead it, edit it, then pulse Export '
+                    'Release Toe again. Nothing has been exported.'
+                    % out['hook']['path'],
+                    buttons=['OK'])
+        return out
+
+    if save_path is None:
+        lines = ['Export this project as a release .toe?', '',
+                 'What gets written:', '',
+                 'A single self-contained .toe at a location you pick next. '
+                 'Every externalized file is inlined back into the operator '
+                 'that owns it, so the artifact needs none of your .tox / '
+                 '.tdxn / .py files on disk. Embody itself is removed.', '']
+        lines += _release_plan_summary(pre)
+        lines += ['',
+                  'Saved WITHOUT Project Privacy -- the networks open '
+                  'normally. For a locked build, call '
+                  'op.Embody.ExportReleaseToe(save_path, privacy_key=..., '
+                  'confirm=True) from Python instead.',
+                  '',
+                  'THIS SESSION DOES NOT SURVIVE. Embody and the '
+                  'externalizations table are deleted, the file is saved, '
+                  'and TouchDesigner quits. There is no undo and no restore '
+                  'phase -- run this in a dedicated TouchDesigner instance, '
+                  'never the one you are editing in.',
+                  '',
+                  'Your own project .toe on disk is never written.',
+                  '',
+                  'You will confirm once more after choosing the location.']
+        if ext._messageBox('Embody -- Export Release .toe', '\n'.join(lines),
+                           buttons=['Cancel', 'Choose Location...']) != 1:
+            ext.Log('Export Release .toe cancelled before the file dialog -- '
+                    'nothing was changed.', 'INFO')
+            return {'ran': False, 'reason': 'cancelled', 'stage': 'pre',
+                    'plan': pre}
+
+    # --- Stage 2: where -------------------------------------------------
+    chosen = save_path or ui.chooseFile(load=False, fileTypes=['toe'],
+                                        title='Export Release .toe')
+    if not chosen:
+        ext.Log('Export Release .toe: cancelled at the file dialog -- '
+                'nothing was changed.', 'INFO')
+        return {'ran': False, 'reason': 'cancelled', 'stage': 'choose'}
+    # A Save dialog filtered to .toe still hands back a bare name; the gate
+    # refuses anything that is not a .toe, so add it rather than bounce.
+    if not str(chosen).lower().endswith('.toe'):
+        chosen = str(chosen) + '.toe'
+
+    # --- Stage 3: the destination-specific verdict ----------------------
+    plan = preview_release_toe(ext, save_path=chosen)
+    ready = plan['readiness']
+    resolved = plan['save_path'] or chosen
+    if not ready['ready']:
+        ext._messageBox(
+            'Embody -- Export Release .toe',
+            'Not ready to export to that location:\n\n'
+            + '\n'.join('- ' + r for r in ready['refusals'])
+            + '\n\nNothing was changed. The full preview -- what would be '
+              'inlined, scrubbed and destroyed -- is in the log.',
+            buttons=['OK'])
+        return {'ran': False, 'reason': 'not ready', 'stage': 'confirm',
+                'refusals': list(ready['refusals']), 'plan': plan}
+
+    refs = plan['references']
+    lines = ['Write the release .toe now?', '', 'To: ' + resolved, '',
+             'This session does NOT survive. Embody and the externalizations '
+             'table are deleted, the file is saved, and TouchDesigner quits. '
+             'There is no undo.', '']
+    lines += _release_plan_summary(plan)
+    if refs['absolute']:
+        lines.append('')
+        lines.append('WARNING: %d absolute path(s) stay bound after '
+                     'inlining -- they leak this build machine filesystem '
+                     'into the artifact: %s' % (
+                         len(refs['absolute']),
+                         ', '.join('%s.%s' % (e['path'], e['par'])
+                                   for e in refs['absolute'][:5])))
+    for warning in ready['warnings']:
+        lines.append('')
+        lines.append('WARNING: ' + warning)
+    lines += ['', 'Cancel leaves everything exactly as it is; the preview '
+                  'above has already been logged as a dry run.']
+
+    choice = ext._messageBox('Embody -- Export Release .toe',
+                             '\n'.join(lines),
+                             buttons=['Cancel', 'Export and Quit'])
+    if choice != 1:
+        ext.Log('Export Release .toe cancelled -- nothing was changed. The '
+                'logged preview stands as the dry run.', 'INFO')
+        return {'ran': False, 'reason': 'cancelled', 'stage': 'confirm',
+                'plan': plan}
+    # No completion dialog: on success the deferred tail quits TD, and a
+    # modal would block the quit it is reporting.
+    return export_release_toe(ext, resolved, hook_name=plan['hook_name'],
+                              confirm=True)
 
 
 def _release_refuse_presave(ext, blocking, hook_name) -> dict:

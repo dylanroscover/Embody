@@ -748,6 +748,20 @@ class _Op:
         self.par.__dict__["_owner"] = self
         self.color = (1.0, 1.0, 1.0)
         self.valid = True
+        self.text = ""
+        self.nodeX, self.nodeY = 0, 0
+        self.nodeWidth, self.nodeHeight = 100, 100
+
+    @property
+    def children(self):
+        prefix = self.path.rstrip("/") + "/"
+        return [o for p, o in self.world.ops.items()
+                if p.startswith(prefix) and "/" not in p[len(prefix):]]
+
+    def create(self, type_, name):
+        # textDAT is monkeypatched onto the module as a marker string.
+        return self.world.add(self.path.rstrip("/") + "/" + name,
+                              "DAT", "text")
 
     def destroy(self):
         self.valid = False
@@ -838,11 +852,21 @@ class _Ext:
         self.root = world.ops["/"]
         self.Externalizations = world.ops.get(TABLE)
         self.log, self.hook_calls = [], []
+        # The pulse handler's two dialog seams.
+        self.dialogs, self.answers = [], []
+        self.test_runner_active = False
         self._performMode = False
         self._STORAGE_CONTROL_KEYS = embodyext.EmbodyExt._STORAGE_CONTROL_KEYS
 
     def Log(self, message, level="INFO", details=None):
         self.log.append((level, message))
+
+    def _testRunnerActive(self):
+        return self.test_runner_active
+
+    def _messageBox(self, title, message, buttons):
+        self.dialogs.append((title, message, list(buttons)))
+        return self.answers.pop(0) if self.answers else 0
 
     def _cellVal(self, row, col, default="", table=None):
         return self.world.rows[row - 1].get(col, default)
@@ -1249,3 +1273,354 @@ def test_td_owned_networks_are_outside_the_scans():
     assert [d["path"] for d in admin._release_execute_dats(ext)] == [
         EMBODY + "/execute"]                  # Embody's own, dropped later
     assert admin._release_op_errors(ext) == []
+
+
+# ==========================================================================
+# The Export Release Toe PULSE handler (one parameter, two dialogs)
+# ==========================================================================
+# Everything the button does before it is allowed to reach export_release_toe:
+# refuse a file dialog nothing can answer, preview, and stop on Cancel.
+
+
+def _chooser(w, answer):
+    """Stand in for ui.chooseFile and record that it was reached."""
+    def chooseFile(**kwargs):
+        w.events.append(("chooseFile", kwargs.get("title", "")))
+        return answer
+    admin.ui = SimpleNamespace(chooseFile=chooseFile)
+
+
+def test_the_pulse_refuses_the_file_dialog_during_a_save_or_test(tmp_path):
+    """ui.chooseFile is a native modal no test or save can answer -- refuse
+    BEFORE it opens, where _messageBox would have returned its -1 default."""
+    for arm in ("suppress", "testrunner"):
+        w, ext = _world()
+        _chooser(w, str(tmp_path / "Release.toe"))
+        if arm == "suppress":
+            ext.my.store("_suppress_dialogs", True)
+        else:
+            ext.test_runner_active = True
+        before = _snapshot(w)
+        res = admin.export_release_toe_handler(ext)
+        assert res == {"ran": False, "reason": "dialogs suppressed"}
+        assert [e for e in w.events if e[0] == "chooseFile"] == []
+        assert ext.dialogs == [] and w.runs == [] and _snapshot(w) == before
+
+
+def test_an_explicit_save_path_is_not_gated_by_the_dialog_guard(tmp_path):
+    """The guard exists for chooseFile; a caller that passes a path opens no
+    dialog, so a save/test context still reaches the preview."""
+    w, ext = _world()
+    ext.test_runner_active = True
+    ext.answers = [0]
+    res = admin.export_release_toe_handler(
+        ext, save_path=str(tmp_path / "Release.toe"))
+    assert res["reason"] == "cancelled" and ext.dialogs
+
+
+# --- Stage 1: the prompt that comes BEFORE the file dialog ----------------
+
+
+def test_the_prompt_comes_before_the_file_dialog(tmp_path):
+    """Nobody should have to name a file to find out what the button does."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [0]                       # Cancel the very first prompt
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "cancelled" and res["stage"] == "pre"
+    assert [e for e in w.events if e[0] == "chooseFile"] == []
+    _, message, buttons = ext.dialogs[0]
+    assert buttons == ["Cancel", "Choose Location..."]
+    assert "What gets written:" in message
+    assert "DOES NOT SURVIVE" in message
+    assert "WITHOUT Project Privacy" in message
+    assert "INLINE" in message and "DESTROY" in message
+    assert w.runs == [] and _snapshot(w) == before
+
+
+def test_a_blocker_dead_ends_before_anyone_picks_a_path(tmp_path):
+    """A project that cannot be exported says so FIRST -- not after the user
+    has gone hunting for a save location."""
+    w, ext = _world(with_hook=False, presave_armed=True)
+    _chooser(w, str(tmp_path / "Release.toe"))
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "not ready" and res["stage"] == "pre"
+    assert _refusal(res, QUIESCE)
+    assert [e for e in w.events if e[0] == "chooseFile"] == []
+    assert len(ext.dialogs) == 1
+    _, message, buttons = ext.dialogs[0]
+    # A missing hook is the fix for this blocker, so the dialog offers it.
+    assert buttons == ["Cancel", "Create the hook for me"]
+    assert QUIESCE in message
+    assert w.runs == [] and _snapshot(w) == before
+
+
+def test_a_missing_path_is_not_a_stage_one_blocker(tmp_path):
+    """The pre-flight runs with NO path, so the gate's own 'a save path is
+    required' must not read as a reason the project cannot be exported."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [0]
+    res = admin.export_release_toe_handler(ext)
+    gate = admin.preview_release_toe(ext, save_path=None)["readiness"]
+    assert gate["ready"] is False                       # pathless: refused
+    assert gate["path_refusals"] == ["a save path is required"]
+    assert res["stage"] == "pre" and res["reason"] == "cancelled"
+    _, message, buttons = ext.dialogs[0]
+    assert buttons == ["Cancel", "Choose Location..."]  # prompted, not blocked
+    assert "a save path is required" not in message
+
+
+def test_path_refusals_stay_inside_the_full_refusal_list(tmp_path):
+    """Splitting them out must not remove them: every existing caller still
+    reads the whole list from refusals."""
+    w, ext = _world()
+    gate = admin.preview_release_toe(
+        ext, save_path=str(PROJECT_TOE))["readiness"]
+    assert gate["path_refusals"] and gate["path_refusals"][0] in gate["refusals"]
+    assert _refusal({"refusals": gate["refusals"]}, "running project itself")
+
+
+# --- Stage 2: where -------------------------------------------------------
+
+
+def test_a_cancelled_file_dialog_changes_nothing(tmp_path):
+    w, ext = _world()
+    _chooser(w, None)
+    ext.answers = [1]                       # accept stage 1, then cancel
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert res == {"ran": False, "reason": "cancelled", "stage": "choose"}
+    assert len(ext.dialogs) == 1 and w.runs == [] and _snapshot(w) == before
+
+
+def test_a_bare_name_from_the_save_dialog_gets_the_toe_suffix(tmp_path):
+    """The gate refuses anything that is not a .toe; a Save dialog filtered
+    to .toe still hands back a bare name, so add it rather than bounce."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release"))
+    ext.answers = [1, 0]
+    res = admin.export_release_toe_handler(ext)
+    assert res["plan"]["save_path"].endswith("Release.toe")
+
+
+# --- Stage 3: the confirm that names the real file ------------------------
+
+
+def test_the_destination_verdict_stops_at_its_own_dialog(tmp_path):
+    """A path-specific refusal (an existing file) surfaces AFTER the choice,
+    because nothing could have known it before."""
+    target = tmp_path / "Release.toe"
+    target.write_text("already here")
+    w, ext = _world()
+    _chooser(w, str(target))
+    ext.answers = [1]
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "not ready" and res["stage"] == "confirm"
+    assert _refusal(res, "already exists")
+    _, message, buttons = ext.dialogs[-1]
+    assert buttons == ["OK"] and "that location" in message
+    assert w.runs == [] and _snapshot(w) == before
+
+
+def test_cancelling_the_confirm_is_the_dry_run(tmp_path):
+    """Cancel is why there is no separate Preview parameter: the plan is
+    logged and NOTHING is touched."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [1, 0]
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "cancelled" and res["stage"] == "confirm"
+    assert res["plan"]["readiness"]["ready"]
+    _, message, buttons = ext.dialogs[-1]
+    assert buttons == ["Cancel", "Export and Quit"]
+    assert str(tmp_path / "Release.toe").replace("\\", "/") in message
+    assert w.runs == [] and ext.hook_calls == [] and _snapshot(w) == before
+
+
+def test_a_suppressed_confirm_defaults_to_cancel(tmp_path):
+    """_messageBox returns -1 when a dialog cannot be shown. That must read
+    as Cancel at BOTH stages -- never as the Export button."""
+    for answers in ([-1], [1, -1]):
+        w, ext = _world()
+        _chooser(w, str(tmp_path / "Release.toe"))
+        ext.answers = list(answers)
+        before = _snapshot(w)
+        res = admin.export_release_toe_handler(ext)
+        assert res["reason"] == "cancelled"
+        assert w.runs == [] and _snapshot(w) == before
+
+
+def test_the_confirm_button_runs_the_export(tmp_path):
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [1, 1]                    # Choose Location..., Export
+    res = admin.export_release_toe_handler(ext)
+    assert res["ran"] is True and res["save_path"].endswith("Release.toe")
+    assert len(w.runs) == 1                 # the destroy/save/quit tail
+    # Exactly two dialogs: the prompt and the confirm. No completion box --
+    # the tail quits TD and a modal would block the quit it reports.
+    assert len(ext.dialogs) == 2
+
+
+def test_the_confirm_names_absolute_paths_that_would_ship(tmp_path):
+    """An absolute binding leaks the build machine's filesystem; the preview
+    logs it, and the confirm has to say so before the one-way button."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [1, 0]
+    admin.export_release_toe_handler(ext)
+    _, message, _ = ext.dialogs[-1]
+    assert "absolute path" in message and "/moonshine/media" in message
+
+
+def test_one_pulse_shows_one_dialog_even_though_a_modal_pumps_frames(tmp_path):
+    """A TD modal runs the frame loop, so the pending pulse is re-delivered
+    and the handler re-enters while its own dialog is still up -- measured as
+    two stacked dialogs from one click. The guard makes the second a no-op."""
+    w, ext = _world()
+    _chooser(w, str(tmp_path / "Release.toe"))
+    reentered = []
+
+    def answer(title, message, buttons):
+        ext.dialogs.append((title, message, list(buttons)))
+        # Re-enter exactly as TD does: from inside the blocking dialog.
+        reentered.append(admin.export_release_toe_handler(ext))
+        return 0
+
+    ext._messageBox = answer
+    before = _snapshot(w)
+    res = admin.export_release_toe_handler(ext)
+    assert reentered == [{"ran": False, "reason": "already running"}]
+    assert len(ext.dialogs) == 1                 # not two
+    assert res["reason"] == "cancelled" and res["stage"] == "pre"
+    assert w.runs == [] and _snapshot(w) == before
+
+
+def test_the_guard_clears_after_a_raise(tmp_path):
+    """A guard that latches would make the button dead until a DAT reload."""
+    w, ext = _world()
+
+    def boom(*a, **k):
+        raise RuntimeError("dialog exploded")
+
+    ext._messageBox = boom
+    _chooser(w, str(tmp_path / "Release.toe"))
+    try:
+        admin.export_release_toe_handler(ext)
+    except RuntimeError:
+        pass
+    assert admin._RELEASE_HANDLER_ACTIVE is False
+
+
+# ==========================================================================
+# The generated pre_release_toe hook (the "prep it" half)
+# ==========================================================================
+# The gate can only say WHY it refuses. Every fix it names belongs in a hook
+# the author does not have yet, so Embody offers to write that hook.
+
+
+def test_the_generated_hook_disarms_exactly_what_blocks_the_export(tmp_path):
+    w, ext = _world(with_hook=False, presave_armed=True)
+    plan = admin.preview_release_toe(ext, save_path=None)
+    script = admin.build_release_toe_hook_script(plan, version="6.2.50",
+                                                 today="2026-09-12")
+    # A real disarm line, addressed RELATIVE to the product COMP.
+    assert "p.op('sources/quiesce').par.projectpresave = False" in script
+    assert "'/moonshine/sources/quiesce'" not in script     # no absolute path
+    assert "save_path, embody_version = args[0], args[1]" in script
+    assert "6.2.50" in script and "2026-09-12" in script
+    compile(script, "pre_release_toe", "exec")              # it must be Python
+
+
+def test_the_generated_hook_lists_absolute_paths_as_a_checklist(tmp_path):
+    """Embody cannot guess the right target, so these are comments -- never
+    generated code that would silently repoint someone's asset."""
+    w, ext = _world(with_hook=False, presave_armed=True)
+    plan = admin.preview_release_toe(ext, save_path=None)
+    script = admin.build_release_toe_hook_script(plan)
+    line = [l for l in script.splitlines() if "/moonshine/media" in l]
+    assert line and line[0].lstrip().startswith("#")
+    compile(script, "pre_release_toe", "exec")
+
+
+def test_the_generated_hook_is_valid_with_nothing_to_fix(tmp_path):
+    w, ext = _world(with_hook=False)
+    plan = admin.preview_release_toe(ext, save_path=None)
+    script = admin.build_release_toe_hook_script(plan)
+    assert "None right now" in script
+    compile(script, "pre_release_toe", "exec")
+
+
+def test_a_reference_outside_the_product_comp_is_flagged():
+    """Nothing relative reaches it, so it is absolute AND called out rather
+    than inherited silently."""
+    ref = admin._release_hook_ref("/elsewhere/quiesce", "/moonshine")
+    assert ref.startswith("op('/elsewhere/quiesce')") and "check this" in ref
+    assert admin._release_hook_ref("/moonshine/a/b", "/moonshine") == \
+        "p.op('a/b')"
+
+
+def test_creating_the_hook_writes_a_text_dat_on_the_product_comp(tmp_path):
+    w, ext = _world(with_hook=False, presave_armed=True)
+    admin.textDAT = "textDAT"
+    admin.datetime = __import__("datetime")
+    res = admin.create_release_toe_hook(ext)
+    assert res["created"] is True and res["path"] == HOOK
+    dat = w.ops[HOOK]
+    assert dat.family == "DAT" and dat.type == "text"
+    assert "projectpresave = False" in dat.text
+    assert (dat.nodeX, dat.nodeY) != (0, 0)        # network-layout.md
+    # And the export is satisfied by it: the gate now waits for the hook.
+    plan = admin.preview_release_toe(ext, save_path=str(tmp_path / "R.toe"))
+    assert plan["readiness"]["ready"] is True
+    assert plan["hook_path"] == HOOK
+
+
+def test_an_existing_hook_is_never_overwritten(tmp_path):
+    """It holds the author's release recipe."""
+    w, ext = _world(presave_armed=True)
+    admin.textDAT = "textDAT"
+    w.ops[HOOK].text = "# my careful release recipe\n"
+    res = admin.create_release_toe_hook(ext)
+    assert res["created"] is False and res["reason"] == "already exists"
+    assert w.ops[HOOK].text == "# my careful release recipe\n"
+
+
+def test_the_blocker_dialog_writes_the_hook_on_request(tmp_path):
+    w, ext = _world(with_hook=False, presave_armed=True)
+    admin.textDAT = "textDAT"
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [1, 0]            # "Create the hook for me", then OK
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "not ready" and res["hook"]["created"] is True
+    assert HOOK in w.ops
+    # It only ever WRITES the hook -- it never exports off the back of it.
+    assert [e for e in w.events if e[0] == "chooseFile"] == []
+    assert w.runs == []
+    assert "Created " + HOOK in ext.dialogs[-1][1]
+
+
+def test_declining_the_offer_writes_nothing(tmp_path):
+    w, ext = _world(with_hook=False, presave_armed=True)
+    admin.textDAT = "textDAT"
+    _chooser(w, str(tmp_path / "Release.toe"))
+    ext.answers = [0]
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "not ready" and "hook" not in res
+    assert HOOK not in w.ops and w.runs == []
+
+
+def test_a_blocker_no_hook_can_fix_gets_a_plain_ok(tmp_path):
+    """The offer is only made when a hook is actually the remedy."""
+    w, ext = _world(with_hook=False)
+    admin.absTime = SimpleNamespace(frame=10)       # startup window
+    _chooser(w, str(tmp_path / "Release.toe"))
+    res = admin.export_release_toe_handler(ext)
+    assert res["reason"] == "not ready" and _refusal(res, "startup window")
+    assert ext.dialogs[0][2] == ["OK"]
+    assert HOOK not in w.ops

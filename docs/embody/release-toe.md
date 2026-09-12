@@ -13,19 +13,54 @@ Save your **whole project** as a locked, self-contained `.toe` that ships to a c
 
 ## Usage
 
+### The **Export Release Toe** pulse
+
+One parameter on the Embody page does the whole thing, and it **asks before it
+does anything** -- you never land in a bare file browser wondering what you
+clicked. Pulsing it:
+
+1. **Prompts first.** Before any file dialog: what the artifact will be, that
+   it is saved without Project Privacy, that this session does not survive, and
+   the same inline / scrub / destroy counts the preview logs. If the project
+   cannot be exported at all -- a stripped shell, an operator error, an armed
+   pre-save hook -- you get that list here and the flow **dead-ends**, so you
+   are never sent looking for a save location for an export that was going to
+   refuse anyway.
+2. **Asks where.** A Save dialog for the `.toe` path (a bare name gets `.toe`
+   appended rather than bounced by the gate).
+3. **Confirms against that path.** The destination-specific verdict -- an
+   existing file, a save-series collision, absolute paths that would ship --
+   and then **Export and Quit**.
+
+**Cancel at step 1 or 3 is the dry run.** The plan has already been logged and
+nothing has been touched, which is why there is no separate Preview parameter.
+
+The button always exports **unlocked**. A privacy-locked build needs
+`privacy_key`, and a passphrase does not belong in a parameter -- it would
+persist into your `.toe` and `.embody/config.json` -- so that path stays in
+Python.
+
+!!! note "One click is one prompt"
+    A TouchDesigner modal runs the frame loop while it is up, which re-delivers
+    the pending pulse and re-enters the handler -- one click produced two
+    stacked dialogs (measured 2026-09-12). The handler carries a re-entrancy
+    guard so the second invocation is a no-op.
+
+### From Python
+
 ```python
 # Look before you leap -- reads the network, changes nothing.
 op.Embody.PreviewReleaseToe(save_path='D:/builds/MyShow-1.0.0.toe')
 
 # The real thing.
-op.Embody.ExportReleaseToe('D:/builds/MyShow-1.0.0.toe',
+op.Embody.ExportReleaseToe(save_path='D:/builds/MyShow-1.0.0.toe',
                            privacy_key='a-long-passphrase',
                            confirm=True)
 ```
 
 | Argument | Default | What it does |
 |---|---|---|
-| `save_path` | *required* | Where the release `.toe` is written. A relative path is taken against the project folder. Must end in `.toe`, must not exist yet, and must not be the running project or a file in its save series. |
+| `save_path` | *required* (optional on `PreviewReleaseToe`) | Where the release `.toe` is written. A relative path is taken against the project folder. Must end in `.toe`, must not exist yet, and must not be the running project or a file in its save series. |
 | `privacy_key` | `None` | Applies [Project Privacy](https://docs.derivative.ca/Privacy) with this key. **Pro licence only.** |
 | `hook_name` | `'pre_release_toe'` | The Text DAT to run before the export. `PreviewReleaseToe` takes it too, so a preview looks for the same hook. |
 | `quit_after` | `True` | Quit TouchDesigner once the file is on disk. |
@@ -62,6 +97,33 @@ In order, each step only after the one before it succeeded — a tracked operato
 6. **Saves** the release `.toe` and quits.
 
 ## The `pre_release_toe` hook
+
+### Let Embody write the first draft
+
+You do not have to start from a blank DAT. When the export refuses because a
+product Execute DAT still has `projectpresave` on and there is no hook to
+disarm it, the prompt offers **Create the hook for me** -- or call it directly:
+
+```python
+op.Embody.CreateReleaseToeHook()
+```
+
+It writes `pre_release_toe` as a Text DAT on your product COMP, filled in from
+the same plan the preview logs:
+
+- **real disarm lines** for every Execute DAT that blocks the export, addressed
+  *relative* to the product COMP (`p.op('sources/quiesce').par.projectpresave =
+  False`) so they survive a rename or a renest;
+- **a checklist of the absolute paths** that would ship, as comments. Embody
+  cannot guess where those assets should point, so it never generates code that
+  would silently repoint someone's file;
+- **commented stubs** for the usual recipe -- `performOnStart`, a version stamp,
+  a demo-mode guard.
+
+It is an ordinary Text DAT afterwards: yours to edit, and **never overwritten**.
+Regenerating means deleting it first, which is deliberate -- the hook holds your
+release recipe, not Embody's.
+
 
 A **Text DAT** named `pre_release_toe`, a **direct child of your product COMP** — the top-level COMP that contains Embody. If Embody lives at `/myshow/lib/Embody`, the hook belongs at `/myshow/pre_release_toe`.
 
@@ -121,3 +183,5 @@ When the export succeeds, TouchDesigner quits. A Claude Code session whose bridg
 ## The dry run
 
 `PreviewReleaseToe(save_path=...)` composes the identical plan and applies none of it: no hook, no quiet step, no inline, no scrub, nothing destroyed. It logs the readiness verdict, which hook it found and where it looked, how many operators get inlined and scrubbed, what will be destroyed, which file references would remain, and whether privacy applies. Run it first — it is the only way to see the refusal list without a session to throw away.
+
+**Called without a path it runs as a pre-flight**: the log reads `Release .toe pre-flight -> no path chosen yet` and reports only what is true regardless of destination, so `a save path is required` is not listed as a refusal when you deliberately did not give one. That is the mode the pulse uses for its first prompt. Path-specific refusals — an existing file, a save-series collision — still appear in full once a path is given.

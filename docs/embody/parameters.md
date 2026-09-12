@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdxn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdxn`), the source of truth for its parameters, so it stays in sync with the actual component. **139 parameters** across 9 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdxn`), the source of truth for its parameters, so it stays in sync with the actual component. **140 parameters** across 9 pages.
 
 ## Embody
 
@@ -17,7 +17,8 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-externalizeproject" href="#par-externalizeproject">Externalize Full Project (`Externalizeproject`)</a> | Pulse | - | Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content. |
 | <a class="par-anchor" id="par-disable" href="#par-disable">`Disable`</a> | Pulse | - | Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable. |
 | <a class="par-anchor" id="par-update" href="#par-update">Enable / Update (`Update`)</a> | Pulse | - | Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table. |
-| <a class="par-anchor" id="par-releaseall" href="#par-releaseall">Release All (`Releaseall`)</a> | Pulse | - | Export every releasable component as its own portable .tox into the release folder, in one pass. A component is releasable when it is BOTH externalized by Embody (tracked -- it is yours) AND carries a release hook (a pre_release or post_release Text DAT as a direct child). Third-party components that ship with their authors' hook DATs are never batch-released -- export those explicitly if needed. Failures are logged and skipped without halting the batch. |
+| <a class="par-anchor" id="par-releaseall" href="#par-releaseall">Export All Release Toxes (`Releaseall`)</a> | Pulse | - | Export every releasable component as its own portable .tox into the release folder, in one pass. A component is releasable when it is BOTH externalized by Embody (tracked -- it is yours) AND carries a release hook (a pre_release or post_release Text DAT as a direct child). Third-party components that ship with their authors' hook DATs are never batch-released -- export those explicitly if needed. Failures are logged and skipped without halting the batch. |
+| <a class="par-anchor" id="par-exportreleasetoe" href="#par-exportreleasetoe">Export Release Toe (`Exportreleasetoe`)</a> | Pulse | - | Export the WHOLE project as a locked, self-contained release .toe: every externalized file inlined back into its operator, Embody removed, then saved and TouchDesigner quits. Pulsing PROMPTS FIRST -- what will be written, what this session loses, and whether the project is exportable at all -- before it ever asks for a location; you then pick the file and confirm once more against that exact path. Cancel at either prompt and nothing is touched (that is the dry run). One-way, no undo: run it in a dedicated TouchDesigner instance, never the one you are editing in. For a privacy-locked build call op.Embody.ExportReleaseToe(save_path, privacy_key=..., confirm=True) in Python. |
 | <a class="par-anchor" id="par-refresh" href="#par-refresh">`Refresh`</a> | Pulse | - | Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks. |
 | <a class="par-anchor" id="par-performmode" href="#par-performmode">Perform Mode (`Performmode`)</a> | Toggle | - | - |
 | <a class="par-anchor" id="par-status" href="#par-status">Embody Status (`Status`)</a> | Str (read-only) | `Disabled` | Current Embody status (read-only). Shows whether Embody is initialized and running. |
@@ -180,7 +181,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.2.48` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.2.49` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33230` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |

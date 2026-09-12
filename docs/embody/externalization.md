@@ -389,7 +389,7 @@ Details worth knowing:
 
 ### Release All
 
-`op.Embody.ReleaseAll()` — or the **Release All** pulse on the Embody page — exports every **releasable** component as its own portable `.tox` in one pass. Releasable means two things at once: the component is **externalized by Embody** (tracked — it's yours) *and* it **carries a release hook** (`pre_release` or `post_release` as a direct child). No other tagging, list, or setting is consulted.
+`op.Embody.ReleaseAll()` — or the **Export All Release Toxes** pulse on the Embody page — exports every **releasable** component as its own portable `.tox` in one pass. Releasable means two things at once: the component is **externalized by Embody** (tracked — it's yours) *and* it **carries a release hook** (`pre_release` or `post_release` as a direct child). No other tagging, list, or setting is consulted.
 
 Both conditions matter: hooks alone would be too eager, because third-party components arrive with their *authors'* hook DATs baked in (Private Investigator-style tools ship them inside their artifacts) — a hooks-only sweep would execute foreign release machinery. Tracked-and-hooked means "mine, and declared releasable."
 

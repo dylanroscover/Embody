@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.50
+
+Shipping a project as a locked `.toe` is a button now, and it asks before it does anything.
+
+- **Export Release Toe.** One pulse walks the whole export: what gets written, where, then a final confirm. Cancel at any prompt and nothing is touched.
+- **Embody can write the `pre_release_toe` hook for you** -- pre-filled to disarm what blocks the export and list the absolute paths that would ship.
+- **Release All is now Export All Release Toxes.** Same batch `.tox` export, clearer name.
+
 ## v6.2.49
 
 `.tdxn` headers stay visible, saves say what they cannot keep, and nothing here can take TouchDesigner down.

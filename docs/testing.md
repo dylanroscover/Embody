@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **152 test suites** and **4,959 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **153 test suites** and **4,965 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -63,7 +63,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-The tables below cover 149 suites. The remaining three are the
+The tables below cover 150 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
@@ -248,7 +248,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_catalog_default_patch` | 6 | CatalogManager cross-build default repair (`_patchComp`) for parameters whose default TD changed between builds |
 | `test_pyenv_context_live` | 9 | The live gating state machine around the TD pre-cook venv context (`_ensurePyEnvContext`) |
 
-### pytest-only suites (5 suites, 149 tests)
+### pytest-only suites (6 suites, 155 tests)
 
 Plain pytest functions, which the in-TD runner does not collect: these run only under pytest, locally and on the CI matrix.
 
@@ -259,6 +259,7 @@ Plain pytest functions, which the in-TD runner does not collect: these run only 
 | `test_worker_run_lint` | 26 | Static lint for the global `run()` reached from a worker thread (2026-08-17 Derivative advisory) |
 | `test_release_preflight` | 18 | The `/release` GitHub preflight: open alerts, Dependabot PRs, red CI and unmerged hotfixes block a release |
 | `test_pytest_kill_fence` | 20 | The repo-root `conftest.py` fence: a run may terminate only processes it spawned, and gets its own temp dir |
+| `test_specimen_bindings` | 6 | Published Specimens carry no dev-only file bindings, so a pasted Specimen never writes into the user project |
 
 ## Execution Modes
 
