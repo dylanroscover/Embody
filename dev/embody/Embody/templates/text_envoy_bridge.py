@@ -30,6 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from typing import Callable, Dict, Optional, Set, Tuple
 
 # signal.SIGKILL does not exist on Windows, so referencing it directly
 # makes the POSIX force-kill branch unreachable by a platform-injected
@@ -45,7 +46,7 @@ CONNECT_TIMEOUT_S = 60  # Max seconds to wait for Envoy during launch_td/restart
 INITIAL_PROBE_TIMEOUT_S = 3  # Quick probe on first tools/list -- reconciler handles recovery
 STDIN_POLL_INTERVAL_MS = 5000  # Watchdog poll timeout (ms) for stdin pipe closure
 WATCHDOG_MAX_FAILURES = 10     # Consecutive watchdog errors before giving up
-HEARTBEAT_STALE_S = 60  # Kill peer bridges with heartbeats older than this
+HEARTBEAT_STALE_S = 60  # Older heartbeats are stale-bridge cleanup candidates
 CRASH_LOOP_WINDOW_S = 300  # 5 minutes
 CRASH_LOOP_MAX = 3  # Max launches within the window
 
@@ -1683,20 +1684,14 @@ def find_td_pid():
 def is_process_alive(pid, platform=None, kill=None):
     """Check if a process is still running.
 
-    platform is injectable (D-5): the existing win32 tests reach this
-    through `@patch('envoy_bridge.sys')`, a module-mock pattern that has
-    already failed once in a full-suite run (a mocked platform silently
-    failed to take and a REAL taskkill escaped to the host). New tests
-    pass platform= instead.
+    platform and kill are injectable (D-5); tests pass both, never an
+    `@patch('envoy_bridge.sys')` module mock (one silently failed to take
+    and a REAL taskkill escaped to the host). On a win32 host the POSIX
+    branch refuses to run without an injected kill.
     """
     if not pid or pid <= 0:
         return False
     platform = platform or sys.platform
-    # kill= exists so injecting platform='darwin' on a Windows host can
-    # never reach the REAL os.kill: on Windows os.kill(pid, 0) calls
-    # TerminateProcess and would kill the target (the documented
-    # TD-killing hazard). Tests inject both.
-    kill = kill or os.kill
     if platform == "win32":
         # os.kill(pid, 0) on Windows calls TerminateProcess() -- it KILLS the
         # process instead of checking liveness.  Use OpenProcess(SYNCHRONIZE)
@@ -1740,6 +1735,18 @@ def is_process_alive(pid, platform=None, kill=None):
                 kernel32.CloseHandle(handle)
         except Exception:
             return False
+    if kill is None:
+        if sys.platform == "win32" or os.name == "nt":
+            # HARD REFUSAL, not a fallback (mirrors convoy_platform
+            # .pid_is_alive): the POSIX branch on a win32 host would run
+            # os.kill(pid, 0), which reaches TerminateProcess and KILLS the
+            # pid it was asked to inspect. Tests inject kill. os.name too,
+            # so a test that mocks this module's sys cannot slip past it.
+            raise RuntimeError(
+                "refusing the POSIX liveness branch on a win32 host "
+                "without an injected kill: os.kill would TERMINATE the "
+                "target process, not probe it")
+        kill = os.kill
     # Unix: signal 0 is a no-op liveness check
     try:
         kill(pid, 0)
@@ -1817,7 +1824,7 @@ _CONVOY_ARTIFACT_TEMP_LOCK = threading.Lock()
 _CONVOY_ARTIFACT_TEMP_PATHS = set()
 
 
-def convoy_data_dir():
+def convoy_data_dir(platform: Optional[str] = None) -> Optional[str]:
     """Per-user Convoy state dir on THIS machine, or None.
 
     Joins with the TARGET platform's separator (ntpath on win32, posixpath
@@ -1825,17 +1832,19 @@ def convoy_data_dir():
     is the host, so this is just the right separator; the explicit choice
     also lets a foreign-platform test validate the real path SHAPE rather
     than silently getting host-flavored separators (the failure a macOS CI
-    run caught one layer down)."""
+    run caught one layer down). platform is injectable (D-5) so such a test
+    never mutates the process-global sys.platform."""
     import ntpath
     import posixpath
+    platform = platform or sys.platform
     try:
-        join = ntpath.join if sys.platform == "win32" else posixpath.join
+        join = ntpath.join if platform == "win32" else posixpath.join
         home = os.path.expanduser("~")
-        if sys.platform == "win32":
+        if platform == "win32":
             base = os.environ.get("LOCALAPPDATA") or join(
                 home, "AppData", "Local")
             return join(base, CONVOY_APP_DIR_WIN)
-        if sys.platform == "darwin":
+        if platform == "darwin":
             return join(home, "Library", "Application Support",
                         CONVOY_APP_DIR_WIN)
         base = os.environ.get("XDG_STATE_HOME") or join(
@@ -5770,51 +5779,119 @@ def send_error(request_id, code, message):
     })
 
 
-def _get_parent_pid(pid):
-    """Return the parent PID of a given process, or None on failure."""
-    if sys.platform == "win32":
-        try:
-            ps_cmd = (
-                f'(Get-CimInstance Win32_Process -Filter '
-                f'"ProcessId = {pid}").ParentProcessId'
-            )
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_cmd],
-                capture_output=True, text=True, timeout=5,
-            )
-            val = result.stdout.strip()
-            return int(val) if val.isdigit() else None
-        except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
-            return None
-    # Linux: /proc/<pid>/stat field 4 is ppid
+def _process_table(
+        platform: Optional[str] = None,
+        run: Optional[Callable[..., subprocess.CompletedProcess]] = None,
+) -> Dict[int, Tuple[int, str]]:
+    """{pid: (ppid, cmdline)} for every visible process, from ONE query.
+
+    One Win32_Process query for all of them (never a PowerShell call per
+    pid), or one `ps -A`. {} on any failure: stale-bridge cleanup reads an
+    unreadable table as "kill nothing". platform/run injectable (D-5).
+    ASCII-escaped JSON: PowerShell 5.1 writes a pipe in the OEM codepage (a
+    non-ASCII --config never matched), and [Console]::OutputEncoding would
+    switch the SHARED console's codepage for good (review 2026-09-11).
+    stdin=DEVNULL: this runs at startup, before the stdin reader, and must
+    never hold or read the MCP client's pipe (review 2026-09-11).
+    """
+    platform = platform or sys.platform
+    run = run or subprocess.run
+    table = {}
     try:
-        stat_path = f"/proc/{pid}/stat"
-        if os.path.exists(stat_path):
-            with open(stat_path, "r") as f:
-                fields = f.read().split()
-            return int(fields[3]) if len(fields) > 3 else None
-    except (OSError, ValueError, IndexError):
-        pass
-    # macOS: ps -p PID -o ppid=
-    try:
-        result = subprocess.run(
-            ["ps", "-ww", "-p", str(pid), "-o", "ppid="],
-            capture_output=True, text=True, timeout=5,
-        )
-        val = result.stdout.strip()
-        return int(val) if val else None
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
-        return None
+        if platform == "win32":
+            ps_cmd = (r"$j = Get-CimInstance Win32_Process | Select-Object "
+                      r"ProcessId, ParentProcessId, CommandLine | "
+                      r"ConvertTo-Json -Compress; "
+                      r"[regex]::Replace($j, '[^\x00-\x7f]', "
+                      r"{ param($m) '\u{0:x4}' -f [int][char]$m.Value })")
+            result = run(["powershell", "-NoProfile", "-Command", ps_cmd],
+                         capture_output=True, encoding="utf-8",
+                         errors="replace", timeout=10,
+                         stdin=subprocess.DEVNULL,
+                         creationflags=getattr(
+                             subprocess, "CREATE_NO_WINDOW", 0))
+            rows = json.loads((result.stdout or "").lstrip("\ufeff") or "[]")
+            for row in rows if isinstance(rows, list) else [rows]:
+                pid, ppid = row.get("ProcessId"), row.get("ParentProcessId")
+                cmdline = row.get("CommandLine")
+                if isinstance(pid, int):
+                    table[pid] = (ppid if isinstance(ppid, int) else 0,
+                                  cmdline if isinstance(cmdline, str) else "")
+        else:
+            result = run(["ps", "-ww", "-A", "-o", "pid=", "-o", "ppid=",
+                          "-o", "args="],
+                         capture_output=True, encoding="utf-8",
+                         errors="replace", timeout=10,
+                         stdin=subprocess.DEVNULL)
+            for line in result.stdout.splitlines():
+                parts = line.split(None, 2)
+                if (len(parts) >= 2 and parts[0].isdigit()
+                        and parts[1].isdigit()):
+                    table[int(parts[0])] = (
+                        int(parts[1]), parts[2] if len(parts) > 2 else "")
+    except (subprocess.TimeoutExpired, OSError, ValueError, TypeError,
+            AttributeError):
+        return {}
+    return table
 
 
-def _is_orphan(pid):
-    """Return True if the given bridge process is an orphan (parent dead)."""
-    ppid = _get_parent_pid(pid)
-    if ppid is None:
-        return True  # Can't determine -- assume orphan (safe to kill)
-    if ppid <= 1:
-        return True  # Reparented to init/launchd
-    return not is_process_alive(ppid)
+def _ancestor_pids(table: Dict[int, Tuple[int, str]],
+                   pid: Optional[int] = None) -> Set[int]:
+    """pid's ancestors (default: this process), walked through the table.
+
+    Cycle-safe: Windows recycles a dead parent's pid, so a chain can loop.
+    Over-inclusion only ever spares a process, never kills one.
+    """
+    own = pid is None
+    pid = os.getpid() if own else pid
+    ancestors = set()
+    cur = table.get(pid, (os.getppid() if own else 0, ""))[0]
+    while cur and cur > 0 and cur not in ancestors:
+        ancestors.add(cur)
+        cur = table.get(cur, (0, ""))[0]
+    if own:
+        ancestors.add(os.getppid())
+    return ancestors
+
+
+def _cmdline_targets_config(cmdline: str, config_path: Optional[str],
+                            platform: Optional[str] = None) -> bool:
+    """True when a command line passes EXACTLY this --config file.
+
+    Slash-folded, and case-folded on win32. The heartbeat dir is per
+    project, but pids recycle: a stale file can name ANOTHER project's
+    same-port bridge, and the config path is what ties a bridge to us.
+    """
+    if not cmdline or not config_path:
+        return False
+    fold = (platform or sys.platform) == "win32"
+
+    def norm(text: str) -> str:
+        text = text.replace(chr(0), " ").replace("\\", "/")
+        return text.lower() if fold else text
+
+    line = norm(cmdline)
+    for path in {norm(config_path), norm(os.path.abspath(config_path))}:
+        if re.search(r'--config\s+"?' + re.escape(path) + r'(?:"|\s|$)',
+                     line):
+            return True
+    return False
+
+
+def _cmdline_runs_python(cmdline: str) -> bool:
+    """True when a win32 command line's program token is a python.
+
+    win32 quotes a program path that has spaces, so the first token IS the
+    executable: the image filter the old Phase 2 query had. A shell or AI
+    CLI whose argv merely quotes a bridge command must never match. (POSIX
+    `ps` output is unquoted, so it cannot be split this way there.)
+    """
+    text = (cmdline or "").strip()
+    if text.startswith('"'):
+        exe = text[1:].split('"', 1)[0]
+    else:
+        exe = text.split(None, 1)[0] if text else ""
+    return re.split(r"[\\/]", exe)[-1].lower().startswith("python")
 
 
 def _cmdline_targets_port(cmdline, port):
@@ -5841,116 +5918,98 @@ def _cmdline_targets_port(cmdline, port):
     return False
 
 
-def kill_stale_bridges(port, config_path):
-    """Find and terminate stale envoy-bridge processes.
+def kill_stale_bridges(port, config_path, cli_port=None):
+    """Terminate stale envoy-bridge processes of THIS project and port.
 
-    Phase 1: Kill bridges with stale heartbeat files (>HEARTBEAT_STALE_S old).
-    This is the primary detection mechanism -- fast, reliable, no parent PID
-    assumptions.
-
-    Phase 2 (legacy fallback): For bridges that predate heartbeat files, fall
-    back to pgrep/tasklist + _is_orphan() parent-PID checking.
+    Phase 1: pids named by stale heartbeat files (>HEARTBEAT_STALE_S old).
+    Phase 2 (legacy): orphaned bridges (parent gone) that predate heartbeats.
+    A heartbeat is a NAME, not an identity: a stale one named TD's own pid
+    and killed TD (field 2026-08-29). Either phase kills only a live bridge
+    command line carrying this --config and --port `port` or `cli_port` (a
+    resolved instance's port can differ from the launch --port), run by
+    python on win32, and never a TD, this process or an ancestor. A refused
+    pid is never signalled; its stale heartbeat file goes only when the pid
+    is dead or a TD (a live bridge on another port keeps it). A relative
+    --config identifies no project: it only matches the same text.
+    No config_path, no kills: that scan reads the machine-wide temp dir,
+    which only tests and hand launches use (every generated client config
+    passes --config). Dead-pid heartbeat files are still pruned.
     """
-    my_pid = os.getpid()
-
-    # --- Phase 1: Heartbeat-based detection ---
     stale = _list_stale_heartbeats(config_path, HEARTBEAT_STALE_S)
-    for pid, age in stale:
-        if pid == my_pid:
+    if not config_path:
+        if stale:
+            log(f"Stale-bridge cleanup: no --config, so {len(stale)} stale "
+                f"heartbeat(s) in the shared temp dir cannot be tied to "
+                f"this project -- terminating nothing")
+        return
+    table = _process_table()
+    if not table:
+        # Logged even with no stale heartbeat: a locked-down host (e.g.
+        # PowerShell Constrained Language Mode) would otherwise disable the
+        # orphan phase silently (review 2026-09-11).
+        log("Stale-bridge cleanup skipped: process table unavailable")
+        return
+
+    ports = {p for p in (port, cli_port) if p is not None}
+    win = sys.platform == "win32"
+
+    def ours(pid: int) -> bool:
+        cmdline = table.get(pid, (0, ""))[1]
+        return (_is_bridge_process(pid, cmdline=cmdline)
+                and (not win or _cmdline_runs_python(cmdline))
+                and any(_cmdline_targets_port(cmdline, p) for p in ports)
+                and _cmdline_targets_config(cmdline, config_path))
+
+    named = {pid for pid, _age in stale}
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(config_path))), "dev", "logs")
+    candidates = [(pid, f"stale bridge (PID {pid}, heartbeat {age:.0f}s old)")
+                  for pid, age in stale]
+    candidates += [(pid, f"orphan bridge (PID {pid}, parent {ppid} dead)")
+                   for pid, (ppid, _cmd) in table.items()
+                   if pid not in named and (ppid <= 1 or ppid not in table)
+                   and ours(pid)]
+    if not candidates:
+        return
+    spared = {pid: "TouchDesigner" for pid in find_all_td_pids()}
+    spared.update((pid, "an ancestor of this bridge")
+                  for pid in _ancestor_pids(table))
+    spared[os.getpid()] = "this process"
+    refused = []
+    for pid, what in candidates:
+        reason = spared.get(pid)
+        if reason is None and pid not in table:
+            reason = "not running"
+        if reason is None and not ours(pid):
+            reason = "not this project's bridge on this port"
+        if reason:
+            refused.append(f"{pid} ({reason})")
+            if pid in named and reason in ("not running", "TouchDesigner"):
+                # A dead pid's file is litter, and one naming TD is the
+                # 2026-08-29 hazard itself. A live bridge on another port or
+                # of another project keeps its file, so get_sessions still
+                # lists it (review 2026-09-11). Project dir only.
+                try:
+                    os.remove(os.path.join(
+                        log_dir, f"envoy-bridge-{pid}.heartbeat"))
+                except OSError:
+                    pass
             continue
         try:
             if sys.platform == "win32":
                 subprocess.run(
                     ["taskkill", "/F", "/PID", str(pid)],
                     capture_output=True, timeout=5,
+                    stdin=subprocess.DEVNULL,
                 )
             else:
                 os.kill(pid, signal.SIGTERM)
-            log(f"Terminated stale bridge (PID {pid}, heartbeat {age:.0f}s old)")
+            log(f"Terminated {what}")
         except (ProcessLookupError, PermissionError, OSError,
                 subprocess.TimeoutExpired):
             pass
-
-    # --- Phase 2: Legacy fallback (pgrep/tasklist + orphan check) ---
-    if sys.platform == "win32":
-        try:
-            ps_cmd = (
-                f'Get-CimInstance Win32_Process -Filter '
-                f'"Name like \'%python%\'" | '
-                f'Where-Object {{ $_.CommandLine -match "envoy.bridge" -and '
-                # Anchor the port so cleaning 9870 cannot match a peer
-                # bridge on 19870/98700 -- the POSIX branch got this fix
-                # via _cmdline_targets_port; the two must agree.
-                f'$_.CommandLine -match "--port {port}(\\s|$)" -and '
-                f'$_.ProcessId -ne {my_pid} }} | '
-                f'Select-Object ProcessId, ParentProcessId | '
-                f'ForEach-Object {{ "$($_.ProcessId),$($_.ParentProcessId)" }}'
-            )
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_cmd],
-                capture_output=True, text=True, timeout=10,
-            )
-            for line in result.stdout.strip().split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(",")
-                if len(parts) < 2 or not parts[0].isdigit():
-                    continue
-                pid = int(parts[0])
-                ppid = int(parts[1]) if parts[1].isdigit() else 0
-                # Only kill if parent is dead (orphan)
-                if ppid > 1 and is_process_alive(ppid):
-                    continue
-                try:
-                    subprocess.run(
-                        ["taskkill", "/F", "/PID", str(pid)],
-                        capture_output=True, timeout=5,
-                    )
-                    log(f"Terminated orphan bridge (PID {pid}, parent {ppid} dead)")
-                except (subprocess.TimeoutExpired, OSError):
-                    pass
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            pass
-        return
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "envoy-bridge.py"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            return
-        for line in result.stdout.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                pid = int(line)
-            except ValueError:
-                continue
-            if pid == my_pid:
-                continue
-            try:
-                cmdline_path = f"/proc/{pid}/cmdline"
-                if os.path.exists(cmdline_path):
-                    with open(cmdline_path, "r") as f:
-                        cmdline = f.read()
-                else:
-                    ps = subprocess.run(
-                        ["ps", "-ww", "-p", str(pid), "-o", "args="],
-                        capture_output=True, text=True, timeout=5,
-                    )
-                    cmdline = ps.stdout.strip()
-                if _cmdline_targets_port(cmdline, port):
-                    if _is_orphan(pid):
-                        os.kill(pid, signal.SIGTERM)
-                        log(f"Terminated orphan bridge (PID {pid})")
-                    else:
-                        log(f"Skipping active peer bridge (PID {pid}, parent alive)")
-            except (ProcessLookupError, PermissionError, OSError):
-                pass
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
-        pass
+    if refused:
+        log("Stale-bridge cleanup spared: " + ", ".join(refused))
 
 
 def start_orphan_watchdog(stdin_probe_fd, config_path):
@@ -6709,7 +6768,7 @@ def main():
     _install_signal_diagnostics()
 
     # Clean up stale bridge processes from previous Claude Code sessions
-    kill_stale_bridges(port, config_path)
+    kill_stale_bridges(port, config_path, cli_port=cli_port)
 
     # Self-terminate when MCP client closes stdin pipe (session ended)
     start_orphan_watchdog(stdin_probe_fd, config_path)

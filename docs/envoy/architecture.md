@@ -45,7 +45,7 @@ The bridge provides several features beyond simple proxying:
 - **Crash detection**: Tracks the TD process PID and detects when it exits unexpectedly
 - **Crash-loop protection**: Limits launches to 3 within a 5-minute window to prevent infinite restart loops
 - **Orphan cleanup**: A watchdog thread terminates the bridge if its parent process (Claude Code) exits, preventing zombie processes
-- **Stale bridge cleanup**: On startup, kills other bridge processes targeting the same port from previous sessions
+- **Stale bridge cleanup**: On startup, terminates stale bridges left by previous sessions, but only a bridge whose command line carries this project's `--config` and the same `--port` (on Windows, one run by Python). It never touches a TouchDesigner process or the bridge's own launcher, and a bridge started without `--config` terminates nothing
 
 The bridge is regenerated from Embody's templates on each Envoy start. It uses only the Python standard library (no third-party dependencies).
 
