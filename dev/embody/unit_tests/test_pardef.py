@@ -1,7 +1,7 @@
 """Get-or-create for custom pages and parameters (issue #94, WP5).
 
 Function Store's third point was PlusPlusOne's declarative parameter ownership.
-Embody already declares its own 139 parameters three times over (Embody.tdn,
+Embody already declares its own 140 parameters three times over (Embody.tdn,
 the release manifest, _PERSISTED_PARAMS), so a fourth declaration would be the
 wrong answer. What was actually missing is the CONTRACT underneath: four ad-hoc
 copies of the page lookup had drifted, one of them searching for a page named

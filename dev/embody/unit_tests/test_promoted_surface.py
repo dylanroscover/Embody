@@ -47,7 +47,9 @@ PROMOTED_CEILING = {
     # +2 for PreviewReleaseToe / ExportReleaseToe (the release .toe export):
     # deliberate public API, promoted for the same reason Uninstall is --
     # the release runbook drives them from outside the COMP.
-    "EmbodyExt": 22,
+    # 23 as of 2026-09-12: CreateReleaseToeHook, the generator for the
+    # pre_release_toe hook the release gate refuses without.
+    "EmbodyExt": 23,
     # WP4 waves 4b/4b-2: promoted class constants went 79 -> 5. The five that
     # remain are ConvoyExt's HOST_* states, which are DELIBERATELY mirrored as
     # module constants in convoy/convoy_client.py -- test_convoy_client reaches

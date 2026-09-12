@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1265
-generator: Embody/6.2.49
+generator: Embody/6.2.50
 td_build: 099.2025.33230
 network_path: /embody
 options:
@@ -76,7 +76,6 @@ operators:
     - {}
     - {}
     - {}
-    - {}
   custom_pars:
     Embody:
     - name: Setupwizard
@@ -114,8 +113,12 @@ operators:
       help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
     - name: Releaseall
       style: Pulse
-      label: Release All
+      label: Export All Release Toxes
       help: Export every releasable component as its own portable .tox into the release folder, in one pass. A component is releasable when it is BOTH externalized by Embody (tracked -- it is yours) AND carries a release hook (a pre_release or post_release Text DAT as a direct child). Third-party components that ship with their authors' hook DATs are never batch-released -- export those explicitly if needed. Failures are logged and skipped without halting the batch.
+    - name: Exportreleasetoe
+      style: Pulse
+      label: Export Release Toe
+      help: 'Export the WHOLE project as a locked, self-contained release .toe: every externalized file inlined back into its operator, Embody removed, then saved and TouchDesigner quits. Pulsing PROMPTS FIRST -- what will be written, what this session loses, and whether the project is exportable at all -- before it ever asks for a location; you then pick the file and confirm once more against that exact path. Cancel at either prompt and nothing is touched (that is the dry run). One-way, no undo: run it in a dedicated TouchDesigner instance, never the one you are editing in. For a privacy-locked build call op.Embody.ExportReleaseToe(save_path, privacy_key=..., confirm=True) in Python.'
     - name: Refresh
       style: Pulse
       help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
@@ -899,7 +902,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.49
+      value: 6.2.50
     - name: Touchbuild
       style: Str
       label: Touch Build

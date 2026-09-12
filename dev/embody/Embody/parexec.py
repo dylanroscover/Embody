@@ -407,6 +407,19 @@ def onPulse(par):
 	elif par.name == 'Migratetotdxn':
 		parent.Embody.ext.Embody.migrateToTDXN()
 
+	else:
+		# NEW pulse handlers hang off the extension BY NAME -- one
+		# dispatcher, not a promoted method per par (parameter-design).
+		# The chain above predates it; do not extend it. DEBUG, not
+		# WARNING: a pulse par with no handler at all is legitimate.
+		handler = getattr(parent.Embody.ext.Embody,
+						  '_on%sPulse' % par.name, None)
+		if handler is None:
+			parent.Embody.Log(f'No pulse handler for {par.name} '
+				f'(_on{par.name}Pulse)', 'DEBUG')
+		else:
+			handler(par)
+
 	return
 
 def onExpressionChange(par, val, prev):
