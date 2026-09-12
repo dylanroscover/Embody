@@ -217,14 +217,20 @@ def http_get(url: str) -> bytes:
 
 
 def committed_reader(root: Path) -> Reader:
-    """specimens/<rel> as committed on origin/main -- what production deploys."""
+    """specimens/<rel> as committed on origin/main, LF -- what production deploys.
+
+    .gitattributes normalizes .tdxn to LF, but core.autocrlf decides whether a
+    blob written without it keeps CRLF, so trusting git config made the hash
+    platform-dependent (macOS-only CI failure 2026-09-12). Normalize like
+    worktree_reader: the published blob is LF either way.
+    """
     def read(rel: str) -> bytes:
         proc = subprocess.run(["git", "-C", str(root), "show", f"origin/main:specimens/{rel}"],
                               capture_output=True, stdin=subprocess.DEVNULL, timeout=TIMEOUT_S)
         if proc.returncode != 0:
             detail = proc.stderr.decode("utf-8", "replace").strip().splitlines()
             raise CheckError(f"git show origin/main:specimens/{rel}: " + (detail[0][:200] if detail else "failed"))
-        return proc.stdout
+        return proc.stdout.replace(b"\r\n", b"\n")
     return read
 
 
