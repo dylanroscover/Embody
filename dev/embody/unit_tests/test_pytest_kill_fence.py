@@ -41,8 +41,11 @@ def test_tmp_path_root_is_the_run_dir(tmp_path: object) -> None:
     pushed a git-init test past Windows MAX_PATH."""
     fence = _fence()
     assert fence is not None, 'kill fence NOT installed'
-    root = os.path.normcase(os.path.join(fence.run_dir, 't'))
-    assert os.path.normcase(str(tmp_path)).startswith(root + os.sep)
+    # Resolved on both sides: pytest resolves the basetemp it is handed, so a
+    # symlinked or 8.3-short TEMP spells the same directory two ways.
+    root = os.path.normcase(os.path.realpath(os.path.join(fence.run_dir, 't')))
+    got = os.path.normcase(os.path.realpath(str(tmp_path)))
+    assert got.startswith(root + os.sep), (got, root)
 
 
 class TestPytestKillFence(EmbodyTestCase):

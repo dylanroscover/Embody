@@ -299,8 +299,14 @@ class KillFence:
     # -- install / uninstall -------------------------------------------
 
     def install(self) -> None:
-        self.real_temp = tempfile.gettempdir()
-        self.run_dir = tempfile.mkdtemp(prefix=_RUN_PREFIX, dir=self.real_temp)
+        # realpath both: pytest resolves the basetemp it is handed
+        # (TempPathFactory.getbasetemp), so an unresolved run dir does not
+        # prefix-match tmp_path where TEMP is a symlink or an 8.3 short name
+        # -- /var -> /private/var on macOS, RUNNER~1 -> runneradmin on the
+        # Windows CI runner (both legs red 2026-09-11, green on this box).
+        self.real_temp = os.path.realpath(tempfile.gettempdir())
+        self.run_dir = os.path.realpath(
+            tempfile.mkdtemp(prefix=_RUN_PREFIX, dir=self.real_temp))
         self._saved['tempdir'] = tempfile.tempdir
         self._saved['env'] = {k: os.environ.get(k) for k in _TEMP_VARS}
         tempfile.tempdir = self.run_dir
