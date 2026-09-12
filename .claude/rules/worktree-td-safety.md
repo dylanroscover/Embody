@@ -85,10 +85,9 @@ commit in TD first) -- never overwrite main-tree edits blindly. The `preflight_l
 tool automates this check -- landing-vs-main-dirty, peer-territory, and
 unsaved-live-TDXN collisions in one call; run it before every landing.
 
-Move the diff with `git cherry-pick -n <worktree-commit>`, or stage it in the
-worktree and pipe `git diff --cached --no-textconv --binary` into `git apply`.
-Never a plain `git diff`: Embody's `.tdxn` diff driver strips the export
-header from that output, so every NEW `.tdxn` would land without it.
+Move the diff with `git cherry-pick -n <worktree-commit>`, or stage
+everything in the worktree and pipe `git diff --cached --binary` into
+`git apply` -- `--binary` carries `.tox` changes, staging carries new files.
 
 ## Exceptions and cleanup
 

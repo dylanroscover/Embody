@@ -757,8 +757,8 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		"""Every .tdn write funnels through _safe_write_tdxn, so this guard is
 		what stops an explicit save (manager Save, save_externalization,
 		dirty-driven SaveTDXN) from rewriting a file whose network is
-		identical. Without it the file reads modified in `git status` while
-		`git diff` renders EMPTY -- textconv strips exactly these keys.
+		identical. Without it the file reads modified in `git status` over
+		nothing but fresh header values.
 		"""
 		base = dict(_make_valid_tdxn(2), build=1, generator='Embody/6.1.0',
 					td_build='099.2025.33070', source_file='A.toe',

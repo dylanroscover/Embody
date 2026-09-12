@@ -17,7 +17,7 @@ version: '2.0'
 
 ## What the Schema Validates
 
-- **Document structure**: Required fields (`format`, `version`, `generator`, `td_build`, `exported_at`, `network_path`, `options`, `operators`)
+- **Document structure**: Required fields (`format`, `version`, `generator`, `td_build`, `network_path`, `options`, `operators`)
 - **Operator objects**: Name, type, position, size, color, parameters, flags, connections, children
 - **Custom parameters**: Page-grouped format, template references (`$t`), all 32 parameter styles
 - **Type defaults**: Per-type shared properties (parameters, flags, size, color, tags)
@@ -57,8 +57,8 @@ tdxn
 ├── build: integer | null
 ├── generator: string
 ├── td_build: string
-├── source_file: string
-├── exported_at: date-time
+├── source_file: string (untracked exports only)
+├── exported_at: date-time (untracked exports only)
 ├── network_path: string
 ├── options
 │   ├── include_dat_content: boolean

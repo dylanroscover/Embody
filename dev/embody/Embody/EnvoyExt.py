@@ -827,6 +827,47 @@ def _list_jobs(now):
     return records[:_JOB_LIST_CAP]
 
 
+def _save_warnings(before: Optional[deque], mark: int,
+                   after: Optional[deque], cap: int = 8) -> list:
+    """WARNING/ERROR messages a save logged, for its job record (issue #109).
+
+    `before` is EmbodyExt's log deque captured before project.save(): only
+    entries past `mark` (its last id then) count. `after` is the deque after
+    the save; a reinit replaces the buffer and restarts ids, so when it is a
+    different object every entry in it counts (the new instance's own init
+    lines included). No `before` means no baseline: nothing is attributed.
+    ERRORs first, then WARNINGs, each oldest first with repeats collapsed,
+    so late per-op lines never evict the pre-save content report; past
+    `cap`, one '... (+N more ...)' entry counts the rest. Pure.
+    """
+    if before is None:
+        return []
+    entries = [e for e in list(before) if e.get('id', 0) > mark]
+    if after is not None and after is not before:
+        entries += list(after)
+    picked = []
+    for level in ('ERROR', 'WARNING'):
+        for e in entries:
+            msg = str(e.get('message', ''))
+            if e.get('level') == level and msg not in picked:
+                picked.append(msg)
+    if len(picked) > cap:
+        extra = len(picked) - cap
+        picked = picked[:cap] + [
+            '... (+%d more, see get_logs or the Embody log files)' % extra]
+    return picked
+
+
+def _save_log_ring(embody_ext: Any) -> Optional[deque]:
+    """The deque _save_warnings reads: EmbodyExt's WARNING/ERROR ring, which
+    a busy save's DEBUG churn cannot evict, else (an EmbodyExt predating it)
+    its full log ring; None when neither exists (issue #109)."""
+    ring = getattr(embody_ext, '_notable_log_buffer', None)
+    if ring is None:
+        ring = getattr(embody_ext, '_log_buffer', None)
+    return ring
+
+
 def _scope_overlaps(a: str, b: str) -> bool:
     """True when two scopes denote overlapping territory.
 
@@ -1184,6 +1225,104 @@ def _worker_run_findings(source) -> list:
     return findings
 
 
+# --- Host-destroy guard (issue #110) ---
+# A request runs nested inside the Embody COMP hosting Envoy, so destroying
+# or reloading that COMP, an ancestor, '/' or the EnvoyExt DAT from inside
+# it cuts the branch the request sits on (it has hung TD). The structured
+# tools are checked inline here and fail CLOSED (no module DAT to lose);
+# execute_python's static lint lives in envoy_guard and fails OPEN.
+_HOST_DESTROY_CODE = 'envoy.embody.host_destroy_refused'
+_HOST_DESTROY_METHODS = frozenset({'destroy', 'reload', 'changeType',
+                                   'progressiveUnload'})
+_HOST_RELOAD_PULSES = frozenset({'enableexternaltoxpulse', 'reinitnet',
+                                 'enablecloningpulse'})
+# execute_python's lint prefilter: every call envoy_guard can flag names one
+# of these (lowercased), so token-free code skips the module entirely.
+_HOST_LINT_TOKENS = tuple(sorted(name.lower() for name in
+                                 _HOST_DESTROY_METHODS | _HOST_RELOAD_PULSES))
+
+
+def _host_destroy_shape(operation: Any, params: Any) -> Optional[tuple]:
+    """(op_path, what) when a structured call would destroy or reload its
+    target, else None -- a non-str op_path gives no verdict (the handler
+    reports it). Pure; never raises."""
+    if not isinstance(params, dict):
+        return None
+    if operation == 'import_network':
+        # clear_first destroys the target's children (issue #110 review).
+        target = params.get('target_path')
+        if isinstance(target, str) and params.get('clear_first'):
+            return target, 'import_network(clear_first=True)'
+        return None
+    op_path = params.get('op_path')
+    if not isinstance(op_path, str):
+        return None
+    if operation == 'delete_op':
+        return op_path, 'delete_op'
+    if operation == 'exec_op_method':
+        method = params.get('method')
+        if isinstance(method, str) and method in _HOST_DESTROY_METHODS:
+            return op_path, '%s()' % method
+        return None
+    if operation == 'set_parameter':
+        par_name = params.get('par_name')
+        if isinstance(par_name, str) and par_name.lower() in _HOST_RELOAD_PULSES:
+            return op_path, 'setting %s' % par_name
+    return None
+
+
+def _host_relation(target: str, chain: list) -> str:
+    """How a refused target relates to the host chain [Embody COMP,
+    ancestors..., '/', EnvoyExt DAT], worded for a refusal. Pure."""
+    host = chain[0] if chain else ''
+    if target == host:
+        return 'the Embody COMP that Envoy runs inside'
+    if target == '/':
+        return ('the project root, which contains the Embody COMP that '
+                'Envoy runs inside')
+    if host and target.startswith(host + '/'):
+        return "Envoy's own extension DAT, whose code is running this call"
+    return 'an ancestor of the Embody COMP (%s) that Envoy runs inside' % host
+
+
+def _host_refusal_text(what: str, target: str, relation: str,
+                       purges_tracking: bool) -> str:
+    """Structured-tool refusal. No destroy recipe on purpose: an agent that
+    hits this rarely knew Embody lived there, so it stops and asks."""
+    losses = 'That would take Envoy away from every connected AI client'
+    if purges_tracking:
+        losses += (', delete_op would first purge the externalization '
+                   'tracking (rows and files) of everything under it')
+    return ("HOST-DESTROY REFUSED (nothing changed): %s on %s would destroy "
+            "or reload %s, while Envoy's own request is still executing. %s, "
+            "and doing this from inside an Envoy call has hung TouchDesigner "
+            "(issue #110). override=True does not bypass this check. Stop "
+            "and ask the user." % (what, target, relation, losses))
+
+
+def _host_refusal(message: str, target: Optional[str]) -> dict:
+    """The refusal envelope. error_code rides here, so no recovery-hint rule
+    exists for it (and none matches): the message is the guidance."""
+    return {'error': message, 'error_code': _HOST_DESTROY_CODE,
+            'refused_target': target}
+
+
+# Main-thread liveness for the bridge (issue #110). EnvoyExt._onRefresh
+# stamps sys._envoy_main_tick (time.monotonic) every frame; the WORKER serves
+# its age at _MAIN_TICK_ROUTE, so a main thread stuck with the GIL released
+# reads as main_thread_stalled instead of healthy. sys survives reinits.
+_MAIN_TICK_ROUTE = '/envoy/main_tick'
+
+
+def _main_tick_age(now: Optional[float] = None) -> Optional[float]:
+    """Seconds since the main thread last entered Envoy's request loop, or
+    None before the first stamp. A pure read of a float: worker-safe."""
+    tick = getattr(sys, '_envoy_main_tick', None)
+    if not isinstance(tick, float):
+        return None
+    return max(0.0, (time.monotonic() if now is None else now) - tick)
+
+
 # Worker threads must not print(): TD replaces sys.stdout with a Textport
 # catcher, a main-thread object, so a worker print is the same defect class
 # as worker-side run() (Derivative-confirmed 2026-08-17). Workers buffer
@@ -1429,6 +1568,36 @@ class EnvoyMCPServer:
                 _root.removeHandler(_h)
         _root.setLevel(_pre_level)
         self._register_tools()
+        try:
+            self._registerMainTickRoute()
+        except Exception as e:
+            _queueWorkerLog(f'Main-thread tick route unavailable: {e}')
+        # Direct delivery for EnvoyExt._answerAfterHostDestroyed (issue #110):
+        # response_checker stops once shutdown_event is set, which the dying
+        # host's onDestroyTD does. Same function it runs; pure Python.
+        try:
+            response_queue.envoy_deliver = self.check_responses
+        except Exception:
+            pass
+
+    def _registerMainTickRoute(self) -> None:
+        """GET _MAIN_TICK_ROUTE -> {'main_tick_age_s': float | None}, the
+        bridge's main_thread_stalled signal (issue #110). Served here on the
+        worker, so it answers while the main thread is stuck. Loopback Host
+        only: the SDK's DNS-rebinding check covers /mcp, not custom routes."""
+        from starlette.responses import JSONResponse
+
+        async def main_tick(request: Any) -> Any:
+            host = (request.headers.get('host') or '').rsplit(':', 1)[0]
+            if host not in ('127.0.0.1', 'localhost', '[::1]'):
+                return JSONResponse({'error': 'forbidden host'},
+                                    status_code=403)
+            age = _main_tick_age()
+            return JSONResponse(
+                {'main_tick_age_s': None if age is None else round(age, 3)})
+
+        self.mcp.custom_route(_MAIN_TICK_ROUTE, methods=['GET'],
+                              include_in_schema=False)(main_tick)
 
     def _touch_session(self, sid: str, label: Optional[str] = None,
                        operation: Optional[str] = None) -> None:
@@ -2201,8 +2370,17 @@ class EnvoyMCPServer:
         if not event.wait(timeout=timeout):
             with self.lock:
                 del self.pending_requests[request_id]
-            return {'error': f'Operation timed out after {timeout} seconds. '
-                    f'The operation may still execute on the main thread.'}
+            message = (f'Operation timed out after {timeout} seconds. '
+                       f'The operation may still execute on the main thread.')
+            # A stale tick says WHY (issue #110): the main thread never came
+            # back to the request loop -- a dialog, or a call that is stuck.
+            stuck_s = _main_tick_age()
+            if stuck_s is not None and stuck_s >= timeout:
+                message += (f' TouchDesigner has not come back to the Envoy '
+                            f'request loop for {stuck_s:.0f}s (a blocking '
+                            f'dialog, or a call still running); call '
+                            f'list_dialogs before retrying.')
+            return {'error': message}
 
         with self.lock:
             result = self.pending_requests[request_id].get('result', {'error': 'No result'})
@@ -2329,6 +2507,10 @@ class EnvoyMCPServer:
             """
             Delete an operator.
 
+            Refuses the Embody COMP, its ancestors, '/' and Envoy's own
+            extension DAT (error_code envoy.embody.host_destroy_refused);
+            override does not bypass that check.
+
             Args:
                 op_path: Full path to the operator (e.g., "/project1/base1")
                 override: Bypass the multi-session gate when another live
@@ -2377,7 +2559,10 @@ class EnvoyMCPServer:
             Invalid Menu values are rejected with the valid menuNames because
             TD would otherwise silently coerce them to index 0. Sequence-block
             parameters auto-grow their sequence, e.g. const5name grows
-            numBlocks to 6.
+            numBlocks to 6. A reload or clone pulse (enableexternaltoxpulse,
+            reinitnet, enablecloningpulse) on the Embody COMP, an ancestor,
+            '/' or Envoy's extension DAT is refused
+            (envoy.embody.host_destroy_refused).
 
             Args:
                 op_path: Full path to the operator
@@ -2557,6 +2742,11 @@ class EnvoyMCPServer:
             Python. Ops created here bypass auto-layout: position them per the
             network-layout rule or a LAYOUT WARNING rides back in _logs.
 
+            Refused before anything runs (envoy.embody.host_destroy_refused)
+            when the code would destroy or reload the Embody COMP, an
+            ancestor, '/' or Envoy's extension DAT in this call -- me and
+            parent() ARE the Embody COMP here; the refusal says how to defer.
+
             Args:
                 code: Python code to execute
 
@@ -2632,6 +2822,10 @@ class EnvoyMCPServer:
             """
             Call a method on a TouchDesigner operator.
             Example: exec_op_method("/project1/table1", "appendRow", args=[["a", "b", "c"]])
+
+            destroy/reload/changeType/progressiveUnload on the Embody COMP,
+            an ancestor, '/' or Envoy's extension DAT are refused
+            (envoy.embody.host_destroy_refused).
 
             Args:
                 op_path: Path to the operator
@@ -3370,6 +3564,9 @@ class EnvoyMCPServer:
             Tdxnpalettehandling parameter on the Embody COMP ('blackbox' |
             'fullexport' | 'ask'), or per COMP via
             comp.store('_tdn_palette_handling', 'blackbox').
+            This tool's exports never raise the locked-content dialog: the
+            _logs WARNING lists each locked op's source and the COMP to tag
+            'tox'.
 
             File-removal behavior likewise follows the Filecleanup parameter
             ('ask' | 'keep' | 'delete') -- set it rather than letting a modal
@@ -4060,7 +4257,11 @@ class EnvoyMCPServer:
             tool returned; omit it to list recent jobs. A finished
             run_tests job carries the summary (counts + the failing
             tests); a finished save_project job carries
-            version_before/version_after.
+            version_before/version_after. It also carries warnings: the
+            WARNING/ERROR lines logged during the save (ERRORs first, then
+            oldest first, repeats collapsed, at most 8 plus a '(+N more)'
+            entry), which the save's own extension reinit can keep out of
+            _logs. INFO lines are not listed; read them with get_logs.
 
             Args:
                 job_id: The id the starting tool returned (job_...). Omit
@@ -4100,6 +4301,22 @@ class EnvoyMCPServer:
             get_job_status(job_id) -- the finished record carries
             version_before/version_after and the saved .toe name. Expect
             this session's next call to ride a brief bridge reconnect.
+
+            Unattended sessions: a save never shows a dialog. Editable,
+            unexternalized DAT content is always written into its COMP's
+            .tdxn (tdxn_exclude:dat_content opts out; generated DATs are
+            recreated by TD). get_job_status(job_id)['warnings'] lists the
+            save's WARNING/ERROR lines: storage a save or the next open
+            destroys (Roundtrip mode with Strip on Save or Create on Start,
+            Embed Storage off) and any other save-time warning. Storage
+            only a rebuild from the .tdxn would lose (Export mode, a TDXN
+            COMP's own keys) is logged at INFO: get_logs and Embody's log
+            files, not the record. The Tdxndatsafety parameter on the
+            Embody COMP ('ask' | 'externalize' | 'ignore') governs that
+            report; set it before saving, like Tdxnpalettehandling and
+            Filecleanup. For an unattended save prefer this tool over
+            execute_python project.save(): the save reinitializes
+            extensions, so a warning may never reach _logs.
 
             Args:
                 idempotency_key: A stable key that makes a RETRY safe. A
@@ -5452,6 +5669,9 @@ class EnvoyExt:
 
     def Start(self) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
+        # Fresh main-thread tick (issue #110): sys outlives Stop, so a new
+        # worker must not serve an age left over from before a long disable.
+        sys._envoy_main_tick = time.monotonic()
         # Envoyenable is the master switch. Queued restart fires (auto-restart
         # backoff, watchdog revive) can land AFTER the user disabled Envoy;
         # without this gate they kept spawning servers for minutes after
@@ -7075,9 +7295,21 @@ class EnvoyExt:
         call that actually EXECUTED, and the write-effect footer runs; leave
         it None (e.g. for a refused multi-session gate, where no TD state
         moved) and only the existing attachments apply."""
-        self._attachRecoveryHints(result)
-        self._attachNotableLogs(result, sid)
-        self._attachEffects(result, operation, sid, scopes)
+        # Each attachment rides its own try: _attachNotableLogs reads
+        # op.Embody, which raises once no COMP holds the shortcut, and the
+        # put below must run regardless (issue #110).
+        try:
+            self._attachRecoveryHints(result)
+        except Exception:
+            pass
+        try:
+            self._attachNotableLogs(result, sid)
+        except Exception:
+            pass
+        try:
+            self._attachEffects(result, operation, sid, scopes)
+        except Exception:
+            pass
 
         self.response_queue.put({
             'id': request_id,
@@ -7157,6 +7389,11 @@ class EnvoyExt:
         RefreshHook - Called every frame on main thread while task is running.
         Polls request_queue for operations queued by the worker thread.
         """
+        # Main-thread liveness tick; the worker serves its age (see
+        # _main_tick_age). Before the stale guard: it proves the MAIN THREAD
+        # is running, whichever instance's hook this is (issue #110).
+        sys._envoy_main_tick = time.monotonic()
+
         # Guard: bail if this RefreshHook fires on a stale instance
         # (e.g., thread wasn't cleaned yet after extension reinit)
         try:
@@ -7214,8 +7451,12 @@ class EnvoyExt:
             sid = info.get('sid')
 
             # Baseline this session's log cursor BEFORE executing, so the
-            # response carries the warnings THIS operation generates.
-            self._baselineLogCursor(sid)
+            # response carries the warnings THIS operation generates. It reads
+            # op.Embody; a raise here would drop the request (issue #110).
+            try:
+                self._baselineLogCursor(sid)
+            except Exception:
+                pass
 
             # Multi-session Phase 3: destructive-op gate. Refusal is
             # instant and skips execution entirely.
@@ -7228,7 +7469,11 @@ class EnvoyExt:
             # permission. Non-gated operations are unaffected: they were
             # never the gate's business, so an internal error there must
             # not break unrelated tools.
-            gate = self._gateVerdict(sid, operation, params)
+            #
+            # The host-destroy guard answers FIRST (issue #110), so a host
+            # target never draws the gate's 'pass override=True' advice.
+            gate = (self._hostDestroyRefusal(operation, params)
+                    or self._gateVerdict(sid, operation, params))
             if gate is not None:
                 if isinstance(request_id, int) and request_id >= 0:
                     # Refused before execution -- no TD state moved, so the
@@ -7246,6 +7491,13 @@ class EnvoyExt:
             self._log(f'Processing: {operation}')
 
             result = self._execute_operation(operation, params)
+
+            # The call destroyed the COMP hosting Envoy (issue #110): answer
+            # straight into the worker and stop this server. The normal tail
+            # reads op.Embody and scans the project from a dead instance.
+            if self._hostIsGone():
+                self._answerAfterHostDestroyed(request_id, result)
+                return
 
             # A handler that needs real frames to finish (a non-TOP capture
             # waiting for its OP Viewer TOP to render) hands back a deferral
@@ -7419,6 +7671,11 @@ class EnvoyExt:
         # sub-operations that loop back through are covered too.
         if params and 'override' in params:
             params = {k: v for k, v in params.items() if k != 'override'}
+        # Host-destroy guard (issue #110) for direct calls and for each
+        # batch sub-operation, which loops back through here.
+        refused = self._hostDestroyRefusal(operation, params)
+        if refused is not None:
+            return refused
         handlers = {
             'create_op': self._create_op,
             'delete_op': self._delete_op,
@@ -8422,6 +8679,15 @@ class EnvoyExt:
         path = _job_path(job_id)
         _os, _json, _time = os, json, time
         _project, _op = project, op
+        # Save warnings ride the record: the save's reinit makes _logs on
+        # the next call unreliable. Hold the log DEQUE, never the extension
+        # -- a reinit replaces the buffer (issue #109).
+        _warnings_of, _ring_of = _save_warnings, _save_log_ring
+        try:
+            log_before = _ring_of(_op.Embody.ext.Embody)
+            mark = log_before[-1]['id'] if log_before else 0
+        except Exception:
+            log_before, mark = None, 0
         try:
             _project.save()
             job['status'] = 'done'
@@ -8433,6 +8699,14 @@ class EnvoyExt:
         except Exception as e:
             job['status'] = 'error'
             job['error'] = 'project.save() failed: %s' % e
+        try:
+            log_after = _ring_of(_op.Embody.ext.Embody)
+        except Exception:
+            log_after = None
+        try:
+            job['warnings'] = _warnings_of(log_before, mark, log_after)
+        except Exception:
+            job['warnings'] = []
         job['finished'] = _time.time()
         if path:
             try:
@@ -8642,6 +8916,16 @@ class EnvoyExt:
             result = self._execute_operation(tool, params)
             results.append(result)
             if 'error' in result:
+                break
+            # A sub-op destroyed or reloaded the COMP hosting Envoy (issue
+            # #110): the rest would run from a dead instance, maybe on a new
+            # Embody at the same paths.
+            if self._hostIsGone():
+                if i < len(operations) - 1:
+                    results.append({'error': 'Remaining sub-operations '
+                                             'skipped: the Embody COMP hosting '
+                                             'Envoy was destroyed or reloaded '
+                                             'by the one before (issue #110).'})
                 break
         return {
             'success': not any('error' in r for r in results),
@@ -8971,6 +9255,12 @@ class EnvoyExt:
         """Execute arbitrary Python code"""
         code_preview = code[:200] + ('...' if len(code) > 200 else '')
         self._log(f'execute_python: {code_preview}')
+        # Built first: the host-destroy lint resolves receivers against
+        # this SAME dict.
+        namespace = self._execNamespace()
+        refused = self._hostDestroyLint(code, namespace)
+        if refused is not None:
+            return refused
         # Before exec, so the warning lands even when the code itself fails.
         self._lintWorkerRun(code, 'execute_python')
         try:
@@ -8985,17 +9275,13 @@ class EnvoyExt:
             except Exception:
                 pre_paths = None
 
-            # Create a namespace with useful globals
-            namespace = {
-                'op': op,
-                'ops': ops,
-                'parent': parent,
-                'root': root,
-                'me': self.ownerComp,
-                'result': None
-            }
-
             exec(code, namespace)
+
+            # Backstop (issue #110): the code destroyed the COMP hosting Envoy
+            # through a form the lint cannot see. Skip every post-exec tail:
+            # _lintNewOps walks root and can move docks in a new Embody.
+            if self._hostIsGone():
+                return self._hostDestroyedResult(namespace.get('result'))
 
             # Return the 'result' variable if set
             result = namespace.get('result')
@@ -9005,6 +9291,14 @@ class EnvoyExt:
                 return {'success': True, 'result': str(result)}
             return {'success': True}
         except Exception as e:
+            if self._hostIsGone():
+                # Never roll back from a dead host (issue #110):
+                # _rollbackNewOps destroys every op not in pre_paths, a
+                # replacement Embody included.
+                return {'error': 'Execution failed after the Embody COMP '
+                                 'hosting Envoy was destroyed or reloaded '
+                                 '(issue #110); nothing was rolled back: %s'
+                                 % e}
             self._log(f'execute_python failed: {e}', 'ERROR')
             removed = self._rollbackNewOps(pre_paths)
             msg = f'Execution failed: {e}'
@@ -9048,6 +9342,195 @@ class EnvoyExt:
         except Exception:
             pass
         return count
+
+    # --- Host-destroy guard (issue #110; see _HOST_DESTROY_CODE) ---
+
+    def _execNamespace(self) -> dict:
+        """execute_python's exec globals. The host-destroy lint resolves
+        receivers against this same dict (issue #110)."""
+        return {'op': op, 'ops': ops, 'parent': parent, 'root': root,
+                'me': self.ownerComp, 'result': None}
+
+    def _hostChain(self) -> list:
+        """Paths no Envoy request may destroy or reload: the Embody COMP,
+        each ancestor, '/', then this extension's own source DAT. The seam
+        tests patch to a sandbox stand-in host."""
+        chain = []
+        node = self.ownerComp
+        while node is not None and len(chain) < 64:
+            chain.append(node.path)
+            node = node.parent()
+        if '/' not in chain:
+            chain.append('/')
+        source = self.ownerComp.op('EnvoyExt')
+        if source is not None:
+            chain.append(source.path)
+        return chain
+
+    def _hostDestroyRefusal(self, operation: str,
+                            params: Optional[dict]) -> Optional[dict]:
+        """Refusal for a delete_op, a destroy-class exec_op_method, or a
+        reload/clone pulse via set_parameter whose target is on the host
+        chain; None to proceed. A batch is refused whole, before any sub-op
+        runs -- its execute_python sub-ops are linted here too (fail-open).
+        FAIL-CLOSED: a guarded call the check cannot judge is refused.
+        override=True is not consulted."""
+        shape = None
+        try:
+            if operation == 'batch_operations':
+                subs = params.get('operations') if isinstance(params, dict) else None
+                for sub in (subs if isinstance(subs, list) else ()):
+                    if isinstance(sub, dict) and sub.get('tool') != 'batch_operations':
+                        refused = self._hostDestroyRefusal(sub.get('tool'),
+                                                           sub.get('params'))
+                        sub_params = sub.get('params')
+                        if (refused is None and sub.get('tool') == 'execute_python'
+                                and isinstance(sub_params, dict)):
+                            refused = self._hostDestroyLint(
+                                sub_params.get('code'), self._execNamespace())
+                        if refused is not None:
+                            return refused
+                return None
+            shape = _host_destroy_shape(operation, params)
+            if shape is None:
+                return None
+            op_path, what = shape
+            node = self._resolve_op(op_path)
+            if node is None:
+                return None     # the handler reports the missing operator
+            target = node.path
+            chain = self._hostChain()
+            if target not in chain:
+                return None
+            relation = _host_relation(target, chain)
+            refused = _host_refusal(
+                _host_refusal_text(what, target, relation,
+                                   operation == 'delete_op'), target)
+        except Exception as e:
+            if shape is None and operation != 'batch_operations':
+                return None
+            refused = _host_refusal(
+                'HOST-DESTROY REFUSED (nothing changed): the host-destroy check '
+                'for %s could not reach a verdict (%s: %s), so it fails closed. '
+                'Retry; if it persists, check get_op_errors on the Embody COMP.'
+                % (operation, type(e).__name__, e),
+                shape[0] if shape else None)
+            self._log(refused['error'], 'ERROR')
+            return refused
+        self._log('HOST-DESTROY REFUSED: %s on %s, %s (issue #110)'
+                  % (what, target, relation), 'WARNING')
+        return refused
+
+    def _resolveLookupPath(self, node: Any, namespace: dict) -> Optional[str]:
+        """envoy_guard's resolver: eval ONE whitelisted lookup against
+        execute_python's own namespace, from THIS frame. TD resolves relative
+        op()/parent() against the innermost DAT frame, and the exec also runs
+        from EnvoyExt, so both see the same context. Never raises."""
+        try:
+            expr = ast.parse(ast.unparse(node), mode='eval')
+            found = eval(compile(expr, '<envoy_guard>', 'eval'), namespace)
+            if found is not None and found.valid:
+                return found.path
+        except Exception:
+            pass
+        return None
+
+    def _hostDestroyLint(self, code: str, namespace: dict) -> Optional[dict]:
+        """execute_python's pre-exec lint: a refusal, or None. FAIL-OPEN --
+        a missing envoy_guard DAT or any fault lints to nothing, and the
+        backstop in _execute_python still stands."""
+        # Token prefilter BEFORE the module lookup: token-free code (nearly
+        # every call) never touches mod.envoy_guard or logs a skip.
+        lowered = code.lower() if isinstance(code, str) else ''
+        if not any(token in lowered for token in _HOST_LINT_TOKENS):
+            return None
+        try:
+            guard = mod.envoy_guard
+            chain = self._hostChain()
+            findings = guard.host_destroy_findings(
+                code, lambda node: self._resolveLookupPath(node, namespace),
+                set(chain))
+            if not findings:
+                return None
+            first = findings[0]
+            relation = _host_relation(first['target'], chain)
+            refused = _host_refusal(
+                guard.python_refusal_text(first, relation), first['target'])
+        except Exception as e:
+            self._log(f'Host-destroy lint skipped (fail-open): '
+                      f'{type(e).__name__}: {e}', 'DEBUG')
+            return None
+        self._log('HOST-DESTROY REFUSED: execute_python line %s: %s, %s '
+                  '(issue #110)' % (first['line'], first['call'], relation),
+                  'WARNING')
+        return refused
+
+    def _hostIsGone(self) -> bool:
+        """True once the COMP hosting this extension was destroyed (a deleted
+        OP reads valid=False) or reloaded/reinitialized (a new EnvoyExt
+        instance replaced this one; its onDestroyTD already stopped
+        response_checker)."""
+        try:
+            return (not self.ownerComp.valid
+                    or self.ownerComp.ext.Envoy is not self)
+        except Exception as e:
+            self._log(f'Host check raised, treating the Embody COMP as gone: '
+                      f'{type(e).__name__}: {e}', 'WARNING')
+            return True
+
+    def _hostDestroyedResult(self, result: Any) -> dict:
+        """execute_python's answer when its code destroyed the host COMP, or
+        replaced this extension instance (a reload or an extension reinit,
+        which destroys nothing: worded apart so the agent is not misled)."""
+        try:
+            destroyed = not self.ownerComp.valid
+        except Exception:
+            destroyed = True
+        if destroyed:
+            out = {'success': True, 'host_destroyed': True,
+                   'warning': 'This call destroyed the Embody COMP that Envoy '
+                              'runs inside, so Envoy skipped its post-call '
+                              'checks and this server stops; Envoy restarts '
+                              'from a new Embody instance if one loads. Defer '
+                              'such work next time: run(code, delayFrames=30) '
+                              '(issue #110).'}
+        else:
+            out = {'success': True, 'host_reloaded': True,
+                   'warning': 'This call reloaded the Embody COMP or '
+                              "reinitialized Envoy's extension, so this Envoy "
+                              'instance skipped its post-call checks and '
+                              'stops; the new instance restarts Envoy '
+                              '(issue #110).'}
+        if result is not None:
+            try:
+                out['result'] = str(result)
+            except Exception:
+                pass
+        return out
+
+    def _answerAfterHostDestroyed(self, request_id: Any, result: Any) -> None:
+        """Hand one response straight to the worker after the host COMP died
+        -- check_responses, as response_checker would, since that thread
+        exits once shutdown_event is set -- then stop this server."""
+        try:
+            if not isinstance(result, dict):
+                result = {'error': 'The Embody COMP hosting Envoy was destroyed '
+                                   'during this call (issue #110).'}
+            self._attachRecoveryHints(result)
+            if isinstance(request_id, int) and request_id >= 0:
+                message = {'id': request_id, 'result': result}
+                deliver = getattr(self.response_queue, 'envoy_deliver', None)
+                if callable(deliver):
+                    deliver(message)
+                else:
+                    self.response_queue.put(message)
+        except Exception:
+            pass
+        finally:
+            try:
+                self.shutdown_event.set()
+            except Exception:
+                pass
 
     # === Introspection & Diagnostics (Main Thread Only) ===
 
@@ -9448,12 +9931,12 @@ class EnvoyExt:
         return mod.envoy_setup.configure_gitignore(self, git_root)
 
     def _configureGitattributes(self, git_root):
-        """Ensure .gitattributes normalizes TD line endings + TDXN diffs -- see envoy_setup."""
+        """Ensure .gitattributes normalizes TD line endings -- see envoy_setup."""
         return mod.envoy_setup.configure_gitattributes(self, git_root)
 
-    def _configureTdxnDiffDriver(self, target_dir, python_cmd):
-        """Deploy the TDXN git textconv script and register the diff driver -- see envoy_setup."""
-        return mod.envoy_setup.configure_tdxn_diff_driver(self, target_dir, python_cmd)
+    def _retireTdxnDiffDriver(self, target_dir):
+        """Remove the git textconv diff driver older versions installed -- see envoy_setup."""
+        return mod.envoy_setup.retire_tdxn_diff_driver(self, target_dir)
 
     def _cleanupTempFiles(self):
         """Remove stale Envoy temp files from /tmp -- see envoy_setup."""

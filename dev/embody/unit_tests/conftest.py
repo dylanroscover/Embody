@@ -23,10 +23,13 @@ dev box and landed flagged "unverified on mac" (commit e28b73e).
 import builtins
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
 import unittest
+
+import pytest
 
 
 # The interpreter this suite is CONTRACTED to run on: TouchDesigner's own.
@@ -91,8 +94,9 @@ def _sandbox_dev_dir() -> str:
     early-refuses inside TD (where the runner pid IS a TouchDesigner) can
     fall through off-TD into code that resolves the REAL registry -- the
     2026-07-30 incident: the dev TD exited silently mid-pytest-run with
-    no crash record; cause unproven, but this class of reach into the
-    live .embody/ is exactly what cannot be allowed either way.
+    no crash record; likely the stale-heartbeat kill (see the runtime cage
+    below), but this reach into the live .embody/ cannot be allowed either
+    way.
     """
     root = tempfile.mkdtemp(prefix='embody_pytest_sandbox_')
     for rel in ('embody/envoy_bridge.py',
@@ -183,16 +187,12 @@ def _runner_stub():
     return _Op('op')
 
 
-# --- Runtime cage: the sandbox covers WHICH module is imported, not what
-# that module reaches at runtime. envoy_bridge._init_file_logging falls back
-# to os.getcwd()/dev/logs when no --config is passed, so a pytest run started
-# from the repo root appends to the LIVE dev/logs/envoy-bridge.log, and the
-# bridge's port resolution still finds the real registry on 9870. Proven
-# 2026-08-29: bridge lines under dev/.venv-tests/python.exe (3.11.15, an
-# interpreter only pytest uses) recorded "Connected to Envoy" and four
-# "Launching TouchDesigner" calls against the live install; the dev TD exited
-# five seconds later. That is the same signature as the 2026-07-30 incident
-# this file's header records as cause-unproven.
+# --- Runtime cage: the sandbox covers WHICH module is imported, not what it
+# reaches at runtime: with no --config, _init_file_logging falls back to
+# os.getcwd()/dev/logs, so a repo-root run appended to the LIVE bridge log.
+# The TD deaths once blamed on that reach were kill_stale_bridges taskkill'ing
+# TD's pid from a stale temp heartbeat the in-TD suite wrote (log 2026-08-29,
+# PID 13784; 2026-07-30 likely the same) -- fenced by the repo-root conftest.
 _LIVE_BRIDGE_LOG = os.path.join(_DEV_DIR, 'logs', 'envoy-bridge.log')
 _live_log_size_at_start = None
 
@@ -238,7 +238,18 @@ def _cage_bridge_runtime():
     return len(targets)
 
 
+def _require_kill_fence() -> None:
+    """Fail closed: --confcutdir can skip the repo-root conftest (the
+    process-kill fence) while this file still loads. A run without the
+    fence once killed TouchDesigner (2026-09-11)."""
+    if getattr(subprocess.Popen.__init__, '_embody_kill_fence', None) is None:
+        raise pytest.UsageError(
+            'kill fence not installed: the repo-root conftest.py did not '
+            'load (--confcutdir/--noconftest?). Run pytest from the repo root.')
+
+
 def pytest_configure(config):
+    _require_kill_fence()  # first: before any sandbox dir is made
     # Inject only when TD is genuinely absent -- inside TD these names
     # are real builtins and must never be shadowed. project.folder points
     # at a SANDBOX COPY (see _sandbox_dev_dir), never the real dev/.

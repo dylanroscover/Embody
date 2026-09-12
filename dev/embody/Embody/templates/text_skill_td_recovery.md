@@ -11,7 +11,7 @@ description: "MUST READ when Envoy/TD connectivity is broken and has not self-he
 The bridge runs a background reconciler thread that continuously manages connectivity:
 
 - **Config polling** (every 1s): Watches `.embody/envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
-- **Heartbeat** (every 3-30s, dynamic): Pings the backend to detect connect/disconnect transitions. Fast cadence (3s) while disconnected, slow cadence (30s) once stable.
+- **Heartbeat** (every 10s, fixed -- `HEARTBEAT_TICK_S`): Pings the backend to detect connect/disconnect transitions, and reads how long TD's main thread has been away from Envoy's request loop.
 - **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
 - **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
 - **Single-attempt forwarding**: Failed requests return an error immediately -- no per-request retry loop. The reconciler handles recovery in the background.
@@ -32,6 +32,7 @@ Most connectivity issues self-heal (see the two layers above). Before any manual
 
 - **`connected:false` while `td_process_alive:true`** (Envoy unreachable but TD still running) is the dropped-socket zombie. The TD-side watchdog self-heals it in ~6-8s. **WAIT ~10s and re-check `get_td_status`** (or probe the port directly: `python3 -c "import socket; socket.create_connection(('127.0.0.1',9870),0.4)"`). **Do NOT `restart_td`, relaunch TD, or toggle Envoy for this** -- it defeats the watchdog and is almost never necessary. Only escalate if it genuinely has not recovered after ~15s.
 - Editing an extension `.py` (EnvoyExt / EmbodyExt / TDXNExt) does NOT need a restart either -- the source DATs have `syncfile=True` and reinit on change, so edits go live on their own.
+- **`envoy_unresponsive:true`** (TD alive, port accepting, Envoy silent 60s+ since `unresponsive_since`) means TD looks frozen, or stuck in one very long call; **`main_thread_stalled:true`** (Envoy answers, but TD's main thread has not come back to Envoy's request loop for 60s+ since `stalled_since`) means a blocking dialog or a call that never returned. The TD-side watchdog cannot help either -- it runs on that thread. Call `list_dialogs` first; with no dialog up, report the timestamp to the user and let them decide. Never kill TD yourself. A call pinned on the frozen TD is answered once `envoy_unresponsive` has held another 120s (180s of silence), saying it was abandoned.
 
 Manual recovery below is only for when TD is actually down or the bridge process itself is broken:
 

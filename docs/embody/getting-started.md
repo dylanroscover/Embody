@@ -106,7 +106,7 @@ Pulsing **Uninstall** first shows a confirmation dialog that spells out exactly 
 
 - **Removed** — Embody-generated AI-assistant config (`CLAUDE.md` / `AGENTS.md` / `.claude/` / `.cursor/` / …), the Embody `.venv`, and the `.embody/` state folder.
 - **Modified** — shared files where Embody only *strips its own block or key*, leaving your content intact: `.gitignore`, `.gitattributes`, and the `envoy` server entry in `.mcp.json` (your other MCP servers are kept).
-- **Un-set** — the git config keys for the `.tdxn` diff driver.
+- **Un-set** — any git config keys an older Embody set for its retired `.tdxn` diff driver.
 - **Kept** — anything Embody can't prove it owns: a generated file you edited, `settings.local.json`, an unrecorded-looking venv. These are flagged and left untouched.
 
 It only proceeds when you confirm. Cancelling — or triggering it during a save or a test run — does nothing.

@@ -1292,7 +1292,13 @@ def test_an_unplugged_volume_is_never_a_deletion(tmp_path):
     ordinary folder, by contrast, IS provably deleted."""
     gone = ha.HostApp._path_provably_deleted
     if sys.platform == "win32":
-        assert gone("Q:\\nonexistent-drive\\show\\show.toe") is False
+        # Probe for a letter that is really unmounted. A hardcoded one (was
+        # Q:) turns into a false failure the day that drive gets mapped --
+        # which it was, on the dev box (field 2026-09-11).
+        free = next((c for c in "QZYXWVU" if not os.path.exists(c + ":\\")),
+                    None)
+        assert free, "no unmounted drive letter available to test with"
+        assert gone(free + ":\\nonexistent-drive\\show\\show.toe") is False
     elif sys.platform == "darwin":
         assert gone("/Volumes/UnpluggedDrive/show/show.toe") is False
     deleted = tmp_path / "was-here" / "show.toe"

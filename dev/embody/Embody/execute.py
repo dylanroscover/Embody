@@ -258,7 +258,15 @@ def onProjectPreSave():
 			parent.Embody.ext.Embody.Log('Perform Mode -- skipping pre-save externalization', 'INFO')
 			return
 
-		_runPreSaveExternalization()
+		try:
+			_runPreSaveExternalization()
+		finally:
+			# The save's unanswered palette prompts as ONE WARNING, after
+			# every export ran (issue #109 review).
+			try:
+				parent.Embody.ext.TDXN.flushPaletteUnanswered()
+			except Exception:
+				pass
 	except Exception as e:
 		try:
 			parent.Embody.ext.Embody.Log(
@@ -277,6 +285,13 @@ def _runPreSaveExternalization():
 	# re-exports everything anyway, so cancel it.
 	try:
 		tdxn = parent.Embody.ext.TDXN
+		# Per-save report state: each save's job record names its own
+		# unanswered palette clones and dropped companions (issue #109).
+		for name in ('_palette_unanswered_warned', '_palette_unanswered_pending',
+					 '_companion_drop_logged'):
+			bucket = getattr(tdxn, name, None)
+			if bucket is not None:
+				bucket.clear()
 		state = getattr(tdxn, '_export_state', None)
 		if state and not state.get('done'):
 			parent.Embody.ext.Embody.Log(
@@ -300,8 +315,17 @@ def _runPreSaveExternalization():
 			'TDXN mode=off -- skipping pre-save TDXN strip/export', 'INFO')
 		return
 
-	# TDXN content safety -- detect unprotected DATs and storage before strip/restore
-	parent.Embody.ext.Embody._checkTDXNContentSafety()
+	# TDXN content report: storage a .tdxn cannot hold, DATs no copy keeps.
+	# Its own boundary -- a bug here must never skip Phase 1 or the strip,
+	# which would leave every .tdxn stale (issue #109).
+	try:
+		parent.Embody.ext.Embody._checkTDXNContentSafety()
+	except Exception as e:
+		try:
+			parent.Embody.ext.Embody.Log(
+				f'TDXN content check failed (export continues): {e}', 'ERROR')
+		except Exception:
+			print(f'Embody > TDXN content check failed (export continues): {e}')
 
 	tdxn_comps = parent.Embody.ext.Embody._getTDXNStrategyComps()
 	if not tdxn_comps:
@@ -310,7 +334,7 @@ def _runPreSaveExternalization():
 	# Phase 1: Export current in-memory state to .tdn files, but only
 	# if the content actually changed. Skipping unchanged COMPs avoids
 	# noisy git diffs from volatile header fields (build, generator,
-	# exported_at, td_build).
+	# td_build).
 	exported = []
 	for comp_path, rel_tdxn_path in tdxn_comps:
 		comp = op(comp_path)

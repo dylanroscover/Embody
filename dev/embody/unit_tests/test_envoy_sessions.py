@@ -36,6 +36,21 @@ bridge.start_orphan_watchdog = lambda *a, **k: None
 if hasattr(bridge, 'start_reconciler'):
     bridge.start_reconciler = lambda *a, **k: None
 
+# Kill fence -- see test_envoy_bridge.py's header. This suite runs in TD,
+# where os.getpid() is TouchDesigner: the heartbeat tests call the real
+# writer only through _real_touch_heartbeat, into a TemporaryDirectory.
+_real_touch_heartbeat = bridge._touch_heartbeat
+
+
+def _refuse_kill_stale_bridges(*a: object, **k: object) -> None:
+    raise AssertionError('real kill path reached in a test')
+
+
+bridge.kill_stale_bridges = _refuse_kill_stale_bridges
+bridge.quit_td = _refuse_kill_stale_bridges
+bridge._touch_heartbeat = lambda *a, **k: None
+bridge._install_signal_diagnostics = lambda *a, **k: None
+
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
@@ -113,7 +128,7 @@ class TestHeartbeatSessions(EmbodyTestCase):
     def test_heartbeat_carries_sid_and_label(self):
         with tempfile.TemporaryDirectory() as td:
             cfg, logdir = self._mk_config(td)
-            bridge._touch_heartbeat(cfg)
+            _real_touch_heartbeat(cfg)
             path = os.path.join(
                 logdir, 'envoy-bridge-{}.heartbeat'.format(os.getpid()))
             self.assertTrue(os.path.exists(path))
@@ -125,7 +140,7 @@ class TestHeartbeatSessions(EmbodyTestCase):
     def test_list_live_sessions_includes_self_and_fresh_peer(self):
         with tempfile.TemporaryDirectory() as td:
             cfg, logdir = self._mk_config(td)
-            bridge._touch_heartbeat(cfg)
+            _real_touch_heartbeat(cfg)
             # A peer pid we can't actually signal would read as dead
             # (inside TD, getppid() is launchd) -- mock liveness instead,
             # matching test_envoy_bridge's mock-heavy convention.

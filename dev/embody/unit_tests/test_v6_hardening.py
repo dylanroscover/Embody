@@ -21,10 +21,6 @@ test_tdn_fingerprint.py). Each class targets one seam:
       DOCK IDENTITY (docked AND name == f'{dock.name}_compute'), never on
       text alone. Three negative cases must NOT be omitted.
 
-  TestTDXNTextconvDegrade
-      The git textconv driver's "never make the diff worse" guard: an
-      UNPARSEABLE blob (with PyYAML available) returns raw input unchanged.
-
   TestPOPSequenceResolution
       mathmixPOP `comb` -- subscript pop.seq['comb'] is None (TD quirk) while
       TDXNExt._getSequenceByName finds the real sequence; and a custom
@@ -42,7 +38,6 @@ test_tdn_fingerprint.py). Each class targets one seam:
       into a Config()-time ValueError and a watchdog restart loop.
 """
 
-import importlib.util
 import os
 import re
 import sys
@@ -291,53 +286,6 @@ class TestTDXNBoilerplateNegativeGuards(EmbodyTestCase):
         dat = self.sandbox.create(textDAT, 'custom_dat')
         dat.text = '// my custom shader\nvoid main() {}'
         self._assert_not_omitted(dat)
-
-
-# =============================================================================
-# textconv driver: unparseable blob returns raw input unchanged
-# =============================================================================
-
-class TestTDXNTextconvDegrade(EmbodyTestCase):
-
-    def _load_textconv(self):
-        fp = os.path.join(
-            project.folder, 'embody', 'Embody', 'templates',
-            'text_tdxn_textconv.py')
-        if not os.path.isfile(fp):
-            return None
-        spec = importlib.util.spec_from_file_location(
-            'v6h_tdxn_textconv', fp)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
-    def test_unparseable_blob_returns_raw_with_yaml_available(self):
-        """With PyYAML AVAILABLE, an unparseable .tdn blob must round-trip
-        through normalize() UNCHANGED -- the 'never make the diff worse'
-        guard returns the raw input on any parse error, so a malformed file
-        still diffs (unfiltered) rather than breaking git."""
-        mod = self._load_textconv()
-        if mod is None:
-            self.skipTest('textconv template not found')
-        if not getattr(mod, '_HAVE_YAML', False):
-            self.skipTest('PyYAML unavailable in textconv module')
-
-        # Brace-prefixed, invalid as BOTH JSON and YAML -> _parse raises ->
-        # normalize returns raw.
-        blob = '{"a": 1,, "b": 2}\n'
-        self.assertEqual(mod.normalize(blob), blob,
-            'unparseable blob must pass through normalize() unchanged')
-
-    def test_unparseable_yaml_block_returns_raw(self):
-        """A non-brace, invalid-YAML blob also degrades to raw passthrough."""
-        mod = self._load_textconv()
-        if mod is None:
-            self.skipTest('textconv template not found')
-        if not getattr(mod, '_HAVE_YAML', False):
-            self.skipTest('PyYAML unavailable in textconv module')
-        blob = 'foo: |\n\tbad tab block\n'
-        self.assertEqual(mod.normalize(blob), blob,
-            'invalid-YAML blob must pass through normalize() unchanged')
 
 
 # =============================================================================

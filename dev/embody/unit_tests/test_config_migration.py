@@ -32,6 +32,130 @@ except (AttributeError, NameError):
 HEADER = '# Embody / Envoy (auto-managed)'
 
 
+class TestTdxnDriverRetirement(EmbodyTestCase):
+    """envoy_setup.retire_tdxn_diff_driver (issue #106) against a real git
+    repo: unset only OUR textconv key, confirm it is gone, then delete the
+    script. A key left pointing at a missing script makes every .tdxn
+    `git diff` fail (exit 128), and a user's own driver is not ours."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = Path(tempfile.mkdtemp(prefix='embody_retire_'))
+        (self.tmp / '.embody').mkdir()
+        self._git('init', '-q')
+        self.logs = []
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _git(self, *args):
+        import subprocess
+        return subprocess.run(
+            ['git', *args], cwd=str(self.tmp), capture_output=True,
+            text=True, timeout=10, stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    def _get(self, key):
+        return self._git('config', '--local', '--get', key).stdout.strip()
+
+    def _install(self, name='tdxn', script='tdxn_textconv.py'):
+        path = self.tmp / '.embody' / script
+        path.write_text('# driver\n', encoding='utf-8')
+        self._git('config', f'diff.{name}.textconv',
+                  f'"python" "{path.as_posix()}"')
+        self._git('config', f'diff.{name}.cachetextconv', 'false')
+        return path
+
+    def _retire(self):
+        logs = self.logs
+        ext = type('LogOnlyExt', (), {
+            '_log': lambda _s, msg, level='INFO': logs.append((level, msg))})()
+        op.Embody.op('envoy_setup').module.retire_tdxn_diff_driver(
+            ext, self.tmp)
+
+    def test_our_driver_is_unset_then_its_script_deleted(self):
+        script = self._install()
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), '')
+        self.assertEqual(self._get('diff.tdxn.cachetextconv'), '')
+        self.assertFalse(script.exists(),
+                         'the script must go once nothing references it')
+
+    def test_legacy_tdn_driver_is_retired_too(self):
+        script = self._install('tdn', 'tdn_textconv.py')
+        self._retire()
+        self.assertEqual(self._get('diff.tdn.textconv'), '')
+        self.assertFalse(script.exists())
+
+    def test_a_users_own_driver_is_left_alone(self):
+        self._git('config', 'diff.tdxn.textconv', 'my-own-tool')
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), 'my-own-tool')
+
+    def test_nothing_installed_is_a_quiet_no_op(self):
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), '')
+        self.assertEqual(
+            [l for l in self.logs if l[0] in ('WARNING', 'ERROR')], [])
+
+    def test_foreign_driver_is_kept_and_our_orphan_script_removed(self):
+        script = self.tmp / '.embody' / 'tdxn_textconv.py'
+        script.write_text('# driver\n', encoding='utf-8')
+        self._git('config', 'diff.tdxn.textconv', 'my-own-tool')
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), 'my-own-tool')
+        self.assertFalse(script.exists(), 'nothing references our script')
+
+    def test_a_tool_elsewhere_named_like_ours_is_not_ours(self):
+        value = '"python" "C:/tools/tdxn_textconv.py"'
+        self._git('config', 'diff.tdxn.textconv', value)
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), value)
+
+    def test_unset_that_fails_keeps_key_and_script(self):
+        """A key left pointing at a missing script breaks every .tdxn git
+        diff, so a failed unset (config locked) must keep the script."""
+        script = self._install()
+        lock = self.tmp / '.git' / 'config.lock'
+        lock.write_text('', encoding='utf-8')
+        try:
+            self._retire()
+        finally:
+            lock.unlink()
+        self.assertNotEqual(self._get('diff.tdxn.textconv'), '')
+        self.assertTrue(script.exists())
+        self.assertTrue(any(l[0] == 'WARNING' for l in self.logs))
+        self._retire()                       # lock gone: now it retires
+        self.assertEqual(self._get('diff.tdxn.textconv'), '')
+        self.assertFalse(script.exists())
+
+    def test_key_without_its_script_is_still_retired(self):
+        """git clean -fdX can remove the gitignored script and leave the key
+        -- every .tdxn diff fails until the key goes."""
+        script = self._install()
+        script.unlink()
+        self._retire()
+        self.assertEqual(self._get('diff.tdxn.textconv'), '')
+
+    def test_every_open_hook_retires_with_envoy_off(self):
+        """embody_git.retire_leftover_tdxn_driver runs from upgrade_envoy on
+        every open, before the Envoyenable check."""
+        script = self._install()
+        logs, tmp = self.logs, self.tmp
+        envoy = type('LogOnlyExt', (), {
+            '_log': lambda _s, msg, level='INFO': logs.append((level, msg))})()
+        fake = type('FakeEmbodyExt', (), {
+            '_findProjectRoot': lambda _s: tmp,
+            'Log': lambda _s, msg, level='INFO': logs.append((level, msg)),
+            'my': type('My', (), {
+                'ext': type('Exts', (), {'Envoy': envoy})()})(),
+        })()
+        op.Embody.op('embody_git').module.retire_leftover_tdxn_driver(fake)
+        self.assertEqual(self._get('diff.tdxn.textconv'), '')
+        self.assertFalse(script.exists())
+
+
 class TestConfigMigration(EmbodyTestCase):
 
     def setUp(self):

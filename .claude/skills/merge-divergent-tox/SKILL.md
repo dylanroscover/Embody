@@ -204,7 +204,7 @@ A clean diff is **not** proof of equivalence. Invisible to it:
 | **Export-mode** parameters (CHOP exports) | Not stored in TDXN. A CHOP-export difference is completely invisible. |
 | `par.enable` / `enableExpr` / `password` | Conditional-enable rules silently lost. |
 | Fully-default, unwired operators | Dropped from TDXN export entirely. **Phase 2 covers this -- another reason not to skip it.** |
-| Locked TOP/CHOP/SOP frozen data | Arrives locked and empty. |
+| Locked TOP/CHOP/SOP/POP frozen data | Arrives locked and empty. |
 | Parameters equal to a creation default that **changed between TD builds** | Two exports can match while the live networks differ. Always merge in the NEWER build, applying the older side's delta onto the newer. |
 | Derived DAT content under cooking-off | Empty, not deleted. |
 | Panel visual position | Captured only as ordinary parameters -- eyeball it. |

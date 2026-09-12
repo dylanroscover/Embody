@@ -623,8 +623,8 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 		self.assertFalse(self.ext._environmentNeedsInstall(spec))
 
 	def test_missing_yaml_needs_install(self):
-		# PyYAML powers the .tdn git textconv driver, invoked via the venv
-		# python -- an mcp-complete venv that still lacks yaml needs install.
+		# PyYAML is a required venv package -- an mcp-complete venv that
+		# still lacks yaml needs install.
 		spec = self._spec()
 		self._make_dist('mcp', '2.0.0')
 		self._write_stamp(spec)

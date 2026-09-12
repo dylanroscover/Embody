@@ -798,14 +798,18 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
             tag_type = tdxn_tag
 
         # The tagger REFUSES unknown values -- an unchecked return reported
-        # success while nothing was tagged.
-        if not op.Embody.ext.Embody.applyTagToOperator(target, tag_type):
+        # success while nothing was tagged. MCP never raises the locked-
+        # content modal: its WARNING rides back in _logs (issue #108).
+        with op.Embody.ext.TDXN.suppressLockedDialogs():
+            tagged = op.Embody.ext.Embody.applyTagToOperator(target, tag_type)
+            if tagged:
+                op.Embody.Update()
+        if not tagged:
             return {'error': f'{op_path}: tag_type {tag_type!r} was rejected. '
                              f'COMPs accept "tox" or {tdxn_tag!r} (the TDXN '
                              f'strategy tag, legacy "tdn" also accepted); '
                              f'DATs accept a source type such as "py". '
                              f'Nothing was tagged.'}
-        op.Embody.Update()
 
         # Report the file actually written for the strategy: TDXN comps track
         # their .tdxn in the externalizations table (externaltox would report
@@ -953,7 +957,9 @@ def save_externalization(ext, op_path: str) -> dict:
         if target.family == 'COMP':
             strategy = op.Embody.ext.Embody._getCompStrategy(target)
             if strategy == 'tdn':
-                written = op.Embody.ext.Embody.saveTDXN(op_path)
+                # Log-only locked-content warning from MCP (issue #108).
+                with op.Embody.ext.TDXN.suppressLockedDialogs():
+                    written = op.Embody.ext.Embody.saveTDXN(op_path)
             else:
                 written = op.Embody.Save(op_path)
             if not written:

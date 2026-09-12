@@ -27,6 +27,17 @@ bridge.start_orphan_watchdog = lambda *args, **kwargs: None
 if hasattr(bridge, 'start_reconciler'):
     bridge.start_reconciler = lambda *args, **kwargs: None
 
+
+# Kill fence for both runners -- see test_envoy_bridge.py's header.
+def _refuse_kill_stale_bridges(*args: object, **kwargs: object) -> None:
+    raise AssertionError('real kill path reached in a test')
+
+
+bridge.kill_stale_bridges = _refuse_kill_stale_bridges
+bridge.quit_td = _refuse_kill_stale_bridges
+bridge._touch_heartbeat = lambda *args, **kwargs: None
+bridge._install_signal_diagnostics = lambda *args, **kwargs: None
+
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 

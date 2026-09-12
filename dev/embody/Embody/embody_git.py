@@ -1075,6 +1075,7 @@ def upgrade_envoy(ext):
     Auto restores silently (the managed default). Advanced defers with a
     breadcrumb: _extractAIConfig runs under _startup_config_pass so its guard
     DEFERS instead of popping a modal that would block the restore chain."""
+    retire_leftover_tdxn_driver(ext)
     if not ext.my.par.Envoyenable.eval():
         return
     target_dir = ext._findProjectRoot()
@@ -1090,6 +1091,20 @@ def upgrade_envoy(ext):
         ext._extractAIConfig()
     finally:
         ext._startup_config_pass = prior
+
+
+def retire_leftover_tdxn_driver(ext):
+    """Retire the old .tdxn git diff driver on every open, Envoy on or off.
+
+    Only configure_mcp_client ever registered it, so a project that later
+    disabled Envoy, or starts Convoy-only, never reaches that path again
+    (issue #106). Spawn-free unless something is left to retire
+    (envoy_setup._driver_leftovers_present). Never raises."""
+    try:
+        mod.envoy_setup.retire_tdxn_diff_driver(ext.my.ext.Envoy,
+                                                ext._findProjectRoot())
+    except Exception as e:
+        ext.Log(f'Could not retire the .tdxn git diff driver: {e}', 'DEBUG')
 
 
 def client_files_missing(ext, target_dir, client):

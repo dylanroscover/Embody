@@ -95,6 +95,8 @@ return the shape and range instead.
 |------|-----------|-------------|
 | `execute_python` | `code` | Execute Python in TD. Set `result` variable to return values |
 
+**Envoy's own host**: `execute_python` refuses (nothing runs; `error_code` `envoy.embody.host_destroy_refused`) code that would destroy or reload the Embody COMP, an ancestor, `/` or Envoy's extension DAT in the same call -- `me` and `parent()` ARE the Embody COMP here. `delete_op`, destroy-class `exec_op_method` and reload pulses via `set_parameter` refuse the same targets. Stop and ask the user; only when they asked to move or remove Embody, follow the refusal text (one deferred `run()` string).
+
 ## Introspection & Diagnostics
 
 | Tool | Parameters | Description |
@@ -141,7 +143,7 @@ return the shape and range instead.
 | `read_tdxn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdxn`. |
 | `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
-| `diff_tdxn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
+| `diff_tdxn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff`. Read-only. |
 
 `read_tdn` and `diff_tdn` remain registered as DEPRECATED aliases that call straight through -- the old names are published in shipped rule files and saved agent prompts, so they keep working. Prefer `read_tdxn` / `diff_tdxn`.
 
@@ -149,7 +151,7 @@ return the shape and range instead.
 
 **When NOT to use `read_tdxn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdxn` is an authored-state snapshot, not a runtime probe.
 
-**When to use `diff_tdxn`:** whenever the user asks "what's changed / unsaved?" for TDXN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdxn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDXN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdxn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdxn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
+**When to use `diff_tdxn`:** whenever the user asks "what's changed / unsaved?" for TDXN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdxn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDXN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdxn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff`. Read-only, non-interactive. Requires TD running.
 
 ## TOP Capture
 
@@ -167,6 +169,8 @@ For visual work, success is verified by capturing and judging the output TOP, no
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
 **Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Warning cursors are **per session** (from the bridge's identity headers), so concurrent sessions each receive their own copy of a warning -- one session polling first no longer consumes it for the others.
+
+**Unattended sessions**: nothing answers a dialog, so preset the Embody parameter that decides it: `Tdxnpalettehandling` (palette Black Box vs Full Export), `Filecleanup` (deleted-file prompt), `Tdxnlockedwarn` (`quiet`) and `Tdxndatsafety` (save-time content report). Saves never prompt: save through `save_project` and read save warnings in `get_job_status(job_id)["warnings"]` -- the save's reinit can keep them out of `_logs`.
 
 **Auto-piggybacked peer advisories**: a `_peers` field rides along when your request touches territory another session modified recently (last ~10 min) -- one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer WROTE an overlapping scope within the last minute AND your operation is also a write -- **treat it as a hard stop**: check `get_sessions`, coordinate (or divide work by COMP subtree), and only then proceed. Non-conflict advisories are informational and deduped per (peer, scope) for ~5 min; conflicts always ride.
 

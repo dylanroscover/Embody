@@ -49,10 +49,7 @@ preflight_landing(worktree_path="../<repo>-wt-<task>")
 | `peers` | A peer session holds a `file:` claim on — or recently wrote — a landing file | Coordinate with the named peer before proceeding |
 | `tdn_unsaved` | A landing file's live TDXN/DAT state is unsaved (`dirty` in `externalizations.tsv`) | Save the project (or re-export) so the live state is on disk before you replace it |
 
-The verdict is `clear` or `conflicts`; an empty intersection on all three classes means the diff can land as one reviewed unit: commit in the worktree and `git cherry-pick -n` that commit (lands the change without committing it), or stage it in the worktree and pipe `git diff --cached --no-textconv --binary` into `git apply`. After landing: let the hot-sync sweep pick the files up, check `get_op_errors`, and run the project's tests — worktree verification is static-only, so nothing is truly tested until the main tree runs it.
-
-!!! warning "A plain `git diff` is not a patch"
-    Embody's `.tdxn` diff driver strips the export header from `git diff`, `git show`, and `git log -p` output so re-exports don't churn. That output is for reading only: a patch built from it recreates every **new** `.tdxn` without its header (`network_path` becomes the first key), and modified files either fail to apply or lose their header changes. `git cherry-pick`, `git format-patch`, and `git diff --no-textconv` all carry the real file.
+The verdict is `clear` or `conflicts`; an empty intersection on all three classes means the diff can land as one reviewed unit (commit in the worktree and `git cherry-pick -n` it, or stage everything there and pipe `git diff --cached --binary` into `git apply` -- `--binary` carries `.tox` changes, staging carries new files). After landing: let the hot-sync sweep pick the files up, check `get_op_errors`, and run the project's tests — worktree verification is static-only, so nothing is truly tested until the main tree runs it.
 
 Remove the worktree (`git worktree remove`) and release the claim when done — stale worktrees accumulate silently, and the claim's directory check will expire it either way.
 

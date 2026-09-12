@@ -149,10 +149,11 @@ class TestAnnotationGuards(EmbodyTestCase):
         finally:
             self.embody.par.Autoexternalize = prev
 
-    def test_findAtRiskDATs_skips_annotate_interior(self):
+    def test_findUnbackedDATs_skips_annotate_interior(self) -> None:
         """With a (synthetic) TDXN row for the workspace and embed-DATs off,
-        the at-risk sweep must flag a loose sibling DAT but never a DAT
-        inside an annotation widget."""
+        the save-time DAT sweep must list a loose sibling DAT but never a
+        DAT inside an annotation widget. (The loose DAT is an externalize
+        candidate, not a loss: the export embeds it -- issue #109.)"""
         table = self.embody_ext.Externalizations
         table.appendRow([
             self.workspace.path, self.workspace.OPType, 'tdn',
@@ -165,13 +166,13 @@ class TestAnnotationGuards(EmbodyTestCase):
             interior = ann.create(tableDAT)
             interior.clear()
             interior.appendRow(['focus', 'font'])
-            result = self.embody_ext._findAtRiskDATs()
+            result = self.embody_ext._findUnbackedDATs()
             ws_dats = []
             for comp_path, dats in result:
                 if comp_path == self.workspace.path:
                     ws_dats = [d.path for d in dats]
             self.assertIn(loose.path, ws_dats,
-                          'loose sibling DAT must still be flagged at-risk')
+                          'loose sibling DAT must still be listed')
             self.assertNotIn(interior.path, ws_dats,
                              'annotate-interior DAT must never be flagged')
         finally:

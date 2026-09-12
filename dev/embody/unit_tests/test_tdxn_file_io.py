@@ -604,7 +604,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 							 'tags block changed between exports')
 
 	def test_export_file_includes_source_file(self):
-		"""Exported TDXN should contain source_file with the .toe filename."""
+		"""An untracked export (no build) carries source_file = the .toe name."""
 		self.sandbox.create(baseCOMP, 'src_check')
 		fp = str(Path(self._temp_dir) / 'source.tdn')
 		result = self.embody.ext.TDXN.ExportNetwork(
@@ -711,7 +711,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertTrue(Path(fp).exists())
 
 	def test_export_file_has_metadata(self):
-		"""Exported file should contain version, generator, td_build."""
+		"""An untracked export carries version, generator, td_build, exported_at."""
 		fp = str(Path(self._temp_dir) / 'meta.tdn')
 		self.embody.ext.TDXN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
@@ -722,6 +722,64 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertIn('td_build', data)
 		self.assertIn('exported_at', data)
 		self.assertTrue(data['generator'].startswith('Embody/'))
+
+	def test_tracked_export_omits_per_write_provenance(self):
+		"""A tracked network (a build number) keeps `build` but writes no
+		`source_file`/`exported_at`: they changed on every write, and the
+		tsv + git already hold them (issue #106)."""
+		comp = self.sandbox.create(baseCOMP, 'tracked_src')
+		comp.appendCustomPage('Test').appendInt('Build')
+		comp.par.Build = 7
+		fp = str(Path(self._temp_dir) / 'tracked.tdxn')
+		result = self.embody.ext.TDXN.ExportNetwork(
+			root_path=comp.path, output_file=fp)
+		self.assertTrue(result.get('success'))
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		self.assertEqual(data.get('build'), 7)
+		self.assertNotIn('source_file', data)
+		self.assertNotIn('exported_at', data)
+		for key in ('format', 'version', 'generator', 'td_build'):
+			self.assertIn(key, data)
+
+	def test_untracked_export_keeps_provenance(self):
+		"""An untracked/portable network has no tsv row or build, so it keeps
+		its own `source_file`/`exported_at` and omits `build`."""
+		fp = str(Path(self._temp_dir) / 'untracked.tdxn')
+		self.embody.ext.TDXN.ExportNetwork(
+			root_path=self.sandbox.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		self.assertNotIn('build', data)
+		self.assertEqual(data.get('source_file'), project.name)
+		self.assertIn('exported_at', data)
+
+	def test_dropped_provenance_never_forces_a_rewrite(self):
+		"""source_file/exported_at must stay volatile: an old file still
+		carrying them compares EQUAL to a new export without them, so the
+		upgrade rewrites nothing until a network really changes."""
+		for key in ('build', 'source_file', 'exported_at'):
+			self.assertIn(key, self.embody.ext.TDXN._TDXN_VOLATILE_KEYS)
+		new = {'format': 'tdxn', 'version': '2.1', 'build': 3,
+			   'network_path': '/p', 'operators': []}
+		old = dict(new, source_file='P.12.toe',
+				   exported_at='2026-09-01T00:00:00Z')
+		self.assertTrue(self.embody.ext.TDXN._tdxn_content_equal(new, old))
+
+	def test_header_provenance_rule(self):
+		"""Both writers (sync and the async worker) share this rule: a build
+		number -- 0 included -- keeps build and drops the two per-write keys;
+		no build keeps them and omits build."""
+		rule = self.embody.ext.TDXN._applyHeaderProvenance
+		base = {'format': 'tdxn', 'source_file': 'P.toe',
+				'exported_at': '2026-09-11T00:00:00Z'}
+		for build in (7, 0):
+			d = dict(base, build=build)
+			rule(d)
+			self.assertEqual(d, {'format': 'tdxn', 'build': build})
+		d = dict(base, build=None)
+		rule(d)
+		self.assertEqual(d, base)
 
 	def test_export_file_preserves_connections(self):
 		"""Operator connections should be in the exported file."""

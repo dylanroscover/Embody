@@ -1,10 +1,8 @@
 format: tdxn
 version: '2.1'
 build: 30
-generator: Embody/6.2.35
-td_build: 099.2025.33070
-source_file: Embody-6.338.toe
-exported_at: '2026-09-07T17:23:27Z'
+generator: Embody/6.2.46
+td_build: 099.2025.33230
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -52,14 +50,6 @@ operators:
     file: embody/Embody/templates/text_envoy_bridge.py
     language: python
   position: [200, -400]
-  tags:
-  - py
-- name: text_tdxn_textconv
-  type: textDAT
-  parameters:
-    file: embody/Embody/templates/text_tdxn_textconv.py
-    language: python
-  position: [200, -800]
   tags:
   - py
 - name: text_rule_td_python
@@ -275,7 +265,7 @@ annotations:
 - name: annotate1
   mode: annotate
   title: Config Templates
-  text: CLAUDE.md, AGENTS.md, settings, bridge, git textconv
+  text: CLAUDE.md, AGENTS.md, settings, bridge
   position: [130, -870]
   size: [270, 1130]
   color: [0.45, 0.45, 0.45]

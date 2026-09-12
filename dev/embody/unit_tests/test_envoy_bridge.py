@@ -47,6 +47,38 @@ bridge.start_orphan_watchdog = lambda *args, **kwargs: None
 if hasattr(bridge, 'start_reconciler'):
     bridge.start_reconciler = lambda *args, **kwargs: None
 
+# Kill fence for BOTH runners (inside TD there is no conftest): main() wrote a
+# temp-dir heartbeat under os.getpid() -- TD's pid when this suite runs in TD --
+# and a later real kill_stale_bridges taskkill'd that pid, killing TD
+# (envoy-bridge.log 2026-08-29). Tests reach the real cleanup only through
+# _real_kill_stale_bridges, against a private dir. quit_td likewise: an
+# unpatched restart test resolves TD's own pid in TD and would taskkill it.
+_real_kill_stale_bridges = bridge.kill_stale_bridges
+_real_quit_td = bridge.quit_td
+
+
+def _refuse_kill_stale_bridges(*args: object, **kwargs: object) -> None:
+    raise AssertionError('real kill path reached in a test')
+
+
+def _refuse_quit_td(*args: object, **kwargs: object) -> None:
+    raise AssertionError('real quit_td reached in a test: patch it, or '
+                         'call _real_quit_td with an injected platform')
+
+
+def _no_heartbeat(*args: object, **kwargs: object) -> None:
+    return None
+
+
+def _no_signal_diagnostics(*args: object, **kwargs: object) -> None:
+    return None
+
+
+bridge.kill_stale_bridges = _refuse_kill_stale_bridges
+bridge.quit_td = _refuse_quit_td
+bridge._touch_heartbeat = _no_heartbeat
+bridge._install_signal_diagnostics = _no_signal_diagnostics
+
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
@@ -1268,10 +1300,16 @@ class TestBridgeMainLoop(EmbodyTestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
 
+        # These two once ran the REAL kill_stale_bridges -- the TD-killing
+        # path (see the module header). Patch like _run_main.
         with patch.object(sys, 'stdin', stdin), \
              patch.object(sys, 'stdout', stdout), \
              patch.object(sys, 'stderr', stderr), \
-             patch.object(sys, 'argv', ['envoy_bridge.py']):
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'probe_convoy_host',
+                          return_value={'convoy': 'absent', 'detail': ''}):
             bridge.main()  # Should not raise
 
         self.assertIn('stdin closed', stderr.getvalue())
@@ -1285,7 +1323,11 @@ class TestBridgeMainLoop(EmbodyTestCase):
         with patch.object(sys, 'stdin', stdin), \
              patch.object(sys, 'stdout', stdout), \
              patch.object(sys, 'stderr', stderr), \
-             patch.object(sys, 'argv', ['envoy_bridge.py']):
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'probe_convoy_host',
+                          return_value={'convoy': 'absent', 'detail': ''}):
             bridge.main()
 
         # No responses, no errors
@@ -1912,11 +1954,11 @@ class TestBridgeMetaTools(EmbodyTestCase):
     # --- quit_td ---
 
     def test_quit_td_none_pid(self):
-        success, msg = bridge.quit_td(None)
+        success, msg = _real_quit_td(None)
         self.assertFalse(success)
 
     def test_quit_td_already_exited(self):
-        success, msg = bridge.quit_td(99999999)
+        success, msg = _real_quit_td(99999999)
         self.assertTrue(success)
         self.assertIn('already exited', msg)
 
@@ -1944,7 +1986,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
              patch('os.kill'):
-            success, msg = bridge.quit_td(
+            success, msg = _real_quit_td(
                 12345, clock=_slow_clock(100.0), sleep=lambda s: None,
                 platform='win32')
         self.assertTrue(success)
@@ -1978,7 +2020,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run', side_effect=fake_run), \
              patch('os.kill', side_effect=fake_kill):
-            success, msg = bridge.quit_td(
+            success, msg = _real_quit_td(
                 12345, graceful_timeout=15,
                 clock=_slow_clock(100.0, step=5.0), sleep=lambda s: None,
                 platform='win32')
@@ -2703,6 +2745,503 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
             self.assertTrue(
                 state.crash_detected,
                 'pid dead AND Envoy unreachable is a real crash')
+
+
+# =====================================================================
+# Frozen TouchDesigner visibility (issue #110)
+# =====================================================================
+
+def _iso(epoch_s):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(epoch_s))
+
+
+class TestBridgeFrozenTouchDesigner(EmbodyTestCase):
+    """issue #110: a TouchDesigner frozen inside an Envoy call read as a
+    plain dropped socket (connected:false), and the session that froze it
+    sat out its 300s forward. The bridge now names the frozen state and
+    releases the pinned forward."""
+
+    URL = 'http://127.0.0.1:9870/mcp'
+
+    def _state(self, **attrs):
+        state = bridge.BridgeState(url=self.URL, td_pid=1234,
+                                   config_path='/tmp/envoy.json')
+        with state:
+            for key, value in attrs.items():
+                setattr(state, key, value)
+        return state
+
+    def _status(self, state, port_open=True, pid_alive=True):
+        with patch.object(bridge, 'is_td_process_alive',
+                          return_value=pid_alive), \
+             patch.object(bridge, 'ping_envoy_port',
+                          return_value=port_open) as ping, \
+             patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, '_list_live_sessions', return_value=[]):
+            return bridge.handle_get_td_status(state), ping
+
+    def _heartbeat(self, state, is_up, pid_alive=True, port_open=True):
+        with patch.object(bridge, 'ping_backend_mcp', return_value=is_up), \
+             patch.object(bridge, 'is_td_process_alive',
+                          return_value=pid_alive), \
+             patch.object(bridge, 'ping_envoy_port',
+                          return_value=port_open) as ping, \
+             patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        return ping
+
+    # --- get_td_status: envoy_unresponsive ---------------------------------
+
+    def test_silence_triple_is_pure(self):
+        f = bridge.envoy_silence_s
+        self.assertEqual(f(100.0, 190.0, connected=False, pid_alive=True,
+                           port_open=True), 90.0)
+        for kwargs in (dict(connected=True, pid_alive=True, port_open=True),
+                       dict(connected=False, pid_alive=False, port_open=True),
+                       dict(connected=False, pid_alive=True, port_open=False)):
+            self.assertIsNone(f(100.0, 190.0, **kwargs), kwargs)
+        self.assertIsNone(f(None, 190.0, connected=False, pid_alive=True,
+                            port_open=True))
+
+    def test_status_names_an_unresponsive_envoy(self):
+        last = time.time() - 90
+        state = self._state(connected=False, last_connected_time=last)
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+        self.assertEqual(status['unresponsive_since'], _iso(last))
+        self.assertTrue(status['td_process_alive'])
+        self.assertFalse(status['main_thread_stalled'])
+
+    def test_a_save_length_silence_is_not_a_freeze(self):
+        """A save blocks the main thread 15-30s: no flag, and no port probe."""
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 30)
+        status, ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'])
+        self.assertIsNone(status['unresponsive_since'])
+        ping.assert_not_called()
+
+    def test_refused_port_is_not_unresponsive(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        status, _ping = self._status(state, port_open=False)
+        self.assertFalse(status['envoy_unresponsive'])
+
+    def test_dead_process_is_not_unresponsive(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        status, _ping = self._status(state, pid_alive=False)
+        self.assertFalse(status['envoy_unresponsive'])
+        self.assertTrue(status['crash_detected'])
+
+    def test_frozen_fields_default_to_quiet(self):
+        state = self._state(connected=True, last_connected_time=time.time())
+        status, _ping = self._status(state)
+        for key in ('envoy_unresponsive', 'main_thread_stalled'):
+            self.assertIs(status[key], False, key)
+        for key in ('unresponsive_since', 'stalled_since'):
+            self.assertIsNone(status[key], key)
+
+    def test_status_description_names_the_frozen_fields(self):
+        tool = next(t for t in bridge.BRIDGE_TOOLS
+                    if t['name'] == 'get_td_status')
+        self.assertIn('envoy_unresponsive', tool['description'])
+        self.assertIn('main_thread_stalled', tool['description'])
+
+    # --- get_td_status: main_thread_stalled --------------------------------
+
+    def test_main_thread_stall_is_read_on_the_heartbeat(self):
+        state = self._state(connected=False)
+        state.main_tick_probe = MagicMock(return_value=75.0)
+        self._heartbeat(state, is_up=True)
+        state.main_tick_probe.assert_called_once_with(self.URL)
+        status, _ping = self._status(state)
+        self.assertTrue(status['connected'])
+        self.assertTrue(status['main_thread_stalled'])
+        with state:
+            since = state.main_tick_read_at - 75.0
+        self.assertEqual(status['stalled_since'], _iso(since))
+        self.assertFalse(status['envoy_unresponsive'])
+
+    def test_a_fresh_main_tick_is_not_a_stall(self):
+        state = self._state(connected=False)
+        state.main_tick_probe = MagicMock(return_value=5.0)
+        self._heartbeat(state, is_up=True)
+        status, _ping = self._status(state)
+        self.assertFalse(status['main_thread_stalled'])
+        self.assertIsNone(status['stalled_since'])
+
+    def test_heartbeat_skips_the_tick_probe_while_envoy_is_down(self):
+        state = self._state(connected=True, main_tick_age_s=99.0,
+                            main_tick_read_at=time.time())
+        state.main_tick_probe = MagicMock(return_value=75.0)
+        self._heartbeat(state, is_up=False)
+        state.main_tick_probe.assert_not_called()
+        with state:
+            self.assertIsNone(state.main_tick_age_s,
+                              'a reading from before the drop is not news')
+
+    def test_fixtures_without_a_probe_stay_offline(self):
+        """main() arms the probe; a bare BridgeState never makes the GET."""
+        state = self._state(connected=False)
+        self.assertIsNone(state.main_tick_probe)
+        with patch.object(bridge, 'fetch_main_tick_age') as fetch:
+            self._heartbeat(state, is_up=True)
+        fetch.assert_not_called()
+
+    def test_main_arms_the_tick_probe(self):
+        captured = []
+        stdin = io.StringIO('')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', io.StringIO()), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'start_reconciler',
+                          side_effect=lambda st, cb: captured.append(st)), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        self.assertLen(captured, 1)
+        self.assertIs(captured[0].main_tick_probe, bridge.fetch_main_tick_age)
+
+    def test_fetch_main_tick_age_reads_the_worker_route(self):
+        class _Resp:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self, _n=-1):
+                return self.body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        seen = []
+
+        def open_(url, timeout):
+            seen.append((url, timeout))
+            return _Resp(b'{"main_tick_age_s": 12.5}')
+
+        with patch.object(bridge.urllib.request, 'urlopen', side_effect=open_):
+            self.assertEqual(bridge.fetch_main_tick_age(self.URL), 12.5)
+        self.assertEqual(seen[0][0], 'http://127.0.0.1:9870/envoy/main_tick')
+        self.assertEqual(seen[0][1], bridge.BACKEND_PING_TIMEOUT_S)
+
+        for body in (b'{"main_tick_age_s": null}', b'garbage',
+                     b'{"main_tick_age_s": true}', b'[1, 2]'):
+            with patch.object(bridge.urllib.request, 'urlopen',
+                              return_value=_Resp(body)):
+                self.assertIsNone(bridge.fetch_main_tick_age(self.URL), body)
+        with patch.object(bridge.urllib.request, 'urlopen',
+                          side_effect=bridge.urllib.error.URLError('refused')):
+            self.assertIsNone(bridge.fetch_main_tick_age(self.URL))
+
+    # --- connection-lost messages ------------------------------------------
+
+    def test_connection_lost_message_names_a_frozen_td(self):
+        state = self._state(last_connected_time=time.time() - 90)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True):
+            msg = bridge.connection_lost_message(state)
+        self.assertIn('not responding', msg)
+        self.assertRegex(msg, r'silent for (8\d|9\d)s')
+        # 60s of silence is also one legitimately long main-thread call:
+        # never claim 'not busy' after 'handling a long operation'.
+        self.assertIn('or stuck in one very long call', msg)
+        self.assertNotIn('not busy', msg)
+        self.assertIn('list_dialogs', msg)
+        self.assertIn('never kill TouchDesigner', msg)
+        self.assertTrue(all(ord(ch) < 128 for ch in msg), msg)
+
+    def test_connection_lost_message_unchanged_while_envoy_is_fresh(self):
+        state = self._state(last_connected_time=time.time() - 5)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port') as ping:
+            msg = bridge.connection_lost_message(state)
+        self.assertNotIn('list_dialogs', msg)
+        ping.assert_not_called()
+
+    def test_abandoned_forward_says_the_call_may_still_complete(self):
+        state = self._state(last_connected_time=time.time() - 130)
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port') as ping:
+            msg = bridge.connection_lost_message(
+                state, bridge.ForwardAbandoned(130.0))
+        self.assertIn('silent for 130s', msg)
+        self.assertIn('abandoned', msg)
+        self.assertIn('may still complete', msg)
+        ping.assert_not_called()
+
+    # --- the pinned forward ------------------------------------------------
+
+    def test_inflight_returns_the_answer_and_clears(self):
+        inflight = bridge.InflightForward()
+        self.assertEqual(inflight.run(self.URL, lambda: {'ok': 1}), {'ok': 1})
+        self.assertFalse(inflight.busy_on(self.URL))
+        self.assertFalse(inflight.abandon(130.0), 'nothing is in flight')
+
+    def test_inflight_reraises_the_forward_error(self):
+        def fail():
+            raise OSError('Connection refused')
+
+        with self.assertRaises(OSError):
+            bridge.InflightForward().run(self.URL, fail)
+
+    def test_abandon_releases_the_waiting_loop(self):
+        inflight = bridge.InflightForward()
+        release = threading.Event()
+        started = threading.Event()
+        out = {}
+
+        def forward():
+            started.set()
+            release.wait(10)
+            return {'late': True}
+
+        def stdin_loop():
+            try:
+                out['answer'] = inflight.run(self.URL, forward)
+            except BaseException as e:  # noqa: BLE001 -- asserted below
+                out['error'] = e
+
+        loop = threading.Thread(target=stdin_loop)
+        loop.start()
+        try:
+            self.assertTrue(started.wait(5))
+            self.assertTrue(inflight.busy_on(self.URL))
+            self.assertFalse(inflight.busy_on('http://127.0.0.1:9999/mcp'))
+            self.assertTrue(inflight.abandon(130.0))
+            loop.join(5)
+            self.assertFalse(loop.is_alive(), 'the stdin loop is still pinned')
+        finally:
+            release.set()
+        self.assertIsInstance(out.get('error'), bridge.ForwardAbandoned)
+        self.assertIsInstance(out['error'], ConnectionError,
+                              "the main loop's connection-lost branch")
+        self.assertEqual(out['error'].silence_s, 130.0)
+        self.assertNotIn('answer', out, 'a late answer is dropped')
+        self.assertFalse(inflight.busy_on(self.URL))
+
+    def test_a_real_silent_peer_is_released_without_touching_its_socket(self):
+        """The #110 wedge on a real socket: TCP accepts, nothing answers.
+        shutdown() does not wake a blocked recv on Windows; the helper
+        thread is what lets the loop go."""
+        import socket
+        server = socket.socket()
+        server.bind(('127.0.0.1', 0))
+        server.listen(4)
+        # A timed accept: close() from another thread does not reliably
+        # wake a blocked accept() on POSIX, so the loop polls a stop flag.
+        server.settimeout(0.2)
+        held = []
+        stop = threading.Event()
+
+        def accept():
+            while not stop.is_set():
+                try:
+                    held.append(server.accept()[0])
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return
+
+        acceptor = threading.Thread(target=accept, daemon=True)
+        acceptor.start()
+        url = 'http://127.0.0.1:%d/mcp' % server.getsockname()[1]
+        inflight = bridge.InflightForward()
+        out = {}
+
+        def stdin_loop():
+            try:
+                out['answer'] = inflight.run(url, lambda: bridge.forward_to_http(
+                    url, {'jsonrpc': '2.0', 'id': 1}, timeout=30))
+            except BaseException as e:  # noqa: BLE001 -- asserted below
+                out['error'] = e
+
+        loop = threading.Thread(target=stdin_loop)
+        loop.start()
+        try:
+            deadline = time.monotonic() + 5
+            while not held and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(held, 'the forward never connected')
+            self.assertTrue(inflight.abandon(185.0))
+            loop.join(5)
+            self.assertFalse(loop.is_alive())
+            self.assertIsInstance(out.get('error'), bridge.ForwardAbandoned)
+        finally:
+            stop.set()
+            acceptor.join(5)
+            server.close()
+            for conn in held:
+                conn.close()
+
+    def test_heartbeat_abandons_a_forward_pinned_on_a_frozen_td(self):
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(connected=False, inflight=stub,
+                            last_connected_time=time.time() - 200)
+        ping = self._heartbeat(state, is_up=False)
+        stub.busy_on.assert_called_with(self.URL)
+        stub.abandon.assert_called_once()
+        self.assertGreaterEqual(stub.abandon.call_args.args[0],
+                                bridge.FORWARD_ABANDON_AFTER_S)
+        ping.assert_called_once()
+
+    def test_heartbeat_leaves_the_forward_unless_td_is_frozen(self):
+        cases = (
+            # Flagged unresponsive (60s+) but not yet held another 120s.
+            ('young silence', dict(age=150), dict(is_up=False)),
+            ('port refuses', dict(age=200), dict(is_up=False,
+                                                 port_open=False)),
+            ('TD is dead', dict(age=200), dict(is_up=False,
+                                               pid_alive=False)),
+            ('Envoy answers', dict(age=200), dict(is_up=True)),
+        )
+        for label, state_kw, beat_kw in cases:
+            stub = MagicMock()
+            stub.busy_on.return_value = True
+            state = self._state(
+                connected=False, inflight=stub,
+                last_connected_time=time.time() - state_kw['age'])
+            self._heartbeat(state, **beat_kw)
+            stub.abandon.assert_not_called()
+
+    def test_abandon_threshold_on_an_injected_clock(self):
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(inflight=stub, last_connected_time=1000.0)
+        limit = bridge.FORWARD_ABANDON_AFTER_S
+        with patch.object(bridge, 'ping_envoy_port', return_value=True):
+            self.assertFalse(bridge._abandon_frozen_forward(
+                state, self.URL, is_up=False, pid_alive=True, td_pid=1,
+                now=1000.0 + limit - 0.1))
+            self.assertTrue(bridge._abandon_frozen_forward(
+                state, self.URL, is_up=False, pid_alive=True, td_pid=1,
+                now=1000.0 + limit))
+        stub.abandon.assert_called_once_with(limit)
+
+    def test_abandon_waits_for_the_flag_to_hold_another_120s(self):
+        """Orchestrator spec: abandon once envoy_unresponsive (60s of
+        silence) has held for 120s more -- 180s of silence in all."""
+        self.assertEqual(bridge.FORWARD_ABANDON_AFTER_S,
+                         bridge.ENVOY_SILENT_AFTER_S + 120)
+
+    # --- a TD the user relaunched ----------------------------------------
+
+    def test_silence_baseline_is_pure(self):
+        f = bridge._silence_baseline
+        self.assertEqual(f(self._state(last_connected_time=100.0)), 100.0)
+        self.assertIsNone(f(self._state()))
+        self.assertEqual(f(self._state(last_connected_time=100.0,
+                                       silence_pid=1234,
+                                       silence_pid_seen_at=None)), 100.0)
+        self.assertEqual(f(self._state(last_connected_time=100.0,
+                                       silence_pid=1234,
+                                       silence_pid_seen_at=500.0)), 500.0)
+        self.assertIsNone(f(self._state(last_connected_time=100.0,
+                                        silence_pid=999)),
+                          'the pid changed since the last heartbeat')
+
+    def test_a_relaunched_td_never_inherits_the_old_silence(self):
+        """Review find: last_connected_time is the OLD process's, so a TD the
+        user relaunched read as frozen at once and the in-flight forward
+        was abandoned on the first failed heartbeat of its load."""
+        stub = MagicMock()
+        stub.busy_on.return_value = True
+        stub.abandon.return_value = True
+        state = self._state(connected=False, inflight=stub, silence_pid=999,
+                            last_connected_time=time.time() - 1000)
+        status, _ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'],
+                         'the heartbeat has not seen the new pid yet')
+        self._heartbeat(state, is_up=False)
+        stub.abandon.assert_not_called()
+        with state:
+            self.assertEqual(state.silence_pid, 1234)
+            seen_at = state.silence_pid_seen_at
+        self.assertGreater(seen_at, time.time() - 5)
+        status, _ping = self._status(state)
+        self.assertFalse(status['envoy_unresponsive'])
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True):
+            self.assertNotIn('list_dialogs',
+                             bridge.connection_lost_message(state))
+        # Dated from the relaunch: frozen once IT has been silent 60s.
+        with state:
+            state.silence_pid_seen_at = time.time() - 90
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+        self.assertEqual(status['unresponsive_since'],
+                         _iso(state.silence_pid_seen_at))
+
+    def test_the_first_sighting_of_a_pid_does_not_floor_the_silence(self):
+        state = self._state(connected=False,
+                            last_connected_time=time.time() - 90)
+        self._heartbeat(state, is_up=False)
+        with state:
+            self.assertEqual(state.silence_pid, 1234)
+            self.assertIsNone(state.silence_pid_seen_at)
+        status, _ping = self._status(state)
+        self.assertTrue(status['envoy_unresponsive'])
+
+    def test_main_loop_forwards_through_the_inflight_holder(self):
+        names = []
+
+        def forward(url, msg, **kw):
+            names.append(threading.current_thread().name)
+            return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': 'ok'}
+
+        stdout = io.StringIO()
+        stdin = io.StringIO(json.dumps(
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        self.assertEqual(names, ['envoy-forward'])
+        self.assertEqual(json.loads(stdout.getvalue().strip())['result'], 'ok')
+
+    def test_main_loop_hands_the_forward_error_to_the_message(self):
+        err = bridge.ForwardAbandoned(130.0)
+
+        def forward(url, msg, **kw):
+            raise err
+
+        stdout = io.StringIO()
+        stdin = io.StringIO(json.dumps(
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'connection_lost_message',
+                          return_value='frozen-msg') as message, \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        message.assert_called_once()
+        self.assertIs(message.call_args.args[1], err)
+        reply = json.loads(stdout.getvalue().strip())
+        self.assertEqual(reply['error']['message'], 'frozen-msg')
 
 
 # =====================================================================
@@ -3649,7 +4188,7 @@ class TestQuitTdPidScoping(EmbodyTestCase):
 
     def test_quit_td_posix_branch_is_pid_scoped(self):
         import inspect
-        src = inspect.getsource(bridge.quit_td)
+        src = inspect.getsource(_real_quit_td)
         self.assertIn(
             'signal.SIGTERM', src,
             'quit_td must send a pid-scoped SIGTERM on POSIX platforms')
@@ -3680,7 +4219,7 @@ class TestQuitTdPidScoping(EmbodyTestCase):
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
              patch('os.kill', side_effect=lambda p, s: kills.append((p, s))):
-            success, _msg = bridge.quit_td(
+            success, _msg = _real_quit_td(
                 12345, clock=_slow_clock(100.0), sleep=lambda s: None,
                 platform='darwin')
 
@@ -4178,6 +4717,439 @@ class TestStaleBridgePortMatching(EmbodyTestCase):
         self.assertFalse(bridge._cmdline_targets_port('', 9870))
 
 
+_NO_SUCH_PID = 2 ** 31 - 4  # never live: a regressed guard kills nothing
+
+
+class TestKillStaleBridgesRealTargets(EmbodyTestCase):
+    """kill_stale_bridges may kill only THIS project's same-port bridge.
+
+    A heartbeat is a name, not an identity: one this suite planted under
+    TD's pid read stale and the real cleanup taskkill'd TD (2026-08-29).
+    Every victim here is a child this test spawned (python -c sleep, with
+    bridge-shaped argv where needed), so nothing else can ever be signalled.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        if 'td' in sys.modules:
+            # Inside TD sys.executable IS TouchDesigner.exe.
+            self.skipTest('spawns python children: pytest tier only')
+        self.tmp = tempfile.mkdtemp(prefix='killstale_')
+        self.children = []
+
+    def tearDown(self) -> None:
+        for child in self.children:
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=10)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _spawn(self, *argv_tail: str) -> subprocess.Popen:
+        child = subprocess.Popen(
+            [sys.executable, '-c', 'import time; time.sleep(60)',
+             *argv_tail],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.children.append(child)
+        return child
+
+    def _plant(self, log_dir: str, pid: int) -> None:
+        os.makedirs(log_dir, exist_ok=True)
+        path = os.path.join(log_dir, f'envoy-bridge-{pid}.heartbeat')
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'pid': pid, 'time': 1000.0}, f)
+
+    def _project(self, name: str = 'proj') -> tuple:
+        root = os.path.join(self.tmp, name)
+        cfg = os.path.join(root, '.embody', 'envoy.json')
+        os.makedirs(os.path.dirname(cfg))
+        with open(cfg, 'w', encoding='utf-8') as f:
+            json.dump({}, f)
+        return cfg, os.path.join(root, 'dev', 'logs')
+
+    def _survives(self, child: subprocess.Popen, wait_s: float = 1.0) -> bool:
+        try:
+            child.wait(timeout=wait_s)
+        except subprocess.TimeoutExpired:
+            return True
+        return False
+
+    def _clean(self, port: int, cfg) -> str:
+        """One real cleanup; once more if the real table timed out (a cold
+        CI WMI can near the 10s budget). An unreadable table kills and
+        prunes nothing, so the retry sees the same state. Never a skip: a
+        broken query must fail here, the only place that runs it for real."""
+        for _attempt in range(2):
+            err = io.StringIO()
+            with patch.object(sys, 'stderr', err):
+                _real_kill_stale_bridges(port, cfg)
+            if 'process table unavailable' not in err.getvalue():
+                break
+        return err.getvalue()
+
+    def _spared(self, child: subprocess.Popen, out: str, reason: str,
+                logs: str, pruned: bool = False) -> None:
+        """Alive, refused for `reason` (so the table WAS read -- an empty
+        one also spares). Its stale heartbeat goes only for a TD pid; a live
+        bridge of another port or project keeps it (get_sessions)."""
+        self.assertTrue(self._survives(child))
+        self.assertIn(f'{child.pid} ({reason}', out)
+        self.assertEqual(
+            not os.path.exists(os.path.join(
+                logs, f'envoy-bridge-{child.pid}.heartbeat')),
+            pruned, 'heartbeat pruned' if pruned else 'heartbeat kept')
+
+    def _killed(self, child: subprocess.Popen, out: str) -> None:
+        self.assertNotIn('process table unavailable', out)
+        self.assertFalse(self._survives(child, wait_s=10),
+                         'the one legitimate victim must still be cleaned up')
+        self.assertIn(f'Terminated stale bridge (PID {child.pid}', out)
+
+    def test_shared_temp_fallback_never_kills(self) -> None:
+        """The culprit call exactly: main() with no --config ran
+        kill_stale_bridges(9870, None) over the machine-wide temp dir.
+        Pre-fix this child died (taskkill /F, exit 1)."""
+        child = self._spawn()
+        saved = tempfile.tempdir
+        tempfile.tempdir = self.tmp
+        try:
+            self._plant(self.tmp, child.pid)
+            out = self._clean(9870, None)
+        finally:
+            tempfile.tempdir = saved
+        self.assertTrue(self._survives(child),
+                        'a stale shared-temp heartbeat must never kill')
+        self.assertIn('terminating nothing', out)  # the heartbeat WAS listed
+
+    def test_spares_a_stale_live_pid_that_is_not_a_bridge(self) -> None:
+        cfg, logs = self._project()
+        child = self._spawn()
+        self._plant(logs, child.pid)
+        self._spared(child, self._clean(9870, cfg), 'not this project',
+                     logs)
+
+    def test_spares_a_pid_reported_as_touchdesigner(self) -> None:
+        cfg, logs = self._project()
+        child = self._spawn('envoy_bridge.py', '--port', '9870',
+                            '--config', cfg)
+        self._plant(logs, child.pid)
+        with patch.object(bridge, 'find_all_td_pids',
+                          return_value=[child.pid]):
+            out = self._clean(9870, cfg)
+        self._spared(child, out, 'TouchDesigner', logs, pruned=True)
+
+    def test_spares_a_bridge_on_another_port(self) -> None:
+        cfg, logs = self._project()
+        child = self._spawn('envoy_bridge.py', '--port', '9871',
+                            '--config', cfg)
+        self._plant(logs, child.pid)
+        self._spared(child, self._clean(9870, cfg), 'not this project',
+                     logs)
+
+    def test_spares_a_same_port_bridge_of_another_project(self) -> None:
+        cfg, logs = self._project()
+        other_cfg, _ = self._project('other')
+        child = self._spawn('envoy_bridge.py', '--port', '9870',
+                            '--config', other_cfg)
+        self._plant(logs, child.pid)
+        self._spared(child, self._clean(9870, cfg), 'not this project',
+                     logs)
+
+    def test_kills_a_stale_same_port_bridge_of_this_project(self) -> None:
+        cfg, logs = self._project()
+        child = self._spawn('envoy_bridge.py', '--port', '9870',
+                            '--config', cfg)
+        self._plant(logs, child.pid)
+        self._killed(child, self._clean(9870, cfg))
+
+    def test_kills_a_stale_bridge_whose_config_path_is_not_ascii(self) -> None:
+        """PowerShell 5.1 writes a pipe in the OEM codepage, which mangled
+        this path and silently stopped cleanup (review 2026-09-11). An
+        injected `run` cannot catch a decode bug or a broken query script:
+        this reads the real table."""
+        if sys.platform != 'win32':
+            self.skipTest('the OEM-codepage decode is a win32 PowerShell '
+                          'hazard; POSIX ps decoding is not exercised here')
+        cfg, logs = self._project('Jos\u00e9_\u6771\u4eac')
+        child = self._spawn('envoy_bridge.py', '--port', '9870',
+                            '--config', cfg)
+        self._plant(logs, child.pid)
+        self._killed(child, self._clean(9870, cfg))
+
+
+class TestKillStaleBridgesDecisions(EmbodyTestCase):
+    """The guard layer on injected tables -- no real process is signalled,
+    and the refusal prune's os.remove can only reach a private dir."""
+
+    CFG = '/proj/.embody/envoy.json'  # pure matcher tests: never a real path
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.tmp = tempfile.mkdtemp(prefix='killdec_')
+        self.cfg = os.path.join(self.tmp, 'proj', '.embody', 'envoy.json')
+        self.CMD = self._cmd(self.cfg)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    @staticmethod
+    def _cmd(cfg: str, port: int = 9870) -> str:
+        return f'python envoy-bridge.py --port {port} --config {cfg}'
+
+    def _run(self, table: dict, stale: list, port: int = 9870,
+             **kw: object) -> tuple:
+        with patch.object(bridge, '_list_stale_heartbeats',
+                          return_value=stale), \
+             patch.object(bridge, '_process_table', return_value=table), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge.subprocess, 'run') as run, \
+             patch.object(bridge.os, 'kill') as kill, \
+             patch.object(sys, 'stderr', io.StringIO()) as err:
+            _real_kill_stale_bridges(port, self.cfg, **kw)
+        return run, kill, err.getvalue()
+
+    def test_refusal_prune_touches_only_this_projects_log_dir(self) -> None:
+        """A refused pid is never signalled. Its stale heartbeat goes only
+        when the pid is dead or a TD, looked up in the --config project's
+        dev/logs only; a live non-bridge keeps its file (review 2026-09-11)."""
+        logs = os.path.join(self.tmp, 'proj', 'dev', 'logs')
+        os.makedirs(logs)
+
+        def plant(pid: int) -> str:
+            beat = os.path.join(logs, f'envoy-bridge-{pid}.heartbeat')
+            with open(beat, 'w', encoding='utf-8') as f:
+                json.dump({'pid': pid, 'time': 1000.0}, f)
+            return beat
+
+        live, dead = plant(7000050), plant(7000051)
+        table = {os.getpid(): (os.getppid(), 'pytest'),
+                 os.getppid(): (1, 'shell'), 7000050: (7000999, 'python -c')}
+        run, kill, out = self._run(table, [(7000050, 999.0),
+                                           (7000051, 999.0)])
+        self.assertEqual(run.call_count + kill.call_count, 0)
+        self.assertIn('7000050 (not this project', out)
+        self.assertIn('7000051 (not running', out)
+        self.assertTrue(os.path.exists(live), 'a live pid keeps its file')
+        self.assertFalse(os.path.exists(dead), 'a dead pid loses its file')
+
+    def test_an_ancestor_is_never_killed(self) -> None:
+        """A stale heartbeat naming this bridge's launcher -- or a TD that
+        launched the AI client running it -- must not kill it."""
+        me, parent, grand = os.getpid(), 7000001, 7000002
+        table = {me: (parent, self.CMD), parent: (grand, self.CMD),
+                 grand: (1, 'claude')}
+        run, kill, out = self._run(table, [(parent, 999.0)])
+        run.assert_not_called()
+        kill.assert_not_called()
+        self.assertIn(f'{parent} (an ancestor of this bridge)', out)
+
+    def test_orphan_phase_kills_only_this_projects_same_port_orphan(self) -> None:
+        me, orphan = os.getpid(), 7000010
+        other = os.path.join(self.tmp, 'other', '.embody', 'envoy.json')
+        table = {me: (os.getppid(), 'pytest'), os.getppid(): (1, 'shell'),
+                 orphan: (7000999, self.CMD),
+                 7000011: (7000998, self._cmd(self.cfg, port=9871)),
+                 7000012: (7000997, self._cmd(other)),
+                 7000013: (7000996, 'python -c sleep')}
+        run, kill, _out = self._run(table, [])
+        if sys.platform == 'win32':
+            run.assert_called_once_with(['taskkill', '/F', '/PID', str(orphan)],
+                                        capture_output=True, timeout=5,
+                                        stdin=subprocess.DEVNULL)
+            kill.assert_not_called()
+        else:
+            import signal
+            kill.assert_called_once_with(orphan, signal.SIGTERM)
+            run.assert_not_called()
+
+    def test_unreadable_process_table_kills_nothing(self) -> None:
+        run, kill, out = self._run({}, [(7000020, 999.0)])
+        run.assert_not_called()
+        kill.assert_not_called()
+        self.assertIn('process table unavailable', out)
+
+    def test_empty_process_table_is_logged_even_without_stale(self) -> None:
+        # A locked-down host (PowerShell CLM) must not silently disable the
+        # orphan phase (review 2026-09-11).
+        run, kill, out = self._run({}, [])
+        run.assert_not_called()
+        kill.assert_not_called()
+        self.assertIn('process table unavailable', out)
+
+    def test_the_launch_port_counts_as_this_port(self) -> None:
+        """main() passes the registry-RESOLVED port, but every bridge of
+        this project carries the --port it was launched with."""
+        stale = 7000030
+        table = {os.getpid(): (os.getppid(), 'pytest'),
+                 os.getppid(): (1, 'shell'), stale: (7000999, self.CMD)}
+        run, kill, out = self._run(table, [(stale, 999.0)], port=9871)
+        self.assertEqual(run.call_count + kill.call_count, 0)
+        self.assertIn(f'{stale} (not this project', out)
+        run, kill, _out = self._run(table, [(stale, 999.0)], port=9871,
+                                    cli_port=9870)
+        self.assertEqual(run.call_count + kill.call_count, 1)
+
+    def test_a_shell_quoting_a_bridge_command_is_not_a_bridge(self) -> None:
+        """win32: the program token must be python (the old Phase 2 image
+        filter); an orphaned shell or AI CLI quoting the line is spared."""
+        if sys.platform != 'win32':
+            self.skipTest('win32 command lines only: POSIX ps is unquoted')
+        table = {os.getpid(): (os.getppid(), 'pytest'),
+                 os.getppid(): (1, 'shell'),
+                 7000040: (7000999, 'bash -c "%s"' % self.CMD),
+                 7000041: (7000998, '"C:\\Program Files\\nodejs\\node.exe" '
+                                    'cli.js ' + self.CMD)}
+        run, kill, _out = self._run(table, [])
+        run.assert_not_called()
+        kill.assert_not_called()
+
+    def test_program_token_must_be_python(self) -> None:
+        t = bridge._cmdline_runs_python
+        self.assertTrue(t('"C:\\Program Files\\Py 3\\python.exe" -u b.py'))
+        self.assertTrue(t('C:/p/.venv/Scripts/python.exe -u envoy_bridge.py'))
+        self.assertTrue(t('/usr/bin/python3.11 b.py'))
+        self.assertTrue(t('pythonw.exe b.py'))
+        self.assertFalse(t('bash -c "python b.py"'))
+        self.assertFalse(t('"C:\\Program Files\\nodejs\\node.exe" python b'))
+        self.assertFalse(t(''))
+
+    def test_config_anchor_matches_the_exact_path_only(self) -> None:
+        t = bridge._cmdline_targets_config
+        cmd = 'py envoy-bridge.py --port 9870 --config '
+        self.assertTrue(t(cmd + self.CFG, self.CFG, platform='linux'))
+        self.assertTrue(t(cmd + '"C:\\P Q\\.embody\\envoy.json"',
+                          'c:/p q/.embody/envoy.json', platform='win32'))
+        self.assertFalse(t(cmd + self.CFG + '.bak', self.CFG,
+                           platform='linux'))
+        self.assertFalse(t(cmd + '/x' + self.CFG, self.CFG, platform='linux'))
+        self.assertFalse(t(cmd + self.CFG.upper(), self.CFG,
+                           platform='linux'))
+        self.assertFalse(t('', self.CFG))
+        self.assertFalse(t(cmd + self.CFG, None))
+
+    def test_process_table_is_one_powershell_query(self) -> None:
+        calls = []
+        rows = [{'ProcessId': 10, 'ParentProcessId': 1, 'CommandLine': 'a b'},
+                {'ProcessId': 11, 'ParentProcessId': 10, 'CommandLine': None}]
+
+        def run(argv, **kw):
+            calls.append((argv, kw))
+            return MagicMock(stdout=json.dumps(rows))
+
+        want = {10: (1, 'a b'), 11: (10, '')}
+        self.assertEqual(bridge._process_table(platform='win32', run=run),
+                         want)
+        self.assertEqual(len(calls), 1, 'one query, never one per pid')
+        argv, kw = calls[0]
+        self.assertEqual(argv[0], 'powershell')
+        # Non-ASCII escaped in the JSON itself, never [Console]::Output-
+        # Encoding: that switches the SHARED console's codepage for good.
+        self.assertNotIn('OutputEncoding', argv[-1])
+        self.assertIn("[regex]::Replace($j, '[^\\x00-\\x7f]'", argv[-1])
+        self.assertIn("'\\u{0:x4}' -f [int][char]$m.Value", argv[-1])
+        self.assertEqual(kw.get('encoding'), 'utf-8')
+        self.assertEqual(kw.get('creationflags'),
+                         getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                         'no console window, and never the shared console')
+        self.assertIs(kw.get('stdin'), subprocess.DEVNULL,
+                      'startup must never hold the MCP client\'s stdin pipe')
+        wide = [{'ProcessId': 12, 'ParentProcessId': 1,
+                 'CommandLine': 'py --config C:/Jos\u00e9/\U0001F600/e.json'}]
+        self.assertEqual(bridge._process_table(
+            platform='win32', run=lambda argv, **kw: MagicMock(
+                stdout=json.dumps(wide, ensure_ascii=True))),
+            {12: (1, 'py --config C:/Jos\u00e9/\U0001F600/e.json')},
+            'escaped JSON (surrogate pairs too) decodes to the exact text')
+        self.assertEqual(bridge._process_table(
+            platform='win32', run=lambda argv, **kw: MagicMock(
+                stdout='\ufeff' + json.dumps(rows))), want)
+        one = json.dumps({'ProcessId': 5, 'ParentProcessId': 4,
+                          'CommandLine': 'x'})  # ConvertTo-Json: no list
+        self.assertEqual(bridge._process_table(
+            platform='win32', run=lambda argv, **kw: MagicMock(stdout=one)),
+            {5: (4, 'x')})
+        self.assertEqual(bridge._process_table(
+            platform='win32',
+            run=lambda argv, **kw: MagicMock(stdout='not json')), {})
+
+    def test_process_table_parses_ps(self) -> None:
+        out = ('    1     0 /sbin/launchd\n'
+               '  500     1 /usr/bin/python3 envoy-bridge.py --port 9870\n'
+               'garbage\n')
+        seen = []
+
+        def run(argv, **kw):
+            seen.append(kw)
+            return MagicMock(stdout=out)
+
+        table = bridge._process_table(platform='darwin', run=run)
+        self.assertEqual(table, {
+            1: (0, '/sbin/launchd'),
+            500: (1, '/usr/bin/python3 envoy-bridge.py --port 9870')})
+        self.assertEqual(seen[0].get('encoding'), 'utf-8',
+                         'never the locale codepage')
+
+    def test_ancestor_walk_is_cycle_safe(self) -> None:
+        table = {100: (50, ''), 50: (20, ''), 20: (50, '')}  # 20 <-> 50
+        self.assertEqual(bridge._ancestor_pids(table, pid=100), {50, 20})
+
+
+class TestIsProcessAliveNeverTerminates(EmbodyTestCase):
+    """On Windows os.kill(pid, 0) reaches TerminateProcess: the POSIX
+    branch must be refused on a win32 host unless kill is injected."""
+
+    def test_posix_branch_on_a_win32_host_is_refused(self) -> None:
+        if sys.platform != 'win32':
+            self.skipTest('the hazard exists only on a win32 host')
+        with self.assertRaises(RuntimeError):
+            bridge.is_process_alive(_NO_SUCH_PID, platform='darwin')
+
+    def test_injected_kill_still_drives_the_posix_branch(self) -> None:
+        calls = []
+        self.assertTrue(bridge.is_process_alive(
+            4242, platform='darwin', kill=lambda p, s: calls.append((p, s))))
+        self.assertEqual(calls, [(4242, 0)])
+
+
+class TestSuiteWritesNoHeartbeat(EmbodyTestCase):
+    """This module's main() calls must leave no heartbeat named for THIS
+    process: inside TD that pid is TouchDesigner, and a stale file naming
+    it is what the real cleanup killed. Dual-runner on purpose."""
+
+    def test_module_level_stubs_are_in_place(self) -> None:
+        self.assertIs(bridge._touch_heartbeat, _no_heartbeat)
+        self.assertIs(bridge._install_signal_diagnostics,
+                      _no_signal_diagnostics)
+        self.assertIs(bridge.kill_stale_bridges, _refuse_kill_stale_bridges)
+        self.assertIs(bridge.quit_td, _refuse_quit_td)
+        with self.assertRaises(AssertionError):
+            bridge.kill_stale_bridges(9870, None)
+        with self.assertRaises(AssertionError):
+            bridge.quit_td(_NO_SUCH_PID)
+
+    def test_main_leaves_no_heartbeat_for_this_pid(self) -> None:
+        name = f'envoy-bridge-{os.getpid()}.heartbeat'
+        dirs = {tempfile.gettempdir()}
+        fence = getattr(subprocess.Popen.__init__, '_embody_kill_fence', None)
+        if fence is not None:
+            dirs.add(fence.real_temp)  # the real temp, not the per-run one
+        with patch.object(sys, 'stdin', io.StringIO('')), \
+             patch.object(sys, 'stdout', io.StringIO()), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'probe_convoy_host',
+                          return_value={'convoy': 'absent', 'detail': ''}):
+            bridge.main()
+        for d in sorted(dirs):
+            self.assertFalse(
+                os.path.exists(os.path.join(d, name)),
+                f'{name} in {d}: a heartbeat under this pid (TD\'s, in TD) '
+                'is what a later cleanup killed')
+
+
 class TestQuitTdForceKillPosix(EmbodyTestCase):
     """The POSIX force path -- previously untestable on Windows because
     signal.SIGKILL does not exist there (AttributeError, uncaught)."""
@@ -4209,7 +5181,7 @@ class TestQuitTdForceKillPosix(EmbodyTestCase):
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
              patch('os.kill', side_effect=fake_kill):
-            success, msg = bridge.quit_td(
+            success, msg = _real_quit_td(
                 12345, graceful_timeout=15,
                 clock=_slow_clock(100.0, step=5.0), sleep=lambda s: None,
                 platform='darwin')
@@ -4450,27 +5422,26 @@ class TestConvoyProbe(EmbodyTestCase):
         self.assertIsInstance(r, dict)
         self.assertEqual(r['convoy'], 'absent')
 
+    # platform= is injected, never patched onto sys: sys.platform is
+    # process-global, and in TD every thread would see the fake value.
     def test_data_dir_win32_uses_localappdata_and_backslashes(self):
-        with patch.object(bridge.sys, 'platform', 'win32'), \
-             patch.dict(bridge.os.environ,
+        with patch.dict(bridge.os.environ,
                         {'LOCALAPPDATA': r'C:\Users\x\AppData\Local'}):
-            d = bridge.convoy_data_dir()
+            d = bridge.convoy_data_dir(platform='win32')
         # ntpath.join is used for the win32 target regardless of host OS,
         # so the separator shape is validated even on a POSIX CI runner
         self.assertEqual(d, r'C:\Users\x\AppData\Local\EmbodyConvoy')
 
     def test_data_dir_darwin_uses_application_support_with_slashes(self):
-        with patch.object(bridge.sys, 'platform', 'darwin'), \
-             patch.object(bridge.os.path, 'expanduser',
+        with patch.object(bridge.os.path, 'expanduser',
                           return_value='/Users/x'):
-            d = bridge.convoy_data_dir()
+            d = bridge.convoy_data_dir(platform='darwin')
         self.assertEqual(
             d, '/Users/x/Library/Application Support/EmbodyConvoy')
 
     def test_data_dir_linux_uses_xdg_state_home(self):
-        with patch.object(bridge.sys, 'platform', 'linux'), \
-             patch.dict(bridge.os.environ, {'XDG_STATE_HOME': '/home/x/.state'}):
-            d = bridge.convoy_data_dir()
+        with patch.dict(bridge.os.environ, {'XDG_STATE_HOME': '/home/x/.state'}):
+            d = bridge.convoy_data_dir(platform='linux')
         self.assertEqual(d, '/home/x/.state/embody-convoy')
 
     def test_meta_tool_registered_and_dispatched(self):

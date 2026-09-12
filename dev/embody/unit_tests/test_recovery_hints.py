@@ -92,6 +92,37 @@ class TestRecoveryHints(EmbodyTestCase):
         self.assertEqual(_error_code_for('Operation timed out after 30 seconds.'), 'envoy.timeout')
         self.assertEqual(_error_code_for('MULTI-SESSION GATE: refused'), 'envoy.session.gated')
 
+    def test_host_destroy_refusals_keep_their_code_and_add_no_hint(self):
+        """issue #110: the refusal sets error_code itself and no rule may
+        match it -- a stray 'unsaved' or 'session gate' hint would steer
+        the agent the wrong way. The message is the guidance."""
+        chain = ['/a/Embody', '/a', '/', '/a/Embody/EnvoyExt']
+        texts = [
+            _envoy_mod._host_refusal_text(
+                what, target, _envoy_mod._host_relation(target, chain),
+                what == 'delete_op')
+            for what, target in (('delete_op', '/'), ('destroy()', '/a'),
+                                 ('setting reinitnet', '/a/Embody'),
+                                 ('delete_op', '/a/Embody/EnvoyExt'))]
+        guard_dat = op.Embody.op('envoy_guard')
+        if guard_dat is not None:
+            texts.append(guard_dat.module.python_refusal_text(
+                {'line': 1, 'call': 'me.destroy()', 'target': '/a/Embody'},
+                'the Embody COMP that Envoy runs inside'))
+        for text in texts:
+            self.assertEqual(_recovery_hints_for(text), [], text)
+            env = _envoy_mod._host_refusal(text, '/a')
+            self.envoy._attachRecoveryHints(env)
+            self.assertEqual(env['error_code'],
+                             'envoy.embody.host_destroy_refused')
+            self.assertNotIn('recovery_hints', env)
+
+    def test_host_destroy_code_is_well_formed_and_distinct(self):
+        code = _envoy_mod._HOST_DESTROY_CODE
+        self.assertRegex(code, r'^envoy\.[a-z_]+(\.[a-z_]+)*$')
+        self.assertNotIn(code, [rule[1] for rule in _RULES])
+        self.assertNotEqual(code, _FALLBACK)
+
     def test_error_code_fallback(self):
         self.assertEqual(_error_code_for('everything is fine'), _FALLBACK)
         self.assertEqual(_error_code_for(''), _FALLBACK)

@@ -95,6 +95,29 @@ def _uninstall_marker_singles():
     return tuple(f for f in mod.ai_clients.cleanup_files() if '/' in f)
 
 
+def _embody_driver_keys(root):
+    """The diff.tdxn / diff.tdn git config keys that still belong to Embody's
+    retired textconv driver: a --local textconv value naming our .embody/
+    script,
+    plus its cachetextconv sibling. A user's own driver is never listed."""
+    keys = []
+    for name, script in (('tdxn', 'tdxn_textconv.py'),
+                         ('tdn', 'tdn_textconv.py')):
+        try:
+            r = subprocess.run(
+                ['git', 'config', '--local', '--get', f'diff.{name}.textconv'],
+                cwd=str(root), capture_output=True, text=True, timeout=5,
+                encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL,
+                creationflags=NO_WINDOW)
+        except Exception:
+            continue
+        if r.returncode == 0 and ('/.embody/' + script) in (
+                (r.stdout or '').replace('\\', '/')):
+            keys += [f'diff.{name}.textconv', f'diff.{name}.cachetextconv']
+    return keys
+
+
+
 def compute_uninstall_plan(ext, target_dir=None):
     """NON-DESTRUCTIVE. Return exactly what Uninstall would remove/strip so
     it can be reviewed before any deletion. Manifest-driven, with a
@@ -204,7 +227,14 @@ def compute_uninstall_plan(ext, target_dir=None):
         _add_strip(p, e.get('kind', 'block'), e.get('marker', ''),
                    "strip only Embody's block/key -- your file is kept")
 
-    plan['unset'] = list(m.get('git_config', []))
+    # diff.tdxn / diff.tdn keys come from the live repo, not the manifest:
+    # only while they still point at Embody's retired driver script --
+    # never a user's own driver or a key the retirement already removed,
+    # and a legacy diff.tdn key counts even when the manifest lists only
+    # diff.tdxn (issue #106).
+    plan['unset'] = [k for k in m.get('git_config', [])
+                     if not k.startswith(('diff.tdxn.', 'diff.tdn.'))]
+    plan['unset'] += _embody_driver_keys(root)
 
     v = m.get('venv')
     if v:
@@ -294,23 +324,10 @@ def compute_uninstall_plan(ext, target_dir=None):
                                "strip only Embody's block -- your file is kept")
             except Exception:
                 pass
-    # git config (read-only query) for pre-manifest installs
+    # git config (read-only query) for pre-manifest installs: the retired
+    # driver's keys, both spellings (tdn -> tdxn in 6.2.35).
     if not plan['unset']:
-        # Both spellings: the driver was renamed tdn -> tdxn in 6.2.35,
-        # and an install that never re-ran setup still carries the old key.
-        for key in ('diff.tdxn.textconv', 'diff.tdxn.cachetextconv',
-                    'diff.tdn.textconv', 'diff.tdn.cachetextconv'):
-            try:
-                r = subprocess.run(['git', 'config', '--get', key],
-                                   cwd=str(root), capture_output=True,
-                                   text=True, timeout=5,
-                                   encoding='utf-8', errors='replace',
-                                   stdin=subprocess.DEVNULL,
-                                   creationflags=NO_WINDOW)
-                if r.returncode == 0 and (r.stdout or '').strip():
-                    plan['unset'].append(key)
-            except Exception:
-                pass
+        plan['unset'] = _embody_driver_keys(root)
     # venv not captured by the manifest -> flag for review (can't prove
     # Embody created it without the record, so never auto-delete it). Prefer
     # the authoritative venv location (under project.folder) -- which can sit
@@ -714,7 +731,7 @@ def uninstall_handler(ext, target_dir=None):
             'kept.')
     if n_unset:
         lines.append(
-            f'- UN-SET {n_unset} git config key(s) (the .tdn diff driver).')
+            f'- UN-SET {n_unset} git config key(s) (the retired .tdxn diff driver).')
     if n_review:
         lines.append(
             f'- KEEP {n_review} item(s) you may have edited (flagged, left '

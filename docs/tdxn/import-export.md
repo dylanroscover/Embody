@@ -9,7 +9,7 @@ Use the `read_tdxn` tool to return the live network as a TDXN dict **without wri
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `comp_path` | `"/"` | Starting COMP path |
-| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `include_dat_content` | Toggle setting | Also include file-backed DAT text/table content (content saved nowhere else is always included) |
 | `max_depth` | `null` (unlimited) | Cap recursion on large roots |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of skipping their children |
 
@@ -43,7 +43,7 @@ Use the `export_network` tool with these options:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `root_path` | `"/"` | Starting COMP path |
-| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `include_dat_content` | Toggle setting | Also include file-backed DAT text/table content (content saved nowhere else is always included) |
 | `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only). A path other than the COMP's tracked file writes a **snapshot**: the tracked file and its table row are left untouched, and no stale-file cleanup runs. A relative path is anchored at the project folder. |
 | `max_depth` | `null` (unlimited) | Maximum recursion depth |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export |
@@ -92,7 +92,6 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
 | 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. |
 | 4 | **Set flags** | Array entries without `-` → `true`; with `-` → `false`. |
-| 4a | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP operators are flagged (lock preserved, frozen data is not). |
 | 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
 | 6 | **Set DAT content** | Text or table data loaded into DATs. |
 | 6a | **Restore storage** | Storage key-value pairs restored via `op.store()`; `$type` wrappers deserialized. |
@@ -103,6 +102,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 8.5 | **Restore TOX content** | `.tox` content loaded into `tox_ref` shells. |
 | 8.6 | **Restore nested TDXN content** | `tdn_ref` shells filled from their own `.tdxn` files in the same import (recursive, with an ancestor-chain cycle guard). Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDXN COMP exactly once. |
 | 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags applied last. |
+| 10 | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP/POP operators this import created are logged with their source (lock preserved, frozen data is not), after every wire is restored. See [Lock Flag Limitation](specification.md#lock-flag-limitation). |
 
 ### Version Compatibility
 
@@ -128,11 +128,11 @@ These checks are non-blocking — import always proceeds.
 
 The comparison is **semantic, not byte-level**: both sides normalize through the same `type_defaults` / `par_templates` expansion, and the volatile export header (`build`, `generator`, `td_build`, `exported_at`, `source_file`) is ignored — so a no-op re-export shows nothing. Each change is `{old, new}` (old = disk, new = live), tagged `root`, `op`, or `annotation`.
 
-### Git integration: the `.tdxn` textconv driver
+### Git diffs of `.tdxn` files
 
-`diff_tdxn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdxn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdxn diff=tdxn`, `.embody/tdxn_textconv.py`, and `git config diff.tdxn.textconv`). Before 6.2.35 the driver was named `tdn`; Envoy renames it in place on its next start — registering `diff.tdxn` first, then repointing `.gitattributes`, then unsetting `diff.tdn` and deleting the old script. A `diff.tdn` you pointed at your own textconv is left alone. Use `diff_tdxn` for what you have not saved; use `git diff` for what you have committed.
+`diff_tdxn` covers the *unsaved* window; `git diff` covers what you have committed. Embody keeps those diffs quiet at the source instead of filtering them: the header of any export of a tracked COMP (one with a build number) carries only fields that change for a reason -- `format` and `version` (the file format), `generator` (the Embody version), `td_build` (the TouchDesigner build) and `build` (the COMP's save count). The export time lives in the `externalizations.tsv` `timestamp` column and git history; the source `.toe` name is no longer recorded. Exports of COMPs without a build number (untracked or portable networks) still write `exported_at` and `source_file`. Files written before this change keep both fields until their next real change.
 
-The driver's output is for reading only. A newly added `.tdxn` shows up in `git diff` / `git show` / `git log -p` without its header -- the file on disk still has it (add `--no-textconv` to see it) -- and a patch built from that output creates files without one. Build patches with `git diff --no-textconv`, or move commits with `git cherry-pick`.
+Earlier versions of Embody installed a git textconv driver (`.embody/tdxn_textconv.py`, `git config diff.tdxn.textconv`) that hid the header from diffs. VS Code reads old versions through that driver, so it hid the header there too and could stage files without one. Embody retires it the next time the project opens, Envoy on or off: it unsets the key only when it points at Embody's own script, then deletes the script; a driver you pointed at your own tool is left alone. The `diff=tdxn` lines in `.gitattributes` stay -- with no driver configured, git shows a plain diff. For a header-free view on the command line, use `git diff -I'^(build|generator|td_build):'`.
 
 ---
 
