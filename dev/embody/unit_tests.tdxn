@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 375
-generator: Embody/6.2.47
+generator: Embody/6.2.48
 td_build: 099.2025.33230
 network_path: /embody/unit_tests
 options:
@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 20
+    rows: 3546
     cols: 5
   flags:
   - viewer

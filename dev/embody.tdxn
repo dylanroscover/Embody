@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1265
-generator: Embody/6.2.48
+generator: Embody/6.2.49
 td_build: 099.2025.33230
 network_path: /embody
 options:
@@ -66,6 +66,7 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
     - {}
     - {}
     - {}
@@ -898,7 +899,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.48
+      value: 6.2.49
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -1001,7 +1002,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 314
+    rows: 313
     cols: 11
   flags:
   - viewer
