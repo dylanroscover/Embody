@@ -5,28 +5,41 @@ BLOCKING: open Dependabot / code-scanning / secret-scanning alerts, draft or
 triage security advisories (private vulnerability reports), open Dependabot
 PRs, a red latest push-CI run per workflow on main or dev, a failed
 third-party check on either tip, and real commits on main that the release
-checkout (HEAD) lacks. WARNING: other open PRs, open issues (tagged NEW since
-the last release), merged branches left on the remote. Fails CLOSED: a check
-that cannot run is itself a blocker.
+checkout (HEAD) lacks, and embody.tools serving a first-party specimen whose
+/tdn bytes differ from specimens/*.tdxn. WARNING: other open PRs, open issues
+(tagged NEW since the last release), merged branches left on the remote.
+Fails CLOSED: a check that cannot run is itself a blocker.
 
-It makes outstanding GitHub state visible and blocking; it does not test the
-product -- the platform e2e gate does that (field 2026-09-11).
+It makes outstanding GitHub state visible and blocking; its one product check
+is a read-only hash of the live specimens -- the platform e2e gate tests the
+rest (field 2026-09-11).
 
 Usage:  python dev/release_preflight.py [--ack KEY[,KEY...]] [--repo OWNER/NAME]
+        python dev/release_preflight.py --specimens-only [--site URL]
 Exit:   0 = clear, or every blocker acknowledged by the user; 1 = blocked.
 Needs:  an authenticated gh CLI and git, run from the release checkout.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import http.client
 import json
 import os
 import subprocess
 import sys
+import time
+import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
 Runner = Callable[[Sequence[str]], str]
+Reader = Callable[[str], bytes]
+Fetcher = Callable[[str], bytes]
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SITE = "https://embody.tools"
 
 RED_CONCLUSIONS = {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}
 KEPT_BRANCHES = {"main", "dev", "HEAD", "gh-pages"}
@@ -192,10 +205,82 @@ def check_issues(runner: Runner, repo: str) -> List[Finding]:
     return out
 
 
+def http_get(url: str) -> bytes:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "embody-release-preflight", "Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read()
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        # URLError/HTTPError are OSErrors; a bad URL is a ValueError; a truncated
+        # body is an HTTPException, which used to escape as a traceback.
+        raise CheckError(f"GET {url}: {exc}") from exc
+
+
+def committed_reader(root: Path) -> Reader:
+    """specimens/<rel> as committed on origin/main, LF -- what production deploys.
+
+    .gitattributes normalizes .tdxn to LF, but core.autocrlf decides whether a
+    blob written without it keeps CRLF, so trusting git config made the hash
+    platform-dependent (macOS-only CI failure 2026-09-12). Normalize like
+    worktree_reader: the published blob is LF either way.
+    """
+    def read(rel: str) -> bytes:
+        proc = subprocess.run(["git", "-C", str(root), "show", f"origin/main:specimens/{rel}"],
+                              capture_output=True, stdin=subprocess.DEVNULL, timeout=TIMEOUT_S)
+        if proc.returncode != 0:
+            detail = proc.stderr.decode("utf-8", "replace").strip().splitlines()
+            raise CheckError(f"git show origin/main:specimens/{rel}: " + (detail[0][:200] if detail else "failed"))
+        return proc.stdout.replace(b"\r\n", b"\n")
+    return read
+
+
+def worktree_reader(root: Path) -> Reader:
+    """specimens/<rel> from this checkout, LF as git stores it."""
+    def read(rel: str) -> bytes:
+        return (root / "specimens" / rel).read_bytes().replace(b"\r\n", b"\n")
+    return read
+
+
+def check_specimens(fetch: Fetcher, read: Reader, site: str = SITE,
+                    label: str = "origin/main") -> List[Finding]:
+    # Prod served the 2026-06 specimen blobs for months after the repo moved on
+    # (field 2026-09-11). Hash what the site serves against the repo bytes. The
+    # release runs this against origin/main, NOT the release checkout: a release
+    # re-exports specimens, and comparing prod with those unmerged bytes blocked
+    # the very push that would fix it (field 2026-09-12). CI job sync-specimens
+    # is the fix; this only detects.
+    try:
+        specs = json.loads(read("manifest.json").decode("utf-8"))["specimens"]
+    except (OSError, ValueError, KeyError, TypeError, CheckError) as exc:
+        raise CheckError(f"cannot read {label} specimens/manifest.json: {exc}") from exc
+    if not specs:
+        raise CheckError("specimens/manifest.json lists no specimens")
+    out: List[Finding] = []
+    for spec in specs:
+        slug, rel = spec.get("slug"), spec.get("tdxn_path")
+        try:
+            want = hashlib.sha256(read(rel)).hexdigest()
+        except (OSError, TypeError, CheckError) as exc:
+            out.append(Finding("block", f"verify:specimen:{slug}", f"cannot read {label} specimens/{rel}: {exc}"))
+            continue
+        url = f"{site.rstrip('/')}/api/specimens/{slug}/tdn?cb={int(time.time())}"
+        try:
+            got = hashlib.sha256(fetch(url)).hexdigest()
+        except CheckError as exc:
+            out.append(Finding("block", f"verify:specimen:{slug}", f"could not fetch the live {slug}: {exc}"))
+            continue
+        if got != want:
+            out.append(Finding("block", f"specimen:{slug}",
+                               f"{site} serves a stale {slug}: live sha256 {got[:12]}, {label} specimens/{rel} {want[:12]}. "
+                               "Sync it: Actions > Platform CI > Run workflow on main, dry_run off (job sync-specimens)"))
+    return out
+
+
 CHECKS = (check_alerts, check_prs, check_ci, check_git, check_issues)
 
 
-def collect(runner: Runner, repo: str) -> List[Finding]:
+def collect(runner: Runner, repo: str, fetch: Fetcher = http_get, root: Path = REPO_ROOT,
+            site: str = SITE) -> List[Finding]:
     findings: List[Finding] = []
     for check in CHECKS:
         name = check.__name__.replace("check_", "")
@@ -203,30 +288,46 @@ def collect(runner: Runner, repo: str) -> List[Finding]:
             findings.extend(check(runner, repo))
         except CheckError as exc:
             findings.append(Finding("block", f"verify:{name}", f"could not run the {name} check: {exc}"))
+    findings.extend(collect_specimens(fetch, committed_reader(root), site, "origin/main"))
     return findings
 
 
-def main(argv: Optional[Sequence[str]] = None, runner: Runner = run) -> int:
+def collect_specimens(fetch: Fetcher, read: Reader, site: str, label: str) -> List[Finding]:
+    try:
+        return check_specimens(fetch, read, site, label)
+    except CheckError as exc:
+        return [Finding("block", "verify:specimens", f"could not run the specimens check: {exc}")]
+
+
+def main(argv: Optional[Sequence[str]] = None, runner: Runner = run, fetch: Fetcher = http_get,
+         root: Path = REPO_ROOT) -> int:
     ap = argparse.ArgumentParser(description="Embody release preflight: nothing outstanding on GitHub.")
     ap.add_argument("--repo", help="OWNER/NAME for the gh checks (default: this checkout's gh repo); "
                                    "the git checks always use this checkout")
     ap.add_argument("--ack", action="append", default=[], metavar="KEY",
                     help="blocker key the USER explicitly accepted; repeatable or comma-separated; quote keys with spaces")
+    ap.add_argument("--specimens-only", action="store_true",
+                    help="only compare the live first-party specimens with the repo (no gh/git); CI uses it after a sync")
+    ap.add_argument("--site", default=SITE, help=f"site the specimens check reads (default {SITE})")
     args = ap.parse_args(argv)
     try:
         sys.stdout.reconfigure(errors="replace")  # PR titles can carry non-ASCII
     except AttributeError:
         pass
 
-    repo = args.repo
-    if not repo:
-        try:
-            repo = (gh_json(runner, ["repo", "view", "--json", "nameWithOwner"]) or {}).get("nameWithOwner")
-        except CheckError as exc:
-            print(f"RESULT: BLOCKED, cannot resolve the repo ({exc}); pass --repo OWNER/NAME")
-            return 1
     acks = {k.strip() for a in args.ack for k in a.split(",") if k.strip()}
-    findings = collect(runner, repo)
+    if args.specimens_only:
+        repo = f"specimens on {args.site}"
+        findings = collect_specimens(fetch, worktree_reader(root), args.site, "this checkout")
+    else:
+        repo = args.repo
+        if not repo:
+            try:
+                repo = (gh_json(runner, ["repo", "view", "--json", "nameWithOwner"]) or {}).get("nameWithOwner")
+            except CheckError as exc:
+                print(f"RESULT: BLOCKED, cannot resolve the repo ({exc}); pass --repo OWNER/NAME")
+                return 1
+        findings = collect(runner, repo, fetch, root, args.site)
 
     blockers = [f for f in findings if f.level == "block"]
     open_blockers = [f for f in blockers if f.key not in acks]
