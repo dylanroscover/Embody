@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.51
+
+Agent rules verified against a live build, first-party specimen covers served like everyone else's, and a new specimen.
+
+- **Seven TD gotchas from issue #94, each probed on 2025.33230 before it was written.** The Extension Object parameter is a constant-mode string (never `.expr`), `findChildren(depth=)` matches one exact depth, `Par.default` never sets a value, a Timer CHOP ships with a four-cycle limit, a CHOP Execute DAT demands its CHOP every frame, and `allowCooking` is COMP-only. Claims that did not reproduce were left out.
+- **embody.tools covers come from the specimen row.** First-party thumbnails live beside their networks and reach R2 through the same `thumbnail_key` path as community uploads; the hardcoded slug lists and static images are gone, so a cover appears the moment its row has one.
+- **New specimen: Prismatic Strata** (generative, 18 ops): displaced strata in iridescent fog with a pulse of light rolling down through them once per loop.
+
 ## v6.2.50
 
 Shipping a project as a locked `.toe` is a button now, and it asks before it does anything.

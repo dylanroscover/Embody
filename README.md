@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.50-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.51-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.51** — seven agent-rule gotchas from issue #94 verified live before shipping; embody.tools covers come from the specimen row, never a baked list; new specimen Prismatic Strata
 - **6.2.50** — `Export Release Toe`: one pulse prompts, asks where, then ships the project as a locked `.toe`; Embody can write the `pre_release_toe` hook for you
 - **6.2.49** — saves say what a `.tdxn` cannot hold, headers stay visible in VS Code, and Envoy can no longer freeze TouchDesigner by deleting its own host (issues #106, #108–#110)
 - **6.2.42** — `ExportReleaseToe`: ship the whole project as one locked `.toe` with Embody removed, preview first

@@ -8,7 +8,7 @@ Anyone with a free [account](accounts.md) can share a network with the [Collecti
 - **Title, description, tags.**
 - **Category, level, and hardware requirements** (e.g. MediaPipe, Kinect Azure, Audio — or none, for stock TouchDesigner).
 - **A license** — an SPDX-style identifier picked from the license dropdown (defaults to `CC-BY-4.0`).
-- **An optional thumbnail image** (resized to 640x360), and/or an **optional cover video** (MP4/H.264, 16:9, max 10 MB — a poster frame is auto-extracted as the cover image).
+- **An optional thumbnail image** (resized in the browser to at most 1200 px on the long edge, under 0.5 MB), and/or an **optional cover video** (MP4/H.264, 16:9, max 10 MB — a poster frame is auto-extracted as the cover image).
 - **Visibility** — `private` (default), `public`, or `unlisted`. You can publish or unpublish anytime from the specimen page.
 
 ## The capability scan
