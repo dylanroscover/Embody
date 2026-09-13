@@ -1,38 +1,128 @@
 [
   {
     "slug": "murmuration",
+    "kind": "tdxn",
+    "key": "5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d",
     "sha256": "5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d",
     "size": 13697,
-    "tdxn_path": "specimens/simulation/murmuration.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/simulation/murmuration.tdxn"
+  },
+  {
+    "slug": "murmuration",
+    "kind": "thumbnail",
+    "key": "thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59",
+    "sha256": "94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59",
+    "size": 62386,
+    "content_type": "image/jpeg",
+    "path": "specimens/simulation/murmuration.jpg"
   },
   {
     "slug": "reaction-diffusion",
+    "kind": "tdxn",
+    "key": "bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76",
     "sha256": "bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76",
     "size": 6850,
-    "tdxn_path": "specimens/generative/reaction-diffusion.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/generative/reaction-diffusion.tdxn"
+  },
+  {
+    "slug": "reaction-diffusion",
+    "kind": "thumbnail",
+    "key": "thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04",
+    "sha256": "3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04",
+    "size": 30782,
+    "content_type": "image/jpeg",
+    "path": "specimens/generative/reaction-diffusion.jpg"
   },
   {
     "slug": "kaleidoscope",
+    "kind": "tdxn",
+    "key": "295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103",
     "sha256": "295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103",
     "size": 8005,
-    "tdxn_path": "specimens/compositing/kaleidoscope.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/compositing/kaleidoscope.tdxn"
+  },
+  {
+    "slug": "kaleidoscope",
+    "kind": "thumbnail",
+    "key": "thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d",
+    "sha256": "b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d",
+    "size": 24144,
+    "content_type": "image/jpeg",
+    "path": "specimens/compositing/kaleidoscope.jpg"
   },
   {
     "slug": "noise-terrain",
+    "kind": "tdxn",
+    "key": "12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5",
     "sha256": "12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5",
     "size": 23789,
-    "tdxn_path": "specimens/3d/noise-terrain.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/3d/noise-terrain.tdxn"
+  },
+  {
+    "slug": "noise-terrain",
+    "kind": "thumbnail",
+    "key": "thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75",
+    "sha256": "83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75",
+    "size": 37817,
+    "content_type": "image/jpeg",
+    "path": "specimens/3d/noise-terrain.jpg"
   },
   {
     "slug": "plasma-interference",
+    "kind": "tdxn",
+    "key": "532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63",
     "sha256": "532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63",
     "size": 6980,
-    "tdxn_path": "specimens/generative/plasma-interference.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/generative/plasma-interference.tdxn"
+  },
+  {
+    "slug": "plasma-interference",
+    "kind": "thumbnail",
+    "key": "thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e",
+    "sha256": "fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e",
+    "size": 55864,
+    "content_type": "image/jpeg",
+    "path": "specimens/generative/plasma-interference.jpg"
   },
   {
     "slug": "mandelbulb-march",
+    "kind": "tdxn",
+    "key": "9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d",
     "sha256": "9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d",
     "size": 10257,
-    "tdxn_path": "specimens/raymarching-sdf/mandelbulb-march.tdxn"
+    "content_type": "application/json",
+    "path": "specimens/raymarching-sdf/mandelbulb-march.tdxn"
+  },
+  {
+    "slug": "mandelbulb-march",
+    "kind": "thumbnail",
+    "key": "thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4",
+    "sha256": "ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4",
+    "size": 14253,
+    "content_type": "image/jpeg",
+    "path": "specimens/raymarching-sdf/mandelbulb-march.jpg"
+  },
+  {
+    "slug": "prismatic-strata",
+    "kind": "tdxn",
+    "key": "85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21",
+    "sha256": "85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21",
+    "size": 34394,
+    "content_type": "application/json",
+    "path": "specimens/generative/prismatic-strata.tdxn"
+  },
+  {
+    "slug": "prismatic-strata",
+    "kind": "thumbnail",
+    "key": "thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a",
+    "sha256": "394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a",
+    "size": 185802,
+    "content_type": "image/jpeg",
+    "path": "specimens/generative/prismatic-strata.jpg"
   }
 ]

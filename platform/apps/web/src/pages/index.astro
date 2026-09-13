@@ -187,10 +187,9 @@ const jsonLd = {
 
       <div class="card-grid">
         {featured.map((specimen) => {
-          // Real rendered cover: author-uploaded R2 thumbnail > baked render for
-          // known slugs > procedural placeholder. Mirrors /collection and the
-          // detail pages (SpecimenCover) so the teaser never shows the generic
-          // placeholder when a real result exists.
+          // Real rendered cover: the row's R2 thumbnail > procedural placeholder.
+          // Mirrors /collection and the detail pages (SpecimenCover) so the
+          // teaser never shows the generic placeholder when a real result exists.
           const cover = resultImage({
             slug: specimen.slug,
             name: specimen.name,
@@ -206,7 +205,7 @@ const jsonLd = {
                 height="360"
                 loading="lazy"
                 decoding="async"
-                alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
+                alt={cover.rendered ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
               />
             </div>
             <div class="specimen-card__body">

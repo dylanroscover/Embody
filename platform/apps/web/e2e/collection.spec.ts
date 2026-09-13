@@ -49,6 +49,16 @@ test("homepage renders hero + real featured cards", async ({ page }) => {
 
 test("collection lists the seeded specimens", async ({ page }) => {
   await page.goto("/collection");
+  // The page must be serving the SEEDED rows, not its bundled fixture set.
+  // Fixtures carry the same six slugs, so every check below passes on them
+  // too -- which is how a CI run served fixtures for weeks unnoticed until a
+  // cover test depended on the row's thumbnail_key (field 2026-09-13). The
+  // dev server logs the reason as "[collection] live query failed" (piped
+  // into the run log by playwright.config webServer.stdout).
+  await expect(
+    page.locator("[data-fixtures]"),
+    "collection degraded to fixtures: read the [WebServer] '[collection] live query failed' line in this run's log"
+  ).toHaveAttribute("data-fixtures", "0");
   // Cards are <article data-specimen data-slug=...> (JS nav via data-href).
   for (const slug of SPECIMENS) {
     await expect(page.locator(`[data-specimen][data-slug="${slug}"]`)).toBeVisible();

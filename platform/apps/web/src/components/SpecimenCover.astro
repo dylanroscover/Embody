@@ -13,10 +13,11 @@
 //     mount, so the page NEVER bundles thousands of graphs at build time. An
 //     optional SSR `tdxn` prop is a fast path for the first page (no fetch).
 //
-//   RESULT (default): the baked render at /public/specimens/<slug>.jpg for known
-//     baked slugs (see lib/specimenThumb BAKED_RESULTS, captured from the live
-//     networks); otherwise a tasteful placeholder (specimenThumbnail SVG). Never
-//     a broken img.
+//   RESULT (default): the row's rendered cover, served by
+//     /api/specimens/<slug>/thumbnail when the row carries a thumbnail_key (an
+//     author upload, or the repo cover the first-party sync points at);
+//     otherwise a tasteful placeholder (specimenThumbnail SVG). Never a broken
+//     img, and never a hardcoded slug list (see lib/specimenThumb resultImage).
 //
 // All styles are scoped to this component.
 import SpecimenCoverGraph from "./SpecimenCoverGraph";
@@ -43,25 +44,25 @@ interface Props {
 }
 
 const { slug, name, category, thumbnailKey, videoKey, tdxn } = Astro.props;
-// RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
-// > procedural placeholder. Source of truth lives in lib/specimenThumb.
-const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
+// RESULT layer image: the row's thumbnail (if any) > procedural placeholder.
+// Source of truth lives in lib/specimenThumb.
+const { src: thumb, rendered: hasResult } = resultImage({ slug, name, category, thumbnailKey });
 // RESULT layer video: the streaming route when the cover carries one, else null.
 // A video cover ALSO has a poster (thumb, above), so the result layer always
 // paints the static image first and the video only loads/plays on hover.
 const coverVideo = resultVideo({ slug, videoKey });
 // No rendered result yet -> the network graph IS the preview: open on it and lock
-// the toggle (there's nothing to flip to). A real/baked thumbnail keeps the normal
+// the toggle (there is nothing to flip to). A real thumbnail keeps the normal
 // result-default with a working flip. Keep this in sync with the appended-card
 // template in collection/index.astro.
-const defaultView = hasBaked ? "result" : "network";
-// SSR the graph inline ONLY when it is the default, visible view (a non-baked
-// cover). On a baked cover the graph sits HIDDEN behind the result image until
+const defaultView = hasResult ? "result" : "network";
+// SSR the graph inline ONLY when it is the default, visible view (a cover with
+// no thumbnail). On a rendered cover the graph sits HIDDEN behind the image until
 // the user flips, so inlining its nodes just bloats the document and the cold
 // SSR render for nothing -- drop it and let the client:visible island lazy-fetch
 // the graph on demand (the same path infinite-scroll/appended cards already
 // use). This strips ~all inline graph weight from /collection's first paint.
-const ssrTdxn = hasBaked ? undefined : tdxn;
+const ssrTdxn = hasResult ? undefined : tdxn;
 ---
 
 <!--
@@ -74,11 +75,11 @@ const ssrTdxn = hasBaked ? undefined : tdxn;
   flip buttons opt out separately (the handler bails on any <button>).
 -->
 <div class="cover" data-cover={defaultView} data-cover-shell>
-  <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasBaked ? "true" : "false"}>
+  <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasResult ? "true" : "false"}>
     <SpecimenCoverGraph slug={slug} tdxn={ssrTdxn} client:visible />
   </div>
-  <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
-    <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
+  <div class="cover__layer cover__layer--result" aria-hidden={hasResult ? "false" : "true"}>
+    <img src={thumb} loading="lazy" alt={hasResult ? `${name} rendered result` : `${name} preview placeholder`} />
     {/*
       Cover video: the poster (the img above) shows until hover, then the
       coverVideoHover controller sets src from data-cover-video and plays it.
@@ -97,25 +98,25 @@ const ssrTdxn = hasBaked ? undefined : tdxn;
         aria-hidden="true"
       ></video>
     )}
-    {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
+    {!hasResult && <span class="cover__soon mono">preview coming soon</span>}
   </div>
 
   <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
     <button
       type="button"
-      class={`cover__flip-btn${hasBaked ? "" : " is-active"}`}
+      class={`cover__flip-btn${hasResult ? "" : " is-active"}`}
       data-cover-option="network"
-      aria-pressed={hasBaked ? "false" : "true"}
-      disabled={!hasBaked}
+      aria-pressed={hasResult ? "false" : "true"}
+      disabled={!hasResult}
       title="Show network graph"
     >network</button>
     <button
       type="button"
-      class={`cover__flip-btn${hasBaked ? " is-active" : ""}`}
+      class={`cover__flip-btn${hasResult ? " is-active" : ""}`}
       data-cover-option="result"
-      aria-pressed={hasBaked ? "true" : "false"}
-      disabled={!hasBaked}
-      title={hasBaked ? "Show rendered result" : "Rendered result coming soon"}
+      aria-pressed={hasResult ? "true" : "false"}
+      disabled={!hasResult}
+      title={hasResult ? "Show rendered result" : "Rendered result coming soon"}
     >result</button>
   </div>
 </div>

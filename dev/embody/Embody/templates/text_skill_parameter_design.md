@@ -255,6 +255,8 @@ Use `par.readOnly = True` for status and informational parameters that users sho
 
 Always set `par.default = value`. This enables "Revert to Default" in the TD parameter dialog and ensures TDXN round-trips produce consistent results.
 
+**`.default` never sets the value.** After `appendFloat` + `p.default = 5.0` the par still evaluates 0.0, and a later `min`/`clampMin` clamps it to the min, not the default (verified 2025.33230, issue #94). Set `p.val = p.default` -- only on the create branch of get-or-create, so a user's value is never overwritten.
+
 ## Creating Custom Parameters
 
 All `page.append*()` methods return a **ParGroup** (tuple-like), not a single `Par`. Index with `[0]` to get the `Par` object:

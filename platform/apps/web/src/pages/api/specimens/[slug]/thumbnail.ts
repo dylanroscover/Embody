@@ -7,10 +7,10 @@ import { errorResponse, serverErrorResponse } from "../../../../server/http";
 
 export const prerender = false;
 
-// GET /api/specimens/:slug/thumbnail — serve the author-uploaded thumbnail image
-// (stored in R2 under the specimen's thumbnail_key) for the result cover. 404
-// when the specimen has no uploaded thumbnail; the UI only points here when one
-// exists, falling back to the baked render / procedural placeholder otherwise.
+// GET /api/specimens/:slug/thumbnail -- serve the specimen's cover image (R2,
+// under the row's thumbnail_key: an author upload, or the repo cover the
+// first-party sync points at). 404 when the row has no thumbnail; the UI only
+// points here when one exists, falling back to the procedural placeholder.
 // <img> requests carry same-origin cookies, so the author's session resolves here
 // -- letting an owner see their OWN private/unlisted draft's cover (visibility
 // rule mirrors getSpecimenBySlug); other viewers still only get public ones.

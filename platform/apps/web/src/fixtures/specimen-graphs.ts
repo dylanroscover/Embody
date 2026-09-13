@@ -1535,6 +1535,302 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       }
     ]
+  },
+  "prismatic-strata": {
+    "format": "tdxn",
+    "version": "2.1",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          5400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "bloom"
+        ]
+      },
+      {
+        "name": "bloom",
+        "type": "bloomTOP",
+        "position": [
+          5000,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "glsl_streaks"
+        ]
+      },
+      {
+        "name": "glsl_prism",
+        "type": "glslTOP",
+        "position": [
+          2800,
+          0
+        ],
+        "inputs": [
+          "glsl_strata",
+          "renderselect_disp"
+        ]
+      },
+      {
+        "name": "glsl_strata",
+        "type": "glslTOP",
+        "position": [
+          1400,
+          0
+        ],
+        "inputs": [
+          "ramp_strata"
+        ]
+      },
+      {
+        "name": "ramp_strata",
+        "type": "rampTOP",
+        "position": [
+          400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_streaks",
+        "type": "glslTOP",
+        "position": [
+          4000,
+          0
+        ],
+        "inputs": [
+          "glsl_prism",
+          "renderselect_grad"
+        ]
+      },
+      {
+        "name": "glsl_prism_info",
+        "type": "infoDAT",
+        "position": [
+          2950,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_prism_pixel",
+        "type": "textDAT",
+        "position": [
+          2800,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_strata_info",
+        "type": "infoDAT",
+        "position": [
+          1550,
+          -120
+        ]
+      },
+      {
+        "name": "ramp_strata_keys",
+        "type": "tableDAT",
+        "position": [
+          400,
+          -120
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_strata_pixel",
+        "type": "textDAT",
+        "position": [
+          1400,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_streaks_info",
+        "type": "infoDAT",
+        "position": [
+          4150,
+          -120
+        ]
+      },
+      {
+        "name": "renderselect_disp",
+        "type": "renderselectTOP",
+        "position": [
+          2400,
+          -400
+        ]
+      },
+      {
+        "name": "renderselect_grad",
+        "type": "renderselectTOP",
+        "position": [
+          3800,
+          -400
+        ]
+      },
+      {
+        "name": "glsl_prism_compute",
+        "type": "textDAT",
+        "position": [
+          2650,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_streaks_pixel",
+        "type": "textDAT",
+        "position": [
+          4000,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_strata_compute",
+        "type": "textDAT",
+        "position": [
+          1250,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_streaks_compute",
+        "type": "textDAT",
+        "position": [
+          3850,
+          -120
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "1. Stratum ramp",
+        "text": "One period of a stratum, indexed by phase s: s=0 is the lit top of a layer (warm rim line), s rises through grey fog to a brown shadow just under the next rim (s=1). Edit the docked keys table to restyle every layer at once.",
+        "position": [
+          330,
+          -190
+        ],
+        "size": [
+          270,
+          450
+        ],
+        "color": [
+          0.32,
+          0.26,
+          0.18
+        ]
+      },
+      {
+        "name": "annotate2",
+        "title": "2. Layered field (ramp displaced by noise)",
+        "text": "v = y*Bands + Displace*fbm(warped coords) + Scroll*phase; fract(v) picks the ramp phase, and Scroll sweeps the rims down one stratum per loop (the ripple). Anisotropy fades with the octave: long ridges, jagged mountain-profile rims. 4D simplex on a circle -> seamless loop. Buffer 0 = soft strata (+ relief, light, tint, iridescence); buffer 1 = flow field, caustic web, fine layers; buffer 2 = the layer-normal direction field for the streaks.",
+        "position": [
+          1180,
+          -190
+        ],
+        "size": [
+          570,
+          450
+        ],
+        "color": [
+          0.13,
+          0.28,
+          0.32
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "3. Prism split",
+        "text": "renderselect_disp pulls buffer 1 out of glsl_strata. glsl_prism is a Displace TOP run three times: red takes 1-d of the flow, green 1, blue 1+d -> orange/azure fringes on every edge. The caustic web and fine layers are composited AFTER the split so they never leave green/magenta copies. Alpha = streak seeds.",
+        "position": [
+          2330,
+          -470
+        ],
+        "size": [
+          820,
+          730
+        ],
+        "color": [
+          0.3,
+          0.18,
+          0.32
+        ]
+      },
+      {
+        "name": "annotate4",
+        "title": "4. Light streaks",
+        "text": "renderselect_grad pulls buffer 2: the local UP through the layers (gradient of the displaced ramp coordinate). Seeds (thin bright verticals, in the prism pass alpha) are walked along that field both ways with a bounded max-filter and a random length per column, so the rays rise perpendicular to the curved layers, then screened over the color.",
+        "position": [
+          3730,
+          -470
+        ],
+        "size": [
+          620,
+          730
+        ],
+        "color": [
+          0.18,
+          0.3,
+          0.2
+        ]
+      },
+      {
+        "name": "annotate5",
+        "title": "5. Finish",
+        "text": "Bloom TOP on the highlights only (pre-black level 0.8) for the backlit haze, then out1.",
+        "position": [
+          4930,
+          -70
+        ],
+        "size": [
+          670,
+          330
+        ],
+        "color": [
+          0.3,
+          0.3,
+          0.2
+        ]
+      }
+    ]
   }
 };
 

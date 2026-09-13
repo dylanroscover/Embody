@@ -54,5 +54,11 @@ export default defineConfig({
     // it in the foreground. An agent may instead start `astro dev --port P
     // --host 127.0.0.1` itself and run with E2E_PORT=P to reuse it.
     env: { ASTRO_DEV_BACKGROUND: "1" },
+    // The SSR pages log their degrade-to-fixtures fallback with console.error,
+    // which astro dev prints on STDOUT. Playwright drops webServer stdout by
+    // default, so a CI run that quietly served fixtures left no trace of WHY
+    // (field 2026-09-13). Pipe both streams into the run log.
+    stdout: "pipe",
+    stderr: "pipe",
   },
 });
