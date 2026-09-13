@@ -123,27 +123,30 @@ jobs:
         run: npx wrangler d1 migrations apply embody --local
 
       # global.setup.ts reseeds D1 only. The collection and viewer specs also
-      # need the specimen .tdxn blobs in local R2, keyed by sha256 (= tdn_r2_key
-      # in seed.sql). Reads specimens/manifest.json: the committed
-      # scripts/.seed-blobs.manifest.json holds absolute Windows paths.
+      # need every R2 object seed.sql points at in local R2: each .tdxn keyed by
+      # its sha256 (tdn_r2_key) and each cover under thumbnails/<sha256>
+      # (thumbnail_key, served by /api/specimens/:slug/thumbnail). Hashes the
+      # files in specimens/ itself, so a stale committed manifest cannot pass.
       - name: Seed local R2 with specimen blobs
         run: |
-          count=0
-          while read -r rel; do
-            f="../../../specimens/$rel"
-            sha="$(sha256sum "$f" | cut -d' ' -f1)"
-            if ! grep -q "'$sha'" src/server/seed.sql; then
-              echo "::error::specimens/$rel hashes to $sha, which seed.sql does not reference. Rerun scripts/build-specimen-data.py."
-              exit 1
-            fi
-            npx wrangler r2 object put "embody-blobs/$sha" --file="$f" --local < /dev/null
-            count=$((count + 1))
-          done < <(node -e 'for (const s of require("../../../specimens/manifest.json").specimens) console.log(s.tdxn_path)')
-          if [ "$count" -eq 0 ]; then
-            echo "::error::specimens/manifest.json listed no specimens"
+          listed="$(node -e 'console.log(require("../../../specimens/manifest.json").specimens.length)')"
+          staged="$(node -e 'console.log(require("./scripts/.seed-blobs.manifest.json").filter(e => e.kind === "tdxn").length)')"
+          if [ "$listed" -eq 0 ] || [ "$listed" != "$staged" ]; then
+            echo "::error::specimens/manifest.json lists $listed specimens but scripts/.seed-blobs.manifest.json stages $staged. Rerun scripts/build-specimen-data.py and commit."
             exit 1
           fi
-          echo "seeded $count specimen blobs"
+          count=0
+          while IFS=$'\t' read -r slug key sha ctype rel; do
+            f="../../../$rel"
+            got="$(sha256sum "$f" | cut -d' ' -f1)"
+            if [ "$got" != "$sha" ] || ! grep -q "'$key'" src/server/seed.sql; then
+              echo "::error::$rel hashes to $got; the committed seed data says $sha under '$key' ($slug). Rerun scripts/build-specimen-data.py and commit."
+              exit 1
+            fi
+            npx wrangler r2 object put "embody-blobs/$key" --file="$f" --content-type "$ctype" --local < /dev/null
+            count=$((count + 1))
+          done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) console.log([e.slug, e.key, e.sha256, e.content_type, e.path].join("\t"))')
+          echo "seeded $count specimen blobs (networks + covers)"
 
       # A cold node_modules/.vite can kill the first `astro dev` boot: the SSR
       # optimizer finds a late dep, reloads, and workerd imports a chunk that was

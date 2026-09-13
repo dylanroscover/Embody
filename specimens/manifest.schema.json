@@ -28,7 +28,7 @@
           "fallback": { "type": ["string", "null"], "description": "procedural-fallback note when the package is absent" },
           "output_op": { "type": "string", "const": "out1", "description": "every Specimen terminates in an Out TOP named out1" },
           "tdn_path": { "type": "string" },
-          "thumbnail_path": { "type": ["string", "null"] },
+          "thumbnail_path": { "type": ["string", "null"], "description": "cover image beside the network, relative to specimens/ like tdxn_path (<category>/<slug>.jpg); jpg/png/webp under 500 KB. The site serves it from R2 via the row's thumbnail_key; null = placeholder cover" },
           "prompt_path": { "type": ["string", "null"] },
           "operator_count": { "type": "integer", "minimum": 1 },
           "warmup_frames": { "type": "integer", "minimum": 0, "default": 3 },

@@ -33,11 +33,19 @@ them. From `platform/apps/web/`:
 python3 scripts/build-specimen-data.py          # regenerate seed.sql + fixtures + blob manifest
 wrangler d1 migrations apply embody --local
 wrangler d1 execute embody --local --file ./src/server/seed.sql
-bash scripts/upload-seed-blobs.sh               # real .tdxn blobs -> local R2, keyed by sha256
+bash scripts/upload-seed-blobs.sh               # .tdxn blobs + cover images -> local R2
 ```
 
-The blobs are content-addressed: the R2 key IS the sha256 of the `.tdxn` bytes
-(it equals `tdn_r2_key` in `seed.sql`), so `/api/specimens/:slug/tdn` resolves.
+The blobs are content-addressed: a network's R2 key IS the sha256 of the
+`.tdxn` bytes (it equals `tdn_r2_key` in `seed.sql`), so
+`/api/specimens/:slug/tdn` resolves. A cover image (`thumbnail_path` in
+`specimens/manifest.json`, stored beside its `.tdxn`) goes to
+`thumbnails/<sha256>` -- the same namespace the submit/edit routes mint for
+community uploads -- and `seed.sql` / the first-party sync point the row's
+`thumbnail_key` at it, so `/api/specimens/:slug/thumbnail` serves a first-party
+cover exactly like anyone else's. The site holds no slug list and no static
+cover files: a row with an empty `thumbnail_key` shows the procedural
+placeholder, and a new cover appears the moment its row has a key.
 
 To seed **production** (deployed D1 + R2), run the generator, then target the
 remote resources:

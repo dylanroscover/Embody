@@ -15,8 +15,14 @@ emits these artifacts under apps/web, all from the SAME rows:
      shaped for TdxnViewer (operators + annotations; heavy DAT/shader text
      stripped) so the interactive covers render with no runtime YAML parse and
      no per-card API call.
-  5. scripts/.seed-blobs.manifest.json - {slug, sha256, size, tdxn_path} list
-     (tdxn_path repo-relative) for the uploaders; R2 key = sha256.
+  5. scripts/.seed-blobs.manifest.json - every R2 object the six need, one
+     entry per blob: {slug, kind, key, sha256, size, content_type, path}
+     (path repo-relative). kind 'tdxn' -> key = sha256 (tdn_r2_key); kind
+     'thumbnail' -> key = thumbnails/<sha256>, the same namespace the upload
+     route (server/r2.ts putThumbnail) mints, so a first-party cover is served
+     by /api/specimens/<slug>/thumbnail exactly like a community one. Nothing
+     about a cover is hardcoded in the site: a row with an empty thumbnail_key
+     shows the procedural placeholder (field 2026-09-13).
   6. src/fixtures/specimens.json - homepage featured-card fixtures.
 
 ASCII punctuation only. Every file is written with LF line endings.
@@ -56,6 +62,13 @@ AUTHOR_HANDLE = "envoy"
 
 # Avatar for the first-party author: the Embody brand mark (public/embody-mark.svg).
 AUTHOR_AVATAR_URL = "/embody-mark.svg"
+
+# Cover thumbnails: manifest thumbnail_path is repo-relative under specimens/
+# (beside the .tdxn). Same caps as the upload route (server/r2.ts putThumbnail):
+# 0.5 MB and jpeg/png/webp, so a repo cover never exceeds what an author may send.
+THUMBNAIL_MAX_BYTES = 500 * 1024
+THUMBNAIL_CONTENT_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+THUMBNAIL_KEY_PREFIX = "thumbnails/"
 
 # Fictional placeholder + stray test rows to purge from local D1 so the page
 # shows only the six real first-party specimens.
@@ -207,6 +220,28 @@ def main() -> int:
         bad = [t for t in tags if not TAG_SLUG_RE.match(t)]
         if bad:
             raise SystemExit(f"{slug}: tags must be lowercase slugs (a-z, 0-9, '-'): {bad}")
+        thumb = None
+        if spec.get("thumbnail_path"):
+            thumb_path = SPECIMENS_DIR / spec["thumbnail_path"]
+            if not thumb_path.is_file():
+                raise SystemExit(f"{slug}: thumbnail_path {spec['thumbnail_path']} is not a file under specimens/")
+            content_type = THUMBNAIL_CONTENT_TYPES.get(thumb_path.suffix.lower())
+            if not content_type:
+                raise SystemExit(f"{slug}: thumbnail must be .jpg/.png/.webp, got {thumb_path.suffix}")
+            thumb_bytes = thumb_path.read_bytes()
+            if not thumb_bytes or len(thumb_bytes) > THUMBNAIL_MAX_BYTES:
+                raise SystemExit(
+                    f"{slug}: thumbnail is {len(thumb_bytes)} bytes; the cover cap is {THUMBNAIL_MAX_BYTES}"
+                    " (re-encode it, long edge <= 1200px)"
+                )
+            thumb_sha = hashlib.sha256(thumb_bytes).hexdigest()
+            thumb = {
+                "sha256": thumb_sha,
+                "size": len(thumb_bytes),
+                "content_type": content_type,
+                "key": THUMBNAIL_KEY_PREFIX + thumb_sha,
+                "path": thumb_path.relative_to(REPO_ROOT).as_posix(),
+            }
 
         rows.append(
             {
@@ -239,6 +274,9 @@ def main() -> int:
                 # Repo-relative, POSIX: the committed manifest once carried
                 # absolute Windows paths no other machine could use.
                 "tdxn_path": tdxn_path.relative_to(REPO_ROOT).as_posix(),
+                # None when the manifest lists no cover: the row keeps an empty
+                # thumbnail_key and the site shows the procedural placeholder.
+                "thumb": thumb,
             }
         )
 
@@ -251,7 +289,8 @@ def main() -> int:
 
     print(f"Generated seed + first-party sync for {len(rows)} specimens:")
     for r in rows:
-        print(f"  {r['slug']:<22} sha256={r['sha256'][:12]}... size={r['size']}")
+        cover = f"cover={r['thumb']['key'][:23]}..." if r["thumb"] else "cover=none (placeholder)"
+        print(f"  {r['slug']:<22} sha256={r['sha256'][:12]}... size={r['size']} {cover}")
     return 0
 
 
@@ -364,7 +403,7 @@ def write_seed_sql(rows: list[dict]) -> None:
             f"    {r['op_count']},\n"
             f"    {sql_str(r['family_summary'])},\n"
             f"    {sql_str('ver-' + r['slug'])},\n"
-            f"    '',\n"
+            f"    {sql_str(r['thumb']['key'] if r['thumb'] else '')},\n"
             f"    {sql_str(r['license'])},\n"
             f"    'public',\n"
             f"    'featured',\n"
@@ -489,6 +528,9 @@ def stale_predicate(r: dict, cap_json: str, alias: str = "s") -> str:
         f"{s}.license IS NOT {sql_str(r['license'])}",
         f"{s}.scan_status IS NOT 'clean'",
         f"{s}.capability_json IS NOT {sql_str(cap_json)}",
+        # The repo cover is the cover. No manifest thumbnail -> the clause is
+        # omitted and whatever the row holds stays.
+        *([f"{s}.thumbnail_key IS NOT {sql_str(r['thumb']['key'])}"] if r["thumb"] else []),
         f"(SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = {s}.current_version_id) IS NOT {sha}",
         f"(SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = {s}.id) <> {n_tags}",
         f"(SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id"
@@ -509,8 +551,10 @@ def write_sync_sql(rows: list[dict]) -> None:
     a("-- REPO/specimens/. Do not edit by hand. ASCII only.")
     a("-- Production-safe: touches only the six first-party specimens (slug + author")
     a(f"-- '{AUTHOR_HANDLE}'), never deletes a specimen, never changes ids, created_at,")
-    a("-- likes/views/copies, reactions, thumbnail/video, visibility or tier, and every")
-    a("-- statement is gated on a difference, so a second run writes 0 rows.")
+    a("-- likes/views/copies, reactions, video, visibility or tier, and every")
+    a("-- statement is gated on a difference, so a second run writes 0 rows. The")
+    a("-- cover thumbnail_key IS synced (thumbnails/<sha256> of the repo image), so")
+    a("-- the repo cover always wins; it points at a blob the uploader put in R2 first.")
     a("-- Production runs it ONLY via Platform CI (job sync-specimens), after the blobs")
     a("-- are in R2 and a D1 Time Travel bookmark is recorded. Local:")
     a("--   npx wrangler d1 execute embody --local --file=src/server/first-party-sync.sql")
@@ -576,7 +620,7 @@ def write_sync_sql(rows: list[dict]) -> None:
             f"WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = {ver_id})"
             f" AND NOT EXISTS (SELECT 1 FROM scans WHERE id = {scan_id});"
         )
-        a("-- Metadata + current version. Engagement, visibility, tier, media untouched.")
+        a("-- Metadata, cover + current version. Engagement, visibility, tier, video untouched.")
         a("UPDATE specimens AS s")
         a(
             f"SET title = {sql_str(r['name'])}, description = {sql_str(r['description'])},"
@@ -584,6 +628,7 @@ def write_sync_sql(rows: list[dict]) -> None:
             f" requires = {sql_str(json.dumps(r['requires']))}, op_count = {r['op_count']},"
             f" family_summary = {sql_str(r['family_summary'])}, license = {sql_str(r['license'])},"
             f" scan_status = 'clean', capability_json = {sql_str(cap_json)},"
+            + (f" thumbnail_key = {sql_str(r['thumb']['key'])}," if r["thumb"] else "")
         )
         a(
             "    current_version_id = (SELECT v.id FROM specimen_versions AS v"
@@ -641,6 +686,7 @@ def write_plan_sql(rows: list[dict]) -> None:
             f"  CASE WHEN u.handle = {sql_str(AUTHOR_HANDLE)} THEN 1 ELSE 0 END AS first_party,\n"
             "  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,\n"
             "  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,\n"
+            f"  s.thumbnail_key AS live_thumbnail_key, {sql_str(r['thumb']['key'] if r['thumb'] else '')} AS repo_thumbnail_key,\n"
             "  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id\n"
             f"     AND v.tdn_sha256 = {sha} ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,\n"
             f"  CASE WHEN s.id IS NULL THEN NULL WHEN {stale_predicate(r, cap_json)} THEN 1 ELSE 0 END AS stale\n"
@@ -724,17 +770,40 @@ def to_ts_literal(value, indent: int) -> str:
     raise TypeError(f"Unsupported value type: {type(value)!r}")
 
 
+def blob_entries(rows: list[dict]) -> list[dict]:
+    """Every R2 object the first-party rows point at: the .tdxn (key = sha256)
+    and, when the manifest lists one, the cover (key = thumbnails/<sha256>)."""
+    entries = []
+    for r in rows:
+        entries.append(
+            {
+                "slug": r["slug"],
+                "kind": "tdxn",
+                "key": r["sha256"],
+                "sha256": r["sha256"],
+                "size": r["size"],
+                "content_type": "application/json",
+                "path": r["tdxn_path"],
+            }
+        )
+        if r["thumb"]:
+            t = r["thumb"]
+            entries.append(
+                {
+                    "slug": r["slug"],
+                    "kind": "thumbnail",
+                    "key": t["key"],
+                    "sha256": t["sha256"],
+                    "size": t["size"],
+                    "content_type": t["content_type"],
+                    "path": t["path"],
+                }
+            )
+    return entries
+
+
 def write_blob_manifest(rows: list[dict]) -> None:
-    payload = [
-        {
-            "slug": r["slug"],
-            "sha256": r["sha256"],
-            "size": r["size"],
-            "tdxn_path": r["tdxn_path"],
-        }
-        for r in rows
-    ]
-    write_lf(BLOB_MANIFEST_PATH, json.dumps(payload, indent=2, ensure_ascii=True) + "\n")
+    write_lf(BLOB_MANIFEST_PATH, json.dumps(blob_entries(rows), indent=2, ensure_ascii=True) + "\n")
 
 
 def write_fixtures(rows: list[dict]) -> None:

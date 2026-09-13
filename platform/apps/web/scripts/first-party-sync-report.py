@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Checks and reports for the first-party specimen sync (Platform CI job sync-specimens).
 
-  blobs <outdir>              write each manifest .tdxn to <outdir>/<sha256> as the
-                              LF bytes git stores, print "slug<TAB>sha256<TAB>size<TAB>file",
-                              and fail if the generated SQL does not carry that sha
+  blobs <outdir>              stage every R2 object the six need (the .tdxn as the LF
+                              bytes git stores, and the cover image when the manifest
+                              lists one) under <outdir>/<sha256>, print one TSV row per
+                              blob "slug<TAB>key<TAB>sha256<TAB>size<TAB>content_type<TAB>file",
+                              and fail if the generated SQL does not carry that key
   plan <plan.json> before     table of first-party-plan.sql output; GITHUB_OUTPUT
                               stale=<n> and fts=<upsert|skip>; writes rollback.sql
   plan <plan.json> after      fail unless every slug is first-party, clean and live
@@ -59,13 +61,31 @@ def cmd_blobs(outdir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     sync, plan = SYNC_SQL.read_text(encoding="utf-8"), PLAN_SQL.read_text(encoding="utf-8")
     for spec in manifest():
+        # Row 1: the network. Key = sha256 (tdn_r2_key), LF bytes as git stores them.
         data = (REPO / "specimens" / spec["tdxn_path"]).read_bytes().replace(b"\r\n", b"\n")
         sha = hashlib.sha256(data).hexdigest()
         if f"'{sha}'" not in sync or f"'{sha}'" not in plan:
             fail(f"specimens/{spec['tdxn_path']} hashes to {sha}, which the generated sync SQL does not "
                  "carry. Run platform/apps/web/scripts/build-specimen-data.py and commit its output.")
         (out / sha).write_bytes(data)
-        print(f"{spec['slug']}\t{sha}\t{len(data)}\t{out / sha}")
+        print(f"{spec['slug']}\t{sha}\t{sha}\t{len(data)}\tapplication/json\t{out / sha}")
+        # Row 2: the cover, when the manifest lists one. Key = thumbnails/<sha256>,
+        # the namespace the upload route mints, served by /api/specimens/:slug/thumbnail.
+        if spec.get("thumbnail_path"):
+            img_path = REPO / "specimens" / spec["thumbnail_path"]
+            img = img_path.read_bytes()
+            img_sha = hashlib.sha256(img).hexdigest()
+            key = f"thumbnails/{img_sha}"
+            if f"'{key}'" not in sync or f"'{key}'" not in plan:
+                fail(f"specimens/{spec['thumbnail_path']} hashes to {img_sha}, which the generated sync SQL "
+                     "does not carry. Run platform/apps/web/scripts/build-specimen-data.py and commit its output.")
+            content_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}.get(
+                img_path.suffix.lower()
+            )
+            if not content_type:
+                fail(f"specimens/{spec['thumbnail_path']}: covers are .jpg/.png/.webp")
+            (out / img_sha).write_bytes(img)
+            print(f"{spec['slug']}\t{key}\t{img_sha}\t{len(img)}\t{content_type}\t{out / img_sha}")
 
 
 def load_plan(path: str):

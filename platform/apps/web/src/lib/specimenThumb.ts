@@ -55,36 +55,25 @@ export function specimenThumbnail(specimen: SpecimenThumbInput): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-// Slugs with a baked RESULT render at /public/specimens/<slug>.jpg, captured from
-// the live specimen networks. Anything not listed falls back to the procedural
-// placeholder SVG above -- never a broken img.
-//
-// NOTE: the collection page's appended-card browser script keeps its own inline
-// copy of this set (it runs in the client bundle); keep the two in sync.
-export const BAKED_RESULTS = new Set([
-  "kaleidoscope", "mandelbulb-march", "murmuration",
-  "noise-terrain", "plasma-interference", "reaction-diffusion",
-]);
-
 /**
- * Resolve a specimen's RESULT cover image: the baked render for slugs in
- * BAKED_RESULTS, otherwise the procedural placeholder. `baked` lets callers
- * label the image (real result vs. "preview coming soon").
+ * Resolve a specimen's RESULT cover image from its ROW, nothing else: when the
+ * row carries a thumbnail_key (an author upload, or the repo cover the
+ * first-party sync points at -- both live in R2 under thumbnails/<sha256>), the
+ * thumbnail route serves it; otherwise the procedural placeholder. `rendered`
+ * lets callers label the image (real result vs. "preview coming soon"). No slug
+ * list, no static files: a cover appears the moment its row has a key (the
+ * hardcoded "baked" sets were removed 2026-09-13).
+ *
+ * The collection page's appended-card browser script mirrors this rule inline
+ * (it runs in the client bundle); keep the two in sync.
  */
 export function resultImage(
   specimen: SpecimenThumbInput & { thumbnailKey?: string | null }
-): { src: string; baked: boolean } {
-  // An author-uploaded thumbnail (stored in R2 under thumbnail_key) wins — serve
-  // it through the thumbnail route. It's a real rendered result, so baked: true
-  // (no "preview coming soon" label).
+): { src: string; rendered: boolean } {
   if (specimen.thumbnailKey) {
-    return { src: `/api/specimens/${encodeURIComponent(specimen.slug)}/thumbnail`, baked: true };
+    return { src: `/api/specimens/${encodeURIComponent(specimen.slug)}/thumbnail`, rendered: true };
   }
-  const baked = BAKED_RESULTS.has(specimen.slug);
-  return {
-    src: baked ? `/specimens/${specimen.slug}.jpg` : specimenThumbnail(specimen),
-    baked,
-  };
+  return { src: specimenThumbnail(specimen), rendered: false };
 }
 
 /**

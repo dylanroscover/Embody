@@ -12,6 +12,7 @@ SELECT 'murmuration' AS slug, '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -25,6 +26,7 @@ SELECT 'murmuration' AS slug, '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'flocking', 'particles', 'generative')) <> 6
@@ -41,6 +43,7 @@ SELECT 'reaction-diffusion' AS slug, 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -54,6 +57,7 @@ SELECT 'reaction-diffusion' AS slug, 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('feedback', 'glsl', 'generative', 'simulation', 'texture')) <> 5
@@ -70,6 +74,7 @@ SELECT 'kaleidoscope' AS slug, '295f25faf270440a15c38067dc6f1c25906a1a18680870d0
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -83,6 +88,7 @@ SELECT 'kaleidoscope' AS slug, '295f25faf270440a15c38067dc6f1c25906a1a18680870d0
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'glsl', 'mirror', 'symmetry', 'effect')) <> 5
@@ -99,6 +105,7 @@ SELECT 'noise-terrain' AS slug, '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -112,6 +119,7 @@ SELECT 'noise-terrain' AS slug, '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('3d', 'glsl', 'terrain', 'geometry', 'procedural')) <> 5
@@ -128,6 +136,7 @@ SELECT 'plasma-interference' AS slug, '532989ed224f716ac444048d76b037e38381e8ac1
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -141,6 +150,7 @@ SELECT 'plasma-interference' AS slug, '532989ed224f716ac444048d76b037e38381e8ac1
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'plasma', 'palette', 'vj', 'texture')) <> 6
@@ -157,6 +167,7 @@ SELECT 'mandelbulb-march' AS slug, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
@@ -170,6 +181,7 @@ SELECT 'mandelbulb-march' AS slug, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('raymarching', 'sdf', 'glsl', 'fractal', '3d', 'mandelbulb')) <> 6

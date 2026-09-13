@@ -705,12 +705,6 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       root.querySelectorAll("*").forEach(stamp);
     }
 
-    // Slugs with a baked RESULT render -- keep in sync with SpecimenCover.astro.
-    const BAKED_THUMBS = new Set([
-      "kaleidoscope", "mandelbulb-march", "murmuration",
-      "noise-terrain", "plasma-interference", "reaction-diffusion",
-    ]);
-
     const diffAbbr = (d: string): string =>
       (({ starter: "STR", intermediate: "INT", advanced: "ADV" }) as Record<string, string>)[d] ??
       d.slice(0, 3).toUpperCase();
@@ -721,13 +715,13 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       const moreCats = cats.length > 1
         ? `<span class="badge specimen-category" title="${esc(cats.slice(1).join(", "))}">+${cats.length - 1}</span>`
         : "";
-      const uploaded = Boolean(s.thumbnail_key);
-      const baked = uploaded || BAKED_THUMBS.has(s.slug);
-      const thumb = uploaded
+      // Cover image comes from the ROW alone (mirrors resultImage in
+      // lib/specimenThumb): a thumbnail_key -> the thumbnail route, else the
+      // procedural placeholder. No slug list here, ever.
+      const rendered = Boolean(s.thumbnail_key);
+      const thumb = rendered
         ? `/api/specimens/${encodeURIComponent(s.slug)}/thumbnail`
-        : BAKED_THUMBS.has(s.slug)
-          ? `/specimens/${s.slug}.jpg`
-          : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+        : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
       // Cover video route when the cover carries one (mirrors resultVideo in
       // lib/specimenThumb). Poster + hover-play <video> live in the result layer;
       // keep this branch in sync with SpecimenCover.astro's result layer.
@@ -753,21 +747,21 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
       // No rendered result -> open on the network graph and lock the toggle
       // (nothing to flip to). Mirrors SpecimenCover.astro's defaultView logic.
-      const dis = baked ? "" : " disabled";
+      const dis = rendered ? "" : " disabled";
       article.innerHTML = `
         <div class="specimen-card__cover">
-          <div class="cover" data-cover="${baked ? 'result' : 'network'}" data-cover-shell>
-            <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden="${baked ? 'true' : 'false'}">
+          <div class="cover" data-cover="${rendered ? 'result' : 'network'}" data-cover-shell>
+            <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden="${rendered ? 'true' : 'false'}">
               <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
             </div>
-            <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
-              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
+            <div class="cover__layer cover__layer--result" aria-hidden="${rendered ? 'false' : 'true'}">
+              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${rendered ? 'rendered result' : 'preview placeholder'}" />
               ${videoEl}
-              ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
+              ${rendered ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
             </div>
             <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
-              <button type="button" class="cover__flip-btn${baked ? '' : ' is-active'}" data-cover-option="network" aria-pressed="${baked ? 'false' : 'true'}"${dis} title="Show network graph">network</button>
-              <button type="button" class="cover__flip-btn${baked ? ' is-active' : ''}" data-cover-option="result" aria-pressed="${baked ? 'true' : 'false'}"${dis} title="${baked ? 'Show rendered result' : 'Rendered result coming soon'}">result</button>
+              <button type="button" class="cover__flip-btn${rendered ? '' : ' is-active'}" data-cover-option="network" aria-pressed="${rendered ? 'false' : 'true'}"${dis} title="Show network graph">network</button>
+              <button type="button" class="cover__flip-btn${rendered ? ' is-active' : ''}" data-cover-option="result" aria-pressed="${rendered ? 'true' : 'false'}"${dis} title="${rendered ? 'Show rendered result' : 'Rendered result coming soon'}">result</button>
             </div>
           </div>
         </div>

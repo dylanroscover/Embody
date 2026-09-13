@@ -130,8 +130,8 @@ const tdxnSummary = {
   lines: rawTdxn.replace(/\n+$/, "").split("\n").length,
 };
 
-// Rendered RESULT cover for the sidebar thumbnail: baked render when available,
-// otherwise the procedural placeholder (shared with the collection card covers).
+// Rendered RESULT cover for the sidebar thumbnail: the row's thumbnail when it
+// has one, otherwise the procedural placeholder (shared with the card covers).
 const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category, thumbnailKey: specimen.thumbnail_key });
 // Cover video route for the sidebar, when this cover carries one. The poster
 // (cover.src) always renders as the video's poster, so an image-only cover keeps
@@ -139,11 +139,11 @@ const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: 
 const coverVideo = resultVideo({ slug: specimen.slug, videoKey: specimen.video_key });
 
 // Social card: use the specimen's REAL rendered result as og:image when one
-// exists (cover.baked == author-uploaded thumbnail or a baked .jpg). The
+// exists (cover.rendered == the row carries a thumbnail_key). The
 // procedural placeholder is a client-rendered SVG data URI -- invalid for OG
 // scrapers -- so in that case pass undefined and let Base fall back to the brand
 // screenshot. og:url is the canonical specimen page.
-const ogImage = cover.baked ? absoluteUrl(cover.src) : undefined;
+const ogImage = cover.rendered ? absoluteUrl(cover.src) : undefined;
 const ogUrl = `${SITE_ORIGIN}/c/${specimen.slug}`;
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
@@ -741,7 +741,7 @@ function emitKey(key: string): string {
             would reflow the panel when a portrait cover loads. */}
         <img
           src={cover.src}
-          alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
+          alt={cover.rendered ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
           width={coverVideo ? "640" : undefined}
           height={coverVideo ? "360" : undefined}
           loading="lazy"
@@ -769,7 +769,7 @@ function emitKey(key: string): string {
             data-cover-video-detail
           ></video>
         )}
-        {!cover.baked && !coverVideo && <figcaption class="thumb-soon mono">preview coming soon</figcaption>}
+        {!cover.rendered && !coverVideo && <figcaption class="thumb-soon mono">preview coming soon</figcaption>}
       </figure>
     </aside>
 
