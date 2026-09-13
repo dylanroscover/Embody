@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 6,
+  "specimen_count": 7,
   "specimens": [
     {
       "slug": "murmuration",
@@ -117,6 +117,26 @@
       "thumbnail_path": "raymarching-sdf/mandelbulb-march.jpg",
       "prompt_path": "raymarching-sdf/mandelbulb-march.prompt.md",
       "operator_count": 5,
+      "warmup_frames": 8,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "prismatic-strata",
+      "name": "Prismatic Strata",
+      "category": "generative",
+      "difficulty": "advanced",
+      "description": "Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.",
+      "tags": ["generative", "glsl", "strata", "displace", "chromatic", "streaks", "loop", "vj"],
+      "key_ops": ["glslTOP", "rampTOP", "renderselectTOP", "bloomTOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdxn_path": "generative/prismatic-strata.tdxn",
+      "thumbnail_path": "generative/prismatic-strata.jpg",
+      "prompt_path": "generative/prismatic-strata.prompt.md",
+      "operator_count": 18,
       "warmup_frames": 8,
       "preview": true,
       "author": "Embody",

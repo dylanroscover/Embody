@@ -106,5 +106,23 @@
     "size": 14253,
     "content_type": "image/jpeg",
     "path": "specimens/raymarching-sdf/mandelbulb-march.jpg"
+  },
+  {
+    "slug": "prismatic-strata",
+    "kind": "tdxn",
+    "key": "85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21",
+    "sha256": "85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21",
+    "size": 34394,
+    "content_type": "application/json",
+    "path": "specimens/generative/prismatic-strata.tdxn"
+  },
+  {
+    "slug": "prismatic-strata",
+    "kind": "thumbnail",
+    "key": "thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a",
+    "sha256": "394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a",
+    "size": 185802,
+    "content_type": "image/jpeg",
+    "path": "specimens/generative/prismatic-strata.jpg"
   }
 ]
