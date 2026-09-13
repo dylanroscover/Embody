@@ -4775,11 +4775,18 @@ class TestKillStaleBridgesRealTargets(EmbodyTestCase):
         return False
 
     def _clean(self, port: int, cfg) -> str:
-        """One real cleanup; once more if the real table timed out (a cold
-        CI WMI can near the 10s budget). An unreadable table kills and
-        prunes nothing, so the retry sees the same state. Never a skip: a
-        broken query must fail here, the only place that runs it for real."""
-        for _attempt in range(2):
+        """One real cleanup; up to two more if the real table timed out.
+        A cold CI WMI can exceed the query's 10s budget twice running (the
+        v6.2.51 tag run on windows-latest, 2026-09-13), so the CIM
+        repository is warmed first with the same bounded query until it
+        answers -- the production budget stays at 10s, this only stops a
+        cold runner from failing an integration test. An unreadable table
+        kills and prunes nothing, so a retry sees the same state. Never a
+        skip: a broken query must fail here, the only place that runs it."""
+        for _warm in range(3):
+            if bridge._process_table():
+                break
+        for _attempt in range(3):
             err = io.StringIO()
             with patch.object(sys, 'stderr', err):
                 _real_kill_stale_bridges(port, cfg)
