@@ -95,8 +95,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // max-age=0 keeps browsers revalidating (a new specimen / a sign-in shows
   // promptly) while s-maxage lets the edge serve it; the put runs in waitUntil
   // so it never delays this response. A non-200 or a Set-Cookie response is left
-  // uncached (the Cache API refuses Set-Cookie anyway).
-  if (edgeCache && cacheKey && response.status === 200 && !response.headers.has("set-cookie")) {
+  // uncached (the Cache API refuses Set-Cookie anyway), and so is a DEGRADED
+  // render: the page marks its fixtures fallback with X-Embody-Fixtures, and
+  // caching that would pin the placeholder Collection on every visitor until
+  // the entry expired (field 2026-09-13, CI served it for a whole run).
+  if (
+    edgeCache &&
+    cacheKey &&
+    response.status === 200 &&
+    !response.headers.has("set-cookie") &&
+    response.headers.get("X-Embody-Fixtures") !== "1"
+  ) {
     const out = new Response(response.body, response);
     out.headers.set("Cache-Control", "public, max-age=0, s-maxage=60, stale-while-revalidate=300");
     // Astro v6 + @astrojs/cloudflare v13: the ExecutionContext moved from

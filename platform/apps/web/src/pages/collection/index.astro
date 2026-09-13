@@ -88,6 +88,12 @@ try {
   // fixtures, which was invisible until someone read the DB directly.
   console.error("[collection] live query failed; showing fixtures:", err);
   usingFixtures = true;
+  // A degraded page must never be cached: the middleware edge-caches the bare
+  // anonymous /collection, and one render against an empty or erroring D1
+  // would otherwise serve fixtures to every visitor for the cache lifetime
+  // (CI did exactly that: the warm-up hit an unseeded DB, field 2026-09-13).
+  Astro.response.headers.set("X-Embody-Fixtures", "1");
+  Astro.response.headers.set("Cache-Control", "no-store");
   facets = {
     categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
     requires: [...new Set(fixtureSummaries.flatMap((s) => s.requires))].sort(),
