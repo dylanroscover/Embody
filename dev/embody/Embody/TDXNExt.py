@@ -5575,18 +5575,15 @@ class TDXNExt:
 				value = par_def['value']
 				if value is not None:
 					self._setParValue(target, par_name, value)
-			# A custom par whose value equals its (non-standard) default has
-			# its value OMITTED on export; the param is recreated with the
-			# right .default but its .val stays at 0/min. Initialize .val from
-			# the default so default-valued custom params round-trip. Single-
-			# component only: Pulse has no value, and a multi-component def
-			# carries one 'default' that does not map cleanly across components.
+			# A value equal to its (non-standard) default is OMITTED on export,
+			# and append*(replace=True) + .default leave .val at 0 (probed
+			# 2025.33230), so seed .val from `default` on EVERY component.
+			# The single-component-only seed left every RGB/XYZ/size>1 tuplet
+			# at 0 (field: Ditherizer 'Light Colour' pasted black, 2026-09-13).
 			elif ('values' not in par_def and 'default' in par_def
-					and style not in ('Pulse', 'Momentary', 'Header')):
-				suffixes = STYLE_SUFFIXES.get(style, [])
-				size = par_def.get('size') or 1
-				if not suffixes and size == 1:
-					self._setParValue(target, par_name, par_def['default'])
+					and style not in ('Pulse', 'Momentary', 'Header',
+									  'Sequence')):
+				self._seedCustomParDefault(target, par_def, par_name, style)
 
 			# Multi-component values
 			if 'values' in par_def:
@@ -5613,6 +5610,55 @@ class TDXNExt:
 						if val is not None:
 							self._setParValue(
 								target, f'{par_name}{i+1}', val)
+
+	def _customParComponentNames(self, par_def: dict, par_name: str,
+								 style: str) -> list[str]:
+		"""Component par names of a custom def, in component order.
+
+		Suffix styles: base + suffix (Lightr/g/b, arity per
+		_customParGroupBase); Float/Int size>1: numeric suffix (Range1..N);
+		everything else: the name itself.
+		"""
+		suffixes = STYLE_SUFFIXES.get(style, [])
+		if suffixes:
+			base_name, count = self._customParGroupBase(
+				par_def, par_name, suffixes)
+			return [base_name + s for s in suffixes[:count]]
+		try:
+			size = int(par_def.get('size') or 1)
+		except (TypeError, ValueError):
+			size = 1
+		if style in ('Float', 'Int') and size > 1:
+			return [f'{par_name}{i + 1}' for i in range(size)]
+		return [par_name]
+
+	def _seedCustomParDefault(self, target: 'OP', par_def: dict,
+							  par_name: str, style: str) -> None:
+		"""Set each component's .val to its authored `default` (constant).
+
+		A list maps 1:1, a scalar broadcasts (as _applyGroupAttr does). Raw
+		.val assignment, never _setParValue: `default` is a constant by
+		contract, so a Str default starting with '=' or '~' must not be read
+		as expression/bind shorthand.
+		"""
+		names = self._customParComponentNames(par_def, par_name, style)
+		default = par_def['default']
+		if isinstance(default, (list, tuple)):
+			defaults = list(default)
+		else:
+			defaults = [default] * len(names)
+		for name, d in zip(names, defaults):
+			if d is None:
+				continue
+			par = getattr(target.par, name, None)
+			if par is None or par.isPulse:
+				continue
+			try:
+				par.val = d
+			except Exception as e:
+				self._log(
+					f'Could not seed {name} from its default on '
+					f'{target.path}: {e}', 'DEBUG')
 
 	def _setParValue(self, target, par_name, value):
 		"""Set a single parameter value (constant, expression, or bind).
