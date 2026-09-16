@@ -832,6 +832,14 @@ inputs:
 - level1
 ```
 
+A bare name always means the source's **output connector 0**. When the wire leaves a later output connector — a COMP holding several Out OPs (`out_line`, `out_params`, `out_fill`), or any multi-output operator — the entry is a mapping that names the output as well (v2.1; entries stay at their input position):
+```yaml
+inputs:
+- layer                     # layer's output 0 -> input 0
+- {source: layer, out: 2}   # layer's output 2 -> input 1
+```
+Readers that predate `out` wire such entries from output 0, which is exactly what happened before the key existed: every consumer of a multi-output COMP received the same stream.
+
 ### COMP Connections
 
 COMP-level wiring (top/bottom connectors). Only applicable to COMPs. Stored in the `comp_inputs` array:
