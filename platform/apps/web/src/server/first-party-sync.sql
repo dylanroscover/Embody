@@ -182,23 +182,23 @@ WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profi
   );
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT s.rowid, s.slug, 'Thangka Mandala', 'A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', 'generative pop glsl mandala geometry line loop vj', u.handle, 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP'
+SELECT s.rowid, s.slug, 'Thangka Mandala', 'A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', 'generative pop glsl mandala geometry line loop vj', u.handle, 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP'
 FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
   AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts' AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)
   AND (
       s.title IS NOT 'Thangka Mandala'
-   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
+   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
    OR s.category IS NOT 'generative'
    OR s.level IS NOT 'advanced'
    OR s.requires IS NOT '[]'
-   OR s.op_count IS NOT 343
+   OR s.op_count IS NOT 388
    OR s.family_summary IS NOT 'POP,CHOP,MAT,TOP'
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
-   OR s.thumbnail_key IS NOT 'thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13'
+   OR s.thumbnail_key IS NOT 'thumbnails/b5e52c37e30955e64c686e17b1624938f1a14bccf9f8bf0d18880f720849f6f8'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -525,36 +525,36 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- mandala: specimens/generative/mandala.tdxn sha256=8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13 size=224434
+-- mandala: specimens/generative/mandala.tdxn sha256=db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0 size=262885
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-mandala-8a0a6e1800392dd3', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13', '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13', 224434, 343, 'scan-mandala-8a0a6e1800392dd3', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
+SELECT 'ver-mandala-db72d5bcad08fa1c', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0', 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0', 262885, 388, 'scan-mandala-db72d5bcad08fa1c', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-mandala-8a0a6e1800392dd3', 'ver-mandala-8a0a6e1800392dd3', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-8a0a6e1800392dd3') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-8a0a6e1800392dd3');
+SELECT 'scan-mandala-db72d5bcad08fa1c', 'ver-mandala-db72d5bcad08fa1c', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-db72d5bcad08fa1c') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-db72d5bcad08fa1c');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
-SET title = 'Thangka Mandala', description = 'A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', category = 'generative', level = 'advanced', requires = '[]', op_count = 343, family_summary = 'POP,CHOP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13' ORDER BY v.version_num DESC LIMIT 1),
+SET title = 'Thangka Mandala', description = 'A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', category = 'generative', level = 'advanced', requires = '[]', op_count = 388, family_summary = 'POP,CHOP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/b5e52c37e30955e64c686e17b1624938f1a14bccf9f8bf0d18880f720849f6f8',
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0')
   AND (
       s.title IS NOT 'Thangka Mandala'
-   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
+   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
    OR s.category IS NOT 'generative'
    OR s.level IS NOT 'advanced'
    OR s.requires IS NOT '[]'
-   OR s.op_count IS NOT 343
+   OR s.op_count IS NOT 388
    OR s.family_summary IS NOT 'POP,CHOP,MAT,TOP'
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
-   OR s.thumbnail_key IS NOT 'thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13'
+   OR s.thumbnail_key IS NOT 'thumbnails/b5e52c37e30955e64c686e17b1624938f1a14bccf9f8bf0d18880f720849f6f8'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

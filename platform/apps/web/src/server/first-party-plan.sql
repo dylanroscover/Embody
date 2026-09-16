@@ -223,28 +223,28 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'prismatic-strata'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
-SELECT 'mandala' AS slug, '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13' AS repo_sha, 224434 AS repo_size,
+SELECT 'mandala' AS slug, 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0' AS repo_sha, 262885 AS repo_size,
   s.id AS specimen_id, u.handle AS author_handle,
   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
-  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f' AS repo_thumbnail_key,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/b5e52c37e30955e64c686e17b1624938f1a14bccf9f8bf0d18880f720849f6f8' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
-     AND v.tdn_sha256 = '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+     AND v.tdn_sha256 = 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
       s.title IS NOT 'Thangka Mandala'
-   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
+   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
    OR s.category IS NOT 'generative'
    OR s.level IS NOT 'advanced'
    OR s.requires IS NOT '[]'
-   OR s.op_count IS NOT 343
+   OR s.op_count IS NOT 388
    OR s.family_summary IS NOT 'POP,CHOP,MAT,TOP'
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
-   OR s.thumbnail_key IS NOT 'thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13'
+   OR s.thumbnail_key IS NOT 'thumbnails/b5e52c37e30955e64c686e17b1624938f1a14bccf9f8bf0d18880f720849f6f8'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'db72d5bcad08fa1caf5ca7d5b24b254bbb029e66251a64d46710055f8a797dd0'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

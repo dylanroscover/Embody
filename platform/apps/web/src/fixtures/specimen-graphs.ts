@@ -2008,7 +2008,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "type": "constantMAT",
         "position": [
           1400,
-          -1600
+          -1650
         ],
         "size": [
           130,
@@ -2945,6 +2945,18 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
           {
             "source": "field_garland",
             "out": 2
+          },
+          {
+            "source": "outer_ink_ring",
+            "out": 2
+          },
+          {
+            "source": "palace_shadow_squares",
+            "out": 2
+          },
+          {
+            "source": "palace_gold_frame",
+            "out": 2
           }
         ]
       },
@@ -2979,7 +2991,10 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
           "center_star",
           "inner_dot_ring",
           "corner_medallions",
-          "field_garland"
+          "field_garland",
+          "outer_ink_ring",
+          "palace_shadow_squares",
+          "palace_gold_frame"
         ]
       },
       {
@@ -3150,6 +3165,34 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
           0.67,
           0.67,
           0.67
+        ]
+      },
+      {
+        "name": "geo_outline",
+        "type": "geometryCOMP",
+        "position": [
+          1400,
+          -1500
+        ],
+        "inputs": [
+          "glsl_outline"
+        ],
+        "operators": [
+          {
+            "name": "in1",
+            "type": "inPOP"
+          },
+          {
+            "name": "null_out",
+            "type": "nullPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "in1"
+            ]
+          }
         ]
       },
       {
@@ -3781,6 +3824,17 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "glsl_outline",
+        "type": "glslPOP",
+        "position": [
+          1000,
+          -1500
+        ],
+        "inputs": [
+          "merge_line"
+        ]
+      },
+      {
         "name": "inner_circle",
         "type": "baseCOMP",
         "position": [
@@ -4044,6 +4098,18 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
           },
           {
             "source": "field_garland",
+            "out": 1
+          },
+          {
+            "source": "outer_ink_ring",
+            "out": 1
+          },
+          {
+            "source": "palace_shadow_squares",
+            "out": 1
+          },
+          {
+            "source": "palace_gold_frame",
             "out": 1
           }
         ]
@@ -5144,6 +5210,159 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "outer_ink_ring",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
         "name": "outer_petals_a",
         "type": "baseCOMP",
         "position": [
@@ -5953,6 +6172,14 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "glsl_outline_info",
+        "type": "infoDAT",
+        "position": [
+          1075,
+          -1620
+        ]
+      },
+      {
         "name": "glsl_wear_compute",
         "type": "textDAT",
         "position": [
@@ -5961,11 +6188,325 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "palace_gold_frame",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
         "name": "lotus_seat_scallop",
         "type": "baseCOMP",
         "position": [
           0,
           -3800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_outline_compute",
+        "type": "textDAT",
+        "position": [
+          925,
+          -1620
+        ]
+      },
+      {
+        "name": "palace_shadow_squares",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5000
         ],
         "operators": [
           {
@@ -6121,11 +6662,11 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "text": "Each layer_NN is one mandala element. Its Layer page sets shape, radius, symmetry, colours (palette slots 1-8), nesting and outline style; its Animate page adds waves, tumble, colour waves and LFOs on nearly every attribute. Master knobs: Mandala page (Scale, Rotate, Speed Multiplier, Energy, Line Width), Palette page, Wear page. Draw Order stacks layers; duplicate a layer COMP and wire its three outputs into the merges (same input index on all three) to add an element.",
         "position": [
           -70,
-          -4670
+          -5270
         ],
         "size": [
           300,
-          4970
+          5570
         ],
         "color": [
           0.55,
