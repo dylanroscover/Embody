@@ -102,6 +102,15 @@ export interface TdxnViewerProps {
    * partial annotation box would just be clutter.
    */
   showAnnotations?: boolean;
+  /**
+   * Wheel zooms toward the cursor (TD-style) instead of React Flow's default
+   * wheel-pan. Only for a viewer that OWNS its viewport -- the specimen page's
+   * full-screen canvas. Leave false inside a scrolling page (card covers, list
+   * rows): preventScrolling swallows the wheel, so the page would stop scrolling
+   * wherever the cursor crossed a graph. Fullscreen enables it regardless -- it
+   * owns the viewport by definition. Drag pans either way.
+   */
+  zoomOnWheel?: boolean;
 }
 
 type OperatorNodeData = {
@@ -235,7 +244,8 @@ export function TdxnViewer({
   rootLabel,
   onSelect,
   fitPadding = 0.24,
-  showAnnotations = true
+  showAnnotations = true,
+  zoomOnWheel = false
 }: TdxnViewerProps) {
   // Drill-down path: each segment a COMP name, deepest last. Empty = root. Only
   // meaningful when `navigable`; the flatten view ignores it.
@@ -562,7 +572,7 @@ export function TdxnViewer({
           elementsSelectable={false}
           selectNodesOnDrag={false}
           panOnDrag
-          panOnScroll
+          panOnScroll={!(zoomOnWheel || fullscreen)}
           zoomOnScroll
           zoomOnPinch
           zoomOnDoubleClick={false}
