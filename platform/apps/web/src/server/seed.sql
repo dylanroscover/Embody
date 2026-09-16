@@ -241,7 +241,7 @@ INSERT OR REPLACE INTO specimens (
     461,
     'POP,CHOP,MAT,TOP',
     'ver-mandala',
-    'thumbnails/c65afda0255a2d288132e729cbba7b0b9d94bd9e5acd5a768efc8910969af568',
+    'thumbnails/d22290a6cf75da3cc67e38ad3d48b3e48f24df7aaef8b7d84861c044bf2b3cb4',
     'CC-BY-4.0',
     'public',
     'featured',
@@ -264,7 +264,7 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-plasma-interference', 'sp-plasma-interference', 1, '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', 34394, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
-  ('ver-mandala', 'sp-mandala', 1, 'ed27076f8ca81cde6da5c8d011ca2238426c15ee363d1ffc961b9f28dc9c6302', 'ed27076f8ca81cde6da5c8d011ca2238426c15ee363d1ffc961b9f28dc9c6302', 320366, 461, 'scan-mandala', NULL, 'First-party specimen.');
+  ('ver-mandala', 'sp-mandala', 1, 'ab633a2cb9a2da4ebe1d2f8477629f05ed91a4e8a33a20f1f68052c95d017e1d', 'ab633a2cb9a2da4ebe1d2f8477629f05ed91a4e8a33a20f1f68052c95d017e1d', 321833, 461, 'scan-mandala', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (

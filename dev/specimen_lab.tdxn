@@ -1,6 +1,6 @@
 format: tdxn
 version: '2.1'
-build: 8
+build: 9
 generator: Embody/6.2.53
 td_build: 099.2025.33230
 network_path: /specimen_lab
@@ -331,12 +331,12 @@ operators:
       style: Float
       label: Sparkle Density
       startSection: true
-      default: 0.0001
+      default: 0.0002
       max: 0.05
       clampMin: true
       clampMax: true
-      normMax: 0.0005
-      help: Fraction of pixels that carry a bright shimmering speck (0.00001 = 0.001 percent). Very sparse by design; raise to 0.0001 for a visible dusting.
+      normMax: 0.001
+      help: Fraction of pixels lit by a speck of light (0.0002 = roughly 200 specks at 1080p, half visible at any moment as they twinkle). Sparse by design; 0 = off.
     - name: Sparkleclump
       style: Float
       label: Sparkle Clumping
@@ -361,6 +361,7 @@ operators:
       clampMin: true
       clampMax: true
       help: Opacity of the ornamental scrollwork layer drawn over the field (0 = off). Squiggling contour lines and small leaf lobes, folded into mirrored sectors like carpet ornament.
+      value: 1
     - name: Scrollscale
       style: Float
       label: Scale
@@ -372,7 +373,7 @@ operators:
       normMin: 2.0
       normMax: 16.0
       help: Size of the ornament. Higher = finer, more squiggles.
-      value: 12
+      value: 14.5699996948
     - name: Scrolldetail
       style: Int
       label: Detail
@@ -384,7 +385,7 @@ operators:
       normMin: 1.0
       normMax: 6.0
       help: 'Noise octaves in the ornament: 2-3 = smooth graceful curls, 5-6 = crackly fine detail.'
-      value: 4
+      value: 6
     - name: Scrollwarp
       style: Float
       label: Warp
@@ -394,6 +395,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
+      value: 0.5299999714
     - name: Scrolldensity
       style: Float
       label: Line Density
@@ -405,12 +407,14 @@ operators:
       normMin: 1.0
       normMax: 12.0
       help: Number of contour squiggles across the field.
+      value: 1.5299999714
     - name: Scrollleaves
       style: Float
       label: Squiggle Lines
       clampMin: true
       clampMax: true
       help: Opacity of faint contour squiggles drawn over the filled lobes (0 = fills only).
+      value: 1
     - name: Scrollsymmetry
       style: Int
       label: Symmetry
@@ -432,6 +436,7 @@ operators:
       normMin: 0.3
       normMax: 0.8
       help: Where the ornament starts (scene units; the palace wall sits at about 0.47).
+      value: 0.4399999976
     - name: Scrollouter
       style: Float
       label: Outer Radius
@@ -441,6 +446,7 @@ operators:
       clampMax: true
       normMin: 0.5
       help: Where the ornament stops (the beads sit at 0.86).
+      value: 0.7950000167
     - name: Scrollflow
       style: Float
       label: Growth Stretch
@@ -450,6 +456,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: Radial elongation of the ornament lobes along their growth direction (0 = round, 1 = twice as long radially).
+      value: 0.2199999988
     - name: Scrollevolve
       style: Float
       label: Growth Speed
@@ -459,6 +466,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: Outward growth speed of the ornament in pattern units per second (snapped to whole pattern periods per loop in Loop mode). Always outward from the centre.
+      value: 0.4199999869
     - name: Scrolllinecolor
       style: Int
       label: Fill Color A
@@ -491,6 +499,7 @@ operators:
       clampMax: true
       normMax: 1.5
       help: How much the ornament writhes and swells in place while it grows (a second noise field bends the domain warp). 0 = rigid stamp sliding outward.
+      value: 1.5
     - name: Scrollmorphrate
       style: Float
       label: Morph Rate
@@ -500,6 +509,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: Speed of the in-place morph in radians per second (snapped to whole cycles per loop in Loop mode).
+      value: 0.75
   flags:
   - viewer
   position: [1600, -400]

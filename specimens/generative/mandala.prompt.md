@@ -12,8 +12,8 @@ symmetry, colours, nesting and animation are dialled from custom parameters, and
 thing breathes: petals tumble and travel in waves, colours cross-fade around the rings,
 nested rings spin at different rates, tips flex between round and pointed. A GLSL finish
 ages it into a worn cloth painting -- patchy fade toward paper, paper-fibre grunge only in
-those patches, a soft vignette, grain and sparse shimmering specks of light (Sparkle Density, Clumping,
-Shimmer on the Wear page). With Loop on, every rate is snapped so the whole
+those patches, a soft vignette, grain and sparse shimmering specks of light scattered at random and
+clumped by the same smooth noise (Sparkle Density, Clumping, Shimmer on the Wear page). With Loop on, every rate is snapped so the whole
 mandala repeats exactly every Loop Length seconds.
 
 ## What it teaches
@@ -28,7 +28,7 @@ mandala repeats exactly every Loop Length seconds.
   `texelFetch(uP, layer * 64 + j)`. A per-layer GLSL POP with 28 expression uniforms costs
   0.4 ms per cook (TD re-evaluates every expression each cook); this costs nothing.
 - **Outlines as a function of angle.** Polygon, star, rosette, scallop, petal, bar, dot and arc
-  (a ring segment) are all `r(u)` or `(x(s), y(s))` remaps of the same closed line strip, so one Detail
+  (a ring segment whose Amplitude slants its ends into candy-cane notches) are all `r(u)` or `(x(s), y(s))` remaps of the same closed line strip, so one Detail
   parameter controls smoothness and the same code serves lines and fills.
 - **Fills without triangulation.** The fill circle is a `Circle POP` with Surface
   connectivity (a fan with a centre point); the shader maps the centre to the shape's pivot,
@@ -106,8 +106,8 @@ mandala repeats exactly every Loop Length seconds.
 > copies alternating cream and gold, one shared phase so they never cross, breathing amplitude
 > and spacing;
 > a second family is included switched off), dark framing ring, four-colour outer
-> petal ring, gold rings, a thin candy-cane ring (two interleaved layers of sixteen arc segments,
-> vermilion/cream and teal/gold, ink-rimmed, turning slowly), lace border, eight vase treasures, a bold ink cross (four square-ended
+> petal ring, gold rings, a thin candy-cane ring (two interleaved layers of sixteen arc segments
+> with slanted ends, vermilion/cream and teal/gold, ink-rimmed, turning slowly), lace border, eight vase treasures, a bold ink cross (four square-ended
 > bars from the centre to the vases, drawn beneath the scrollwork), bead and tick rings, palace
 > square with nested bands, a heavy ink wall and gold corner brackets (Gap cuts the middle
 > of each edge), thin nested lines, gates on top, corner medallions, dotted lotus
