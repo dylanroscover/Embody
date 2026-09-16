@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 3
-generator: Embody/6.2.53
+generator: Embody/6.2.54
 td_build: 099.2025.33230
 network_path: /specimen_lab/mandala
 options:
@@ -97,6 +97,13 @@ type_defaults:
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
 par_templates:
+  wiring:
+  - clampMin: true
+    help: 'Index of this layer among the merge_line / merge_fill / merge_params inputs: the stride the shaders read its parameters at. Set it when you wire a new layer (a pure parameter read, so it survives a sandboxed paste).'
+    label: Layer Id
+    name: Layerid
+    normMax: 40.0
+    style: Int
   layer:
   - default: true
     help: Turn this layer on or off.
@@ -996,6 +1003,7 @@ operators:
   parameters:
     tz: -0.004
     material: mat_fill
+    drawpriority: 3
   position: [1400, -1800]
   inputs:
   - glsl_fill
@@ -1011,6 +1019,7 @@ operators:
   type: geometryCOMP
   parameters:
     material: mat_line
+    drawpriority: 1
   position: [1400, -1200]
   inputs:
   - glsl_line
@@ -1066,6 +1075,9 @@ operators:
       Lengthrate: 3
       Opacityanim: 0.25
       Opacityrate: 2
+    Wiring:
+      $t: wiring
+      Layerid: 7
   position: [0, -1400]
 - name: glsl_fill
   type: glslPOP
@@ -1214,6 +1226,9 @@ operators:
       Wavecycles: 4
       Lengthanim: 0.01
       Lengthrate: 2.5
+    Wiring:
+      $t: wiring
+      Layerid: 8
   position: [0, -1600]
 - name: center_dot
   type: baseCOMP
@@ -1237,6 +1252,9 @@ operators:
       Linewidthrate: 2.5
       Opacityanim: 0.2
       Opacityrate: 2.5
+    Wiring:
+      $t: wiring
+      Layerid: 15
   position: [0, -3000]
 - name: field_disc
   type: baseCOMP
@@ -1254,6 +1272,8 @@ operators:
       Wobblerate: 0.15
       Radiusanim: 0.01
       Radiusrate: 0.4
+    Wiring:
+      $t: wiring
   children:
   - name: params
     type: parameterCHOP
@@ -1276,7 +1296,7 @@ operators:
       attr:
       - customname: LayerId
         type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+        value0: =parent.Layer.par.Layerid
       - customname: IsFill
         type: int
         value0: 1
@@ -1289,7 +1309,7 @@ operators:
       attr:
       - customname: LayerId
         type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+        value0: =parent.Layer.par.Layerid
       - customname: IsFill
         type: int
     position: [400, 200]
@@ -1369,6 +1389,9 @@ operators:
       Tumble: 5
       Tumblerate: 1.1
       Lengthanim: 0.015
+    Wiring:
+      $t: wiring
+      Layerid: 16
   position: [0, -3200]
 - name: geo_scroll
   type: geometryCOMP
@@ -1594,6 +1617,9 @@ operators:
       Amplitudeanim: 0.12
       Amplituderate: 1.6
       Sharpnessanim: 0.5
+    Wiring:
+      $t: wiring
+      Layerid: 20
   position: [0, -4000]
 - name: constant_bg
   type: constantTOP
@@ -1611,6 +1637,7 @@ operators:
   parameters:
     tz: -0.002
     material: mat_line
+    drawpriority: 2
   position: [1400, -1500]
   inputs:
   - glsl_outline
@@ -1708,6 +1735,9 @@ operators:
       Wobblerate: 0.3
       Amplitudeanim: 0.01
       Amplituderate: 2.2
+    Wiring:
+      $t: wiring
+      Layerid: 5
   position: [0, -1000]
 - name: lotus_inner
   type: baseCOMP
@@ -1744,6 +1774,9 @@ operators:
       Tumblerate: 1.3
       Lengthanim: 0.025
       Lengthrate: 1.2
+    Wiring:
+      $t: wiring
+      Layerid: 13
   position: [0, -2600]
 - name: lotus_outer
   type: baseCOMP
@@ -1784,6 +1817,9 @@ operators:
       Lengthrate: 1.2
       Widthanim: 0.01
       Widthrate: 1.7
+    Wiring:
+      $t: wiring
+      Layerid: 12
   position: [0, -2400]
 - name: noise_fiber
   type: noiseTOP
@@ -1828,6 +1864,9 @@ operators:
       Nestgaprate: 0.9
       Linewidthanim: 0.4
       Linewidthrate: 1.5
+    Wiring:
+      $t: wiring
+      Layerid: 3
   position: [0, -600]
 - name: candy_ring_a
   type: baseCOMP
@@ -1857,6 +1896,9 @@ operators:
       $t: animate
       Lengthrate: 0.5
       Widthrate: 0.5
+    Wiring:
+      $t: wiring
+      Layerid: 30
   position: [0, -6000]
 - name: candy_ring_b
   type: baseCOMP
@@ -1886,6 +1928,9 @@ operators:
       $t: animate
       Lengthrate: 0.5
       Widthrate: 0.5
+    Wiring:
+      $t: wiring
+      Layerid: 31
   position: [0, -6200]
 - name: glsl_outline
   type: glslPOP
@@ -1950,6 +1995,9 @@ operators:
       Radiusanim: 0.008
       Radiusrate: 0.9
       Nestgapanim: 0.015
+    Wiring:
+      $t: wiring
+      Layerid: 11
   position: [0, -2200]
 - name: merge_params
   type: mergeCHOP
@@ -2050,6 +2098,9 @@ operators:
       Lengthrate: 0.5
       Widthanim: 0.006
       Widthrate: 0.5
+    Wiring:
+      $t: wiring
+      Layerid: 29
   position: [0, -5800]
 - name: palace_lines
   type: baseCOMP
@@ -2077,6 +2128,9 @@ operators:
       Nestgaprate: 0.9
       Linewidthanim: 0.3
       Linewidthrate: 1.5
+    Wiring:
+      $t: wiring
+      Layerid: 18
   position: [0, -3600]
 - name: field_garland
   type: baseCOMP
@@ -2106,6 +2160,9 @@ operators:
       Amplituderate: 1.2
       Nestgapanim: 0.015
       Nestgaprate: 1.4
+    Wiring:
+      $t: wiring
+      Layerid: 23
   position: [0, -4600]
 - name: palace_square
   type: baseCOMP
@@ -2140,6 +2197,9 @@ operators:
       Nestgaprate: 0.8
       Linewidthanim: 0.3
       Linewidthrate: 1.2
+    Wiring:
+      $t: wiring
+      Layerid: 9
   position: [0, -1800]
 - name: treasure_bars
   type: baseCOMP
@@ -2173,6 +2233,9 @@ operators:
       Lengthanim: 0.02
       Widthanim: 0.01
       Widthrate: 1.3
+    Wiring:
+      $t: wiring
+      Layerid: 10
   position: [0, -2000]
 - name: center_rosette
   type: baseCOMP
@@ -2205,6 +2268,9 @@ operators:
       Amplituderate: 1.4
       Sharpnessanim: 0.6
       Sharpnessrate: 1.1
+    Wiring:
+      $t: wiring
+      Layerid: 14
   position: [0, -2800]
 - name: gate_crossbars
   type: baseCOMP
@@ -2232,6 +2298,9 @@ operators:
       Tumble: 4
       Tumblerate: 1.1
       Widthanim: 0.02
+    Wiring:
+      $t: wiring
+      Layerid: 17
   position: [0, -3400]
 - name: glsl_fill_info
   type: infoDAT
@@ -2279,6 +2348,9 @@ operators:
       Lengthrate: 3
       Opacityanim: 0.3
       Opacityrate: 3
+    Wiring:
+      $t: wiring
+      Layerid: 21
   position: [0, -4200]
 - name: outer_ink_ring
   type: baseCOMP
@@ -2300,6 +2372,9 @@ operators:
       Radiusrate: 0.5
       Linewidthanim: 0.25
       Linewidthrate: 0.8
+    Wiring:
+      $t: wiring
+      Layerid: 24
   position: [0, -4800]
 - name: outer_petals_a
   type: baseCOMP
@@ -2335,6 +2410,9 @@ operators:
       Tumblerate: 1.4
       Lengthanim: 0.02
       Lengthrate: 1.1
+    Wiring:
+      $t: wiring
+      Layerid: 1
   position: [0, -200]
 - name: outer_petals_b
   type: baseCOMP
@@ -2370,6 +2448,9 @@ operators:
       Tumblerate: 1.4
       Widthanim: 0.008
       Widthrate: 2
+    Wiring:
+      $t: wiring
+      Layerid: 2
   position: [0, -400]
 - name: params_palette
   type: parameterCHOP
@@ -2412,6 +2493,9 @@ operators:
       Linewidthrate: 0.7
       Opacityanim: 0.05
       Opacityrate: 0.6
+    Wiring:
+      $t: wiring
+      Layerid: 27
   position: [0, -5400]
 - name: field_ripples_b
   type: baseCOMP
@@ -2448,6 +2532,9 @@ operators:
       Linewidthrate: 0.7
       Opacityanim: 0.05
       Opacityrate: 0.6
+    Wiring:
+      $t: wiring
+      Layerid: 28
   position: [0, -5600]
 - name: glsl_wear_pixel
   type: textDAT
@@ -2503,6 +2590,9 @@ operators:
       Sharpnessanim: 0.8
       Sharpnessrate: 0.8
       Lengthanim: 0.03
+    Wiring:
+      $t: wiring
+      Layerid: 6
   position: [0, -1200]
 - name: field_edge_rings
   type: baseCOMP
@@ -2525,6 +2615,9 @@ operators:
       Nestgaprate: 1.3
       Linewidthanim: 0.3
       Linewidthrate: 2
+    Wiring:
+      $t: wiring
+      Layerid: 4
   position: [0, -800]
 - name: glsl_scroll_info
   type: infoDAT
@@ -2564,6 +2657,9 @@ operators:
       Lengthrate: 1.5
       Nestgapanim: 0.1
       Nestgaprate: 1.2
+    Wiring:
+      $t: wiring
+      Layerid: 22
   position: [0, -4400]
 - name: glsl_line_compute
   type: textDAT
@@ -2571,7 +2667,7 @@ operators:
   - viewer
   position: [925, -1320]
   dock: glsl_line
-  dat_content: "// Mandala stream shader (one instance for the line stream, one for the fill stream).\n// Every point carries LayerId / CopyId / NestId from the static per-layer copy chains; all layer\n// parameters live in the uP texture buffer (merge_params -> shuffle_params, 53 floats per layer, one per Layer/Animate parameter in page order),\n// so per frame only this shader cooks: outline, nesting, radial placement, every animation, colour.\n// Uniforms auto-declared from the Vectors / Arrays pages:\n//   samplerBuffer uP; float uTime, uEnergy, uGlobalRot, uLoop, uLoopLen, uInkWidth; vec3 uInkColor; int uIsFill.\n// uIsFill: 0 = coloured outline stream, 1 = filled fan stream, 2 = ink contour (the line geometry redrawn\n// thicker in the ink colour, sitting between a layer's fill and its coloured outline).\n// Loop mode (uLoop): every rate is snapped to whole cycles per uLoopLen seconds and every spin to a\n// symmetric position, so frame T equals frame 0 exactly (the wobble walks a circle in noise space).\n#define TAU 6.28318530718\n#define PI  3.14159265359\n#define STRIDE 53\n// palette slots live in uPal (Col1r..Col8b, then the master Seed at 24), so a layer stores a slot number\n#define PALC(s, c) texelFetch(uPal, (clamp(int(s), 1, 8) - 1) * 3 + (c)).r\n#define PAL(s) vec3(PALC(s, 0), PALC(s, 1), PALC(s, 2))\n\nfloat PRM(int layer, int j) { return texelFetch(uP, layer * STRIDE + j).r; }\nvec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }\n\n// snap an LFO rate (rad/s) to a whole number of cycles per loop (at least one)\nfloat qrate(float rate) {\n\tif (uLoop < 0.5 || rate == 0.0) return rate;\n\tfloat k = max(1.0, floor(abs(rate) * uLoopLen / TAU + 0.5));\n\treturn sign(rate) * k * TAU / uLoopLen;\n}\n// snap a spin (deg/s) to whole symmetric steps per loop; minK 0 lets a very slow spin stop instead\nfloat qspin(float dps, float period, float minK) {\n\tif (uLoop < 0.5 || dps == 0.0 || period <= 0.0) return dps;\n\tfloat k = max(minK, floor(abs(dps) * uLoopLen / period + 0.5));\n\treturn sign(dps) * k * period / uLoopLen;\n}\nfloat lfo(float base, float amt, float rate, float t, float ph) { return base + amt * uEnergy * sin(t * qrate(rate) + ph); }\n\nvoid main() {\n\tconst uint id = TDIndex();\n\tif (id >= TDNumElements())\n\t\treturn;\n\n\tvec3 pin = TDIn_P();\n\tint layer = int(TDIn_LayerId());\n\tint ci = int(TDIn_CopyId());\n\tint ni = int(TDIn_NestId());\n\tfloat t = uTime;\n\tfloat lph = float(layer) * 0.7;                 // per-layer phase so LFOs never sync\n\n\tfloat isOn     = PRM(layer, 0);                 // 'active' is a GLSL reserved word\n\tint   shape    = int(PRM(layer, 1));\n\tint   style    = int(PRM(layer, 2));\n\tfloat order    = PRM(layer, 3);\n\tfloat radius   = lfo(PRM(layer, 4), PRM(layer, 37), PRM(layer, 38), t, lph);\n\tint   lobes    = int(PRM(layer, 5));\n\tfloat amp      = lfo(PRM(layer, 6), PRM(layer, 39), PRM(layer, 40), t, lph);\n\tfloat sharp    = max(0.02, lfo(PRM(layer, 7), PRM(layer, 41), PRM(layer, 42), t, lph));\n\tfloat len      = lfo(PRM(layer, 8), PRM(layer, 43), PRM(layer, 44), t, lph);\n\tfloat wid      = lfo(PRM(layer, 9), PRM(layer, 45), PRM(layer, 46), t, lph);\n\tint   count    = max(int(PRM(layer, 12)), 1);\n\tfloat nestgap  = lfo(PRM(layer, 14), PRM(layer, 47), PRM(layer, 48), t, lph);\n\tfloat rotate   = PRM(layer, 15);\n\tfloat speed    = PRM(layer, 16);\n\tfloat pulse    = PRM(layer, 17);\n\tfloat pulserate = PRM(layer, 18);\n\tvec3  colA     = PAL(PRM(layer, 19));\n\tvec3  colB     = PAL(PRM(layer, 20));\n\tvec3  colL     = PAL(max(PRM(layer, 21), 1.0));\n\tfloat useLine  = (PRM(layer, 21) > 0.5) ? 1.0 : 0.0;\n\tint   alternate = int(PRM(layer, 22));\n\tfloat opacity  = clamp(lfo(PRM(layer, 23), PRM(layer, 51), PRM(layer, 52), t, lph), 0.0, 1.0);\n\tfloat lwidth   = max(0.0, lfo(PRM(layer, 24), PRM(layer, 49), PRM(layer, 50), t, lph));\n\tfloat wobble   = PRM(layer, 26);\n\tfloat wobscale = PRM(layer, 27);\n\tfloat seed     = texelFetch(uPal, 24).r + float(layer);\n\tfloat waveAmt  = PRM(layer, 28)
+  dat_content: "// Mandala stream shader (one instance for the line stream, one for the fill stream).\n// Every point carries LayerId / CopyId / NestId from the static per-layer copy chains; all layer\n// parameters live in the uP texture buffer (merge_params -> shuffle_params, 54 floats per layer, one per Layer/Animate parameter in page order),\n// so per frame only this shader cooks: outline, nesting, radial placement, every animation, colour.\n// Uniforms auto-declared from the Vectors / Arrays pages:\n//   samplerBuffer uP; float uTime, uEnergy, uGlobalRot, uLoop, uLoopLen, uInkWidth; vec3 uInkColor; int uIsFill.\n// uIsFill: 0 = coloured outline stream, 1 = filled fan stream, 2 = ink contour (the line geometry redrawn\n// thicker in the ink colour, sitting between a layer's fill and its coloured outline).\n// Loop mode (uLoop): every rate is snapped to whole cycles per uLoopLen seconds and every spin to a\n// symmetric position, so frame T equals frame 0 exactly (the wobble walks a circle in noise space).\n#define TAU 6.28318530718\n#define PI  3.14159265359\n#define STRIDE 54\n// palette slots live in uPal (Col1r..Col8b, then the master Seed at 24), so a layer stores a slot number\n#define PALC(s, c) texelFetch(uPal, (clamp(int(s), 1, 8) - 1) * 3 + (c)).r\n#define PAL(s) vec3(PALC(s, 0), PALC(s, 1), PALC(s, 2))\n\nfloat PRM(int layer, int j) { return texelFetch(uP, layer * STRIDE + j).r; }\nvec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }\n\n// snap an LFO rate (rad/s) to a whole number of cycles per loop (at least one)\nfloat qrate(float rate) {\n\tif (uLoop < 0.5 || rate == 0.0) return rate;\n\tfloat k = max(1.0, floor(abs(rate) * uLoopLen / TAU + 0.5));\n\treturn sign(rate) * k * TAU / uLoopLen;\n}\n// snap a spin (deg/s) to whole symmetric steps per loop; minK 0 lets a very slow spin stop instead\nfloat qspin(float dps, float period, float minK) {\n\tif (uLoop < 0.5 || dps == 0.0 || period <= 0.0) return dps;\n\tfloat k = max(minK, floor(abs(dps) * uLoopLen / period + 0.5));\n\treturn sign(dps) * k * period / uLoopLen;\n}\nfloat lfo(float base, float amt, float rate, float t, float ph) { return base + amt * uEnergy * sin(t * qrate(rate) + ph); }\n\nvoid main() {\n\tconst uint id = TDIndex();\n\tif (id >= TDNumElements())\n\t\treturn;\n\n\tvec3 pin = TDIn_P();\n\tint layer = int(TDIn_LayerId());\n\tint ci = int(TDIn_CopyId());\n\tint ni = int(TDIn_NestId());\n\tfloat t = uTime;\n\tfloat lph = float(layer) * 0.7;                 // per-layer phase so LFOs never sync\n\n\tfloat isOn     = PRM(layer, 0);                 // 'active' is a GLSL reserved word\n\tint   shape    = int(PRM(layer, 1));\n\tint   style    = int(PRM(layer, 2));\n\tfloat order    = PRM(layer, 3);\n\tfloat radius   = lfo(PRM(layer, 4), PRM(layer, 37), PRM(layer, 38), t, lph);\n\tint   lobes    = int(PRM(layer, 5));\n\tfloat amp      = lfo(PRM(layer, 6), PRM(layer, 39), PRM(layer, 40), t, lph);\n\tfloat sharp    = max(0.02, lfo(PRM(layer, 7), PRM(layer, 41), PRM(layer, 42), t, lph));\n\tfloat len      = lfo(PRM(layer, 8), PRM(layer, 43), PRM(layer, 44), t, lph);\n\tfloat wid      = lfo(PRM(layer, 9), PRM(layer, 45), PRM(layer, 46), t, lph);\n\tint   count    = max(int(PRM(layer, 12)), 1);\n\tfloat nestgap  = lfo(PRM(layer, 14), PRM(layer, 47), PRM(layer, 48), t, lph);\n\tfloat rotate   = PRM(layer, 15);\n\tfloat speed    = PRM(layer, 16);\n\tfloat pulse    = PRM(layer, 17);\n\tfloat pulserate = PRM(layer, 18);\n\tvec3  colA     = PAL(PRM(layer, 19));\n\tvec3  colB     = PAL(PRM(layer, 20));\n\tvec3  colL     = PAL(max(PRM(layer, 21), 1.0));\n\tfloat useLine  = (PRM(layer, 21) > 0.5) ? 1.0 : 0.0;\n\tint   alternate = int(PRM(layer, 22));\n\tfloat opacity  = clamp(lfo(PRM(layer, 23), PRM(layer, 51), PRM(layer, 52), t, lph), 0.0, 1.0);\n\tfloat lwidth   = max(0.0, lfo(PRM(layer, 24), PRM(layer, 49), PRM(layer, 50), t, lph));\n\tfloat wobble   = PRM(layer, 26);\n\tfloat wobscale = PRM(layer, 27);\n\tfloat seed     = texelFetch(uPal, 24).r + float(layer);\n\tfloat waveAmt  = PRM(layer, 28)
     * uEnergy;\n\tfloat waveRate = PRM(layer, 29);\n\tfloat waveCyc  = max(PRM(layer, 30), 1.0);\n\tfloat colWave  = min(1.0, PRM(layer, 31) * uEnergy);\n\tfloat colRate  = PRM(layer, 32);\n\tfloat tumble   = PRM(layer, 33) * uEnergy;\n\tfloat tumbleRate = PRM(layer, 34);\n\tfloat nestSpin = PRM(layer, 35);\n\tfloat wobRate  = PRM(layer, 36);\n\tfloat ink      = PRM(layer, 25);\n\tfloat gap      = PRM(layer, 11);\n\n\t// visibility: Active plus the Style gate for this stream (line / fill / both)\n\tbool show = (isOn > 0.5) && ((uIsFill == 1) ? (style != 0) : ((uIsFill == 2) ? (ink > 0.0) : (style != 1)));\n\tfloat alpha = show ? opacity : 0.0;\n\n\tbool centre = (uIsFill == 1) && (dot(pin.xy, pin.xy) < 1e-8);   // fan centre of the filled circle\n\tfloat u = atan(pin.y, pin.x);\n\tif (u < 0.0) u += TAU;\n\tfloat cph = float(ci) / float(count);\n\tfloat wphase = cph * TAU * waveCyc + float(ni) * 0.7;\n\tfloat wave = (waveAmt != 0.0) ? waveAmt * sin(t * qrate(waveRate) + wphase) : 0.0;\n\tfloat R = radius * (1.0 + wave);\n\tfloat k = float(max(lobes, 1));\n\tvec2 dir = vec2(cos(u), sin(u));\n\tvec2 q;\n\tvec2 pivot = vec2(0.0);\n\n\tif (shape == 1) {                               // regular polygon, circumradius R\n\t\tfloat kk = max(k, 3.0);\n\t\tfloat sec = TAU / kk;\n\t\tfloat a = mod(u, sec) - sec * 0.5;\n\t\tq = dir * (R * cos(sec * 0.5) / cos(a));\n\t} else if (shape == 2) {                        // star\n\t\tfloat f = fract(u * k / TAU);\n\t\tfloat tri = 1.0 - abs(2.0 * f - 1.0);\n\t\tq = dir * (R * (1.0 - amp * pow(tri, sharp)));\n\t} else if (shape == 3) {                        // rosette\n\t\tfloat c = 0.5 + 0.5 * cos(k * u);\n\t\tq = dir * (R * (1.0 + amp * (2.0 * pow(c, sharp) - 1.0)));\n\t} else if (shape == 4) {                        // scallop\n\t\tfloat b = abs(sin(k * u * 0.5));\n\t\tq = dir * (R * (1.0 + amp * pow(b, sharp)));\n\t} else if (shape == 5) {                        // petal\n\t\tfloat s = 0.5 - 0.5 * cos(u);\n\t\tfloat e = mix(0.7, sharp, s);\n\t\tfloat w = pow(max(sin(PI * s), 0.0), e);\n\t\tfloat side = (u < PI) ? 1.0 : -1.0;\n\t\tq = vec2(R + len * s, side * wid * w);\n\t\tpivot = vec2(R + len * 0.5, 0.0);\n\t} else if (shape == 6) {                        // bar\n\t\tfloat s = 0.5 - 0.5 * cos(u);\n\t\tfloat capLen = 0.12 / max(sharp, 0.1);          // Sharpness > 1 squares the bar ends\n\t\tfloat cap = smoothstep(0.0, capLen, s) * smoothstep(0.0, capLen, 1.0 - s);\n\t\tfloat side = (u < PI) ? 1.0 : -1.0;\n\t\tq = vec2(R + len * s, side * wid * sqrt(cap));\n\t\tpivot = vec2(R + len * 0.5, 0.0);\n\t} else if (shape == 8) {                        // arc: ring segment; Length = share of its slot, Width = half-thickness\n\t\tfloat hspan = len * (PI / float(count));\n\t\tfloat skew = amp * (PI / float(count));     // Amplitude slants the ends: outer edge leads, inner trails\n\t\tfloat s = u / TAU;\n\t\tfloat a = (s < 0.5) ? mix(-hspan, hspan, s * 2.0) + skew : mix(hspan, -hspan, (s - 0.5) * 2.0) - skew;\n\t\tfloat rr = (s < 0.5) ? (R + wid) : (R - wid);\n\t\tq = vec2(cos(a), sin(a)) * rr;\n\t\tpivot = vec2(R, 0.0);\n\t} else if (shape == 7) {                        // dot\n\t\tq = vec2(R + len * cos(u), len * sin(u));\n\t\tpivot = vec2(R, 0.0);\n\t} else {                                        // circle\n\t\tq = dir * R;\n\t}\n\tif (centre) q = pivot;\n\t// Gap: cut the middle of each edge / lobe sector (corners-only frames, dashed rings)\n\tif (gap > 0.0 && !centre) {\n\t\tfloat f = fract(u * k / TAU);\n\t\tif (abs(f - 0.5) < gap * 0.5) alpha = 0.0;\n\t}\n\n\tfloat ns = pow(max(1.0 - nestgap, 0.01), float(ni));\n\tq = pivot + (q - pivot) * ns;\n\n\tif (tumble != 0.0 && shape >= 5) {\n\t\tfloat a = radians(tumble) * sin(t * qrate(tumbleRate) + wphase);\n\t\tq = pivot + rot2(q - pivot, a);\n\t}\n\n\t// symmetric period of the whole ring (deg): what a spin must cover per loop to land on itself\n\tfloat per = 360.0 / float(count);\n\tif (count == 1 && shape >= 1 && shape <= 4) per = 360.0 / k;\n\tbool wavy = (waveAmt != 0.0) || (tumble != 0.0) || (colWave > 0.0);\n\tif (wavy) per = (mod(float(count),
     waveCyc) < 0.5) ? 360.0 / waveCyc : 360.0;\n\tif (alternate == 1) {\n\t\tfloat per2 = (mod(float(count), 2.0) < 0.5) ? 720.0 / float(count) : 360.0;\n\t\tfloat r1 = per / per2, r2 = per2 / per;      // keep the coarser period when one divides the other\n\t\tif (abs(r2 - floor(r2 + 0.5)) < 1e-3) per = per2;\n\t\telse if (abs(r1 - floor(r1 + 0.5)) > 1e-3) per = 360.0;\n\t}\n\tfloat nestPer = (shape == 0) ? 0.0 : ((shape <= 4) ? 360.0 / k : 360.0);\n\n\tfloat spin = radians(rotate + uGlobalRot) + radians(qspin(speed, per, 1.0)) * t;\n\tfloat ang = cph * TAU + mod(radians(qspin(nestSpin, nestPer, 0.0)) * t * float(ni), TAU) + mod(spin, TAU);\n\tq = rot2(q, ang);\n\n\tif (pulse != 0.0)\n\t\tq *= 1.0 + pulse * uEnergy * sin(t * qrate(pulserate) + lph);\n\n\tif (wobble > 0.0 && !centre) {\n\t\tfloat nx, ny;\n\t\tif (uLoop > 0.5) {                          // seamless: walk a circle in the noise's zw plane\n\t\t\tfloat ph = TAU * t / uLoopLen;\n\t\t\tfloat r = wobRate * 0.5;\n\t\t\tvec4 z = vec4(q * wobscale, seed * 3.17 + r * cos(ph), r * sin(ph));\n\t\t\tnx = TDSimplexNoise(z);\n\t\t\tny = TDSimplexNoise(z + vec4(31.7, 17.3, 5.1, 2.3));\n\t\t} else {\n\t\t\tvec3 z = vec3(q * wobscale, seed * 3.17 + t * wobRate);\n\t\t\tnx = TDSimplexNoise(z);\n\t\t\tny = TDSimplexNoise(z + vec3(31.7, 17.3, 5.1));\n\t\t}\n\t\tq += vec2(nx, ny) * wobble;\n\t}\n\n\t// hidden streams park far behind every layer so they can neither show nor occlude\n\tfloat z = show ? order * 0.01 : -5.0;         // 0.01 per Draw Order step; fills sit 0.004 and ink 0.002 behind their layer's lines (geo tz)\n\tP[id] = vec3(q, z);\n\n\tfloat sel = 0.0;\n\tif (alternate == 1) sel = float(ci & 1);\n\telse if (alternate == 2) sel = float(ni & 1);\n\tif (colWave > 0.0) {\n\t\tfloat w = 0.5 + 0.5 * sin(t * qrate(colRate) + wphase);\n\t\tsel = mix(sel, w, colWave);\n\t}\n\tvec3 col = mix(colA, colB, sel);\n\tif (uIsFill == 0 && useLine > 0.5) col = colL;\n\tif (uIsFill == 2) {\n\t\tcol = uInkColor;\n\t\tlwidth = lwidth * ink * uInkWidth;\n\t}\n\tColor[id] = vec4(col * alpha, alpha);\n\tLineWidth[id] = lwidth;\n}\n"
   dat_content_format: text
@@ -2628,6 +2724,9 @@ operators:
       Nestgaprate: 0.7
       Linewidthanim: 0.3
       Linewidthrate: 0.8
+    Wiring:
+      $t: wiring
+      Layerid: 26
   position: [0, -5200]
 - name: lotus_seat_scallop
   type: baseCOMP
@@ -2657,6 +2756,9 @@ operators:
       Amplituderate: 1.8
       Sharpnessanim: 0.6
       Sharpnessrate: 1.3
+    Wiring:
+      $t: wiring
+      Layerid: 19
   position: [0, -3800]
 - name: glsl_scroll_compute
   type: textDAT
@@ -2693,6 +2795,9 @@ operators:
       Nestgaprate: 0.7
       Linewidthanim: 0.4
       Linewidthrate: 0.9
+    Wiring:
+      $t: wiring
+      Layerid: 25
   position: [0, -5000]
 annotations:
 - name: annotate1

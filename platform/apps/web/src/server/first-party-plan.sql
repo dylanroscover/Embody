@@ -192,7 +192,7 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'mandelbulb-march'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
-SELECT 'prismatic-strata' AS slug, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21' AS repo_sha, 34394 AS repo_size,
+SELECT 'prismatic-strata' AS slug, '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049' AS repo_sha, 34347 AS repo_size,
   s.id AS specimen_id, u.handle AS author_handle,
   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
@@ -200,7 +200,7 @@ SELECT 'prismatic-strata' AS slug, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4c
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
   s.thumbnail_key AS live_thumbnail_key, 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
-     AND v.tdn_sha256 = '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+     AND v.tdn_sha256 = '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
       s.title IS NOT 'Prismatic Strata'
    OR s.description IS NOT 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.'
@@ -213,7 +213,7 @@ SELECT 'prismatic-strata' AS slug, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4c
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'strata', 'displace', 'chromatic', 'streaks', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -223,7 +223,7 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'prismatic-strata'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
-SELECT 'mandala' AS slug, 'eff42f380ad82389d7ae30c9646eec31a08fd65bc7022033d3b9789ed7753e60' AS repo_sha, 86573 AS repo_size,
+SELECT 'mandala' AS slug, '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5' AS repo_sha, 88254 AS repo_size,
   s.id AS specimen_id, u.handle AS author_handle,
   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
@@ -231,7 +231,7 @@ SELECT 'mandala' AS slug, 'eff42f380ad82389d7ae30c9646eec31a08fd65bc7022033d3b97
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
   s.thumbnail_key AS live_thumbnail_key, 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
-     AND v.tdn_sha256 = 'eff42f380ad82389d7ae30c9646eec31a08fd65bc7022033d3b9789ed7753e60' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+     AND v.tdn_sha256 = '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
       s.title IS NOT 'Serenity and Beauty'
    OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
@@ -244,7 +244,7 @@ SELECT 'mandala' AS slug, 'eff42f380ad82389d7ae30c9646eec31a08fd65bc7022033d3b97
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'eff42f380ad82389d7ae30c9646eec31a08fd65bc7022033d3b9789ed7753e60'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

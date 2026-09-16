@@ -26,9 +26,9 @@ mandala repeats exactly every Loop Length seconds.
   animation and the per-point `Color` / `LineWidth` for all 32 layers at once. Per frame only those three POPs,
   the render and the finish cook: about 1 ms for 40,000 points.
 - **Parameters travel in a texture buffer, not as uniforms.** Every layer owns one Parameter
-  CHOP that emits its Layer + Animate pages as 53 channels in page order (menus as indices);
-  `merge_params` joins them in layer order and `shuffle_params` swaps channels for samples so
-  the shader reads `texelFetch(uP, layer * 53 + j)`. The palette and master seed ride the same
+  CHOP that emits its Layer + Animate + Wiring pages as 54 channels in page order (menus as
+  indices); `merge_params` joins them in layer order and `shuffle_params` swaps channels for
+  samples so the shader reads `texelFetch(uP, layer * 54 + j)`. The palette and master seed ride the same
   way (`params_palette` -> `shuffle_palette` -> `uPal`), so a layer stores a palette slot, not a
   colour. A per-layer GLSL POP with 28 expression uniforms costs 0.4 ms per cook (TD
   re-evaluates every expression each cook); this costs nothing, and the Parameter CHOP is
@@ -64,10 +64,10 @@ mandala repeats exactly every Loop Length seconds.
 
 ## How it works
 1. Inside each layer COMP: `circle_line` (closed line strip, Detail points) and
-   `circle_fill` (surface fan) -> `attr_line` / `attr_fill` (int `LayerId` = this layer's
-   index among the merge inputs, `IsFill`) -> `copy_nest` (Nest copies, `NestId`) ->
+   `circle_fill` (surface fan) -> `attr_line` / `attr_fill` (int `LayerId` read from the
+   layer's Layer Id parameter, its index among the merge inputs; `IsFill`) -> `copy_nest` (Nest copies, `NestId`) ->
    `copy_radial` (Count copies, `CopyId`) -> `out_line` / `out_fill`. `params` (Parameter
-   CHOP on the layer's custom pages, 53 channels) -> `out_params`.
+   CHOP on the layer's custom pages, 54 channels) -> `out_params`.
 2. `merge_line` / `merge_fill` (Merge POP, 32 inputs) -> `glsl_line` / `glsl_outline` /
    `glsl_fill` (GLSL POP, one shared compute DAT, `uP` texture buffer from `shuffle_params`,
    `uPal` from `shuffle_palette`, uniforms uTime /
@@ -125,8 +125,9 @@ mandala repeats exactly every Loop Length seconds.
   two knobs to tame or excite the whole piece. `Loop` + `Loop Length` make it seamless for
   renders (`Time Mode` = manual with `Manual Time` gives frame-accurate offline stepping).
 - To add an element, clone `field_disc` (a new Base COMP with Clone = `field_disc`), wire its
-  three outputs into `merge_line`, `merge_fill` and `merge_params` at the same input index and
-  set its Draw Order; never copy a layer, or the copy stops following the master.
+  three outputs into `merge_line`, `merge_fill` and `merge_params` at the same input index, set
+  its Layer Id (Wiring page) to that index and its Draw Order; never copy a layer, or the copy
+  stops following the master.
 - Style = Both draws the outline in Line Color over the fill; Line Color 0 keeps the fill
   colours for the outline. `Ink` adds the dark contour behind an element; `Gap` cuts the
   middle of every edge or lobe (0.6 on a square leaves four corner brackets).
