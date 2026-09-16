@@ -128,18 +128,18 @@
   {
     "slug": "mandala",
     "kind": "tdxn",
-    "key": "5c07aeacd9f8034b7094e7ac01c75bebe80187a28ae88205f763ab04374157a6",
-    "sha256": "5c07aeacd9f8034b7094e7ac01c75bebe80187a28ae88205f763ab04374157a6",
-    "size": 318796,
+    "key": "ed27076f8ca81cde6da5c8d011ca2238426c15ee363d1ffc961b9f28dc9c6302",
+    "sha256": "ed27076f8ca81cde6da5c8d011ca2238426c15ee363d1ffc961b9f28dc9c6302",
+    "size": 320366,
     "content_type": "application/json",
     "path": "specimens/generative/mandala.tdxn"
   },
   {
     "slug": "mandala",
     "kind": "thumbnail",
-    "key": "thumbnails/811918e8427c34cd3444dc7091f58f8db153009af08f0b2b9f213b88fe8a0973",
-    "sha256": "811918e8427c34cd3444dc7091f58f8db153009af08f0b2b9f213b88fe8a0973",
-    "size": 413167,
+    "key": "thumbnails/c65afda0255a2d288132e729cbba7b0b9d94bd9e5acd5a768efc8910969af568",
+    "sha256": "c65afda0255a2d288132e729cbba7b0b9d94bd9e5acd5a768efc8910969af568",
+    "size": 413265,
     "content_type": "image/jpeg",
     "path": "specimens/generative/mandala.jpg"
   }

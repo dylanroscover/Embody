@@ -48,7 +48,9 @@ mandala repeats exactly every Loop Length seconds.
   blend, no depth write) at a depth just above the field, ripples and ink cross (Draw Order 2 and below) and below every other element.
   Its radial coordinate lives on a circle in the noise's xy plane, so sliding it with time makes
   every lobe grow outward from the centre, never inward, with no seam and an exact loop (whole
-  pattern periods per loop).
+  pattern periods per loop). A second field walks a circle in noise space and bends the domain
+  warp, so the lobes writhe and swell in place as they grow instead of sliding like a stamp
+  (Organic Morph, Morph Rate).
 - **Exact loops from free-running rates.** In Loop mode every LFO rate is snapped to whole
   cycles per loop, every spin to a whole number of symmetric ring steps (720/Count when
   colours alternate, 360/Cycles under a colour wave), and the hand-drawn wobble walks a
@@ -75,6 +77,7 @@ mandala repeats exactly every Loop Length seconds.
    **Wear** (Grunge, Grunge Base, Grunge Scale, Coverage, Patch Scale, Fade, Paper, Seed,
    Vignette, Grain, Sparkle Density / Clumping / Shimmer) and **Scroll** (Scrollwork, Scale,
    Detail, Warp, Line Density, Squiggle Lines, Symmetry, Inner / Outer Radius, Growth Stretch, Growth Speed,
+  Organic Morph, Morph Rate,
    Fill Color A / B). Layers reference the palette by slot number, so recolouring a slot restyles every
    layer that uses it.
 

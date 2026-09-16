@@ -388,13 +388,12 @@ operators:
     - name: Scrollwarp
       style: Float
       label: Warp
-      default: 0.75
+      default: 0.7
       max: 10.0
       clampMin: true
       clampMax: true
       normMax: 2.0
       help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
-      value: 0.6
     - name: Scrolldensity
       style: Float
       label: Line Density
@@ -483,6 +482,24 @@ operators:
       normMin: 1.0
       normMax: 8.0
       help: Palette slot for the second lobe family (teal by default, lifted toward gold in the shader).
+    - name: Scrollmorph
+      style: Float
+      label: Organic Morph
+      default: 0.8
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: How much the ornament writhes and swells in place while it grows (a second noise field bends the domain warp). 0 = rigid stamp sliding outward.
+    - name: Scrollmorphrate
+      style: Float
+      label: Morph Rate
+      default: 0.3
+      max: 5.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Speed of the in-place morph in radians per second (snapped to whole cycles per loop in Loop mode).
   flags:
   - viewer
   position: [1600, -400]
