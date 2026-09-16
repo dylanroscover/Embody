@@ -586,7 +586,6 @@ custom_pars:
     label: Manual Time
     normMax: 60.0
     help: Animation time in seconds when Time Mode is manual.
-    value: 19.9833333333
   - name: Saturation
     style: Float
     default: 0.92
@@ -659,6 +658,15 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: Strength of the paper-fiber texture inside the worn patches. 0 = clean vector look.
+  - name: Grungebase
+    style: Float
+    label: Grunge Base
+    default: 0.14
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 0.5
+    help: Uniform paper-fibre texture over the WHOLE image, mandala included (the patchy Grunge sits on top of it). Keep it low.
   - name: Grungescale
     style: Float
     label: Grunge Scale
@@ -725,7 +733,7 @@ custom_pars:
     style: Float
     label: Sparkle Density
     startSection: true
-    default: 1.0e-05
+    default: 3.0e-05
     max: 0.05
     clampMin: true
     clampMax: true
@@ -1224,6 +1232,8 @@ operators:
       valuex: =parent.Mandala.par.Looplength / max(parent.Mandala.par.Speedmult, 1e-6)
     - name: uSeed
       valuex: =parent.Mandala.par.Seed
+    - name: uGrungeBase
+      valuex: =parent.Mandala.par.Grungebase
   position: [3400, -1400]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -6490,21 +6500,20 @@ operators:
       Shape: rosette
       Order: 2
       Radius: 0.86
-      Amplitude: 0.012
+      Amplitude: 0.009
       Detail: 256
       Nest: 16
       Nestgap: 0.03
-      Speed: 0.2
+      Speed: 0.25
       Alternate: nest
       Opacity: 0.3
       Linewidth: 0.45
-      Wobble: 0.0008
+      Wobble: 0.0005
       Wobblescale: 4
     Animate:
       $t: animate
-      Nestspin: 0.1
       Wobblerate: 0.1
-      Amplitudeanim: 0.004
+      Amplitudeanim: 0.003
       Amplituderate: 0.6
       Nestgapanim: 0.004
       Nestgaprate: 0.35
@@ -6994,7 +7003,7 @@ operators:
   - viewer
   position: [3400, -1520]
   dock: glsl_wear
-  dat_content: "// Worn-thangka finish: patchy fade toward paper, paper-fibre grunge inside the patches,\n// a soft vignette, animated grain, and sparse shimmering specks of light.\n// Inputs: 0 = image, 1 = fiber noise, 2 = patch noise.\n// Uniform values come from the Vectors page (GLSL TOP uniforms must be declared here).\n\nuniform float uGrunge;\nuniform float uFade;\nuniform vec3 uPaper;\nuniform float uCoverage;\nuniform float uVignette;\nuniform float uGrain;\nuniform float uTime;\nuniform float uSparkle;\nuniform float uSparkleClump;\nuniform float uSparkleRate;\nuniform float uLoop;\nuniform float uLoopLen;\nuniform float uSeed;\n\nout vec4 fragColor;\n\n#define TAU 6.28318530718\n\nfloat hash21(vec2 p) {\n\tp = fract(p * vec2(123.34, 456.21));\n\tp += dot(p, p + 45.32);\n\treturn fract(p.x * p.y);\n}\n\nvoid main() {\n\tvec2 uv = vUV.st;\n\tvec4 img = texture(sTD2DInputs[0], uv);\n\tfloat fiber = texture(sTD2DInputs[1], uv).r;\n\tfloat patchNoise = texture(sTD2DInputs[2], uv).r;\n\n\t// patchy coverage: threshold the low-frequency noise softly ('patch' is a GLSL keyword)\n\tfloat edge = 0.24;\n\tfloat m = smoothstep(1.0 - uCoverage - edge, 1.0 - uCoverage + edge, patchNoise);\n\tfloat wear = m * (0.35 + 0.65 * fiber);\n\n\tvec3 c = img.rgb;\n\tc = mix(c, uPaper, clamp(uFade * wear, 0.0, 1.0));\n\tc *= 1.0 + uGrunge * m * (fiber - 0.5) * 1.3;\n\n\tvec2 d = uv - 0.5;\n\tfloat r = length(d) * 1.41421356;\n\tc *= 1.0 - uVignette * smoothstep(0.5, 1.05, r);\n\n\tfloat g = fract(sin(dot(uv * 1417.0 + vec2(uTime * 13.7, uTime * 7.1), vec2(12.9898, 78.233))) * 43758.5453);\n\tc += (g - 0.5) * uGrain;\n\n\t// sparkles: fixed seeded positions on a 3px lattice, a few hot regions (clumping), each speck twinkling\n\tif (uSparkle > 0.0) {\n\t\tvec2 px = uv * uTD2DInfos[0].res.zw;\n\t\tvec2 cell = floor(px / 3.0);\n\t\tvec2 coarse = floor(px / 64.0);\n\t\tfloat hot = pow(hash21(coarse + uSeed * 0.37), 4.0) * 8.0;\n\t\tfloat dens = uSparkle * 9.0 * mix(1.0, hot, uSparkleClump);\n\t\tfloat h = hash21(cell + uSeed * 3.1);\n\t\tif (h < dens) {\n\t\t\tvec2 jitter = (vec2(hash21(cell + 7.7), hash21(cell + 9.1)) - 0.5) * 1.5;\n\t\t\tvec2 centre = (cell + 0.5 + jitter) * 3.0;\n\t\t\tfloat dist = length(px - centre);\n\t\t\tfloat rate = uSparkleRate;\n\t\t\tif (uLoop > 0.5 && rate > 0.0)\n\t\t\t\trate = max(1.0, floor(rate * uLoopLen / TAU + 0.5)) * TAU / uLoopLen;\n\t\t\tfloat tw = 0.55 + 0.45 * sin(uTime * rate + hash21(cell + 3.3) * TAU);\n\t\t\tfloat s = smoothstep(1.7, 0.2, dist) * tw;\n\t\t\tc += vec3(1.0, 0.97, 0.88) * s * 1.3;\n\t\t}\n\t}\n\n\tfragColor = TDOutputSwizzle(vec4(c, 1.0));\n}\n"
+  dat_content: "// Worn-thangka finish: patchy fade toward paper, paper-fibre grunge inside the patches,\n// a soft vignette, animated grain, and sparse shimmering specks of light.\n// Inputs: 0 = image, 1 = fiber noise, 2 = patch noise.\n// Uniform values come from the Vectors page (GLSL TOP uniforms must be declared here).\n\nuniform float uGrunge;\nuniform float uFade;\nuniform vec3 uPaper;\nuniform float uCoverage;\nuniform float uVignette;\nuniform float uGrain;\nuniform float uTime;\nuniform float uSparkle;\nuniform float uSparkleClump;\nuniform float uSparkleRate;\nuniform float uLoop;\nuniform float uLoopLen;\nuniform float uSeed;\nuniform float uGrungeBase;\n\nout vec4 fragColor;\n\n#define TAU 6.28318530718\n\nfloat hash21(vec2 p) {\n\tp = fract(p * vec2(123.34, 456.21));\n\tp += dot(p, p + 45.32);\n\treturn fract(p.x * p.y);\n}\n\nvoid main() {\n\tvec2 uv = vUV.st;\n\tvec4 img = texture(sTD2DInputs[0], uv);\n\tfloat fiber = texture(sTD2DInputs[1], uv).r;\n\tfloat patchNoise = texture(sTD2DInputs[2], uv).r;\n\n\t// patchy coverage: threshold the low-frequency noise softly ('patch' is a GLSL keyword)\n\tfloat edge = 0.24;\n\tfloat m = smoothstep(1.0 - uCoverage - edge, 1.0 - uCoverage + edge, patchNoise);\n\tfloat wear = m * (0.35 + 0.65 * fiber);\n\n\tvec3 c = img.rgb;\n\tc = mix(c, uPaper, clamp(uFade * wear, 0.0, 1.0));\n\tc *= 1.0 + uGrunge * m * (fiber - 0.5) * 1.3;\n\tc *= 1.0 + uGrungeBase * (fiber - 0.5) * 1.3;       // faint fibre over everything, mandala included\n\n\tvec2 d = uv - 0.5;\n\tfloat r = length(d) * 1.41421356;\n\tc *= 1.0 - uVignette * smoothstep(0.5, 1.05, r);\n\n\tfloat g = fract(sin(dot(uv * 1417.0 + vec2(uTime * 13.7, uTime * 7.1), vec2(12.9898, 78.233))) * 43758.5453);\n\tc += (g - 0.5) * uGrain;\n\n\t// sparkles: specks on a 3px lattice that re-roll their spot every shimmer cycle (each cell has its\n\t// own phase, so they come and go at different moments), fading in and out so nothing pops; the\n\t// hot regions that clump them drift every few cycles. In Loop mode the cycle count is a whole\n\t// number per loop, so the same specks return at the seam.\n\tif (uSparkle > 0.0) {\n\t\tvec2 px = uv * uTD2DInfos[0].res.zw;\n\t\tvec2 cell = floor(px / 3.0);\n\t\tvec2 coarse = floor(px / 64.0);\n\t\tfloat rate = uSparkleRate;\n\t\tfloat cycles = 1.0e9;\n\t\tif (uLoop > 0.5 && rate > 0.0) {\n\t\t\tcycles = max(1.0, floor(rate * uLoopLen / TAU + 0.5));\n\t\t\trate = cycles * TAU / uLoopLen;\n\t\t}\n\t\tfloat phase = hash21(cell + 3.3 + uSeed);\n\t\tfloat tcyc = uTime * rate / TAU + phase;\n\t\tfloat e = floor(tcyc);\n\t\tif (uLoop > 0.5) e = mod(e, cycles);\n\t\tfloat hot = pow(hash21(coarse + uSeed * 0.37 + floor(e / 3.0) * 11.0), 4.0) * 8.0;\n\t\tfloat dens = uSparkle * 9.0 * mix(1.0, hot, uSparkleClump);\n\t\tfloat h = hash21(cell + uSeed * 3.1 + e * 17.0);\n\t\tif (h < dens) {\n\t\t\tvec2 jitter = (vec2(hash21(cell + 7.7 + e), hash21(cell + 9.1 + e)) - 0.5) * 1.5;\n\t\t\tvec2 centre = (cell + 0.5 + jitter) * 3.0;\n\t\t\tfloat dist = length(px - centre);\n\t\t\tfloat size = 1.3 + 1.2 * hash21(cell + 5.5 + e);\n\t\t\tfloat bright = 0.8 + 0.8 * hash21(cell + 2.2 + e);\n\t\t\tfloat tw = 0.5 - 0.5 * cos(TAU * fract(tcyc));\n\t\t\tfloat s = smoothstep(size, 0.15, dist) * tw;\n\t\t\t// composited OVER the colour (not added) so specks read on the mandala's reds and greens too\n\t\t\tc = mix(c, vec3(1.0, 0.97, 0.88) * bright, clamp(s, 0.0, 1.0));\n\t\t}\n\t}\n\n\tfragColor = TDOutputSwizzle(vec4(c, 1.0));\n}\n"
   dat_content_format: text
 - name: treasure_petals
   type: baseCOMP

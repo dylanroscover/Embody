@@ -223,15 +223,15 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'prismatic-strata'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
-SELECT 'mandala' AS slug, 'c7e807322f5d94a31a27358ef4b94beb9229d9263aa672e6410310bbb187308e' AS repo_sha, 280674 AS repo_size,
+SELECT 'mandala' AS slug, '0f6dc25638c06ce9bce250cb55049f4b973ea5d7680f1a0840d4c1325b0a10bd' AS repo_sha, 281840 AS repo_size,
   s.id AS specimen_id, u.handle AS author_handle,
   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
-  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/5e8463ab78b5239e95f8e13cb841de8d14b758506bd44aade97f760e8530ad86' AS repo_thumbnail_key,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/2a7658dd6e020569da6a082341cedb21e7e1e910848a4b4c91c646e7f542f519' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
-     AND v.tdn_sha256 = 'c7e807322f5d94a31a27358ef4b94beb9229d9263aa672e6410310bbb187308e' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+     AND v.tdn_sha256 = '0f6dc25638c06ce9bce250cb55049f4b973ea5d7680f1a0840d4c1325b0a10bd' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
       s.title IS NOT 'Thangka Mandala'
    OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 29 parameterised layers (rippling field lines, petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
@@ -243,8 +243,8 @@ SELECT 'mandala' AS slug, 'c7e807322f5d94a31a27358ef4b94beb9229d9263aa672e641031
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
-   OR s.thumbnail_key IS NOT 'thumbnails/5e8463ab78b5239e95f8e13cb841de8d14b758506bd44aade97f760e8530ad86'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c7e807322f5d94a31a27358ef4b94beb9229d9263aa672e6410310bbb187308e'
+   OR s.thumbnail_key IS NOT 'thumbnails/2a7658dd6e020569da6a082341cedb21e7e1e910848a4b4c91c646e7f542f519'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '0f6dc25638c06ce9bce250cb55049f4b973ea5d7680f1a0840d4c1325b0a10bd'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

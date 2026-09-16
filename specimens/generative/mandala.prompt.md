@@ -1,7 +1,7 @@
 # Thangka Mandala
 
 A Tibetan-thangka mandala drawn entirely from POP geometry: a green field disc, veined with
-rippling nested rosette lines that breathe and drift at staggered rates, inside a
+concentric rippling rosette lines that breathe and drift together, inside a
 four-colour ring of petals, gold rings, bead and tick rings, lace and garland scrollwork,
 eight vase treasures, the palace square with nested colour bands behind one heavy ink wall
 and gold corner brackets, T-gates and corner medallions, a dotted lotus seat, two counter-rotating lotus rings, and a rosette, star and
@@ -62,8 +62,8 @@ mandala repeats exactly every Loop Length seconds.
    Width, Ink Width, Ink Color, Loop, Loop Length, Fill Opacity, Time Mode, Manual Time,
    Saturation, Background),
    **Palette** (8 slots: vermilion, saffron, gold, teal, cream, indigo, rose, ink) and
-   **Wear** (Grunge, Grunge Scale, Coverage, Patch Scale, Fade, Paper, Seed, Vignette,
-   Grain). Layers reference the palette by slot number, so recolouring a slot restyles every
+   **Wear** (Grunge, Grunge Base, Grunge Scale, Coverage, Patch Scale, Fade, Paper, Seed,
+   Vignette, Grain, Sparkle Density / Clumping / Shimmer). Layers reference the palette by slot number, so recolouring a slot restyles every
    layer that uses it.
 
 ## Recreate it
@@ -83,7 +83,8 @@ mandala repeats exactly every Loop Length seconds.
 > finish with global saturation and a GLSL wear pass that fades patchy regions toward paper,
 > adds paper-fibre grunge only there, a vignette and grain. Add a Loop mode that snaps every
 > rate and spin to whole cycles per loop. Compose 29 layers: field disc, a family of thin rippling nested rosette lines (16 nested
-> copies alternating cream and gold, a slow per-ring Nest Spin, breathing amplitude and spacing;
+> copies alternating cream and gold, one shared phase so they never cross, breathing amplitude
+> and spacing;
 > a second family is included switched off), dark framing ring, four-colour outer
 > petal ring, gold rings, lace border, eight vase treasures, bead and tick rings, palace
 > square with nested bands, a heavy ink wall and gold corner brackets (Gap cuts the middle
@@ -100,5 +101,6 @@ mandala repeats exactly every Loop Length seconds.
   colours for the outline. `Ink` adds the dark contour behind an element; `Gap` cuts the
   middle of every edge or lobe (0.6 on a square leaves four corner brackets).
 - The wear is patchy on purpose: Coverage picks how much of the image is worn, Patch Scale
-  how big the patches are, Fade and Grunge how strongly.
+  how big the patches are, Fade and Grunge how strongly; Grunge Base is the faint fibre over
+  everything. Specks re-roll their spots every shimmer cycle and fade in and out.
 - Cost at 1080p: about 1 ms CPU + 0.5 ms GPU per frame; 8x AA is the largest share.
