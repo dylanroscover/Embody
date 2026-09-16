@@ -24,7 +24,7 @@ export const prerender = false;
 // every subsequent fetch -- the page NEVER loads the whole set. FTS handles
 // search at thousands of rows; keyset (cursor) pagination keeps each page O(24).
 const PAGE_SIZE = 24;
-const DEFAULT_SORT = "az" as const;
+const DEFAULT_SORT = "newest" as const;
 
 // SSR the FIRST page server-side (fast paint + SEO). The search box, facet
 // filters, sort, and infinite scroll then talk to /api/specimens and take over
@@ -106,6 +106,8 @@ try {
       (!activeCategory || s.category === activeCategory) &&
       (!activeAuthor || s.author_handle === activeAuthor)
   );
+  // Fixtures carry no timestamp, so the newest default is unorderable here --
+  // A-Z keeps this degraded page deterministic instead of arbitrary.
   firstPage = pool.sort((a, b) => a.name.localeCompare(b.name)).slice(0, PAGE_SIZE);
   totalCount = pool.length;
   nextCursor = null;
@@ -236,18 +238,18 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
           <span class="sort-control__label mono" id="ddlbl-sort">sort</span>
           <div class="dd" data-dd>
             <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-sort dd-val-sort">
-              <span class="dd__val" id="dd-val-sort">A-Z</span>
+              <span class="dd__val" id="dd-val-sort">newest</span>
               <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
             </button>
             <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-sort" hidden>
-              <li class="dd__opt" role="option" data-value="az" aria-selected="true">A-Z</li>
-              <li class="dd__opt" role="option" data-value="newest" aria-selected="false">newest</li>
+              <li class="dd__opt" role="option" data-value="newest" aria-selected="true">newest</li>
+              <li class="dd__opt" role="option" data-value="az" aria-selected="false">A-Z</li>
               <li class="dd__opt" role="option" data-value="liked" aria-selected="false">most liked 👍</li>
               <li class="dd__opt" role="option" data-value="copied" aria-selected="false">most copied</li>
             </ul>
             <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-sort>
-              <option value="az" selected>A-Z</option>
-              <option value="newest">newest</option>
+              <option value="newest" selected>newest</option>
+              <option value="az">A-Z</option>
               <option value="liked">most liked 👍</option>
               <option value="copied">most copied</option>
             </select>
@@ -827,7 +829,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     // so one collection history entry, not one per keystroke). This is the fix for
     // "I lost my place": browser Back, the specimen "Collection" breadcrumb, a
     // shared link, and a cold reload all reconstruct the same set. pageSize/cursor
-    // stay OUT of the URL (they're transport detail); the default A-Z sort is
+    // stay OUT of the URL (they're transport detail); the default newest sort is
     // omitted so a clean view stays a clean /collection.
     function reflectUrl(): void {
       if (usingFixtures) return; // no live API to reconstruct from -> keep URL clean
@@ -837,7 +839,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       if (categorySelect?.value) params.set("category", categorySelect.value);
       if (levelSelect?.value) params.set("level", levelSelect.value);
       if (authorSelect?.value) params.set("author", authorSelect.value);
-      if (sortSelect?.value && sortSelect.value !== "az") params.set("sort", sortSelect.value);
+      if (sortSelect?.value && sortSelect.value !== "newest") params.set("sort", sortSelect.value);
       const qs = params.toString();
       try { history.replaceState(history.state, "", qs ? `/collection?${qs}` : "/collection"); } catch {}
     }
@@ -849,7 +851,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       if (!native) return;
       const has = Array.from(native.options).some((o) => o.value === value);
       // An unknown value (e.g. ?sort=bogus) resolves to the control's real default
-      // so its label/aria never desync (sort has no empty option, so fallback "az").
+      // so its label/aria never desync (sort has no empty option, so fallback "newest").
       native.value = has ? value : fallback;
       const dd = native.closest(".dd");
       if (!dd) return;
@@ -863,7 +865,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
     // On load, make the controls + grid reflect the URL (a shared link, a cold
     // browser-Back, or the specimen breadcrumb all arrive with ?q/category/...).
-    // SSR already painted the category/author-filtered A-Z first page, so we only
+    // SSR already painted the category/author-filtered newest-first page, so we only
     // re-query when the URL carries state SSR can't apply (q, level, non-default
     // sort) -- category/author alone need no refetch, so the common path (a bare
     // category link) shows no flash.
@@ -879,13 +881,13 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       if (usingFixtures) return;
       if (searchInput) searchInput.value = params.get("q") ?? "";
       setControl(levelSelect, params.get("level") ?? "");
-      setControl(sortSelect, params.get("sort") ?? "az", "az");
+      setControl(sortSelect, params.get("sort") ?? "newest", "newest");
       // Re-query only when the RESOLVED controls carry state SSR didn't paint
       // (q / level / non-default sort) -- category + author are already SSR-applied,
       // so a bare category link needs no refetch (no flash).
       const sortVal = sortSelect?.value ?? "";
       const needsRequery =
-        Boolean(searchInput?.value.trim()) || Boolean(levelSelect?.value) || (Boolean(sortVal) && sortVal !== "az");
+        Boolean(searchInput?.value.trim()) || Boolean(levelSelect?.value) || (Boolean(sortVal) && sortVal !== "newest");
       if (needsRequery) void runQuery();
     }
 
