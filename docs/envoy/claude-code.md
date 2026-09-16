@@ -47,6 +47,7 @@ Rules are loaded into every Claude Code conversation automatically. They provide
 | `td-connectivity.md` | Session-start connectivity checks, the bridge reconciler and Envoy liveness watchdog, and manual recovery steps |
 | `multi-session.md` | The session-start presence check, `_peers` advisories and gate hard stops, and claiming a scope before big or destructive work |
 | `worktree-td-safety.md` | When to isolate multi-step edits in a git worktree instead of the live tree, and the discipline for landing that diff back |
+| `tdxn-economy.md` | Fewer operators, parameters and lines in every network that ends up in a `.tdxn`: measure the file by bucket, read parameters with a Parameter CHOP, share identical GLSL, let defaults carry the common case, verify a cut with a frame diff |
 
 ## Skills (On-Demand)
 

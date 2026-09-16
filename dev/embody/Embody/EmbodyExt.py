@@ -65,6 +65,7 @@ class EmbodyExt:
         'text_rule_td_connectivity':         'td-connectivity',
         'text_rule_multi_session':           'multi-session',
         'text_rule_worktree_td_safety':      'worktree-td-safety',
+        'text_rule_tdxn_economy':            'tdxn-economy',
     }
 
     # Skill DAT name -> slug (Claude Code only)
