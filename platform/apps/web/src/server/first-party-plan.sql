@@ -229,12 +229,12 @@ SELECT 'mandala' AS slug, 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f260
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
   s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
-  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/6be8625c751f046b3c599271c6fc6d34a57fe3fcdb5ef78ee54f2b1846bb69f3' AS repo_thumbnail_key,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
      AND v.tdn_sha256 = 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
-      s.title IS NOT 'Thangka Mandala'
-   OR s.description IS NOT 'A Tibetan-thangka mandala drawn from POP geometry: 32 parameterised layers (rippling field lines, petal rings, gold rings, a slowly turning candy-cane ring of palette blocks, beads, lace, vase treasures, a bold ink cross beneath the palace reaching out to the four vases, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, with minute filled orange and green cloud scrolls (a domain-warped noise GLSL TOP on a quad inside the render) growing outward behind them and over the cross, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.'
+      s.title IS NOT 'Serenity and Beauty'
+   OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
    OR s.category IS NOT 'generative'
    OR s.level IS NOT 'advanced'
    OR s.requires IS NOT '[]'
@@ -243,7 +243,7 @@ SELECT 'mandala' AS slug, 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f260
    OR s.license IS NOT 'CC-BY-4.0'
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
-   OR s.thumbnail_key IS NOT 'thumbnails/6be8625c751f046b3c599271c6fc6d34a57fe3fcdb5ef78ee54f2b1846bb69f3'
+   OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8

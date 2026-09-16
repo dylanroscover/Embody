@@ -1,4 +1,4 @@
-# Thangka Mandala
+# Serenity and Beauty
 
 A Tibetan-thangka mandala drawn entirely from POP geometry: a green field disc, veined with
 concentric rippling rosette lines that breathe and drift together, inside a

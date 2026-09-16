@@ -137,9 +137,9 @@
   {
     "slug": "mandala",
     "kind": "thumbnail",
-    "key": "thumbnails/6be8625c751f046b3c599271c6fc6d34a57fe3fcdb5ef78ee54f2b1846bb69f3",
-    "sha256": "6be8625c751f046b3c599271c6fc6d34a57fe3fcdb5ef78ee54f2b1846bb69f3",
-    "size": 441955,
+    "key": "thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463",
+    "sha256": "b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463",
+    "size": 455765,
     "content_type": "image/jpeg",
     "path": "specimens/generative/mandala.jpg"
   }
