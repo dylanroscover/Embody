@@ -263,7 +263,7 @@ export async function listSpecimensForCollection(
   options: CollectionListOptions = {}
 ): Promise<ListResponse> {
   const pageSize = normalizePageSize(options.pageSize);
-  const sort = normalizeCollectionSort(options.sort ?? "az");
+  const sort = normalizeCollectionSort(options.sort ?? "newest");
   const plan = COLLECTION_SORT_PLAN[sort];
 
   // Public + non-banned author. A banned account's specimens drop out of every
@@ -1489,8 +1489,8 @@ export function normalizeSpecimenSort(value: string | null): SpecimenSort {
 }
 
 export function normalizeCollectionSort(value: string | null | undefined): CollectionSort {
-  if (value === "newest" || value === "copied" || value === "liked") return value;
-  return "az";
+  if (value === "az" || value === "copied" || value === "liked") return value;
+  return "newest";
 }
 
 // Keyset cursor (de)serialization. The cursor is an opaque base64url token of a

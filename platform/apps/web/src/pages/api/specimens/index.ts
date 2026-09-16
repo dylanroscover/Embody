@@ -38,7 +38,7 @@ export const prerender = false;
 //   level starter | intermediate | advanced
 //   requires   exact requires facet ("none", "MediaPipe", ...)
 //   author     exact author handle facet
-//   sort       newest | copied | az (default az)
+//   sort       newest | copied | liked | az (default newest)
 //   cursor     opaque keyset cursor from a prior page's nextCursor
 //   pageSize   default 24, max 100
 // Returns { specimens, count, page, pageSize, nextCursor }; cost is O(pageSize).
