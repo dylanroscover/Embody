@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.52-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.55-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.55** — new specimen Serenity and Beauty with a cover video; enabled clones of a sibling COMP export as their values (the mandala `.tdxn` 9,599 → 2,729 lines); embody.tools source viewer renders in the browser; Embot allowed in TDXN COMPs; new shipped rule `tdxn-economy`
 - **6.2.52** — tuplet custom parameters (RGB, XYZ, multi-component Float/Int) at a non-zero default import with that value instead of 0
 - **6.2.51** — seven agent-rule gotchas from issue #94 verified live before shipping; embody.tools covers come from the specimen row, never a baked list; new specimen Prismatic Strata
 - **6.2.50** — `Export Release Toe`: one pulse prompts, asks where, then ships the project as a locked `.toe`; Embody can write the `pre_release_toe` hook for you
