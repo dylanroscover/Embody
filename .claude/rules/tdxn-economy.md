@@ -15,7 +15,13 @@ and shader text, 13% custom-par definitions. Cut the biggest bucket first.
 
 ## The tactics, biggest win first
 
-1. **Read parameters with a Parameter CHOP, never a Constant CHOP full of
+1. **Same internals in several COMPs means a clone setup, always.** One master COMP holds the
+   network; every sibling that shares those internals sets `clone` to the master and turns
+   Enable Cloning on; custom parameters on each clone carry what differs. TouchDesigner keeps
+   the copies in sync (edit the master once), and TDXN writes an enabled clone whose master is
+   in the same file as its parameter values only, with no children. Thirty-two hand-copied
+   layer COMPs were 12 children each in the file; as clones they are their values.
+2. **Read parameters with a Parameter CHOP, never a Constant CHOP full of
    expressions.** One `parameterCHOP` (`ops='..'`, custom on, builtin off) emits
    every custom par of a COMP in page order, menus as indices, RGB as three
    channels -- 3 lines of TDXN. The same 53 channels as a Constant CHOP with 53
@@ -23,27 +29,27 @@ and shader text, 13% custom-par definitions. Cut the biggest bucket first.
    It also cooks only when a par changes, so the per-frame cost is zero either
    way. Anything the Constant CHOP *computed* (a palette lookup, a flag, a seed)
    moves into the consumer shader or a second small CHOP.
-2. **One DAT for identical GLSL.** Several GLSL POPs/TOPs/MATs that run the same
+3. **One DAT for identical GLSL.** Several GLSL POPs/TOPs/MATs that run the same
    code point their `computedat` / `pixeldat` at ONE DAT and differ by uniforms
    (`uIsFill 0/1/2`). Delete the unused docked default DATs. Three copies of a
    330-line shader are 660 wasted lines and a guaranteed drift bug.
-3. **Let defaults carry the common case.** TDXN writes only non-default values.
+4. **Let defaults carry the common case.** TDXN writes only non-default values.
    When 30 copies of a COMP share a value, make it the custom par's `default`
    (and, for a template layer, the value the copies inherit) so it is written once
    in `par_templates`, not 30 times. Keep `help` text: it is the one place a line
    buys readability.
-4. **Fewer operators per copy.** A duplicated sub-network pays for every child in
+5. **Fewer operators per copy.** A duplicated sub-network pays for every child in
    every copy. Before duplicating, ask whether one chain plus an attribute
    (`IsFill`, `LayerId`) and a downstream split (Delete/Select POP) does the same
    work, and whether the copies could be instances or a Copy driven by a table.
    Prefer a shader deforming one static primitive over N primitives.
-5. **Static geometry, parameters in a buffer.** Per-element parameters belong in a
+6. **Static geometry, parameters in a buffer.** Per-element parameters belong in a
    CHOP -> texture buffer read by ONE shader (`texelFetch(uP, layer*STRIDE + j)`),
    not in N per-element expression uniforms: cheaper per frame AND fewer lines.
-6. **No padding, no dead channels, no probe leftovers.** `pad60..63` channels,
+7. **No padding, no dead channels, no probe leftovers.** `pad60..63` channels,
    `_probe` storage, test ops and unused custom pars all export. Sweep before
    `save_externalization` (`comp.storage`, `findChildren` for `*_test*`).
-7. **Prefer a menu or a slot number over a colour triplet** where a palette
+8. **Prefer a menu or a slot number over a colour triplet** where a palette
    exists: one int instead of three floats per element, and recolouring is global.
 
 ## What NOT to cut
@@ -56,6 +62,8 @@ and shader text, 13% custom-par definitions. Cut the biggest bucket first.
 
 Render one frame at a fixed `Manualtime` before and after, `save()` both PNGs,
 and compare out of process (PIL `ImageChops.difference`, or ffmpeg `psnr`).
-Bit-identical is the bar; anything else must be explained (which layer, why)
-before it is accepted. Then confirm idle cooks stayed at zero
+First render the UNCHANGED network twice and diff those: that is the render's
+own jitter (anti-aliased line edges; ~0.05% of pixels on the mandala). A cut is
+accepted when its diff sits inside that baseline; anything beyond it must be
+explained (which layer, why). Then confirm idle cooks stayed at zero
 (`totalCooks` over 30 frames on the CHOP chain) and re-export.

@@ -361,7 +361,6 @@ operators:
       clampMin: true
       clampMax: true
       help: Opacity of the ornamental scrollwork layer drawn over the field (0 = off). Squiggling contour lines and small leaf lobes, folded into mirrored sectors like carpet ornament.
-      value: 1
     - name: Scrollscale
       style: Float
       label: Scale

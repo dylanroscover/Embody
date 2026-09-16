@@ -17,6 +17,9 @@ clumped by the same smooth noise (Sparkle Density, Clumping, Shimmer on the Wear
 mandala repeats exactly every Loop Length seconds.
 
 ## What it teaches
+- **One master layer, 31 clones.** `field_disc` holds the layer network; every other layer is a
+  clone of it (Clone + Enable Cloning) that differs only in its Layer / Animate values, so an edit
+  to the master reaches all 32 and the TDXN writes a clone as its values, not its children.
 - **One shader for every layer.** Each layer is a static chain (circle -> LayerId/IsFill
   attributes -> Nest copies -> Count copies) merged into ONE line stream and ONE fill stream.
   Three GLSL POPs (line, ink contour, fill) sharing ONE compute DAT then compute outline, nesting, placement,
@@ -121,8 +124,9 @@ mandala repeats exactly every Loop Length seconds.
 - `Energy` scales every animation amount and `Speed Multiplier` every rate; they are the
   two knobs to tame or excite the whole piece. `Loop` + `Loop Length` make it seamless for
   renders (`Time Mode` = manual with `Manual Time` gives frame-accurate offline stepping).
-- Duplicate any layer COMP to add an element: wire its three outputs into `merge_line`,
-  `merge_fill` and `merge_params` at the same input index and set its Draw Order.
+- To add an element, clone `field_disc` (a new Base COMP with Clone = `field_disc`), wire its
+  three outputs into `merge_line`, `merge_fill` and `merge_params` at the same input index and
+  set its Draw Order; never copy a layer, or the copy stops following the master.
 - Style = Both draws the outline in Line Color over the fill; Line Color 0 keeps the fill
   colours for the outline. `Ink` adds the dark contour behind an element; `Gap` cuts the
   middle of every edge or lobe (0.6 on a square leaves four corner brackets).

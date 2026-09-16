@@ -75,12 +75,6 @@ type_defaults:
     - render
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
-  outCHOP:
-    parameters:
-      autoexportroot: =parent()
-      label: =me.name
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
   outPOP:
     parameters:
       label: =me.name
@@ -780,7 +774,6 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: Opacity of the ornamental scrollwork layer drawn over the field (0 = off). Squiggling contour lines and small leaf lobes, folded into mirrored sectors like carpet ornament.
-    value: 1
   - name: Scrollscale
     style: Float
     label: Scale
@@ -1050,6 +1043,8 @@ operators:
   color: [0.67, 0.67, 0.67]
 - name: bead_ring
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -1072,99 +1067,6 @@ operators:
       Opacityanim: 0.25
       Opacityrate: 2
   position: [0, -1400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_fill
   type: glslPOP
   sequences:
@@ -1289,6 +1191,8 @@ operators:
   - noise_patch
 - name: tick_ring
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -1311,101 +1215,10 @@ operators:
       Lengthanim: 0.01
       Lengthrate: 2.5
   position: [0, -1600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: center_dot
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -1425,99 +1238,6 @@ operators:
       Opacityanim: 0.2
       Opacityrate: 2.5
   position: [0, -3000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: field_disc
   type: baseCOMP
   custom_pars:
@@ -1585,7 +1305,12 @@ operators:
     - attr_line
   - name: out_params
     type: outCHOP
+    parameters:
+      label: =me.name
+      autoexportroot: =parent()
     position: [400, -600]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
     inputs:
     - params
   - name: circle_fill
@@ -1618,17 +1343,10 @@ operators:
     position: [1200, -200]
     inputs:
     - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: circle_line (closed line strip, Detail points) -> LayerId/IsFill attributes -> Nest copies -> Count copies -> out_line. Bottom row: the same for the filled fan (circle_fill). Nothing here cooks per frame; the shape, placement, animation and colour are computed by the parent''s glsl_line / glsl_fill from the params CHOP (64 channels bound to this COMP''s Layer + Animate pages).'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: gate_posts
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -1652,104 +1370,12 @@ operators:
       Tumblerate: 1.1
       Lengthanim: 0.015
   position: [0, -3200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: geo_scroll
   type: geometryCOMP
   parameters:
     tz: 0.025
     material: mat_scroll
+    drawpriority: -1
   position: [3000, -2500]
   children:
   - name: null_out
@@ -1945,6 +1571,8 @@ operators:
   - candy_ring_b
 - name: center_star
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -1967,99 +1595,6 @@ operators:
       Amplituderate: 1.6
       Sharpnessanim: 0.5
   position: [0, -4000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: constant_bg
   type: constantTOP
   parameters:
@@ -2148,6 +1683,8 @@ operators:
   position: [2200, -2500]
 - name: lace_border
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2172,101 +1709,10 @@ operators:
       Amplitudeanim: 0.01
       Amplituderate: 2.2
   position: [0, -1000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: lotus_inner
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2299,101 +1745,10 @@ operators:
       Lengthanim: 0.025
       Lengthrate: 1.2
   position: [0, -2600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: lotus_outer
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2430,99 +1785,6 @@ operators:
       Widthanim: 0.01
       Widthrate: 1.7
   position: [0, -2400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: noise_fiber
   type: noiseTOP
   parameters:
@@ -2542,6 +1804,8 @@ operators:
   position: [3000, -2100]
 - name: outer_rings
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2565,101 +1829,10 @@ operators:
       Linewidthanim: 0.4
       Linewidthrate: 1.5
   position: [0, -600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: candy_ring_a
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2685,101 +1858,10 @@ operators:
       Lengthrate: 0.5
       Widthrate: 0.5
   position: [0, -6000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: candy_ring_b
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2805,99 +1887,6 @@ operators:
       Lengthrate: 0.5
       Widthrate: 0.5
   position: [0, -6200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_outline
   type: glslPOP
   sequences:
@@ -2938,6 +1927,8 @@ operators:
   - merge_line
 - name: inner_circle
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -2960,99 +1951,6 @@ operators:
       Radiusrate: 0.9
       Nestgapanim: 0.015
   position: [0, -2200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: merge_params
   type: mergeCHOP
   parameters:
@@ -3127,6 +2025,8 @@ operators:
     out: 1
 - name: palace_cross
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3151,101 +2051,10 @@ operators:
       Widthanim: 0.006
       Widthrate: 0.5
   position: [0, -5800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: palace_lines
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3269,101 +2078,10 @@ operators:
       Linewidthanim: 0.3
       Linewidthrate: 1.5
   position: [0, -3600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: field_garland
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3389,101 +2107,10 @@ operators:
       Nestgapanim: 0.015
       Nestgaprate: 1.4
   position: [0, -4600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: palace_square
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3514,101 +2141,10 @@ operators:
       Linewidthanim: 0.3
       Linewidthrate: 1.2
   position: [0, -1800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: treasure_bars
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3638,101 +2174,10 @@ operators:
       Widthanim: 0.01
       Widthrate: 1.3
   position: [0, -2000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: center_rosette
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3761,101 +2206,10 @@ operators:
       Sharpnessanim: 0.6
       Sharpnessrate: 1.1
   position: [0, -2800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: gate_crossbars
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -3879,99 +2233,6 @@ operators:
       Tumblerate: 1.1
       Widthanim: 0.02
   position: [0, -3400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_fill_info
   type: infoDAT
   parameters:
@@ -3995,6 +2256,8 @@ operators:
   dat_read_only: true
 - name: inner_dot_ring
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4017,101 +2280,10 @@ operators:
       Opacityanim: 0.3
       Opacityrate: 3
   position: [0, -4200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: outer_ink_ring
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4129,101 +2301,10 @@ operators:
       Linewidthanim: 0.25
       Linewidthrate: 0.8
   position: [0, -4800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: outer_petals_a
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4255,101 +2336,10 @@ operators:
       Lengthanim: 0.02
       Lengthrate: 1.1
   position: [0, -200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: outer_petals_b
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4381,99 +2371,6 @@ operators:
       Widthanim: 0.008
       Widthrate: 2
   position: [0, -400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: params_palette
   type: parameterCHOP
   parameters:
@@ -4486,6 +2383,8 @@ operators:
   - merge_params
 - name: field_ripples_a
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4514,105 +2413,13 @@ operators:
       Opacityanim: 0.05
       Opacityrate: 0.6
   position: [0, -5400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: field_ripples_b
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
-      Active: false
       Shape: rosette
       Order: 2
       Radius: 0.845
@@ -4642,99 +2449,6 @@ operators:
       Opacityanim: 0.05
       Opacityrate: 0.6
   position: [0, -5600]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_wear_pixel
   type: textDAT
   parameters:
@@ -4753,6 +2467,8 @@ operators:
   - params_palette
 - name: treasure_petals
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4788,101 +2504,10 @@ operators:
       Sharpnessrate: 0.8
       Lengthanim: 0.03
   position: [0, -1200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: field_edge_rings
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -4901,99 +2526,6 @@ operators:
       Linewidthanim: 0.3
       Linewidthrate: 2
   position: [0, -800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_scroll_info
   type: infoDAT
   parameters:
@@ -5003,6 +2535,8 @@ operators:
   dat_read_only: true
 - name: corner_medallions
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -5031,99 +2565,6 @@ operators:
       Nestgapanim: 0.1
       Nestgaprate: 1.2
   position: [0, -4400]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_line_compute
   type: textDAT
   flags:
@@ -5163,6 +2604,8 @@ operators:
   dat_content_format: text
 - name: palace_gold_frame
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -5186,101 +2629,10 @@ operators:
       Linewidthanim: 0.3
       Linewidthrate: 0.8
   position: [0, -5200]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: lotus_seat_scallop
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -5306,99 +2658,6 @@ operators:
       Sharpnessanim: 0.6
       Sharpnessrate: 1.3
   position: [0, -3800]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 - name: glsl_scroll_compute
   type: textDAT
   flags:
@@ -5410,6 +2669,8 @@ operators:
   dat_content_format: text
 - name: palace_shadow_squares
   type: baseCOMP
+  parameters:
+    clone: field_disc
   custom_pars:
     Layer:
       $t: layer
@@ -5433,104 +2694,11 @@ operators:
       Linewidthanim: 0.4
       Linewidthrate: 0.9
   position: [0, -5000]
-  children:
-  - name: params
-    type: parameterCHOP
-    position: [0, -600]
-  - name: out_fill
-    type: outPOP
-    parameters:
-      connectorder: 1
-    position: [1600, -200]
-    inputs:
-    - copy_radial_f
-  - name: out_line
-    type: outPOP
-    position: [1600, 200]
-    inputs:
-    - copy_radial
-  - name: attr_fill
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-        value0: 1
-    position: [400, -200]
-    inputs:
-    - circle_fill
-  - name: attr_line
-    type: attributePOP
-    sequences:
-      attr:
-      - customname: LayerId
-        type: int
-        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
-      - customname: IsFill
-        type: int
-    position: [400, 200]
-    inputs:
-    - circle_line
-  - name: copy_nest
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, 200]
-    inputs:
-    - attr_line
-  - name: out_params
-    type: outCHOP
-    position: [400, -600]
-    inputs:
-    - params
-  - name: circle_fill
-    type: circlePOP
-    parameters:
-      connectivity: surface
-    position: [0, -200]
-  - name: circle_line
-    type: circlePOP
-    position: [0, 200]
-  - name: copy_nest_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Nest
-      copyidname: NestId
-    position: [800, -200]
-    inputs:
-    - attr_fill
-  - name: copy_radial
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, 200]
-    inputs:
-    - copy_nest
-  - name: copy_radial_f
-    type: copyPOP
-    parameters:
-      ncy: =parent.Layer.par.Count
-    position: [1200, -200]
-    inputs:
-    - copy_nest_f
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 'Layer element: static copy chains + parameter channels'
-    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
-    position: [-70, -670]
-    size: [1870, 1130]
-    color: [0.55, 0.35, 0.25]
-    opacity: 0.35
 annotations:
 - name: annotate1
   mode: annotate
-  title: Layers (24 x ring / petal / palace elements)
-  text: 'Each layer_NN is one mandala element. Its Layer page sets shape, radius, symmetry, colours (palette slots 1-8), nesting and outline style; its Animate page adds waves, tumble, colour waves and LFOs on nearly every attribute. Master knobs: Mandala page (Scale, Rotate, Speed Multiplier, Energy, Line Width), Palette page, Wear page. Draw Order stacks layers; duplicate a layer COMP and wire its three outputs into the merges (same input index on all three) to add an element.'
+  title: 'Layers (32: one master, 31 clones)'
+  text: 'field_disc is the master layer network: circle_line / circle_fill -> LayerId + IsFill attributes -> Nest copies -> Count copies -> out_line / out_fill, plus a Parameter CHOP that emits the Layer + Animate pages as 53 channels -> out_params. Every other layer is a clone of it (Clone + Enable Cloning) that differs only in its parameter values: shape, radius, symmetry, palette slots, nesting, outline style, waves, tumble, colour waves and LFOs. Draw Order stacks layers. To add an element, clone field_disc and wire its three outputs into the merges at the same input index; never copy a layer.'
   position: [-70, -6270]
   size: [300, 6570]
   color: [0.55, 0.35, 0.25]

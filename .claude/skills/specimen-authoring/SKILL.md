@@ -109,6 +109,15 @@ A specimen's exposed parameters export their **definitions** (default, range, he
 
 Still verify the round-trip in every build (cheap): re-import the exported `.tdxn` into a throwaway COMP, check a couple of `.val`s and that `out1` renders, then destroy the temp COMP.
 
+## Blended geometry: set Draw Priority, never trust creation order
+
+With Sorted Blending, TouchDesigner orders blended objects at equal depth by an internal
+creation-order tie-break. A live network can look right by accident and its TDXN import
+can flip it: the mandala's ornament quad (blended Constant MAT over the field fills) vanished
+on every import with parameter-identical materials (2026-09-16). Any Geometry COMP whose
+material blends over other geometry gets an explicit `drawpriority` (-1 drew the quad after
+the fills), and the round-trip check compares a frame, not just operator counts.
+
 ## Naming, layout, output
 
 - Processing ops: `optype_name` (`glsl_colorize`, `feedback_state`); DATs stay role-named (see `td-python.md` Naming).
