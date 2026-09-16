@@ -1,9 +1,8 @@
 format: tdxn
 version: '2.1'
-generator: Embody/6.2.50
+build: 1
+generator: Embody/6.2.54
 td_build: 099.2025.33230
-source_file: Embody-6.353.toe
-exported_at: '2026-09-13T06:36:43Z'
 network_path: /specimen_lab/prismatic_strata
 options:
   include_dat_content: true
@@ -323,7 +322,9 @@ custom_pars:
     help: Render height (px).
 parameters:
   parentshortcut: Specimen
-color: [0.67, 0.67, 0.67]
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
 operators:
 - name: out1
   type: outTOP
