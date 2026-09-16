@@ -34,6 +34,51 @@ class TestTDXNFingerprint(EmbodyTestCase):
     def _fp(self, comp):
         return self.embody_ext._computeTDXNFingerprint(comp)
 
+    def _annotate(self, parent, name):
+        """COMP.create(annotateCOMP, name) silently IGNORES the name and
+        auto-names the op, so a fixture that skips the rename builds
+        'annotate1' -- which no envoy_bot_ prefix can ever match, and the
+        failure then reads as a broken filter when the fixture is at fault."""
+        a = parent.create(annotateCOMP)
+        a.name = name
+        return a
+
+    # --- Embot's live parts are furniture, not content ---
+
+    def test_live_bot_parts_do_not_move_the_fingerprint(self):
+        """Embot stands in whatever network Envoy is working in, and his nine
+        parts move on every hop and gesture. The exporter already drops them,
+        so a fingerprint that SAW them would mark the COMP dirty and re-export
+        it unchanged on every animation frame -- which is why he was banned
+        from TDXN COMPs (envoy_viz.botUnsafeNet) until this filter existed."""
+        comp, _ = self._make_comp()
+        before = self._fp(comp)
+        part = self._annotate(comp, 'envoy_bot_body')
+        self.assertEqual(before, self._fp(comp),
+                         'a live Embot part must not dirty the COMP')
+        part.nodeX, part.nodeY = 250, 400          # he hopped to the next node
+        self.assertEqual(before, self._fp(comp),
+                         'and moving him must not dirty it either')
+
+    def test_an_ordinary_annotation_still_moves_the_fingerprint(self):
+        """The filter is name-scoped on purpose: blinding the fingerprint to
+        real annotations would stop genuine edits from ever reaching disk."""
+        comp, _ = self._make_comp()
+        before = self._fp(comp)
+        self._annotate(comp, 'ordinary_note')
+        self.assertNotEqual(before, self._fp(comp),
+                            'a user annotation is content and must dirty')
+
+    def test_the_shipped_bot_template_keeps_its_parts(self):
+        """Same carve-out as TDXNExt._exportAnnotations: embot_template's nine
+        parts are a real asset inside Embody.tdxn, so the template's OWN
+        fingerprint must still see them."""
+        tmpl = self.sandbox.create(baseCOMP, 'embot_template')
+        before = self._fp(tmpl)
+        self._annotate(tmpl, 'envoy_bot_body')
+        self.assertNotEqual(before, self._fp(tmpl),
+                            'in the template the parts are content')
+
     # --- parameter changes (the regression) ---
 
     def test_top_level_param_change_detected(self):

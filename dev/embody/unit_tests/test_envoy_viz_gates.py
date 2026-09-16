@@ -594,9 +594,9 @@ class TestEnvoyVizGates(EmbodyTestCase):
 
     def test_refused_spawn_never_commits_a_phantom_home(self):
         """REGRESSION GUARD for the desync that made Embot freeze on a stale
-        node. ensureBot legitimately refuses a spawn -- botUnsafeNet fires on
-        EVERY TDXN-strategy COMP (the auto-externalization default, so most COMPs
-        in an Embody project), and botWouldBeSeen fires whenever the follow is
+        node. ensureBot legitimately refuses a spawn -- botUnsafeNet fires
+        under /local and inside Embody, a write suppression bars a COMP that
+        was just serialized, and botWouldBeSeen fires whenever the follow is
         off and the user is parked elsewhere. If the gate had already stamped
         _viz_home, viz would be committed to a network he never entered, and
         every later hop to the network he IS in would be charged a full
@@ -761,11 +761,11 @@ class TestEnvoyVizGates(EmbodyTestCase):
 
     # ----- issue #86: ordering + suppression -------------------------------
 
-    def test_ensure_bot_refuses_unseen_net_before_table_scan(self):
-        """botWouldBeSeen MUST run before botUnsafeNet: botUnsafeNet reaches
-        EmbodyExt._getTDXNPaths() (a full externalizations-table scan with a
-        per-row op()), and in the suppressed state ensureBot runs its prefix
-        EVERY frame."""
+    def test_ensure_bot_refuses_an_unseen_net_before_the_safety_guard(self):
+        """The visibility gate short-circuits first -- it is the refusal that
+        fires most often, and ensureBot runs this prefix EVERY frame. The order
+        used to be mandatory: botUnsafeNet ran a full externalizations-table
+        scan (_getTDXNPaths) until it dropped its TDXN clause."""
         dest = self.sandbox.create(baseCOMP, 'viz_unseen_dest')
         ext = _stub_ext(embot=True, follow=False)
         calls = []
@@ -779,10 +779,65 @@ class TestEnvoyVizGates(EmbodyTestCase):
             self.assertIsNone(ext._viz_bot_net,
                               'nothing may be claimed for an unseen net')
             self.assertEqual(len(calls), 0,
-                             'the table scan must not run in the suppressed state')
+                             'the safety guard must not run in the suppressed state')
         finally:
             viz.botWouldBeSeen = orig_seen
             viz.botUnsafeNet = orig_unsafe
+
+    def test_bot_unsafe_net_lets_him_into_a_tdxn_comp(self):
+        """Embot was barred from every TDXN-strategy COMP -- the tagged
+        majority of a project -- because his parts would be "captured by .tdn
+        export". They cannot be: TDXNExt._exportAnnotations drops them from
+        every export path, and _computeTDXNFingerprint skips them, so he can
+        neither reach the file nor dirty the COMP. The ban cost the feature
+        most of the networks an agent actually works in."""
+        comp = self.sandbox.create(baseCOMP, 'viz_tdxn_ok')
+        ext = _stub_ext(embot=True)
+        ext.ownerComp.path = '/nowhere/Embody'      # not an ancestor of comp
+        calls = []
+        ext.ownerComp.ext.Embody._getTDXNPaths = (
+            lambda: calls.append(1) or {comp.path})
+        self.assertFalse(viz.botUnsafeNet(ext, comp),
+                         'a TDXN COMP is a legal place for Embot to stand')
+        self.assertEqual(calls, [],
+                         'and the table scan went with the clause')
+
+    def test_bot_unsafe_net_still_refuses_local_and_embody(self):
+        """The two bans that remain, and why: /local is volatile, and
+        ExportPortableTox captures Embody's whole subtree."""
+        ext = _stub_ext(embot=True)
+        ext.ownerComp.path = op.Embody.path
+        self.assertTrue(viz.botUnsafeNet(ext, SimpleNamespace(path='/local/x')),
+                        '/local is still off limits')
+        self.assertTrue(viz.botUnsafeNet(ext, op.Embody),
+                        'and so is Embody itself')
+        self.assertTrue(viz.botUnsafeNet(ext, op.Embody.op('envoy_viz')),
+                        'the ancestor walk still covers a descendant')
+
+    def test_ensure_bot_rebuilds_after_his_parts_are_destroyed(self):
+        """import_network(clear_first=True) -- the normal way to edit a TDXN
+        COMP, and the reason this matters now that he is allowed in one --
+        deletes every child of the target network, Embot's parts included. The
+        bookkeeping still named the net, so ensureBot's early return would call
+        him present forever and nothing would rebuild him: an invisible ghost
+        until he happened to relocate. The retire also bars re-entry, so a net
+        being cleared repeatedly cannot buy one respawn per clear."""
+        net = self.sandbox.create(baseCOMP, 'viz_ghost_net')
+        ext = _stub_ext(embot=True)
+        ext._viz_bot_net = net.path
+        t = absTime.seconds
+        self.assertFalse(viz.ensureBot(ext, net),
+                         'his parts are gone -- he is not "already here"')
+        self.assertIsNone(ext._viz_bot_net,
+                          'the stale claim is dropped')
+        self.assertTrue(viz.writeSuppressed(ext, net.path, t),
+                        'and the respawn is rate-bound like any other retire')
+        # Control: with his body present the early return still holds, so an
+        # ordinary standing bot is never torn down by this check.
+        ext._viz_bot_net = net.path
+        _annotate(net, 'envoy_bot_body')
+        self.assertTrue(viz.ensureBot(ext, net),
+                        'a bot whose parts are intact stays put')
 
     def test_bot_writes_skipped_while_staging(self):
         """Mid-assembly he is an invisible pile at the off-view staging point;
@@ -877,17 +932,25 @@ class TestEnvoyVizGates(EmbodyTestCase):
         self.assertEqual(removed, 2, 'exactly the two annotations')
 
     def test_viz_bot_constants_match_the_tdxn_exporter(self):
-        """TDXNExt mirrors these two literals rather than importing the viz
-        module DAT (Envoy is optional; .tdn export must work without it). Drift
-        is SILENT -- the export filter simply stops matching and live bot parts
-        reach .tdn again with no error and no other failing test."""
-        # Read the LIVE extension's own module namespace (via the function
-        # object actually doing the filtering) rather than re-compiling the DAT
-        # with .module -- this asserts against the code that is running.
+        """TDXNExt and EmbodyExt each MIRROR these two literals rather than
+        importing the viz module DAT (Envoy is optional; .tdn export and dirty
+        detection must both work without it). Three copies, and drift is
+        SILENT -- the filter simply stops matching, so live bot parts reach
+        .tdn again, or start dirtying every COMP he stands in, with no error
+        and no other failing test."""
+        # Read the LIVE extensions' own module namespaces (via the function
+        # objects actually doing the filtering) rather than re-compiling the
+        # DATs with .module -- this asserts against the code that is running.
         tdxn_globals = type(op.Embody.ext.TDXN)._exportAnnotations.__globals__
         self.assertEqual(tdxn_globals['VIZ_BOT_ANNOTATION_PREFIX'],
                          viz._VIZ_BOT_PREFIX)
         self.assertEqual(tdxn_globals['VIZ_BOT_TEMPLATE_COMP'],
+                         viz._VIZ_TEMPLATE_COMP)
+        embody_globals = (
+            type(op.Embody.ext.Embody)._computeTDXNFingerprint.__globals__)
+        self.assertEqual(embody_globals['_VIZ_BOT_ANNOTATION_PREFIX'],
+                         viz._VIZ_BOT_PREFIX)
+        self.assertEqual(embody_globals['_VIZ_BOT_TEMPLATE_COMP'],
                          viz._VIZ_TEMPLATE_COMP)
 
     def test_export_annotations_omits_loose_bot_parts(self):

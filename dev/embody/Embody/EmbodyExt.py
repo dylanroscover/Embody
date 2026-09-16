@@ -32,11 +32,19 @@ from pathlib import Path
 from glob import glob
 from typing import Optional, Union, Any
 
-# TD is a GUI process on Windows and owns no console, so every console child
+# TD is a GUI process and owns no console, so every console child
 # (git, uv, pip, python) gets a NEW console window -- a flash over the user's
 # TD. CREATE_NO_WINDOW suppresses it; absent off-Windows, hence getattr.
 # EVERY subprocess spawned from inside TD must pass creationflags=NO_WINDOW.
 NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+
+# Embot's live parts (annotateCOMPs) are furniture, not content: the dirty
+# fingerprint skips them exactly as TDXNExt._exportAnnotations does, or he
+# marks a COMP dirty on every hop and re-exports it unchanged. Mirrored
+# literals (Envoy is optional, so this file must not import the viz DAT);
+# test_viz_bot_constants_match_the_tdxn_exporter guards the drift.
+_VIZ_BOT_ANNOTATION_PREFIX = 'envoy_bot_'
+_VIZ_BOT_TEMPLATE_COMP = 'embot_template'
 
 # Flags the TDXN exporter writes, in TDXNExt.DEFAULT_FLAGS order. The dirty
 # fingerprint must see every one of them: a flag the exporter records but the
@@ -6439,9 +6447,16 @@ class EmbodyExt:
                     c, tdxn_paths, None, ext_tags)
                 parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) -- uses annotation-specific attrs
+        is_bot_template = comp.name == _VIZ_BOT_TEMPLATE_COMP
         for ann in sorted(comp.findChildren(type=annotateCOMP, depth=1,
                                             includeUtility=True),
                           key=lambda a: a.name):
+            # A live Embot part never reaches the file (the exporter drops it),
+            # so it must not move the fingerprint either -- otherwise he dirties
+            # the COMP on every hop. Same template carve-out as the exporter.
+            if not is_bot_template and \
+                    ann.name.startswith(_VIZ_BOT_ANNOTATION_PREFIX):
+                continue
             ann_color = tuple(round(v, 4) for v in (
                 ann.par.Backcolorr.eval(), ann.par.Backcolorg.eval(),
                 ann.par.Backcolorb.eval()))
