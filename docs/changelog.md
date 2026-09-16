@@ -5,7 +5,7 @@
 A published mandala, clone-aware TDXN, and a lighter embody.tools.
 
 - **New specimen: Serenity and Beauty** (generative, 461 ops): a Tibetan-thangka mandala drawn by three GLSL POPs from one static circle, with a cover video.
-- **Clones export as their values.** An enabled clone of a sibling COMP writes its parameters and no children; TouchDesigner refills it on import. The mandala's 32 layers are one master and 31 clones, and its `.tdxn` fell from 9,599 to 2,729 lines. Wires from a COMP's second or later output keep their connector.
+- **Clones export as their values.** An enabled clone of a sibling COMP writes its parameters and no children; TouchDesigner refills it on import. The mandala's 32 layers are one master and 31 clones, and its `.tdxn` fell from 9,599 to 2,834 lines. Wires from a COMP's second or later output keep their connector.
 - **Tuplet custom parameters keep their default on import** (v6.2.52): RGB, XYZ and multi-component values no longer arrive as 0.
 - **embody.tools renders the source viewer in the browser**, up to 20,000 lines; a 9,600-line specimen had pushed the page past the Worker limit.
 - **Embot can stand in TDXN COMPs** without dirtying or exporting them. New shipped rule `tdxn-economy`: fewer operators, parameters and lines; clone setups for shared internals.
