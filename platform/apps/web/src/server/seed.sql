@@ -264,7 +264,7 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-plasma-interference', 'sp-plasma-interference', 1, '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', 34394, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
-  ('ver-mandala', 'sp-mandala', 1, 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26', 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26', 322731, 461, 'scan-mandala', NULL, 'First-party specimen.');
+  ('ver-mandala', 'sp-mandala', 1, '499fb9ec8500a46fba05dc950371c3386198dd4d6ce26bfb200839963053738e', '499fb9ec8500a46fba05dc950371c3386198dd4d6ce26bfb200839963053738e', 158806, 461, 'scan-mandala', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -361,7 +361,7 @@ SELECT rowid, 'prismatic-strata', 'Prismatic Strata', 'Stacked jagged strata lit
 FROM specimens WHERE id = 'sp-prismatic-strata';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'mandala', 'Serenity and Beauty', 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP rectanglePOP'
+SELECT rowid, 'mandala', 'Serenity and Beauty', 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP parameterCHOP shuffleCHOP lineMAT constantMAT glslTOP'
 FROM specimens WHERE id = 'sp-mandala';
 
 -- Category membership (multi). Seed the join table from each specimen's primary

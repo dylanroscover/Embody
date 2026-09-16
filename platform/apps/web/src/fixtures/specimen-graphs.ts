@@ -2038,7 +2038,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -2226,7 +2226,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -2379,7 +2379,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -2528,7 +2528,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -2681,7 +2681,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3056,7 +3056,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3262,7 +3262,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3415,7 +3415,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3568,7 +3568,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3737,7 +3737,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -3890,7 +3890,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4043,7 +4043,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4207,7 +4207,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4507,7 +4507,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4660,7 +4660,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4813,7 +4813,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -4966,7 +4966,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5119,7 +5119,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5272,7 +5272,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5425,7 +5425,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5602,7 +5602,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5755,7 +5755,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -5908,7 +5908,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6061,7 +6061,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6205,20 +6205,19 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "params_palette",
+        "type": "parameterCHOP",
+        "position": [
+          600,
+          -3100
+        ]
+      },
+      {
         "name": "shuffle_params",
         "type": "shuffleCHOP",
         "position": [
           1000,
           -2800
-        ],
-        "size": [
-          130,
-          90
-        ],
-        "color": [
-          0.67,
-          0.67,
-          0.67
         ],
         "inputs": [
           "merge_params"
@@ -6234,7 +6233,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6387,7 +6386,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6539,6 +6538,17 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
+        "name": "shuffle_palette",
+        "type": "shuffleCHOP",
+        "position": [
+          1000,
+          -3100
+        ],
+        "inputs": [
+          "params_palette"
+        ]
+      },
+      {
         "name": "treasure_petals",
         "type": "baseCOMP",
         "position": [
@@ -6548,7 +6558,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6701,7 +6711,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -6862,7 +6872,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -7006,14 +7016,6 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
-        "name": "glsl_fill_compute",
-        "type": "textDAT",
-        "position": [
-          925,
-          -1920
-        ]
-      },
-      {
         "name": "glsl_line_compute",
         "type": "textDAT",
         "position": [
@@ -7055,7 +7057,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -7208,7 +7210,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600
@@ -7360,14 +7362,6 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       },
       {
-        "name": "glsl_outline_compute",
-        "type": "textDAT",
-        "position": [
-          925,
-          -1620
-        ]
-      },
-      {
         "name": "palace_shadow_squares",
         "type": "baseCOMP",
         "position": [
@@ -7377,7 +7371,7 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         "operators": [
           {
             "name": "params",
-            "type": "constantCHOP",
+            "type": "parameterCHOP",
             "position": [
               0,
               -600

@@ -1,6 +1,6 @@
 format: tdxn
 version: '2.1'
-build: 9
+build: 10
 generator: Embody/6.2.53
 td_build: 099.2025.33230
 network_path: /specimen_lab
@@ -979,7 +979,7 @@ operators:
   parameters:
     type: stopframemovie
     videocodec: h264
-    file: C:/Users/admin/Documents/Git/Embody/marketing/mandala/mandala_loop.mp4
+    file: C:/Users/admin/Documents/Git/Embody/marketing/mandala/mandala_cover_src.mp4
     fps: 60
     pause: true
     avgbitrate: 20000
@@ -2014,15 +2014,15 @@ operators:
     state:
       prior_rt: true
       prior_tm: realtime
-      prior_loop: 0
-      prior_ll: 12
+      prior_loop: 1
+      prior_ll: 20
       prior_sm: 2
-      i: 1200
-      n: 1200
-      fps: 60
+      i: 300
+      n: 300
+      fps: 30
       status: done
       error: ''
-      written: 1200
+      written: 300
   dat_content: |
     # Frame-accurate loop export driver for the mandala specimen (lives OUTSIDE the specimen COMP, never exported).
     # start() sets non-realtime + manual time, then a run() chain writes one unique frame per real TD frame
