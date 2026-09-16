@@ -497,8 +497,8 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `enableExpr` | string or array | If set | Python expression that controls the enable state (conditional greying). Per-component in TDXN, though TouchDesigner documents it as shared across a ParGroup. |
 | `sequence` | string | Template pars of a custom sequence | Name of the custom sequence this definition belongs to. |
 | `help` | string or array | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. Per-component. |
-| `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
-| `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
+| `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default; the importer then seeds the value from `default`, since TouchDesigner leaves a freshly created parameter at `0`/`""` regardless of its default. |
+| `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults; the importer then seeds every component from `default` (a scalar broadcasts, a list maps per component). |
 
 #### Per-component definition fields
 
@@ -831,6 +831,14 @@ inputs:
 - null
 - level1
 ```
+
+A bare name always means the source's **output connector 0**. When the wire leaves a later output connector — a COMP holding several Out OPs (`out_line`, `out_params`, `out_fill`), or any multi-output operator — the entry is a mapping that names the output as well (v2.1; entries stay at their input position):
+```yaml
+inputs:
+- layer                     # layer's output 0 -> input 0
+- {source: layer, out: 2}   # layer's output 2 -> input 1
+```
+Readers that predate `out` wire such entries from output 0, which is exactly what happened before the key existed: every consumer of a multi-output COMP received the same stream.
 
 ### COMP Connections
 
@@ -1297,7 +1305,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
 | 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
-| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. |
+| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. A custom parameter whose `value`/`values` was omitted (it equalled its default) is seeded from `default` on every component. |
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |

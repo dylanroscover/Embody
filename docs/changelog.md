@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.52
+
+Colour and vector custom parameters keep their default value when a `.tdxn` is pasted or imported.
+
+- **Tuplet custom parameters at a non-zero default no longer import as 0.** A shared network whose RGB, XYZ or multi-component Float/Int parameter sat at its default (a white *Light Colour*, say) arrived with every component black or zero; the importer now seeds each component from `default` (+3 tests). Found through Ventura's Ditherizer on embody.tools.
+
 ## v6.2.51
 
 Agent rules verified against a live build, first-party specimen covers served like everyone else's, and a new specimen.

@@ -33,7 +33,10 @@ type Line = {
 // tokenize every line, hanging SSR and the client. Past the cap we render the
 // first MAX_RENDER_LINES and show a truncation notice -- the full TDXN is always
 // available via the copy button / .tdn download.
-const MAX_RENDER_LINES = 5000;
+// 20k (raised from 5k 2026-09-16 for heavy components; the 9.6k-line mandala hit the
+// old cap): ~150 bytes of SSR markup and ~7 DOM nodes per line, so a 20k-line page is
+// ~3 MB of HTML -- the practical ceiling for a viewer that is not virtualized.
+const MAX_RENDER_LINES = 20000;
 
 function parse(raw: string): { lines: Line[]; truncated: boolean; totalLines: number } {
   const allLines = raw.replace(/\n$/, "").split("\n");

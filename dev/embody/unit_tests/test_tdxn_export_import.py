@@ -374,6 +374,69 @@ class TestTDXNExportImport(EmbodyTestCase):
         self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
         self.assertEqual(int(target.par.Active.eval()), 1)
 
+    def test_roundtrip_custom_rgb_default_valued(self):
+        """An RGB tuplet at its non-standard default (white) round-trips with
+        every component's VALUE restored. The exporter omits `values` when
+        all components equal their defaults and TD leaves a re-appended
+        tuplet at 0, so the importer must seed each component from
+        `default` -- the single-component-only seed left every colour
+        tuplet black (field: Ditherizer 'Light Colour', 2026-09-13)."""
+        self.sandbox.appendCustomPage('RT').appendRGB('Light')
+        for p in (self.sandbox.par.Lightr, self.sandbox.par.Lightg,
+                  self.sandbox.par.Lightb):
+            p.default = 1
+            p.val = 1
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        defs = {d['name']: d for d in export['tdn']['custom_pars']['RT']}
+        self.assertNotIn('values', defs['Light'],
+                         'positive control: the value must be omitted for '
+                         'this test to exercise the default seed')
+        self.assertEqual(defs['Light'].get('default'), 1)
+        target = self.sandbox.create(baseCOMP, 'rt_rgb_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertEqual(
+            [target.par.Lightr.eval(), target.par.Lightg.eval(),
+             target.par.Lightb.eval()],
+            [1.0, 1.0, 1.0])
+
+    def test_roundtrip_custom_xyz_per_component_default_valued(self):
+        """A tuplet whose components sit at DIFFERENT non-standard defaults
+        exports a per-component default list and imports each component's
+        value from its own entry."""
+        self.sandbox.appendCustomPage('RT').appendXYZ('Anchor')
+        wanted = (0.5, 0.25, 1.0)
+        for p, d in zip((self.sandbox.par.Anchorx, self.sandbox.par.Anchory,
+                         self.sandbox.par.Anchorz), wanted):
+            p.default = d
+            p.val = d
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        defs = {d['name']: d for d in export['tdn']['custom_pars']['RT']}
+        self.assertNotIn('values', defs['Anchor'])
+        self.assertEqual(list(defs['Anchor']['default']), list(wanted))
+        target = self.sandbox.create(baseCOMP, 'rt_xyz_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        got = (target.par.Anchorx.eval(), target.par.Anchory.eval(),
+               target.par.Anchorz.eval())
+        for g, d in zip(got, wanted):
+            self.assertAlmostEqual(g, d, places=4)
+
+    def test_roundtrip_custom_float_size2_default_valued(self):
+        """A Float size>1 group at its non-standard defaults imports both
+        numeric-suffix components (Range1/Range2)."""
+        self.sandbox.appendCustomPage('RT').appendFloat('Range', size=2)
+        wanted = (0.2, 0.8)
+        for p, d in zip((self.sandbox.par.Range1, self.sandbox.par.Range2),
+                        wanted):
+            p.default = d
+            p.val = d
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        defs = {d['name']: d for d in export['tdn']['custom_pars']['RT']}
+        self.assertNotIn('values', defs['Range'])
+        target = self.sandbox.create(baseCOMP, 'rt_size2_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertAlmostEqual(target.par.Range1.eval(), 0.2, places=4)
+        self.assertAlmostEqual(target.par.Range2.eval(), 0.8, places=4)
+
     def test_roundtrip_child_custom_par_default_valued(self):
         """A default-valued custom par on a CHILD COMP round-trips (values
         flow through Phase 3 for children; the default-fallback restores

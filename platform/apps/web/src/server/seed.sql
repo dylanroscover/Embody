@@ -30,11 +30,11 @@ DELETE FROM specimen_categories WHERE specimen_id IN (SELECT id FROM specimens W
 DELETE FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil');
 
 -- Purge any prior copy of these real specimens (clean re-run).
-DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata'));
-DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata');
-DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata');
-DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata');
-DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata');
+DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala'));
+DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
+DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
+DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
+DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
 
 -- Tags (deduped across all specimens).
 INSERT OR REPLACE INTO tags (id, name, slug) VALUES
@@ -65,7 +65,9 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
   ('tag-displace', 'displace', 'displace'),
   ('tag-chromatic', 'chromatic', 'chromatic'),
   ('tag-streaks', 'streaks', 'streaks'),
-  ('tag-loop', 'loop', 'loop');
+  ('tag-loop', 'loop', 'loop'),
+  ('tag-mandala', 'mandala', 'mandala'),
+  ('tag-line', 'line', 'line');
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
@@ -226,6 +228,28 @@ INSERT OR REPLACE INTO specimens (
     0,
     0,
     0
+  ),
+  (
+    'sp-mandala',
+    'mandala',
+    'dev-user',
+    'Serenity and Beauty',
+    'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.',
+    'generative',
+    'advanced',
+    '[]',
+    461,
+    'POP,CHOP,MAT,TOP',
+    'ver-mandala',
+    'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
   );
 
 -- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdxn bytes).
@@ -239,7 +263,8 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-noise-terrain', 'sp-noise-terrain', 1, '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5', '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5', 23789, 20, 'scan-noise-terrain', NULL, 'First-party specimen.'),
   ('ver-plasma-interference', 'sp-plasma-interference', 1, '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
-  ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', 34394, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.');
+  ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', 34394, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
+  ('ver-mandala', 'sp-mandala', 1, 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26', 'c920eb5d02607fdb215295ad640bff648afc33d137bf78ce5f2609e96ffc2d26', 322731, 461, 'scan-mandala', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -251,7 +276,8 @@ INSERT OR REPLACE INTO scans (
   ('scan-noise-terrain', 'ver-noise-terrain', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-plasma-interference', 'ver-plasma-interference', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-mandelbulb-march', 'ver-mandelbulb-march', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
-  ('scan-prismatic-strata', 'ver-prismatic-strata', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
+  ('scan-prismatic-strata', 'ver-prismatic-strata', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-mandala', 'ver-mandala', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
 
 -- Specimen <-> tag links.
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
@@ -295,7 +321,15 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
   ('sp-prismatic-strata', 'tag-chromatic'),
   ('sp-prismatic-strata', 'tag-streaks'),
   ('sp-prismatic-strata', 'tag-loop'),
-  ('sp-prismatic-strata', 'tag-vj');
+  ('sp-prismatic-strata', 'tag-vj'),
+  ('sp-mandala', 'tag-generative'),
+  ('sp-mandala', 'tag-pop'),
+  ('sp-mandala', 'tag-glsl'),
+  ('sp-mandala', 'tag-mandala'),
+  ('sp-mandala', 'tag-geometry'),
+  ('sp-mandala', 'tag-line'),
+  ('sp-mandala', 'tag-loop'),
+  ('sp-mandala', 'tag-vj');
 
 -- FTS5 keyword mirror (rowid = specimen rowid; dat_text = key_ops).
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
@@ -325,6 +359,10 @@ FROM specimens WHERE id = 'sp-mandelbulb-march';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'prismatic-strata', 'Prismatic Strata', 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.', 'generative glsl strata displace chromatic streaks loop vj', 'envoy', 'glslTOP rampTOP renderselectTOP bloomTOP'
 FROM specimens WHERE id = 'sp-prismatic-strata';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'mandala', 'Serenity and Beauty', 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP rectanglePOP'
+FROM specimens WHERE id = 'sp-mandala';
 
 -- Category membership (multi). Seed the join table from each specimen's primary
 -- category so the collection facet filter (which reads specimen_categories) and

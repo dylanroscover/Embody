@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 7,
+  "specimen_count": 8,
   "specimens": [
     {
       "slug": "murmuration",
@@ -138,6 +138,26 @@
       "prompt_path": "generative/prismatic-strata.prompt.md",
       "operator_count": 18,
       "warmup_frames": 8,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "mandala",
+      "name": "Serenity and Beauty",
+      "category": "generative",
+      "difficulty": "advanced",
+      "description": "A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer's settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.",
+      "tags": ["generative", "pop", "glsl", "mandala", "geometry", "line", "loop", "vj"],
+      "key_ops": ["glslPOP", "copyPOP", "circlePOP", "mergePOP", "shuffleCHOP", "lineMAT", "constantMAT", "glslTOP", "rectanglePOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdxn_path": "generative/mandala.tdxn",
+      "thumbnail_path": "generative/mandala.jpg",
+      "prompt_path": "generative/mandala.prompt.md",
+      "operator_count": 461,
+      "warmup_frames": 4,
       "preview": true,
       "author": "Embody",
       "license": "CC-BY-4.0"

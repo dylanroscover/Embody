@@ -1272,6 +1272,45 @@ class TestTDXNReconstruction(EmbodyTestCase):
 		self.assertEqual(
 			rlk.inputConnectors[1].connections[0].owner.name, 'src2')
 
+	def test_D11_multi_output_comp_keeps_source_output_index(self):
+		"""A wire from a COMP's SECOND output connector reimports from
+		that connector, not from output 0.
+
+		The inputs array only named the source, so every consumer of a
+		multi-Out COMP came back wired to output 0 -- the mandala
+		specimen's out_line / out_params / out_fill all delivered the
+		line stream (2026-09-15). An entry is {source, out} when out > 0.
+		"""
+		multi = self.sandbox.create(baseCOMP, 'multi')
+		ca = multi.create(constantCHOP, 'ca')
+		ca.par.const0name = 'a'
+		cb = multi.create(constantCHOP, 'cb')
+		cb.par.const0name = 'b'
+		o1 = multi.create(outCHOP, 'out1')
+		o1.inputConnectors[0].connect(ca)
+		o2 = multi.create(outCHOP, 'out2')
+		o2.inputConnectors[0].connect(cb)
+		o2.par.connectorder = 1
+		sink = self.sandbox.create(nullCHOP, 'sink')
+		multi.outputConnectors[1].connect(sink.inputConnectors[0])
+		self.assertEqual([c.name for c in sink.chans()], ['b'],
+						 'precondition: output connector 1 carries cb')
+
+		orig_tdxn, _reimported, _res = self._roundTrip(self.sandbox)
+		by_name = {o.get('name'): o
+				   for o in orig_tdxn.get('operators', [])}
+		self.assertEqual(by_name['sink'].get('inputs'),
+						 [{'source': 'multi', 'out': 1}],
+						 'export must name the source output connector')
+
+		rsink = self.sandbox.op('sink')
+		conns = rsink.inputConnectors[0].connections
+		self.assertEqual(len(conns), 1)
+		self.assertEqual(conns[0].owner.name, 'multi')
+		self.assertEqual(conns[0].index, 1,
+						 'the wire must come back from output connector 1')
+		self.assertEqual([c.name for c in rsink.chans()], ['b'])
+
 	def _untrack(self, comp_path):
 		"""Remove a test externalization completely: row, tags, file.
 		Tests that tag sandbox COMPs MUST purge them -- leaked rows

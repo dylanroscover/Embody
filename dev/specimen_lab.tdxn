@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
-build: 6
-generator: Embody/6.2.50
+build: 9
+generator: Embody/6.2.53
 td_build: 099.2025.33230
 network_path: /specimen_lab
 options:
@@ -10,27 +10,9 @@ options:
 type_defaults:
   baseCOMP:
     size: [160, 130]
-  glslTOP:
-    parameters:
-      format: rgba16float
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-  infoDAT:
-    flags:
-    - viewer
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-  renderselectTOP:
-    parameters:
-      format: rgba16float
-      top: glsl_strata
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-  textDAT:
-    parameters:
-      language: glsl
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdxn
 par_templates:
   output:
   - clampMax: true
@@ -79,6 +61,459 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdxn
 operators:
+- name: mandala
+  type: baseCOMP
+  parameters:
+    parentshortcut: Mandala
+  custom_pars:
+    Mandala:
+    - name: Resolution
+      style: Int
+      default: 1080
+      min: 64.0
+      max: 4096.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 2160.0
+      help: Output size in pixels (square). Render, noise and finishing TOPs all follow it.
+    - name: Scale
+      style: Float
+      default: 1
+      min: 0.05
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      normMax: 2.0
+      help: Global zoom. 1.0 fits a radius-1 mandala with a small margin.
+      value: 0.92
+    - name: Rotate
+      style: Float
+      normMin: -180.0
+      normMax: 180.0
+      help: Global rotation of the whole mandala in degrees, added to every layer.
+    - name: Speedmult
+      style: Float
+      label: Speed Multiplier
+      default: 1
+      max: 100.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: Multiplies every layer Speed and Pulse Rate. 0 freezes the animation.
+      value: 2
+    - name: Energy
+      style: Float
+      default: 1
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Multiplies every layer animation AMOUNT (waves, tumble, LFO depths). 0 freezes shapes in place while spins continue; 2 doubles the motion.
+      value: 1.5
+    - name: Linewidth
+      style: Float
+      label: Line Width
+      startSection: true
+      default: 1.4
+      min: 0.01
+      max: 50.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.2
+      normMax: 6.0
+      help: 'Base line width for every line layer (Line MAT units: 1 = 1/1000 of the image width). Each layer multiplies it with its own Line Width.'
+      value: 2
+    - name: Loop
+      style: Toggle
+      startSection: true
+      help: Quantize every animation rate and spin so the whole mandala repeats exactly every Loop Length seconds (for seamless renders). Wobble crawl walks a circle in noise space instead of drifting.
+    - name: Inkwidth
+      style: Float
+      label: Ink Width
+      default: 1
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Global multiplier on every layer Ink contour (the dark stroke drawn behind outlines and around fills).
+      value: 1.15
+    - name: Looplength
+      style: Float
+      label: Loop Length
+      default: 12
+      min: 0.5
+      max: 3600.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 60.0
+      help: Seconds per seamless loop when Loop is on.
+    - name: Fillopacity
+      style: Float
+      label: Fill Opacity
+      default: 1
+      clampMin: true
+      clampMax: true
+      help: Global opacity of every filled shape.
+    - name: Inkcolor
+      style: Int
+      label: Ink Color
+      default: 8
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot used for the Ink contours (8 = Ink by default).
+    - name: Timemode
+      style: Menu
+      label: Time Mode
+      default: realtime
+      menuNames:
+      - realtime
+      - manual
+      menuLabels:
+      - Realtime
+      - Manual
+      help: realtime = wall clock (absTime); manual = the Manual Time parameter drives every animation (used by frame-accurate offline renders).
+    - name: Manualtime
+      style: Float
+      label: Manual Time
+      normMax: 60.0
+      help: Animation time in seconds when Time Mode is manual.
+    - name: Saturation
+      style: Float
+      default: 0.92
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: Global color saturation multiplier applied before the wear pass. Below 1 ages the pigments (0.85 = gently faded).
+    - name: Background
+      style: RGBA
+      size: 3
+      startSection: true
+      default: [0.06, 0.16, 0.46]
+      help: Background field color behind the mandala (the deep thangka blue by default).
+    Palette:
+    - name: Col1
+      style: RGBA
+      label: 1 Vermilion
+      size: 3
+      startSection: true
+      default: [0.82, 0.2, 0.13]
+      help: Palette slot 1 (Vermilion). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col2
+      style: RGBA
+      label: 2 Saffron
+      size: 3
+      default: [0.94, 0.53, 0.12]
+      help: Palette slot 2 (Saffron). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col3
+      style: RGBA
+      label: 3 Gold
+      size: 3
+      default: [0.93, 0.76, 0.3]
+      help: Palette slot 3 (Gold). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col4
+      style: RGBA
+      label: 4 Teal
+      size: 3
+      default: [0.12, 0.5, 0.41]
+      help: Palette slot 4 (Teal). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col5
+      style: RGBA
+      label: 5 Cream
+      size: 3
+      default: [0.96, 0.91, 0.78]
+      help: Palette slot 5 (Cream). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col6
+      style: RGBA
+      label: 6 Indigo
+      size: 3
+      default: [0.13, 0.3, 0.66]
+      help: Palette slot 6 (Indigo). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col7
+      style: RGBA
+      label: 7 Rose
+      size: 3
+      default: [0.8, 0.3, 0.44]
+      help: Palette slot 7 (Rose). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    - name: Col8
+      style: RGBA
+      label: 8 Ink
+      size: 3
+      default: [0.1, 0.07, 0.09]
+      help: Palette slot 8 (Ink). Layers pick slots by number with Color A / Color B, so recoloring here restyles every layer that uses it.
+    Wear:
+    - name: Grunge
+      style: Float
+      default: 0.35
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      help: Strength of the paper-fiber texture inside the worn patches. 0 = clean vector look.
+    - name: Grungebase
+      style: Float
+      label: Grunge Base
+      default: 0.14
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 0.5
+      help: Uniform paper-fibre texture over the WHOLE image, mandala included (the patchy Grunge sits on top of it). Keep it low.
+    - name: Grungescale
+      style: Float
+      label: Grunge Scale
+      default: 1
+      min: 0.01
+      max: 50.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.25
+      normMax: 4.0
+      help: Size of the fiber texture. Higher = finer grain.
+      value: 2
+    - name: Coverage
+      style: Float
+      default: 0.35
+      clampMin: true
+      clampMax: true
+      help: How much of the image is worn. 0 = pristine everywhere, 1 = worn everywhere. The wear is patchy, never uniform.
+      value: 0.3
+    - name: Patchscale
+      style: Float
+      label: Patch Scale
+      default: 1
+      min: 0.01
+      max: 50.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.25
+      normMax: 4.0
+      help: Size of the worn patches. Lower = a few big faded regions, higher = many small spots.
+      value: 0.7
+    - name: Fade
+      style: Float
+      default: 0.35
+      clampMin: true
+      clampMax: true
+      help: How far the worn patches fade toward the Paper color (faded ink / rubbed pigment).
+      value: 0.1
+    - name: Paper
+      style: RGBA
+      size: 3
+      default: [0.84, 0.76, 0.6]
+      help: Color the worn patches fade toward (old cloth / paper).
+    - name: Seed
+      style: Float
+      default: 1
+      normMax: 100.0
+      help: Random seed for the wear pattern. Change it to get a different distribution of patches.
+    - name: Vignette
+      style: Float
+      startSection: true
+      default: 0.22
+      clampMin: true
+      clampMax: true
+      help: Darkening of the frame corners. Keep it subtle.
+    - name: Grain
+      style: Float
+      default: 0.035
+      clampMin: true
+      clampMax: true
+      normMax: 0.2
+      help: Animated film grain added last. 0.03-0.06 is subtle.
+    - name: Sparkle
+      style: Float
+      label: Sparkle Density
+      startSection: true
+      default: 0.0002
+      max: 0.05
+      clampMin: true
+      clampMax: true
+      normMax: 0.001
+      help: Fraction of pixels lit by a speck of light (0.0002 = roughly 200 specks at 1080p, half visible at any moment as they twinkle). Sparse by design; 0 = off.
+    - name: Sparkleclump
+      style: Float
+      label: Sparkle Clumping
+      default: 0.7
+      clampMin: true
+      clampMax: true
+      help: How much the specks gather into a few clusters instead of spreading evenly.
+    - name: Sparklerate
+      style: Float
+      label: Sparkle Shimmer
+      default: 2.5
+      max: 100.0
+      clampMin: true
+      clampMax: true
+      normMax: 8.0
+      help: Twinkle speed of the specks in radians per second (snapped to whole cycles in Loop mode).
+    Scroll:
+    - name: Scrollwork
+      style: Float
+      startSection: true
+      default: 0.85
+      clampMin: true
+      clampMax: true
+      help: Opacity of the ornamental scrollwork layer drawn over the field (0 = off). Squiggling contour lines and small leaf lobes, folded into mirrored sectors like carpet ornament.
+      value: 1
+    - name: Scrollscale
+      style: Float
+      label: Scale
+      default: 4
+      min: 0.1
+      max: 100.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 16.0
+      help: Size of the ornament. Higher = finer, more squiggles.
+      value: 14.5699996948
+    - name: Scrolldetail
+      style: Int
+      label: Detail
+      default: 3
+      min: 1.0
+      max: 6.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 6.0
+      help: 'Noise octaves in the ornament: 2-3 = smooth graceful curls, 5-6 = crackly fine detail.'
+      value: 6
+    - name: Scrollwarp
+      style: Float
+      label: Warp
+      default: 0.7
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
+      value: 0.5299999714
+    - name: Scrolldensity
+      style: Float
+      label: Line Density
+      default: 3.2
+      min: 0.1
+      max: 60.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 12.0
+      help: Number of contour squiggles across the field.
+      value: 1.5299999714
+    - name: Scrollleaves
+      style: Float
+      label: Squiggle Lines
+      clampMin: true
+      clampMax: true
+      help: Opacity of faint contour squiggles drawn over the filled lobes (0 = fills only).
+      value: 1
+    - name: Scrollsymmetry
+      style: Int
+      label: Symmetry
+      default: 8
+      min: 1.0
+      max: 64.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 24.0
+      help: Mirrored sectors around the centre (8 = matches the vases and gates).
+    - name: Scrollinner
+      style: Float
+      label: Inner Radius
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.3
+      normMax: 0.8
+      help: Where the ornament starts (scene units; the palace wall sits at about 0.47).
+      value: 0.4399999976
+    - name: Scrollouter
+      style: Float
+      label: Outer Radius
+      default: 0.855
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      help: Where the ornament stops (the beads sit at 0.86).
+      value: 0.7950000167
+    - name: Scrollflow
+      style: Float
+      label: Growth Stretch
+      default: 0.35
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Radial elongation of the ornament lobes along their growth direction (0 = round, 1 = twice as long radially).
+      value: 0.2199999988
+    - name: Scrollevolve
+      style: Float
+      label: Growth Speed
+      default: 0.15
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Outward growth speed of the ornament in pattern units per second (snapped to whole pattern periods per loop in Loop mode). Always outward from the centre.
+      value: 0.4199999869
+    - name: Scrolllinecolor
+      style: Int
+      label: Fill Color A
+      startSection: true
+      default: 2
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot for the first lobe family (saffron by default; varies toward vermilion).
+    - name: Scrollleafcolor
+      style: Int
+      label: Fill Color B
+      default: 4
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot for the second lobe family (teal by default, lifted toward gold in the shader).
+    - name: Scrollmorph
+      style: Float
+      label: Organic Morph
+      default: 0.8
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: How much the ornament writhes and swells in place while it grows (a second noise field bends the domain warp). 0 = rigid stamp sliding outward.
+      value: 1.5
+    - name: Scrollmorphrate
+      style: Float
+      label: Morph Rate
+      default: 0.3
+      max: 5.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Speed of the in-place morph in radians per second (snapped to whole cycles per loop in Loop mode).
+      value: 0.75
+  flags:
+  - viewer
+  position: [1600, -400]
+  tdn_ref: specimen_lab/mandala.tdxn
 - name: hyper_ntsc
   type: baseCOMP
   custom_pars:
@@ -171,9 +606,6 @@ operators:
       clampMax: true
       normMax: 1.5
   position: [1200, 0]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/hyper_ntsc.tdxn
 - name: murmuration
   type: baseCOMP
@@ -262,9 +694,6 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [0, -800]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/murmuration.tdxn
 - name: kaleidoscope
   type: baseCOMP
@@ -324,9 +753,6 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [800, -400]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/kaleidoscope.tdxn
 - name: noise_terrain
   type: baseCOMP
@@ -422,9 +848,6 @@ operators:
     Output:
       $t: output_2
   position: [400, -800]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/noise_terrain.tdxn
 - name: packet_fabric
   type: baseCOMP
@@ -550,10 +973,22 @@ operators:
       normMin: 256.0
       normMax: 7680.0
   position: [400, -400]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/packet_fabric.tdxn
+- name: mandala_export
+  type: moviefileoutTOP
+  parameters:
+    type: stopframemovie
+    videocodec: h264
+    file: C:/Users/admin/Documents/Git/Embody/marketing/mandala/mandala_loop.mp4
+    fps: 60
+    pause: true
+    avgbitrate: 20000
+    peakbitrate: 32000
+  position: [2000, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - mandala
 - name: waveform_stack
   type: baseCOMP
   custom_pars:
@@ -716,9 +1151,6 @@ operators:
       normMax: 2.0
       help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
   position: [0, -400]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/waveform_stack.tdxn
 - name: essence_streams
   type: baseCOMP
@@ -846,9 +1278,6 @@ operators:
       $t: output
       Resw: 1080
       Resh: 1350
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/essence_streams.tdxn
 - name: vertical_fibers
   type: baseCOMP
@@ -980,9 +1409,6 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [400, 0]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/vertical_fibers.tdxn
 - name: mandelbulb_march
   type: baseCOMP
@@ -1058,9 +1484,6 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [800, -800]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/mandelbulb_march.tdxn
 - name: prismatic_strata
   type: baseCOMP
@@ -1357,595 +1780,7 @@ operators:
       normMax: 7680.0
       help: Render height (px).
   position: [1600, 0]
-  color: [0.67, 0.67, 0.67]
-  children:
-  - name: out1
-    type: outTOP
-    parameters:
-      label: =me.name
-    flags:
-    - display
-    position: [5400, 0]
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-    inputs:
-    - bloom
-  - name: bloom
-    type: bloomTOP
-    parameters:
-      preblacklevel: 0.8
-      minbloomradius: 0.15
-      maxbloomradius: 0.8
-      bloomthreshold: 0
-      bloomintensity: =parent.Specimen.par.Bloom.eval()
-    position: [5000, 0]
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-    inputs:
-    - glsl_streaks
-  - name: glsl_prism
-    type: glslTOP
-    parameters:
-      pixeldat: glsl_prism_pixel
-      computedat: glsl_prism_compute
-      inputextenduv: mirror
-      premultrgbbyalpha: false
-    sequences:
-      vec:
-      - name: uPrism
-        valuex: =parent.Specimen.par.Flow.eval()
-        valuey: =parent.Specimen.par.Dispersion.eval()
-        valuez: =parent.Specimen.par.Streakthreshold.eval()
-      - name: uDetail
-        valuex: =parent.Specimen.par.Causticgain.eval()
-        valuey: =parent.Specimen.par.Layergain.eval()
-        valuez: 0
-        valuew: 0
-    position: [2800, 0]
-    inputs:
-    - glsl_strata
-    - renderselect_disp
-  - name: glsl_strata
-    type: glslTOP
-    parameters:
-      pixeldat: glsl_strata_pixel
-      computedat: glsl_strata_compute
-      inputextenduv: hold
-      numcolorbufs: 3
-      outputresolution: custom
-      resolutionw: =parent.Specimen.par.Resw.eval()
-      resolutionh: =parent.Specimen.par.Resh.eval()
-    sequences:
-      vec:
-      - name: uField
-        valuex: =parent.Specimen.par.Scale.eval()
-        valuey: =parent.Specimen.par.Stretch.eval()
-        valuez: =parent.Specimen.par.Warp.eval()
-        valuew: =parent.Specimen.par.Detail.eval()
-      - name: uStrata
-        valuex: =parent.Specimen.par.Bands.eval()
-        valuey: =parent.Specimen.par.Displace.eval()
-        valuez: =parent.Specimen.par.Relief.eval()
-        valuew: =parent.Specimen.par.Edgesoft.eval()
-      - name: uTime
-        valuex: =(absTime.seconds % parent.Specimen.par.Loopseconds.eval()) / parent.Specimen.par.Loopseconds.eval()
-        valuey: =parent.Specimen.par.Evolution.eval()
-        valuez: =parent.Specimen.par.Seed.eval()
-        valuew: =parent.Specimen.par.Glow.eval()
-      - name: uCaustic
-        valuex: =parent.Specimen.par.Cellscale.eval()
-        valuey: =parent.Specimen.par.Cellwidth.eval()
-        valuez: =parent.Specimen.par.Tint.eval()
-        valuew: =parent.Specimen.par.Iridescence.eval()
-      - name: uLayers
-        valuex: =parent.Specimen.par.Layers.eval()
-        valuey: =parent.Specimen.par.Scroll.eval()
-        valuez: =parent.Specimen.par.Grain.eval()
-        valuew: 0
-      - name: uPulse
-        valuex: =parent.Specimen.par.Pulses.eval()
-        valuey: =parent.Specimen.par.Pulsegain.eval()
-        valuez: 0
-        valuew: 0
-    flags:
-    - viewer
-    position: [1400, 0]
-    inputs:
-    - ramp_strata
-  - name: ramp_strata
-    type: rampTOP
-    parameters:
-      dat: ramp_strata_keys
-      color1: 0.400000006
-      color2: 0.2700000107
-      color3: 0.200000003
-      extendleft: hold
-      outputresolution: custom
-      resolutionw: 512
-      resolutionh: 4
-      format: rgba16float
-    position: [400, 0]
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-  - name: glsl_streaks
-    type: glslTOP
-    parameters:
-      pixeldat: glsl_streaks_pixel
-      computedat: glsl_streaks_compute
-      inputextenduv: mirror
-    sequences:
-      vec:
-      - name: uStreak
-        valuex: =parent.Specimen.par.Streaklength.eval()
-        valuey: =parent.Specimen.par.Streakgain.eval()
-    position: [4000, 0]
-    inputs:
-    - glsl_prism
-    - renderselect_grad
-  - name: glsl_prism_info
-    type: infoDAT
-    parameters:
-      op: glsl_prism
-    position: [2950, -120]
-    dock: glsl_prism
-    dat_read_only: true
-  - name: glsl_prism_pixel
-    type: textDAT
-    parameters:
-      extension: frag
-    flags:
-    - viewer
-    position: [2800, -120]
-    dock: glsl_prism
-    dat_content: |
-      // glsl_prism -- the rainbow. A Displace TOP run three times: a smooth base displacement field
-      // (Flow) warps the whole soft image, and each channel takes a different share of it (Dispersion):
-      // red 1-d, green 1, blue 1+d. Where the field is strong, red and blue land tens of pixels apart,
-      // so every gradient picks up a regional warm or cool tint and every edge comes apart into
-      // orange / azure fringes; where the field is weak the channels line up and the image stays neutral.
-      // The detail (caustic web, fine layers) is composited AFTER the split, sampled at the green
-      // position so it stays glued to the layers -- crisp lines that were split would leave green and
-      // magenta copies the reference never shows.
-      // Input 0 = soft strata (glsl_strata buffer 0). Input 1 = field (buffer 1 via renderselect_disp):
-      // xy = flow vector encoded 0.5 + 0.5 * w, z = web mask, w = fine layers.
-      // Alpha out = streak seeds for glsl_streaks: thin bright vertical features (a horizontal high-pass
-      // of the base and of the web, weighted toward bright pixels, dilated a few px along y so the streak
-      // pass cannot step over one, gated per column so the streaks cluster).
-      uniform vec4 uPrism;    // x = Flow (base displacement, fraction of frame height)  y = Dispersion (per-channel share)  z = Streakthreshold  w unused
-      uniform vec4 uDetail;   // x = Causticgain  y = Layergain  z,w unused
-      out vec4 fragColor;
-
-      float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-      float lumAt(vec2 uv){ return lum(texture(sTD2DInputs[0], uv).rgb); }
-      float webAt(vec2 uv){ return texture(sTD2DInputs[1], uv).z; }
-
-      float seedAt(vec2 uv, vec2 px){
-          vec2 dx = vec2(3.0 * px.x, 0.0);
-          float c = lumAt(uv);
-          float hpBase = c - 0.5 * (lumAt(uv - dx) + lumAt(uv + dx));
-          float hpWeb  = webAt(uv) - 0.5 * (webAt(uv - dx) + webAt(uv + dx));
-          float hp = max(hpBase, 0.5 * hpWeb);
-          return smoothstep(uPrism.z, uPrism.z + 0.12, hp) * smoothstep(0.45, 0.9, c);
-      }
-
-      void main(){
-          vec2 uv  = vUV.st;
-          vec2 res = uTD2DInfos[0].res.zw;                          // width, height
-          vec2 px  = uTD2DInfos[0].res.xy;                          // 1/width, 1/height
-          vec2 w   = texture(sTD2DInputs[1], uv).xy * 2.0 - 1.0;    // decode -1..1
-          vec2 d   = uPrism.x * w * vec2(res.y / res.x, 1.0);       // height-relative -> uv (x shrinks by aspect)
-          float share = uPrism.y;
-          float r = texture(sTD2DInputs[0], uv + d * (1.0 - share)).r;
-          float g = texture(sTD2DInputs[0], uv + d).g;
-          float b = texture(sTD2DInputs[0], uv + d * (1.0 + share)).b;
-          vec3 col = vec3(r, g, b);
-          float L = lum(col);
-
-          // detail rides with the green channel
-          vec4 f = texture(sTD2DInputs[1], uv + d);
-          float fine = f.w;
-          col *= 1.0 + uDetail.y * (fine - 0.3) * mix(vec3(1.1, 0.95, 0.85), vec3(1.0), smoothstep(0.1, 0.6, L));
-          float web = f.z;
-          col += web * uDetail.x * mix(0.8, 0.02, smoothstep(0.15, 0.8, L)) * vec3(1.0, 0.75, 0.55) * (0.5 + col);
-
-          float seed = 0.0;
-          for(int j = -2; j <= 2; j++){
-              seed = max(seed, seedAt(uv + d + vec2(0.0, float(j) * 2.0 * px.y), px));
-          }
-          float colBin = floor(uv.x * res.x / 3.0);
-          float gate = fract(sin(colBin * 12.9898) * 43758.5453);
-          seed *= smoothstep(0.62, 0.85, gate);
-
-          fragColor = TDOutputSwizzle(vec4(col, seed));
-      }
-    dat_content_format: text
-  - name: glsl_strata_info
-    type: infoDAT
-    parameters:
-      op: glsl_strata
-    position: [1550, -120]
-    dock: glsl_strata
-    dat_read_only: true
-  - name: ramp_strata_keys
-    type: tableDAT
-    flags:
-    - viewer
-    - -showDocked
-    position: [400, -120]
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-    dock: ramp_strata
-    dat_content:
-    - - pos
-      - r
-      - g
-      - b
-      - a
-    - - '0'
-      - '0.93'
-      - '0.85'
-      - '0.75'
-      - '1'
-    - - '0.03'
-      - '0.82'
-      - '0.81'
-      - '0.80'
-      - '1'
-    - - '0.10'
-      - '0.72'
-      - '0.72'
-      - '0.73'
-      - '1'
-    - - '0.30'
-      - '0.60'
-      - '0.60'
-      - '0.62'
-      - '1'
-    - - '0.55'
-      - '0.46'
-      - '0.46'
-      - '0.48'
-      - '1'
-    - - '0.72'
-      - '0.30'
-      - '0.30'
-      - '0.32'
-      - '1'
-    - - '0.82'
-      - '0.14'
-      - '0.13'
-      - '0.14'
-      - '1'
-    - - '0.90'
-      - '0.08'
-      - '0.07'
-      - '0.08'
-      - '1'
-    - - '0.95'
-      - '0.17'
-      - '0.11'
-      - '0.09'
-      - '1'
-    - - '1'
-      - '0.40'
-      - '0.27'
-      - '0.20'
-      - '1'
-    dat_content_format: table
-  - name: glsl_strata_pixel
-    type: textDAT
-    parameters:
-      extension: frag
-    flags:
-    - viewer
-    position: [1400, -120]
-    dock: glsl_strata
-    dat_content: |
-      // glsl_strata -- the layered field, built as a stack of scales:
-      //   coarse : soft brightness PULSES (a cosine wave bent by very low-frequency noise) that roll down
-      //            the frame once per loop -- the ripple. Smooth and wide, never hard-edged.
-      //   mid    : the STRATA -- a vertical ramp cycling Bands times per frame height, displaced by
-      //            domain-warped fBm; fract() of that is the stratum phase, which indexes the 1D color
-      //            ramp on input 0. The rims are jagged silhouettes that only morph slowly (Evolution).
-      //   fine   : contour layers that follow every fold, a caustic web, and fibrous grain.
-      // Output 0 = the SOFT strata (ramp + relief + light + pulses + color) -- what glsl_prism splits per channel.
-      // Output 1 = detail composited back after the split: xy = flow field (encoded 0.5+0.5*w),
-      // z = caustic web mask, w = fine contour layers.
-      // Output 2 = the streak direction field: the local "up" through the layers (gradient of the
-      // displaced ramp coordinate, encoded 0.5+0.5*dir), so glsl_streaks can bend its rays with the folds.
-      uniform vec4 uField;    // x=Scale (noise cycles / frame height)  y=Stretch (horizontal elongation)  z=Warp  w=Detail (octaves)
-      uniform vec4 uStrata;   // x=Bands (strata / frame height)  y=Displace (ramp displacement, in strata)  z=Relief  w=Edgesoft
-      uniform vec4 uTime;     // x=loop phase 0..1  y=Evolution (loop circle radius)  z=Seed  w=Glow
-      uniform vec4 uCaustic;  // x=Cellscale (cells / frame height)  y=Cellwidth  z=Tint  w=Iridescence
-      uniform vec4 uLayers;   // x=Layers (fine contour lines per stratum)  y=Scroll (pulses per loop)  z=Grain  w unused
-      uniform vec4 uPulse;    // x=Pulses (pulse bands / frame height)  y=Pulsegain  z,w unused
-
-      layout(location = 0) out vec4 fragColor;
-      layout(location = 1) out vec4 fragField;
-      layout(location = 2) out vec4 fragDir;
-
-      const float TAU = 6.28318530718;
-
-      // One swap point for the noise. TD's built-in 4D simplex: xy = space, zw = a point on a circle
-      // that the loop phase walks around, so every frame of the loop is a fresh field and frame N meets frame 0.
-      float n4(vec4 v){ return TDSimplexNoise(v); }
-
-      // Anisotropy fades with the octave: the broad shapes are long horizontal ridges (stretched by
-      // `stretch`), the fine octaves are isotropic, so every rim is a jagged mountain profile.
-      float fbm(vec2 q, vec2 zw, int oct, float stretch){
-          float sum = 0.0, amp = 0.5, norm = 0.0;
-          float sx = 1.0 / stretch;
-          for(int i = 0; i < 6; i++){
-              if(i >= oct) break;
-              sum  += amp * n4(vec4(q.x * sx, q.y, zw));
-              norm += amp;
-              q *= 2.03; zw *= 1.15; amp *= 0.5;    // zw grows slowly: fine detail must not flicker
-              sx = min(1.0, sx * 1.8);
-          }
-          return sum / norm;   // ~[-1, 1]
-      }
-
-      vec2 hash22(vec2 p){
-          vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.xx + p3.yz) * p3.zy);
-      }
-
-      // Worley cells whose feature points orbit with the loop phase (periodic -> seamless). Returns (F1, F2).
-      vec2 worley(vec2 x, float phase){
-          vec2 n = floor(x), f = fract(x);
-          float f1 = 8.0, f2 = 8.0;
-          for(int j = -1; j <= 1; j++){
-              for(int i = -1; i <= 1; i++){
-                  vec2 g = vec2(float(i), float(j));
-                  vec2 o = 0.5 + 0.4 * sin(TAU * (hash22(n + g) + phase));
-                  vec2 r = g + o - f;
-                  float d = dot(r, r);
-                  if(d < f1){ f2 = f1; f1 = d; }
-                  else if(d < f2){ f2 = d; }
-              }
-          }
-          return sqrt(vec2(f1, f2));
-      }
-
-      void main(){
-          vec2 res = uTDOutputInfo.res.zw;                  // output res: zw = width, height
-          float aspect = res.x / res.y;
-          vec2 uv = vUV.st;
-          vec2 p = vec2((uv.x - 0.5) * aspect, uv.y - 0.5);  // frame height = 1 unit, y up
-
-          float scale   = max(0.05, uField.x);
-          float stretch = max(0.2, uField.y);
-          float warp    = uField.z;
-          int   oct     = int(clamp(uField.w, 1.0, 6.0));
-
-          float phase = uTime.x;
-          vec2  loop  = uTime.y * vec2(cos(TAU * phase), sin(TAU * phase)) + uTime.z;
-          float drift = uLayers.y * phase;                   // the pulses' downward travel, in pulse bands
-
-          vec2 q = p * scale;
-
-          // Low-frequency warp vector: bends the layers into folds.
-          vec2 w = vec2(n4(vec4(q * 0.5 + 7.3, loop)),
-                        n4(vec4(q * 0.5 - 3.1, loop + 5.0)));
-          vec2 qw = q + warp * w;
-
-          // Stratum-scale flow field for the prism pass: regions the size of a layer get displaced.
-          // STATIC in time on purpose -- a fixed curved-space lens the layers scroll and morph through;
-          // an evolving field made the whole image swim. (simplex sits mostly within +-0.5, so it is
-          // doubled: the field reaches full strength in patches.)
-          vec2 wd = clamp(2.0 * vec2(n4(vec4(q * 1.8 + 19.0, uTime.z + 3.7, -2.1)),
-                                     n4(vec4(q * 1.8 - 14.0, uTime.z - 6.3, 4.4))), -1.0, 1.0);
-
-          // ---- mid scale: the strata ----
-          float n = fbm(qw, loop + 11.0, oct, stretch);
-          float v = uv.y * uStrata.x + uStrata.y * n;        // the displaced ramp coordinate (the rims do not scroll)
-          float s = fract(v);                                // s = 0 just above a rim (lit top), s = 1 just below (shadow)
-
-          // Soften the cliff: blend the shadow end of the ramp back into the lit start over Edgesoft of a period.
-          float soft = max(uStrata.w, 0.001);
-          vec3 col = texture(sTD2DInputs[0], vec2(s, 0.5)).rgb;
-          vec3 top = texture(sTD2DInputs[0], vec2(0.0, 0.5)).rgb;
-          col = mix(col, top, smoothstep(1.0 - soft, 1.0, s));
-
-          // Relief: lit from above. Slope of v per unit height, sign-normalized so it does not depend on the API's y.
-          float dvdy = dFdy(v) / dFdy(uv.y);
-          float lit = 1.0 + uStrata.z * clamp(dvdy / max(uStrata.x, 0.01) - 1.0, -1.0, 1.0);
-          col *= lit;
-
-          // ---- coarse scale: light and pulses ----
-          // A broad drifting field: positive lifts regions toward white (the backlit fog), negative sinks
-          // whole layers into shadow, so the frame keeps deep darks as well as blown highlights.
-          float g = fbm(q * 0.4 + 23.0, loop * 0.7 + 3.0, 2, 1.5);
-          float shade = mix(1.0 - clamp(1.5 * uTime.w, 0.0, 0.6), 1.0, smoothstep(-0.6, -0.05, g));
-          col *= shade;
-          float fog = uTime.w * smoothstep(0.05, 0.75, g);
-          col *= 1.0 + 1.0 * fog;
-          col = mix(col, vec3(0.97), 0.3 * fog * fog);
-
-          // The pulses: a cosine wave in a coordinate that is mostly y, bent by very coarse smooth noise
-          // and a little by the strata folds, rolling down `Scroll` bands per loop. Squared for wide soft
-          // crests; it only modulates brightness, so there is no edge anywhere in it.
-          float nc = fbm(q * 0.35 + 47.0, loop * 0.5 + 13.0, 2, 2.0);
-          float pc = uv.y * uPulse.x + drift + 0.45 * nc + 0.12 * n;
-          float pulse = 0.5 + 0.5 * cos(TAU * pc);
-          pulse *= pulse;
-          col *= 1.0 + uPulse.y * (pulse - 0.5);            // centred low: the troughs dim about as much as the crests lift
-
-          // ---- color ----
-          // Two soft hue mechanisms on the soft base (the prism pass only fringes the edges): a regional
-          // temperature field tints mids and shadows rust or steel blue, and a thin-film hue cycle that
-          // rides the pulse coordinate lays pastel pink / peach / azure bands that roll down with the light.
-          float L = dot(col, vec3(0.2126, 0.7152, 0.0722));
-          float temp = n4(vec4(q * 0.9 + 31.0, loop * 0.6 + 9.0));
-          float tk = uCaustic.z * (1.0 - smoothstep(0.7, 1.0, L));
-          col *= vec3(1.0 + 0.55 * tk * temp, 1.0 - 0.06 * tk * temp, 1.0 - 0.75 * tk * temp);   // rust, not yellow
-          float phi = TAU * (pc * 2.0 + v * 0.5) + 2.0 * temp;
-          float ik = uCaustic.w * smoothstep(0.25, 0.7, L);
-          col *= 1.0 + ik * vec3(cos(phi), 0.6 * cos(phi + 2.6), cos(phi + 4.2));
-
-          // ---- fine scale ----
-          // Fibrous grain: two octaves of small noise, strongest in the mids.
-          float fg = fbm(q * 5.0 + 61.0, loop + 51.0, 2, 1.0);
-          col *= 1.0 + uLayers.z * fg * (0.4 + 0.6 * smoothstep(0.15, 0.7, L));
-
-          // Fine sediment layers: thin contour lines of the SAME displaced coordinate, so they follow every
-          // fold and run continuously through the rims. A fine noise bends the line phase and gates the
-          // amplitude, so they read as brushed fibres in patches.
-          float grain = n4(vec4(q * vec2(6.0, 12.0) + 5.0, loop + 21.0));
-          float fine = pow(0.5 + 0.5 * cos(TAU * v * uLayers.x + 3.0 * grain), 10.0);
-          fine *= smoothstep(-0.4, 0.4, n4(vec4(q * 1.5 + 41.0, loop + 33.0)));
-
-          // Caustic web on the warped coordinates, so the veins follow the folds; brightness varies along each vein.
-          vec2 pw = qw / scale;
-          vec2 F  = worley(pw * uCaustic.x * vec2(0.75, 1.0), phase);
-          float web = 1.0 - smoothstep(0.0, max(uCaustic.y, 0.005), F.y - F.x);
-          web *= web;
-          web *= 0.55 + 0.45 * n4(vec4(pw * 6.0, loop + 17.0));
-
-          // Streak direction: the local "up" through the layers. Taken from a 2-octave version of the same
-          // coordinate so the field is smooth (screen derivatives of the full fBm would jitter the rays).
-          float vLow = uv.y * uStrata.x + uStrata.y * fbm(qw, loop + 11.0, 2, stretch);
-          vec2 gv = vec2(dFdx(vLow) / dFdx(uv.x) / aspect, dFdy(vLow) / dFdy(uv.y));   // per unit height
-          vec2 dir = normalize(gv + vec2(0.0, 1e-4));
-
-          fragColor = TDOutputSwizzle(vec4(col, 1.0));
-          fragField = TDOutputSwizzle(vec4(0.5 + 0.5 * wd, web, fine));
-          fragDir   = TDOutputSwizzle(vec4(0.5 + 0.5 * dir, 0.0, 1.0));
-      }
-    dat_content_format: text
-  - name: glsl_streaks_info
-    type: infoDAT
-    parameters:
-      op: glsl_streaks
-    position: [4150, -120]
-    dock: glsl_streaks
-    dat_read_only: true
-  - name: renderselect_disp
-    type: renderselectTOP
-    parameters:
-      bufferindex: 1
-    position: [2400, -400]
-  - name: renderselect_grad
-    type: renderselectTOP
-    parameters:
-      bufferindex: 2
-    position: [3800, -400]
-  - name: glsl_prism_compute
-    type: textDAT
-    flags:
-    - viewer
-    - -showDocked
-    position: [2650, -120]
-    dock: glsl_prism
-    dat_content: "// Example Compute Shader\n\n// uniform float exampleUniform;\n\nlayout (local_size_x = 8, local_size_y = 4) in;\nvoid main()\n{\n\t// This code is running 1:1 per pixel, so early-exit\n\t// if this thread overhangs the edge of the output\n\tif (any(greaterThanEqual(ivec2(gl_GlobalInvocationID.xy), ivec2(uTDOutputInfo.res.zw))))\n\t\treturn;\n\n\tvec4 color;\n\t//color = texelFetch(sTD2DInputs[0], ivec2(gl_GlobalInvocationID.xy), 0);\n\tcolor = vec4(1.0);\n\t// We need to use TDImageStoreOutput() so that 8-bit textures that are sRGB\n\t// encoded can be written to correctly from incoming linear values.\n\t// imageStore() does not do this automatically, while pixel shader outputs do.\n\tTDImageStoreOutput(0, gl_GlobalInvocationID, color);\n}\n"
-    dat_content_format: text
-  - name: glsl_streaks_pixel
-    type: textDAT
-    parameters:
-      extension: frag
-    flags:
-    - viewer
-    position: [4000, -120]
-    dock: glsl_streaks
-    dat_content: |
-      // glsl_streaks -- the rain. Seeds (thin bright vertical features) sit in input 0's alpha; input 1 is
-      // the direction field from glsl_strata buffer 2: the local "up" through the layers (the gradient of
-      // the displaced ramp coordinate). Every seed is walked along that field both ways -- a bounded
-      // line-integral max-filter -- so the rays rise perpendicular to the curved layers instead of straight
-      // up the screen, with a random length per column so they are ragged, then screened over the color.
-      uniform vec4 uStreak;   // x = Streaklength (half-length, fraction of frame height)  y = Streakgain  z,w unused
-      out vec4 fragColor;
-      const int N = 24;
-
-      vec2 dirAt(vec2 uv){ return texture(sTD2DInputs[1], uv).xy * 2.0 - 1.0; }
-
-      void main(){
-          vec2 uv  = vUV.st;
-          vec2 res = uTD2DInfos[0].res.zw;
-          vec2 toUV = vec2(res.y / res.x, 1.0);           // a step in height units -> uv
-          vec4 base = texture(sTD2DInputs[0], uv);
-          float colBin  = floor(uv.x * res.x / 3.0);
-          float colRand = fract(sin(colBin * 78.233) * 43758.5453);
-          float halfLen = uStreak.x * (0.35 + 0.65 * colRand);
-          float stepLen = halfLen / float(N);
-          float st = base.a;
-          for(int s = -1; s <= 1; s += 2){                // up the layers, then down
-              vec2 p = uv;
-              vec2 d = dirAt(p) * float(s);
-              for(int i = 1; i <= N; i++){
-                  vec2 nd = dirAt(p);
-                  if(dot(nd, d) < 0.0) nd = -nd;          // keep walking the same way through the field
-                  d = normalize(nd + vec2(0.0, 1e-5));
-                  p += d * stepLen * toUV;
-                  float t = float(i) / float(N);
-                  st = max(st, texture(sTD2DInputs[0], p).a * (1.0 - t * t));
-              }
-          }
-          // screen, not add: a streak lights up mids and shadows and vanishes into the white
-          vec3 col = base.rgb + st * uStreak.y * (1.0 - clamp(base.rgb, 0.0, 1.0));
-          fragColor = TDOutputSwizzle(vec4(col, 1.0));
-      }
-    dat_content_format: text
-  - name: glsl_strata_compute
-    type: textDAT
-    flags:
-    - viewer
-    - -showDocked
-    position: [1250, -120]
-    dock: glsl_strata
-    dat_content: "// Example Compute Shader\n\n// uniform float exampleUniform;\n\nlayout (local_size_x = 8, local_size_y = 4) in;\nvoid main()\n{\n\t// This code is running 1:1 per pixel, so early-exit\n\t// if this thread overhangs the edge of the output\n\tif (any(greaterThanEqual(ivec2(gl_GlobalInvocationID.xy), ivec2(uTDOutputInfo.res.zw))))\n\t\treturn;\n\n\tvec4 color;\n\t//color = texelFetch(sTD2DInputs[0], ivec2(gl_GlobalInvocationID.xy), 0);\n\tcolor = vec4(1.0);\n\t// We need to use TDImageStoreOutput() so that 8-bit textures that are sRGB\n\t// encoded can be written to correctly from incoming linear values.\n\t// imageStore() does not do this automatically, while pixel shader outputs do.\n\tTDImageStoreOutput(0, gl_GlobalInvocationID, color);\n}\n"
-    dat_content_format: text
-  - name: glsl_streaks_compute
-    type: textDAT
-    flags:
-    - viewer
-    - -showDocked
-    position: [3850, -120]
-    dock: glsl_streaks
-    dat_content: "// Example Compute Shader\n\n// uniform float exampleUniform;\n\nlayout (local_size_x = 8, local_size_y = 4) in;\nvoid main()\n{\n\t// This code is running 1:1 per pixel, so early-exit\n\t// if this thread overhangs the edge of the output\n\tif (any(greaterThanEqual(ivec2(gl_GlobalInvocationID.xy), ivec2(uTDOutputInfo.res.zw))))\n\t\treturn;\n\n\tvec4 color;\n\t//color = texelFetch(sTD2DInputs[0], ivec2(gl_GlobalInvocationID.xy), 0);\n\tcolor = vec4(1.0);\n\t// We need to use TDImageStoreOutput() so that 8-bit textures that are sRGB\n\t// encoded can be written to correctly from incoming linear values.\n\t// imageStore() does not do this automatically, while pixel shader outputs do.\n\tTDImageStoreOutput(0, gl_GlobalInvocationID, color);\n}\n"
-    dat_content_format: text
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: 1. Stratum ramp
-    text: 'One period of a stratum, indexed by phase s: s=0 is the lit top of a layer (warm rim line), s rises through grey fog to a brown shadow just under the next rim (s=1). Edit the docked keys table to restyle every layer at once.'
-    position: [330, -190]
-    size: [270, 450]
-    color: [0.32, 0.26, 0.18]
-    opacity: 0.25
-  - name: annotate2
-    mode: annotate
-    title: 2. Layered field (ramp displaced by noise)
-    text: 'v = y*Bands + Displace*fbm(warped coords) + Scroll*phase; fract(v) picks the ramp phase, and Scroll sweeps the rims down one stratum per loop (the ripple). Anisotropy fades with the octave: long ridges, jagged mountain-profile rims. 4D simplex on a circle -> seamless loop. Buffer 0 = soft strata (+ relief, light, tint, iridescence); buffer 1 = flow field, caustic web, fine layers; buffer 2 = the layer-normal direction field for the streaks.'
-    position: [1180, -190]
-    size: [570, 450]
-    color: [0.13, 0.28, 0.32]
-    opacity: 0.25
-  - name: annotate3
-    mode: annotate
-    title: 3. Prism split
-    text: 'renderselect_disp pulls buffer 1 out of glsl_strata. glsl_prism is a Displace TOP run three times: red takes 1-d of the flow, green 1, blue 1+d -> orange/azure fringes on every edge. The caustic web and fine layers are composited AFTER the split so they never leave green/magenta copies. Alpha = streak seeds.'
-    position: [2330, -470]
-    size: [820, 730]
-    color: [0.3, 0.18, 0.32]
-    opacity: 0.25
-  - name: annotate4
-    mode: annotate
-    title: 4. Light streaks
-    text: 'renderselect_grad pulls buffer 2: the local UP through the layers (gradient of the displaced ramp coordinate). Seeds (thin bright verticals, in the prism pass alpha) are walked along that field both ways with a bounded max-filter and a random length per column, so the rays rise perpendicular to the curved layers, then screened over the color.'
-    position: [3730, -470]
-    size: [620, 730]
-    color: [0.18, 0.3, 0.2]
-    opacity: 0.25
-  - name: annotate5
-    mode: annotate
-    title: 5. Finish
-    text: Bloom TOP on the highlights only (pre-black level 0.8) for the backlit haze, then out1.
-    position: [4930, -70]
-    size: [670, 330]
-    color: [0.3, 0.3, 0.2]
-    opacity: 0.25
+  tdn_ref: specimen_lab/prismatic_strata.tdxn
 - name: crosspoint_matrix
   type: baseCOMP
   custom_pars:
@@ -2072,9 +1907,6 @@ operators:
     Output:
       $t: output
   position: [800, 0]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/crosspoint_matrix.tdxn
 - name: reaction_diffusion
   type: baseCOMP
@@ -2101,10 +1933,15 @@ operators:
       normMax: 7680.0
       help: Output height (px), 4K.
   position: [1200, -400]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/reaction_diffusion.tdxn
+- name: mandala_export_info
+  type: infoCHOP
+  parameters:
+    op: mandala_export
+    autoexportroot: =parent()
+  position: [2400, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
 - name: plasma_interference
   type: baseCOMP
   custom_pars:
@@ -2167,7 +2004,90 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [1200, -800]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
   tdn_ref: specimen_lab/plasma_interference.tdxn
+- name: mandala_export_driver
+  type: textDAT
+  position: [2000, -700]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  storage:
+    state:
+      prior_rt: true
+      prior_tm: realtime
+      prior_loop: 0
+      prior_ll: 12
+      prior_sm: 2
+      i: 1200
+      n: 1200
+      fps: 60
+      status: done
+      error: ''
+      written: 1200
+  dat_content: |
+    # Frame-accurate loop export driver for the mandala specimen (lives OUTSIDE the specimen COMP, never exported).
+    # start() sets non-realtime + manual time, then a run() chain writes one unique frame per real TD frame
+    # through mandala_export (stop-frame movie, Add Frame per pulse). Every exit path goes through finish(),
+    # which restores Realtime and the specimen's parameters.
+
+    def _ops():
+        return op('mandala'), op('mandala_export'), op('mandala_export_info'), op('mandala_export_driver')
+
+    def start(seconds=20.0, fps=60, path=''):
+        m, mfo, info, drv = _ops()
+        n = int(round(seconds * fps))
+        st = {'prior_rt': project.realTime, 'prior_tm': m.par.Timemode.eval(), 'prior_loop': int(m.par.Loop.eval()),
+              'prior_ll': m.par.Looplength.eval(), 'prior_sm': m.par.Speedmult.eval(),
+              'i': 0, 'n': n, 'fps': fps, 'status': 'running', 'error': '', 'written': -1}
+        drv.store('state', st)
+        project.realTime = False
+        m.par.Timemode = 'manual'
+        m.par.Loop = 1
+        # Loop Length is in animation seconds (after Speed Multiplier); the video spans `seconds` of wall time
+        m.par.Looplength = seconds * max(st['prior_sm'], 1e-6)
+        m.par.Manualtime = 0
+        mfo.par.file = path
+        mfo.par.type = 'stopframemovie'
+        mfo.par.pause = 1
+        mfo.par.record = 1
+        run("op('mandala_export_driver').module.step()", fromOP=drv, delayFrames=3)
+
+    def step():
+        m, mfo, info, drv = _ops()
+        st = drv.fetch('state')
+        try:
+            i = st['i']
+            m.par.Manualtime = i / float(st['fps'])
+            out = m.op('out1')
+            out.cook(force=True)
+            if not out.cookedThisFrame:
+                raise RuntimeError('out1 did not cook at frame %d' % i)
+            mfo.par.addframe.pulse()
+            ch = info['total_frames_dropped']
+            dropped = ch.eval() if ch is not None else 0
+            if dropped > 0:
+                raise RuntimeError('frame dropped at %d (total_frames_dropped=%d)' % (i, dropped))
+            st['i'] = i + 1
+            drv.store('state', st)
+            if st['i'] < st['n']:
+                run("op('mandala_export_driver').module.step()", fromOP=drv, delayFrames=1)
+            else:
+                finish('done')
+        except Exception as e:
+            st['error'] = str(e)
+            drv.store('state', st)
+            finish('error')
+
+    def finish(status):
+        m, mfo, info, drv = _ops()
+        st = drv.fetch('state')
+        mfo.par.record = 0
+        project.realTime = st['prior_rt']
+        m.par.Timemode = st['prior_tm']
+        m.par.Loop = st['prior_loop']
+        m.par.Looplength = st['prior_ll']
+        m.par.Speedmult = st['prior_sm']
+        st['status'] = status
+        ch = info['total_frames_written']
+        st['written'] = ch.eval() if ch is not None else -1
+        drv.store('state', st)
+  dat_content_format: text

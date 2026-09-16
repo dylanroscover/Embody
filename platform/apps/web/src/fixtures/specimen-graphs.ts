@@ -1831,6 +1831,5770 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       }
     ]
+  },
+  "mandala": {
+    "format": "tdxn",
+    "version": "2.1",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "cam",
+        "type": "cameraCOMP",
+        "position": [
+          2200,
+          -1000
+        ],
+        "size": [
+          160,
+          130
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "operators": [
+          {
+            "name": "file1",
+            "type": "fileinPOP",
+            "size": [
+              130,
+              90
+            ],
+            "color": [
+              0.67,
+              0.67,
+              0.67
+            ]
+          }
+        ]
+      },
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          3800,
+          -1400
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "glsl_wear"
+        ]
+      },
+      {
+        "name": "render",
+        "type": "renderTOP",
+        "position": [
+          2200,
+          -1400
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "comp_bg",
+        "type": "compositeTOP",
+        "position": [
+          2600,
+          -1400
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "render",
+          "constant_bg"
+        ]
+      },
+      {
+        "name": "hsv_age",
+        "type": "hsvadjustTOP",
+        "position": [
+          3000,
+          -1400
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "comp_bg"
+        ]
+      },
+      {
+        "name": "geo_fill",
+        "type": "geometryCOMP",
+        "position": [
+          1400,
+          -1800
+        ],
+        "inputs": [
+          "glsl_fill"
+        ],
+        "operators": [
+          {
+            "name": "in1",
+            "type": "inPOP"
+          },
+          {
+            "name": "null_out",
+            "type": "nullPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "in1"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "geo_line",
+        "type": "geometryCOMP",
+        "position": [
+          1400,
+          -1200
+        ],
+        "inputs": [
+          "glsl_line"
+        ],
+        "operators": [
+          {
+            "name": "in1",
+            "type": "inPOP"
+          },
+          {
+            "name": "null_out",
+            "type": "nullPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "in1"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "mat_fill",
+        "type": "constantMAT",
+        "position": [
+          1400,
+          -1650
+        ]
+      },
+      {
+        "name": "mat_line",
+        "type": "lineMAT",
+        "position": [
+          1400,
+          -1000
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "bead_ring",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -1400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_fill",
+        "type": "glslPOP",
+        "position": [
+          1000,
+          -1800
+        ],
+        "inputs": [
+          "merge_fill"
+        ]
+      },
+      {
+        "name": "glsl_line",
+        "type": "glslPOP",
+        "position": [
+          1000,
+          -1200
+        ],
+        "inputs": [
+          "merge_line"
+        ]
+      },
+      {
+        "name": "glsl_wear",
+        "type": "glslTOP",
+        "position": [
+          3400,
+          -1400
+        ],
+        "inputs": [
+          "hsv_age",
+          "noise_fiber",
+          "noise_patch"
+        ]
+      },
+      {
+        "name": "tick_ring",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -1600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "center_dot",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -3000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "field_disc",
+        "type": "baseCOMP",
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: circle_line (closed line strip, Detail points) -> LayerId/IsFill attributes -> Nest copies -> Count copies -> out_line. Bottom row: the same for the filled fan (circle_fill). Nothing here cooks per frame; the shape, placement, animation and colour are computed by the parent's glsl_line / glsl_fill from the params CHOP (64 channels bound to this COMP's Layer + Animate pages).",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "gate_posts",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -3200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "geo_scroll",
+        "type": "geometryCOMP",
+        "position": [
+          3000,
+          -2500
+        ],
+        "operators": [
+          {
+            "name": "null_out",
+            "type": "nullPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "rect_quad"
+            ]
+          },
+          {
+            "name": "rect_quad",
+            "type": "rectanglePOP",
+            "size": [
+              130,
+              90
+            ],
+            "color": [
+              0.67,
+              0.67,
+              0.67
+            ]
+          }
+        ]
+      },
+      {
+        "name": "mat_scroll",
+        "type": "constantMAT",
+        "position": [
+          2600,
+          -2500
+        ]
+      },
+      {
+        "name": "merge_fill",
+        "type": "mergePOP",
+        "position": [
+          600,
+          -1800
+        ],
+        "inputs": [
+          {
+            "source": "field_disc",
+            "out": 2
+          },
+          {
+            "source": "outer_petals_a",
+            "out": 2
+          },
+          {
+            "source": "outer_petals_b",
+            "out": 2
+          },
+          {
+            "source": "outer_rings",
+            "out": 2
+          },
+          {
+            "source": "field_edge_rings",
+            "out": 2
+          },
+          {
+            "source": "lace_border",
+            "out": 2
+          },
+          {
+            "source": "treasure_petals",
+            "out": 2
+          },
+          {
+            "source": "bead_ring",
+            "out": 2
+          },
+          {
+            "source": "tick_ring",
+            "out": 2
+          },
+          {
+            "source": "palace_square",
+            "out": 2
+          },
+          {
+            "source": "treasure_bars",
+            "out": 2
+          },
+          {
+            "source": "inner_circle",
+            "out": 2
+          },
+          {
+            "source": "lotus_outer",
+            "out": 2
+          },
+          {
+            "source": "lotus_inner",
+            "out": 2
+          },
+          {
+            "source": "center_rosette",
+            "out": 2
+          },
+          {
+            "source": "center_dot",
+            "out": 2
+          },
+          {
+            "source": "gate_posts",
+            "out": 2
+          },
+          {
+            "source": "gate_crossbars",
+            "out": 2
+          },
+          {
+            "source": "palace_lines",
+            "out": 2
+          },
+          {
+            "source": "lotus_seat_scallop",
+            "out": 2
+          },
+          {
+            "source": "center_star",
+            "out": 2
+          },
+          {
+            "source": "inner_dot_ring",
+            "out": 2
+          },
+          {
+            "source": "corner_medallions",
+            "out": 2
+          },
+          {
+            "source": "field_garland",
+            "out": 2
+          },
+          {
+            "source": "outer_ink_ring",
+            "out": 2
+          },
+          {
+            "source": "palace_shadow_squares",
+            "out": 2
+          },
+          {
+            "source": "palace_gold_frame",
+            "out": 2
+          },
+          {
+            "source": "field_ripples_a",
+            "out": 2
+          },
+          {
+            "source": "field_ripples_b",
+            "out": 2
+          },
+          {
+            "source": "palace_cross",
+            "out": 2
+          },
+          {
+            "source": "candy_ring_a",
+            "out": 2
+          },
+          {
+            "source": "candy_ring_b",
+            "out": 2
+          }
+        ]
+      },
+      {
+        "name": "merge_line",
+        "type": "mergePOP",
+        "position": [
+          600,
+          -1200
+        ],
+        "inputs": [
+          "field_disc",
+          "outer_petals_a",
+          "outer_petals_b",
+          "outer_rings",
+          "field_edge_rings",
+          "lace_border",
+          "treasure_petals",
+          "bead_ring",
+          "tick_ring",
+          "palace_square",
+          "treasure_bars",
+          "inner_circle",
+          "lotus_outer",
+          "lotus_inner",
+          "center_rosette",
+          "center_dot",
+          "gate_posts",
+          "gate_crossbars",
+          "palace_lines",
+          "lotus_seat_scallop",
+          "center_star",
+          "inner_dot_ring",
+          "corner_medallions",
+          "field_garland",
+          "outer_ink_ring",
+          "palace_shadow_squares",
+          "palace_gold_frame",
+          "field_ripples_a",
+          "field_ripples_b",
+          "palace_cross",
+          "candy_ring_a",
+          "candy_ring_b"
+        ]
+      },
+      {
+        "name": "center_star",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "constant_bg",
+        "type": "constantTOP",
+        "position": [
+          2200,
+          -1700
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "geo_outline",
+        "type": "geometryCOMP",
+        "position": [
+          1400,
+          -1500
+        ],
+        "inputs": [
+          "glsl_outline"
+        ],
+        "operators": [
+          {
+            "name": "in1",
+            "type": "inPOP"
+          },
+          {
+            "name": "null_out",
+            "type": "nullPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "in1"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_scroll",
+        "type": "glslTOP",
+        "position": [
+          2200,
+          -2500
+        ]
+      },
+      {
+        "name": "lace_border",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -1000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "lotus_inner",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -2600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "lotus_outer",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -2400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "noise_fiber",
+        "type": "noiseTOP",
+        "position": [
+          3000,
+          -1800
+        ]
+      },
+      {
+        "name": "noise_patch",
+        "type": "noiseTOP",
+        "position": [
+          3000,
+          -2100
+        ]
+      },
+      {
+        "name": "outer_rings",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "candy_ring_a",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -6000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "candy_ring_b",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -6200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_outline",
+        "type": "glslPOP",
+        "position": [
+          1000,
+          -1500
+        ],
+        "inputs": [
+          "merge_line"
+        ]
+      },
+      {
+        "name": "inner_circle",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -2200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "merge_params",
+        "type": "mergeCHOP",
+        "position": [
+          600,
+          -2800
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          {
+            "source": "field_disc",
+            "out": 1
+          },
+          {
+            "source": "outer_petals_a",
+            "out": 1
+          },
+          {
+            "source": "outer_petals_b",
+            "out": 1
+          },
+          {
+            "source": "outer_rings",
+            "out": 1
+          },
+          {
+            "source": "field_edge_rings",
+            "out": 1
+          },
+          {
+            "source": "lace_border",
+            "out": 1
+          },
+          {
+            "source": "treasure_petals",
+            "out": 1
+          },
+          {
+            "source": "bead_ring",
+            "out": 1
+          },
+          {
+            "source": "tick_ring",
+            "out": 1
+          },
+          {
+            "source": "palace_square",
+            "out": 1
+          },
+          {
+            "source": "treasure_bars",
+            "out": 1
+          },
+          {
+            "source": "inner_circle",
+            "out": 1
+          },
+          {
+            "source": "lotus_outer",
+            "out": 1
+          },
+          {
+            "source": "lotus_inner",
+            "out": 1
+          },
+          {
+            "source": "center_rosette",
+            "out": 1
+          },
+          {
+            "source": "center_dot",
+            "out": 1
+          },
+          {
+            "source": "gate_posts",
+            "out": 1
+          },
+          {
+            "source": "gate_crossbars",
+            "out": 1
+          },
+          {
+            "source": "palace_lines",
+            "out": 1
+          },
+          {
+            "source": "lotus_seat_scallop",
+            "out": 1
+          },
+          {
+            "source": "center_star",
+            "out": 1
+          },
+          {
+            "source": "inner_dot_ring",
+            "out": 1
+          },
+          {
+            "source": "corner_medallions",
+            "out": 1
+          },
+          {
+            "source": "field_garland",
+            "out": 1
+          },
+          {
+            "source": "outer_ink_ring",
+            "out": 1
+          },
+          {
+            "source": "palace_shadow_squares",
+            "out": 1
+          },
+          {
+            "source": "palace_gold_frame",
+            "out": 1
+          },
+          {
+            "source": "field_ripples_a",
+            "out": 1
+          },
+          {
+            "source": "field_ripples_b",
+            "out": 1
+          },
+          {
+            "source": "palace_cross",
+            "out": 1
+          },
+          {
+            "source": "candy_ring_a",
+            "out": 1
+          },
+          {
+            "source": "candy_ring_b",
+            "out": 1
+          }
+        ]
+      },
+      {
+        "name": "palace_cross",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "palace_lines",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -3600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "field_garland",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "palace_square",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -1800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "treasure_bars",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -2000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "center_rosette",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -2800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "gate_crossbars",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -3400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_fill_info",
+        "type": "infoDAT",
+        "position": [
+          1075,
+          -1920
+        ]
+      },
+      {
+        "name": "glsl_line_info",
+        "type": "infoDAT",
+        "position": [
+          1075,
+          -1320
+        ]
+      },
+      {
+        "name": "glsl_wear_info",
+        "type": "infoDAT",
+        "position": [
+          3550,
+          -1520
+        ]
+      },
+      {
+        "name": "inner_dot_ring",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "outer_ink_ring",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "outer_petals_a",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "outer_petals_b",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "shuffle_params",
+        "type": "shuffleCHOP",
+        "position": [
+          1000,
+          -2800
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "merge_params"
+        ]
+      },
+      {
+        "name": "field_ripples_a",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "field_ripples_b",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5600
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_wear_pixel",
+        "type": "textDAT",
+        "position": [
+          3400,
+          -1520
+        ]
+      },
+      {
+        "name": "treasure_petals",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -1200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "field_edge_rings",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_scroll_info",
+        "type": "infoDAT",
+        "position": [
+          2200,
+          -2620
+        ]
+      },
+      {
+        "name": "corner_medallions",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -4400
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_fill_compute",
+        "type": "textDAT",
+        "position": [
+          925,
+          -1920
+        ]
+      },
+      {
+        "name": "glsl_line_compute",
+        "type": "textDAT",
+        "position": [
+          925,
+          -1320
+        ]
+      },
+      {
+        "name": "glsl_outline_info",
+        "type": "infoDAT",
+        "position": [
+          1075,
+          -1620
+        ]
+      },
+      {
+        "name": "glsl_scroll_pixel",
+        "type": "textDAT",
+        "position": [
+          2350,
+          -2620
+        ]
+      },
+      {
+        "name": "glsl_wear_compute",
+        "type": "textDAT",
+        "position": [
+          3250,
+          -1520
+        ]
+      },
+      {
+        "name": "palace_gold_frame",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5200
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "lotus_seat_scallop",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -3800
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_scroll_compute",
+        "type": "textDAT",
+        "position": [
+          2050,
+          -2620
+        ]
+      },
+      {
+        "name": "glsl_outline_compute",
+        "type": "textDAT",
+        "position": [
+          925,
+          -1620
+        ]
+      },
+      {
+        "name": "palace_shadow_squares",
+        "type": "baseCOMP",
+        "position": [
+          0,
+          -5000
+        ],
+        "operators": [
+          {
+            "name": "params",
+            "type": "constantCHOP",
+            "position": [
+              0,
+              -600
+            ]
+          },
+          {
+            "name": "out_fill",
+            "type": "outPOP",
+            "position": [
+              1600,
+              -200
+            ],
+            "inputs": [
+              "copy_radial_f"
+            ]
+          },
+          {
+            "name": "out_line",
+            "type": "outPOP",
+            "position": [
+              1600,
+              200
+            ],
+            "inputs": [
+              "copy_radial"
+            ]
+          },
+          {
+            "name": "attr_fill",
+            "type": "attributePOP",
+            "position": [
+              400,
+              -200
+            ],
+            "inputs": [
+              "circle_fill"
+            ]
+          },
+          {
+            "name": "attr_line",
+            "type": "attributePOP",
+            "position": [
+              400,
+              200
+            ],
+            "inputs": [
+              "circle_line"
+            ]
+          },
+          {
+            "name": "copy_nest",
+            "type": "copyPOP",
+            "position": [
+              800,
+              200
+            ],
+            "inputs": [
+              "attr_line"
+            ]
+          },
+          {
+            "name": "out_params",
+            "type": "outCHOP",
+            "position": [
+              400,
+              -600
+            ],
+            "inputs": [
+              "params"
+            ]
+          },
+          {
+            "name": "circle_fill",
+            "type": "circlePOP",
+            "position": [
+              0,
+              -200
+            ]
+          },
+          {
+            "name": "circle_line",
+            "type": "circlePOP",
+            "position": [
+              0,
+              200
+            ]
+          },
+          {
+            "name": "copy_nest_f",
+            "type": "copyPOP",
+            "position": [
+              800,
+              -200
+            ],
+            "inputs": [
+              "attr_fill"
+            ]
+          },
+          {
+            "name": "copy_radial",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              200
+            ],
+            "inputs": [
+              "copy_nest"
+            ]
+          },
+          {
+            "name": "copy_radial_f",
+            "type": "copyPOP",
+            "position": [
+              1200,
+              -200
+            ],
+            "inputs": [
+              "copy_nest_f"
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "annotate1",
+            "title": "Layer element: static copy chains + parameter channels",
+            "text": "Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent's glsl_line / glsl_fill do all per-frame work.",
+            "position": [
+              -70,
+              -670
+            ],
+            "size": [
+              1870,
+              1130
+            ],
+            "color": [
+              0.55,
+              0.35,
+              0.25
+            ]
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "Layers (24 x ring / petal / palace elements)",
+        "text": "Each layer_NN is one mandala element. Its Layer page sets shape, radius, symmetry, colours (palette slots 1-8), nesting and outline style; its Animate page adds waves, tumble, colour waves and LFOs on nearly every attribute. Master knobs: Mandala page (Scale, Rotate, Speed Multiplier, Energy, Line Width), Palette page, Wear page. Draw Order stacks layers; duplicate a layer COMP and wire its three outputs into the merges (same input index on all three) to add an element.",
+        "position": [
+          -70,
+          -6270
+        ],
+        "size": [
+          300,
+          6570
+        ],
+        "color": [
+          0.55,
+          0.35,
+          0.25
+        ]
+      },
+      {
+        "name": "annotate2",
+        "title": "Line and fill streams",
+        "text": "The layer copy chains are static; only glsl_line / glsl_fill cook per frame. They read every layer parameter from the uP texture buffer (64 floats per layer, LayerId indexed), build the outline, nesting, radial placement, animation and per-point Color / LineWidth, then feed the Line MAT (outlines) and Constant MAT (fills, fan triangles) geometry.",
+        "position": [
+          530,
+          -1990
+        ],
+        "size": [
+          1100,
+          1250
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.55
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "Layer parameter buffer",
+        "text": "merge_params joins every layer's 64-channel params CHOP (in layer order); shuffle_params swaps channels for samples so the GLSL texture buffer indexes it as layer * 64 + parameter. Cooks only when a parameter changes.",
+        "position": [
+          530,
+          -2870
+        ],
+        "size": [
+          670,
+          330
+        ],
+        "color": [
+          0.35,
+          0.45,
+          0.3
+        ]
+      },
+      {
+        "name": "annotate4",
+        "title": "Render and worn-thangka finish",
+        "text": "Orthographic camera, 8x AA render over the Background constant, global Saturation, then glsl_wear: patchy fade toward Paper (Coverage / Patch Scale from noise_patch), paper-fibre grunge inside the patches (noise_fiber, Grunge / Grunge Scale), vignette and animated grain. out1 is the deliverable.",
+        "position": [
+          2130,
+          -2770
+        ],
+        "size": [
+          1870,
+          2070
+        ],
+        "color": [
+          0.5,
+          0.4,
+          0.2
+        ]
+      }
+    ]
   }
 };
 

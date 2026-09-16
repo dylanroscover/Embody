@@ -4447,7 +4447,11 @@ class TDXNExt:
 
 		Array position = input index. Entries are source operator names
 		(sibling) or full paths (cross-network). Null entries for gaps.
+		A wire that leaves the source's output connector N > 0 (a COMP with
+		several Out OPs, any multi-output OP) is a mapping
+		``{source: name, out: N}``; a bare name means output 0.
 		Example: ['noise1'] or ['noise1', null, 'level1']
+		or ['layer', {source: layer, out: 2}]
 
 		MUST enumerate ``inputConnectors``, never ``OP.inputs``: inputs is
 		a COMPACTED list of connected sources, so a wire on connector 1
@@ -4456,7 +4460,10 @@ class TDXNExt:
 		(Displace, Matte, Lookup, Cross...) collapsed to the first input
 		on reimport (field report + live repro, 2026-08-12). The import
 		side and the spec both already handle the null gaps this now
-		actually produces.
+		actually produces. The output index matters for the same reason:
+		without it every wire reimported from output 0, so a COMP with
+		out_line / out_params / out_fill fed its line stream to all three
+		consumers (mandala specimen, 2026-09-15).
 		"""
 		inputs = []
 		max_index = -1
@@ -4466,9 +4473,12 @@ class TDXNExt:
 				for conn in connector.connections:
 					source = conn.owner
 					if source.parent() == target.parent():
-						conn_map[i] = source.name
+						ref = source.name
 					else:
-						conn_map[i] = source.path
+						ref = source.path
+					out_index = getattr(conn, 'index', 0) or 0
+					conn_map[i] = (ref if out_index == 0
+								   else {'source': ref, 'out': int(out_index)})
 					max_index = i
 		except Exception as e:
 			# WARNING, not DEBUG: an exception mid-enumeration writes a
@@ -5575,18 +5585,15 @@ class TDXNExt:
 				value = par_def['value']
 				if value is not None:
 					self._setParValue(target, par_name, value)
-			# A custom par whose value equals its (non-standard) default has
-			# its value OMITTED on export; the param is recreated with the
-			# right .default but its .val stays at 0/min. Initialize .val from
-			# the default so default-valued custom params round-trip. Single-
-			# component only: Pulse has no value, and a multi-component def
-			# carries one 'default' that does not map cleanly across components.
+			# A value equal to its (non-standard) default is OMITTED on export,
+			# and append*(replace=True) + .default leave .val at 0 (probed
+			# 2025.33230), so seed .val from `default` on EVERY component.
+			# The single-component-only seed left every RGB/XYZ/size>1 tuplet
+			# at 0 (field: Ditherizer 'Light Colour' pasted black, 2026-09-13).
 			elif ('values' not in par_def and 'default' in par_def
-					and style not in ('Pulse', 'Momentary', 'Header')):
-				suffixes = STYLE_SUFFIXES.get(style, [])
-				size = par_def.get('size') or 1
-				if not suffixes and size == 1:
-					self._setParValue(target, par_name, par_def['default'])
+					and style not in ('Pulse', 'Momentary', 'Header',
+									  'Sequence')):
+				self._seedCustomParDefault(target, par_def, par_name, style)
 
 			# Multi-component values
 			if 'values' in par_def:
@@ -5613,6 +5620,55 @@ class TDXNExt:
 						if val is not None:
 							self._setParValue(
 								target, f'{par_name}{i+1}', val)
+
+	def _customParComponentNames(self, par_def: dict, par_name: str,
+								 style: str) -> list[str]:
+		"""Component par names of a custom def, in component order.
+
+		Suffix styles: base + suffix (Lightr/g/b, arity per
+		_customParGroupBase); Float/Int size>1: numeric suffix (Range1..N);
+		everything else: the name itself.
+		"""
+		suffixes = STYLE_SUFFIXES.get(style, [])
+		if suffixes:
+			base_name, count = self._customParGroupBase(
+				par_def, par_name, suffixes)
+			return [base_name + s for s in suffixes[:count]]
+		try:
+			size = int(par_def.get('size') or 1)
+		except (TypeError, ValueError):
+			size = 1
+		if style in ('Float', 'Int') and size > 1:
+			return [f'{par_name}{i + 1}' for i in range(size)]
+		return [par_name]
+
+	def _seedCustomParDefault(self, target: 'OP', par_def: dict,
+							  par_name: str, style: str) -> None:
+		"""Set each component's .val to its authored `default` (constant).
+
+		A list maps 1:1, a scalar broadcasts (as _applyGroupAttr does). Raw
+		.val assignment, never _setParValue: `default` is a constant by
+		contract, so a Str default starting with '=' or '~' must not be read
+		as expression/bind shorthand.
+		"""
+		names = self._customParComponentNames(par_def, par_name, style)
+		default = par_def['default']
+		if isinstance(default, (list, tuple)):
+			defaults = list(default)
+		else:
+			defaults = [default] * len(names)
+		for name, d in zip(names, defaults):
+			if d is None:
+				continue
+			par = getattr(target.par, name, None)
+			if par is None or par.isPulse:
+				continue
+			try:
+				par.val = d
+			except Exception as e:
+				self._log(
+					f'Could not seed {name} from its default on '
+					f'{target.path}: {e}', 'DEBUG')
 
 	def _setParValue(self, target, par_name, value):
 		"""Set a single parameter value (constant, expression, or bind).
@@ -5731,19 +5787,27 @@ class TDXNExt:
 
 		conn_list can be:
 		  - String array: ['source1', null, 'source2'] (position = index)
+		  - Mapping entries at their position: {'source': 'name', 'out': N}
+		    when the wire leaves the source's output connector N (v2.1)
 		  - Legacy dict array: [{'index': 0, 'source': 'name'}]
 		"""
 		for i, entry in enumerate(conn_list):
-			# Determine source_ref and dest_index
+			# Determine source_ref, dest_index and the source output index
+			out_index = 0
 			if entry is None:
 				continue
 			if isinstance(entry, str):
 				source_ref = entry
 				dest_index = i
 			elif isinstance(entry, dict):
-				# Legacy format
 				source_ref = entry.get('source')
-				dest_index = entry.get('index', 0)
+				# legacy entries carry the destination index explicitly;
+				# v2.1 mappings sit at their position like string entries
+				dest_index = entry.get('index', i)
+				try:
+					out_index = int(entry.get('out', 0) or 0)
+				except (TypeError, ValueError):
+					out_index = 0
 				if not source_ref:
 					continue
 			else:
@@ -5768,8 +5832,14 @@ class TDXNExt:
 				else:
 					src_conns = source.outputConnectors
 					tgt_conns = target.inputConnectors
+					if src_conns and out_index >= len(src_conns):
+						self._log(
+							f'Source output {out_index} missing: '
+							f'{source_ref} -> {target.name}[{dest_index}] '
+							f'(out={len(src_conns)})', 'WARNING')
+						continue
 					if src_conns and dest_index < len(tgt_conns):
-						src_conns[0].connect(tgt_conns[dest_index])
+						src_conns[out_index].connect(tgt_conns[dest_index])
 					elif (src_conns and target.isCOMP
 							and hasattr(target, 'inputCOMPConnectors')
 							and dest_index < len(
@@ -5778,7 +5848,7 @@ class TDXNExt:
 						# (geometryCOMP, cameraCOMP, lightCOMP, etc.)
 						# may not expose inputConnectors until a cook
 						# cycle runs. Fall back to COMP connectors.
-						src_conns[0].connect(
+						src_conns[out_index].connect(
 							target.inputCOMPConnectors[dest_index])
 					else:
 						self._log(

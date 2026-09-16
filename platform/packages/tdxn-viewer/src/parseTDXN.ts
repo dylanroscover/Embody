@@ -205,8 +205,8 @@ function buildGraph(
 
       nodes.push(node);
 
-      collectEdges(asStrings(op.inputs), parentPath, id, false, edges);
-      collectEdges(asStrings(op.comp_inputs), parentPath, id, true, edges);
+      collectEdges(asInputRefs(op.inputs), parentPath, id, false, edges);
+      collectEdges(asInputRefs(op.comp_inputs), parentPath, id, true, edges);
       collectParamRefs(op, parentPath, id);
 
       if (recurse) {
@@ -220,13 +220,14 @@ function buildGraph(
 }
 
 function collectEdges(
-  inputPaths: string[],
+  inputPaths: Array<string | null>,
   parentPath: string,
   targetId: string,
   comp: boolean,
   edges: GraphEdge[]
 ): void {
   inputPaths.forEach((inputPath, inputIndex) => {
+    if (inputPath === null) return; // empty connector: keep the gap, no edge
     const sourceId = resolveInputPath(parentPath, inputPath);
     if (!sourceId) return;
 
@@ -312,6 +313,26 @@ function asRecords(value: unknown): TdxnDict[] {
 function asStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
+}
+
+/**
+ * Normalize a TDXN `inputs` / `comp_inputs` array to one source ref per
+ * connector position. An entry is a source name (output 0), a
+ * `{source, out}` mapping (TDXN v2.1: the wire leaves output connector
+ * `out` of a multi-output COMP), or null for an empty connector. Positions
+ * are preserved so `inputIndex` stays the array position the contract
+ * promises; the viewer draws the edge from the source node either way.
+ */
+function asInputRefs(value: unknown): Array<string | null> {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") {
+      const source = (item as { source?: unknown }).source;
+      if (typeof source === "string") return source;
+    }
+    return null;
+  });
 }
 
 function readString(value: unknown): string | undefined {

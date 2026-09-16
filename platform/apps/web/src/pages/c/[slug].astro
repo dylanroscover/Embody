@@ -823,7 +823,11 @@ function emitKey(key: string): string {
         </button>
       </header>
       <div class="specimen-app__tdxn-body">
-        <TdxnYamlViewer raw={rawTdxn} summary={tdxnSummary} client:visible />
+        {/* client:only: server-rendering the viewer built ~420 bytes and ~20 tags per line
+            (4 MB of HTML for a 5k-line specimen) and tripped the Worker resource limit
+            (error 1102, field 2026-09-16, the mandala page). The browser tokenizes and
+            renders the lines instead; the raw TDXN still travels once as the island prop. */}
+        <TdxnYamlViewer raw={rawTdxn} summary={tdxnSummary} client:only="react" />
       </div>
     </aside>
   </div>
