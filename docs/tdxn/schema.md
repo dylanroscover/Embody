@@ -88,8 +88,8 @@ operator
 ├── flags: [string]
 ├── storage: object
 ├── startup_storage: object
-├── inputs: [string | null]
-├── comp_inputs: [string | null]
+├── inputs: [string | {source, out} | null]
+├── comp_inputs: [string | {source, out} | null]
 ├── dat_content: string | [string] | [[string]]
 ├── dat_content_format: "text" | "table"
 ├── children: [operator]

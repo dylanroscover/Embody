@@ -207,13 +207,31 @@ $defs:
           description: 'Legacy format: Bind expression referencing another parameter.'
   connectionArray:
     description: Array of source operator references. Position equals input index. null for empty slots.
+      An object entry names the source's output connector when it is not 0 (v2.1).
     type: array
     items:
       oneOf:
       - type: string
-        description: Source operator - sibling name or full path.
+        description: Source operator - sibling name or full path (its output 0).
       - type: 'null'
         description: No connection at this index.
+      - type: object
+        required:
+        - source
+        additionalProperties: false
+        properties:
+          source:
+            type: string
+            description: Source operator - sibling name or full path.
+          out:
+            type: integer
+            minimum: 0
+            description: Output connector of the source to wire from (0-based; written only when not 0).
+          index:
+            type: integer
+            minimum: 0
+            description: Destination input index; defaults to the entry's position.
+        description: Wire from a specific output connector of the source (multi-output COMPs).
   legacyConnection:
     type: object
     required:
