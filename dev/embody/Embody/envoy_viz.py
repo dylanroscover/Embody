@@ -288,8 +288,8 @@ def netRelocationOK(ext, netpath, queue, now) -> bool:
     have to persist across frames) but it deliberately does NOT stamp
     `_viz_home`: only commitRelocation does that, and trackActive calls it ONLY
     after the bot actually landed in the net. That ordering is load-bearing --
-    ensureBot can still refuse a spawn (botUnsafeNet on any TDXN-strategy COMP,
-    botWouldBeSeen with the follow off, a write suppression), and an eager commit
+    ensureBot can still refuse a spawn (botUnsafeNet under /local or inside
+    Embody, botWouldBeSeen with the follow off, a write suppression), and an eager commit
     would leave `_viz_home` naming a network Embot never entered. Every later hop
     to the net he IS standing in would then be charged the full gate for a
     relocation that needs zero copyOPs -- Embot frozen on a stale node in front
@@ -658,8 +658,8 @@ def trackActive(ext, now: float, follow: bool, show_bot: bool) -> None:
         pulseStart(ext, target, now)    # ping the node colour
         placeBot(ext, net, target, now) # bring the dancing bot to the op
         # Commit only if he ACTUALLY landed. ensureBot can still refuse
-        # (botUnsafeNet on a TDXN-strategy COMP, botWouldBeSeen with the follow
-        # off, a write suppression); committing anyway would point _viz_home at
+        # (botUnsafeNet under /local or inside Embody, botWouldBeSeen with the
+        # follow off, a write suppression); committing anyway would point _viz_home at
         # a net he never entered and charge every later hop to the net he IS in
         # for a relocation that costs nothing. See netRelocationOK.
         if ext._viz_bot_net == net.path:
@@ -1021,7 +1021,18 @@ def ensureBot(ext, net: 'COMP') -> bool:
     crashes and was reverted. Returns False where a bot must not live."""
     netpath = net.path
     if ext._viz_bot_net == netpath:
-        return True                         # already here (assembled or assembling)
+        # Already here (assembled or assembling) -- unless something destroyed
+        # his parts underneath us. import_network(clear_first=True) is the
+        # normal way to edit a TDXN COMP and guts its children; an undo or a
+        # delete does the same. The bookkeeping would still say he is standing
+        # here, so nothing would ever rebuild him. Treat it as a retire, which
+        # also bars re-entry for _VIZ_WRITE_SUPPRESS_S -- a net being cleared
+        # repeatedly must not buy one respawn per clear.
+        if not ext._viz_bot_build_queue and botPartsMissing(ext, net):
+            destroyBot(ext)
+            noteWriteRetire(ext, netpath, absTime.seconds)
+            return False
+        return True
     # Issue #86: a COMP that was JUST serialized with him retired out of it is
     # off limits briefly -- his own parts are what re-dirty it, so re-entering
     # immediately means the next Update() saves, retires and respawns again, at
@@ -1033,11 +1044,11 @@ def ensureBot(ext, net: 'COMP') -> bool:
     # and nobody is about to look at (follow OFF with the user parked elsewhere,
     # or inside the 6s takeover window). It sits AFTER the "already here" return,
     # so a bot that already exists keeps tracking normally when the user
-    # navigates away -- only NEW spawns are suppressed. It MUST precede
-    # botUnsafeNet, which reaches EmbodyExt._getTDXNPaths() ->
-    # _getTDXNStrategyComps(): a full externalizations-table scan with a per-row
-    # op() plus an exclude-tag lookup. In the suppressed state ensureBot runs its
-    # prefix EVERY frame, so the wrong order would add a per-frame table scan.
+    # navigates away -- only NEW spawns are suppressed. botUnsafeNet used to
+    # reach EmbodyExt._getTDXNPaths() (a full externalizations-table scan) and
+    # HAD to run second; it dropped that clause with the TDXN ban, so the order
+    # is free now. The visibility gate stays first regardless: it is the one
+    # that refuses most often, and ensureBot runs this prefix EVERY frame.
     #
     # Invariant this creates (botWritesNeeded relies on it): a blockSpawn now
     # happens only when the destination is off-screen AND the camera is about to
@@ -1090,6 +1101,18 @@ def ensureBot(ext, net: 'COMP') -> bool:
         ext._viz_bot_build_queue = []
         blockSpawn(ext, net)
     return True
+
+
+def botPartsMissing(ext, net: 'COMP') -> bool:
+    """True when the net viz believes Embot is standing in no longer holds his
+    body part -- something destroyed the parts out from under the bookkeeping.
+    One op lookup, cheap enough for ensureBot's per-frame prefix, and consulted
+    only once assembly has finished (mid-spread the parts legitimately do not
+    exist yet). Any doubt -> False, so a bad read can never buy a rebuild."""
+    try:
+        return net.op(_VIZ_BOT_PREFIX + 'body') is None
+    except Exception:
+        return False
 
 
 def netIsDisplayed(ext, net: 'COMP') -> bool:
@@ -1543,17 +1566,22 @@ def botDance(ext, now: float) -> None:
 
 def botUnsafeNet(ext, net: 'COMP') -> bool:
     """True if a bot must NOT be created in `net` -- it would risk being saved.
-    Unsafe: under /local, under the Embody COMP (ExportPortableTox captures
-    Embody's descendants), or inside any TDXN-strategy COMP (captured by .tdn
-    export)."""
+    Unsafe: under /local, or under the Embody COMP (ExportPortableTox captures
+    Embody's descendants).
+
+    TDXN-strategy COMPs were unsafe too, until the two defences below existed --
+    that is the tagged majority of a project, so Embot was missing from most of
+    the work an agent does. A .tdxn is covered now without banning him:
+    TDXNExt._exportAnnotations drops live parts from every export path (#86),
+    and EmbodyExt._computeTDXNFingerprint skips them, so standing in one
+    neither reaches disk nor marks the COMP dirty."""
     try:
         if net.path.startswith('/local'):
             return True
         embody_path = ext.ownerComp.path
-        tdn = ext.ownerComp.ext.Embody._getTDXNPaths()
         p = net
         while p is not None and p.path != '/':
-            if p.path == embody_path or p.path in tdn:
+            if p.path == embody_path:
                 return True
             p = p.parent()
     except Exception:

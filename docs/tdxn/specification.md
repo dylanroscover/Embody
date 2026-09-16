@@ -1204,6 +1204,10 @@ Per-COMP stored decisions take precedence over the project-wide par. To reset a 
 
 ---
 
+### Sibling Clones
+
+An enabled clone (`enablecloning` on, `clone` resolving) whose master is a sibling COMP in the same network exports as its parameters only: `clone`, `enablecloning`, its custom parameter values, and no `children`. On import, Phase 3 sets the clone reference and TouchDesigner refills the COMP from the master before Phase 5 wires its connectors; a final pass (Phase 8.7) pulses a re-sync. A master, a clone that is itself a clone, a clone with an immune node inside it, or a clone whose master lives elsewhere exports in full. This is the shape to reach for whenever several COMPs share the same internals: one master, clones that differ only in their custom parameter values (32 mandala layers went from 12 children each in the file to their values, 2026-09-16).
+
 ## Annotations
 
 Annotations are visual documentation elements in TouchDesigner networks (comments, network boxes, and annotate panels). They are stored in an `annotations` array at the top level (for root-level annotations) and optionally on each COMP operator (for nested annotations).

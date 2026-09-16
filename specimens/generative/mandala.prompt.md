@@ -17,16 +17,22 @@ clumped by the same smooth noise (Sparkle Density, Clumping, Shimmer on the Wear
 mandala repeats exactly every Loop Length seconds.
 
 ## What it teaches
+- **One master layer, 31 clones.** `field_disc` holds the layer network; every other layer is a
+  clone of it (Clone + Enable Cloning) that differs only in its Layer / Animate values, so an edit
+  to the master reaches all 32 and the TDXN writes a clone as its values, not its children.
 - **One shader for every layer.** Each layer is a static chain (circle -> LayerId/IsFill
   attributes -> Nest copies -> Count copies) merged into ONE line stream and ONE fill stream.
-  Three GLSL POPs (line, ink contour, fill) then compute outline, nesting, placement, animation and the
-  per-point `Color` / `LineWidth` for all 32 layers at once. Per frame only those three POPs,
+  Three GLSL POPs (line, ink contour, fill) sharing ONE compute DAT then compute outline, nesting, placement,
+  animation and the per-point `Color` / `LineWidth` for all 32 layers at once. Per frame only those three POPs,
   the render and the finish cook: about 1 ms for 40,000 points.
-- **Parameters travel in a texture buffer, not as uniforms.** Every layer owns a 64-channel
-  Constant CHOP bound to its Layer + Animate pages; `merge_params` joins them in layer order
-  and `shuffle_params` swaps channels for samples so the shader reads
-  `texelFetch(uP, layer * 64 + j)`. A per-layer GLSL POP with 28 expression uniforms costs
-  0.4 ms per cook (TD re-evaluates every expression each cook); this costs nothing.
+- **Parameters travel in a texture buffer, not as uniforms.** Every layer owns one Parameter
+  CHOP that emits its Layer + Animate + Wiring pages as 54 channels in page order (menus as
+  indices); `merge_params` joins them in layer order and `shuffle_params` swaps channels for
+  samples so the shader reads `texelFetch(uP, layer * 54 + j)`. The palette and master seed ride the same
+  way (`params_palette` -> `shuffle_palette` -> `uPal`), so a layer stores a palette slot, not a
+  colour. A per-layer GLSL POP with 28 expression uniforms costs 0.4 ms per cook (TD
+  re-evaluates every expression each cook); this costs nothing, and the Parameter CHOP is
+  three lines of TDXN where a Constant CHOP of bound expressions was 150.
 - **Outlines as a function of angle.** Polygon, star, rosette, scallop, petal, bar, dot and arc
   (a ring segment whose Amplitude slants its ends into candy-cane notches) are all `r(u)` or `(x(s), y(s))` remaps of the same closed line strip, so one Detail
   parameter controls smoothness and the same code serves lines and fills.
@@ -58,12 +64,13 @@ mandala repeats exactly every Loop Length seconds.
 
 ## How it works
 1. Inside each layer COMP: `circle_line` (closed line strip, Detail points) and
-   `circle_fill` (surface fan) -> `attr_line` / `attr_fill` (int `LayerId` = this layer's
-   index among the merge inputs, `IsFill`) -> `copy_nest` (Nest copies, `NestId`) ->
-   `copy_radial` (Count copies, `CopyId`) -> `out_line` / `out_fill`. `params` (Constant
-   CHOP, 64 channels) -> `out_params`.
+   `circle_fill` (surface fan) -> `attr_line` / `attr_fill` (int `LayerId` read from the
+   layer's Layer Id parameter, its index among the merge inputs; `IsFill`) -> `copy_nest` (Nest copies, `NestId`) ->
+   `copy_radial` (Count copies, `CopyId`) -> `out_line` / `out_fill`. `params` (Parameter
+   CHOP on the layer's custom pages, 54 channels) -> `out_params`.
 2. `merge_line` / `merge_fill` (Merge POP, 32 inputs) -> `glsl_line` / `glsl_outline` /
-   `glsl_fill` (GLSL POP, `uP` texture buffer from `shuffle_params`, uniforms uTime /
+   `glsl_fill` (GLSL POP, one shared compute DAT, `uP` texture buffer from `shuffle_params`,
+   `uPal` from `shuffle_palette`, uniforms uTime /
    uEnergy / uGlobalRot / uLoop / uLoopLen / uInkColor / uInkWidth / uIsFill) -> `geo_line`
    and `geo_outline` (Line MAT, per-point Color and LineWidth) and `geo_fill` (Constant MAT
    with point colour).
@@ -91,9 +98,9 @@ mandala repeats exactly every Loop Length seconds.
 > amount/rate LFOs on radius, amplitude, sharpness, length, width, nest gap, line width and
 > opacity. Keep each layer's geometry static: a closed circle line strip and a surface fan,
 > tagged with LayerId and IsFill, duplicated by two Copy POPs that output NestId and CopyId.
-> Merge all layers into one line stream and one fill stream and compute everything in two
-> GLSL POPs that read the layers' parameters from a Constant CHOP per layer merged and
-> shuffled into a texture buffer. Render with an orthographic camera, a Line MAT reading
+> Merge all layers into one line stream and one fill stream and compute everything in three
+> GLSL POPs sharing one compute DAT that read the layers' parameters from a Parameter CHOP
+> per layer merged and shuffled into a texture buffer, with the palette in a second buffer. Render with an orthographic camera, a Line MAT reading
 > the point Color and LineWidth, and a Constant MAT for the fans, over a deep-blue field;
 > finish with global saturation and a GLSL wear pass that fades patchy regions toward paper,
 > adds paper-fibre grunge only there, a vignette, grain and sparse roaming specks of light. Draw
@@ -117,8 +124,10 @@ mandala repeats exactly every Loop Length seconds.
 - `Energy` scales every animation amount and `Speed Multiplier` every rate; they are the
   two knobs to tame or excite the whole piece. `Loop` + `Loop Length` make it seamless for
   renders (`Time Mode` = manual with `Manual Time` gives frame-accurate offline stepping).
-- Duplicate any layer COMP to add an element: wire its three outputs into `merge_line`,
-  `merge_fill` and `merge_params` at the same input index and set its Draw Order.
+- To add an element, clone `field_disc` (a new Base COMP with Clone = `field_disc`), wire its
+  three outputs into `merge_line`, `merge_fill` and `merge_params` at the same input index, set
+  its Layer Id (Wiring page) to that index and its Draw Order; never copy a layer, or the copy
+  stops following the master.
 - Style = Both draws the outline in Line Color over the fill; Line Color 0 keeps the fill
   colours for the outline. `Ink` adds the dark contour behind an element; `Gap` cuts the
   middle of every edge or lobe (0.6 on a square leaves four corner brackets).

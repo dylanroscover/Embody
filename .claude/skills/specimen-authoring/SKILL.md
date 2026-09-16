@@ -109,6 +109,28 @@ A specimen's exposed parameters export their **definitions** (default, range, he
 
 Still verify the round-trip in every build (cheap): re-import the exported `.tdxn` into a throwaway COMP, check a couple of `.val`s and that `out1` renders, then destroy the temp COMP.
 
+## Every expression must survive the sandboxed paste
+
+A specimen reaches users through the Collection's community paste, which imports
+default-inert: `Collection/safe_import.py` keeps only pure value expressions
+(`scanner.is_pure_value_expression`: parameter reads like `parent.Layer.par.Detail`,
+arithmetic, comparisons, `absTime`) and neutralizes everything else to a constant --
+`op()`, `.inputs`, generators, `.path`, method calls. The mandala's LayerId expression
+(`next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) ...))`) came
+back as 0 on every layer, so all 32 read one layer's parameters (2026-09-16). Store such
+values in a custom parameter and read them with a pure `parent.X.par.Y`. Before publishing,
+run the real path: `op.Embody.op('Collection').ext.Collection.PlanCommunityPaste(doc)`,
+import `plan['tdn']` into a throwaway COMP and diff a frame against the live network.
+
+## Blended geometry: set Draw Priority, never trust creation order
+
+With Sorted Blending, TouchDesigner orders blended objects at equal depth by an internal
+creation-order tie-break. A live network can look right by accident and its TDXN import
+can flip it: the mandala's ornament quad (blended Constant MAT over the field fills) vanished
+on every import with parameter-identical materials (2026-09-16). Any Geometry COMP whose
+material blends over other geometry gets an explicit `drawpriority` (-1 drew the quad after
+the fills), and the round-trip check compares a frame, not just operator counts.
+
 ## Naming, layout, output
 
 - Processing ops: `optype_name` (`glsl_colorize`, `feedback_state`); DATs stay role-named (see `td-python.md` Naming).

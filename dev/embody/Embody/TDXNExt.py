@@ -2805,6 +2805,11 @@ class TDXNExt:
 				dest, restore=restore_tdxn_shells, seen=_tdxn_seen,
 				restore_file_links=restore_file_links)
 
+			# Phase 8.7: re-sync black-boxed sibling clones (entries with an
+			# enabled clone and no children). TD refilled them in Phase 3 and
+			# follows every later master change; the pulse is the backstop.
+			self._resyncSiblingClones(dest, op_defs)
+
 			# Cleanup temporary operator references from Phase 1
 			def _cleanupRefs(defs):
 				for d in defs:
@@ -3273,6 +3278,15 @@ class TDXNExt:
 				# The import side applies them only when the created op
 				# didn't auto-set its own clone (see _applyPaletteCloneRef),
 				# which keeps stale references in old files harmless.
+			elif self._isSiblingCloneBlackbox(target):
+				# Sibling clone black box (2026-09-16): an enabled clone whose
+				# master is a sibling COMP writes its parameters (clone,
+				# enablecloning, custom pars) and no children. Import Phase 3
+				# sets the clone and TD refills it before Phase 5 wires its
+				# connectors; TD re-syncs on every later master change and
+				# Phase 8.7 pulses a re-sync anyway. Masters, immune clones
+				# and clones of non-sibling masters export in full.
+				pass
 			elif self._hasTDXNTag(target) and not options.get('embed_all'):
 				# Child's network managed by its own .tdn file.
 				# Write a tdn_ref pointer for cross-validation.
@@ -5713,6 +5727,30 @@ class TDXNExt:
 			self._log(
 				f'Failed to set {par_name} on {target.path}: {e}', 'WARNING')
 
+	def _resyncSiblingClones(self, parent, op_defs):
+		"""Phase 8.7: pulse Enable Cloning on every imported COMP whose entry
+		had no children but an enabled clone reference (sibling clone black
+		box, see _isSiblingCloneBlackbox). Recurses into exported children.
+		"""
+		for op_def in op_defs:
+			target = self._resolveOp(parent, op_def)
+			if not target:
+				continue
+			kids = op_def.get('children')
+			if kids:
+				self._resyncSiblingClones(target, kids)
+				continue
+			params = op_def.get('parameters') or {}
+			if not params.get('clone') or not hasattr(target, 'children'):
+				continue
+			pulse = getattr(target.par, 'enablecloningpulse', None)
+			enable = getattr(target.par, 'enablecloning', None)
+			if pulse is not None and enable is not None and enable.eval():
+				try:
+					pulse.pulse()
+				except Exception as e:
+					self._log(f'Clone re-sync failed on {target.path}: {e}', 'WARNING')
+
 	def _setFlags(self, parent, op_defs):
 		"""Phase 4: Set operator flags.
 
@@ -6920,6 +6958,33 @@ class TDXNExt:
 				return False
 			clone_op = clone_par.eval()
 			return clone_op is not None and hasattr(clone_op, 'path')
+		except Exception:
+			return False
+
+	def _isSiblingCloneBlackbox(self, target):
+		"""True when target is an enabled, non-immune clone of a sibling COMP
+		that is not itself a clone: its children can be omitted from the
+		file and rebuilt by cloning (see _exportSingleOp, Phase 8.7).
+		"""
+		try:
+			if not hasattr(target, 'children') or self._isPaletteClone(target):
+				return False
+			if not self._cloneRestorable(target):
+				return False
+			master = target.par.clone.eval()
+			if (master is None or not hasattr(master, 'children')
+					or master.path == target.path
+					or master.parent().path != target.parent().path):
+				return False
+			master_clone = getattr(master.par, 'clone', None)
+			if master_clone is not None and master_clone.eval() is not None:
+				return False
+			if getattr(target, 'cloneImmune', False) or getattr(target, 'componentCloneImmune', False):
+				return False
+			for child in target.findChildren(includeUtility=True):
+				if getattr(child, 'cloneImmune', False) or getattr(child, 'componentCloneImmune', False):
+					return False
+			return True
 		except Exception:
 			return False
 

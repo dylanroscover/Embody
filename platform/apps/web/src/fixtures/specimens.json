@@ -173,11 +173,11 @@
       "copyPOP",
       "circlePOP",
       "mergePOP",
+      "parameterCHOP",
       "shuffleCHOP",
       "lineMAT",
       "constantMAT",
-      "glslTOP",
-      "rectanglePOP"
+      "glslTOP"
     ]
   }
 ]

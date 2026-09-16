@@ -163,6 +163,7 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `rules/multi-session.md` | `templates/text_rule_multi_session.md` |
 | `rules/worktree-td-safety.md` | `templates/text_rule_worktree_td_safety.md` |
 | `rules/performance.md` | `templates/text_rule_performance.md` |
+| `rules/tdxn-economy.md` | `templates/text_rule_tdxn_economy.md` |
 | `skills/td-api-reference/SKILL.md` | `templates/text_skill_td_api_reference.md` |
 | `skills/movie-export/SKILL.md` | `templates/text_skill_movie_export.md` |
 | `skills/parameter-design/SKILL.md` | `templates/text_skill_parameter_design.md` |

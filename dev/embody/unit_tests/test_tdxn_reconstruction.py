@@ -1311,6 +1311,46 @@ class TestTDXNReconstruction(EmbodyTestCase):
 						 'the wire must come back from output connector 1')
 		self.assertEqual([c.name for c in rsink.chans()], ['b'])
 
+	def test_D13_sibling_clone_exports_without_children(self):
+		"""An enabled clone of a sibling COMP exports as its parameters only
+		and rebuilds by cloning: children, its wire and its own custom value
+		come back. 32 hand-copied mandala layers were 12 children each in the
+		file (2026-09-16); as clones they are their values.
+		"""
+		master = self.sandbox.create(baseCOMP, 'layer_master')
+		master.appendCustomPage('Layer').appendFloat('Radius')
+		src = master.create(constantCHOP, 'c1')
+		src.par.const0name = 'v'
+		src.par.const0value.expr = 'parent().par.Radius'
+		out = master.create(outCHOP, 'out1')
+		out.inputConnectors[0].connect(src)
+		clone = self.sandbox.create(baseCOMP, 'layer_b')
+		clone.par.clone = 'layer_master'
+		clone.par.enablecloning = 1
+		clone.par.Radius = 2.5
+		sink = self.sandbox.create(nullCHOP, 'sink')
+		clone.outputConnectors[0].connect(sink.inputConnectors[0])
+		self.assertAlmostEqual(sink['v'].eval(), 2.5, places=3,
+							   msg='precondition: the clone drives the sink through its own Radius')
+
+		orig_tdxn, _reimported, _res = self._roundTrip(self.sandbox)
+		by_name = {o.get('name'): o for o in orig_tdxn.get('operators', [])}
+		self.assertNotIn('children', by_name['layer_b'],
+						 'a sibling clone must export without children')
+		self.assertIn('children', by_name['layer_master'],
+					  'the master exports in full')
+		self.assertEqual(by_name['layer_b']['parameters'].get('clone'), 'layer_master')
+
+		rc = self.sandbox.op('layer_b')
+		self.assertEqual(sorted(c.name for c in rc.children), ['c1', 'out1'],
+						 'the clone is refilled by cloning on import')
+		self.assertAlmostEqual(rc.par.Radius.eval(), 2.5, places=3,
+							   msg='the clone keeps its own custom value')
+		rs = self.sandbox.op('sink')
+		self.assertEqual(len(rs.inputConnectors[0].connections), 1,
+						 'the wire from the clone output survives')
+		self.assertAlmostEqual(rs['v'].eval(), 2.5, places=3)
+
 	def _untrack(self, comp_path):
 		"""Remove a test externalization completely: row, tags, file.
 		Tests that tag sandbox COMPs MUST purge them -- leaked rows
