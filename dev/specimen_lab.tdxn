@@ -87,6 +87,7 @@ operators:
       normMin: 0.5
       normMax: 2.0
       help: Global zoom. 1.0 fits a radius-1 mandala with a small margin.
+      value: 0.92
     - name: Rotate
       style: Float
       normMin: -180.0
@@ -128,6 +129,16 @@ operators:
       style: Toggle
       startSection: true
       help: Quantize every animation rate and spin so the whole mandala repeats exactly every Loop Length seconds (for seamless renders). Wobble crawl walks a circle in noise space instead of drifting.
+    - name: Inkwidth
+      style: Float
+      label: Ink Width
+      default: 1
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Global multiplier on every layer Ink contour (the dark stroke drawn behind outlines and around fills).
+      value: 1.15
     - name: Looplength
       style: Float
       label: Loop Length
@@ -146,6 +157,17 @@ operators:
       clampMin: true
       clampMax: true
       help: Global opacity of every filled shape.
+    - name: Inkcolor
+      style: Int
+      label: Ink Color
+      default: 8
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot used for the Ink contours (8 = Ink by default).
     - name: Timemode
       style: Menu
       label: Time Mode
@@ -234,6 +256,15 @@ operators:
       clampMin: true
       clampMax: true
       help: Strength of the paper-fiber texture inside the worn patches. 0 = clean vector look.
+    - name: Grungebase
+      style: Float
+      label: Grunge Base
+      default: 0.14
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 0.5
+      help: Uniform paper-fibre texture over the WHOLE image, mandala included (the patchy Grunge sits on top of it). Keep it low.
     - name: Grungescale
       style: Float
       label: Grunge Scale
@@ -296,6 +327,162 @@ operators:
       clampMax: true
       normMax: 0.2
       help: Animated film grain added last. 0.03-0.06 is subtle.
+    - name: Sparkle
+      style: Float
+      label: Sparkle Density
+      startSection: true
+      default: 0.0001
+      max: 0.05
+      clampMin: true
+      clampMax: true
+      normMax: 0.0005
+      help: Fraction of pixels that carry a bright shimmering speck (0.00001 = 0.001 percent). Very sparse by design; raise to 0.0001 for a visible dusting.
+    - name: Sparkleclump
+      style: Float
+      label: Sparkle Clumping
+      default: 0.7
+      clampMin: true
+      clampMax: true
+      help: How much the specks gather into a few clusters instead of spreading evenly.
+    - name: Sparklerate
+      style: Float
+      label: Sparkle Shimmer
+      default: 2.5
+      max: 100.0
+      clampMin: true
+      clampMax: true
+      normMax: 8.0
+      help: Twinkle speed of the specks in radians per second (snapped to whole cycles in Loop mode).
+    Scroll:
+    - name: Scrollwork
+      style: Float
+      startSection: true
+      default: 0.85
+      clampMin: true
+      clampMax: true
+      help: Opacity of the ornamental scrollwork layer drawn over the field (0 = off). Squiggling contour lines and small leaf lobes, folded into mirrored sectors like carpet ornament.
+    - name: Scrollscale
+      style: Float
+      label: Scale
+      default: 4
+      min: 0.1
+      max: 100.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 16.0
+      help: Size of the ornament. Higher = finer, more squiggles.
+      value: 12
+    - name: Scrolldetail
+      style: Int
+      label: Detail
+      default: 3
+      min: 1.0
+      max: 6.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 6.0
+      help: 'Noise octaves in the ornament: 2-3 = smooth graceful curls, 5-6 = crackly fine detail.'
+      value: 4
+    - name: Scrollwarp
+      style: Float
+      label: Warp
+      default: 0.75
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
+      value: 0.6
+    - name: Scrolldensity
+      style: Float
+      label: Line Density
+      default: 3.2
+      min: 0.1
+      max: 60.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 12.0
+      help: Number of contour squiggles across the field.
+    - name: Scrollleaves
+      style: Float
+      label: Squiggle Lines
+      clampMin: true
+      clampMax: true
+      help: Opacity of faint contour squiggles drawn over the filled lobes (0 = fills only).
+    - name: Scrollsymmetry
+      style: Int
+      label: Symmetry
+      default: 8
+      min: 1.0
+      max: 64.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 24.0
+      help: Mirrored sectors around the centre (8 = matches the vases and gates).
+    - name: Scrollinner
+      style: Float
+      label: Inner Radius
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.3
+      normMax: 0.8
+      help: Where the ornament starts (scene units; the palace wall sits at about 0.47).
+    - name: Scrollouter
+      style: Float
+      label: Outer Radius
+      default: 0.855
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      help: Where the ornament stops (the beads sit at 0.86).
+    - name: Scrollflow
+      style: Float
+      label: Growth Stretch
+      default: 0.35
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Radial elongation of the ornament lobes along their growth direction (0 = round, 1 = twice as long radially).
+    - name: Scrollevolve
+      style: Float
+      label: Growth Speed
+      default: 0.15
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Outward growth speed of the ornament in pattern units per second (snapped to whole pattern periods per loop in Loop mode). Always outward from the centre.
+    - name: Scrolllinecolor
+      style: Int
+      label: Fill Color A
+      startSection: true
+      default: 2
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot for the first lobe family (saffron by default; varies toward vermilion).
+    - name: Scrollleafcolor
+      style: Int
+      label: Fill Color B
+      default: 4
+      min: 1.0
+      max: 8.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 8.0
+      help: Palette slot for the second lobe family (teal by default, lifted toward gold in the shader).
   flags:
   - viewer
   position: [1600, -400]

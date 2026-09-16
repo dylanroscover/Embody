@@ -234,14 +234,14 @@ INSERT OR REPLACE INTO specimens (
     'mandala',
     'dev-user',
     'Thangka Mandala',
-    'A Tibetan-thangka mandala drawn from POP geometry: 29 parameterised layers (rippling field lines, petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.',
+    'A Tibetan-thangka mandala drawn from POP geometry: 32 parameterised layers (rippling field lines, petal rings, gold rings, a slowly turning candy-cane ring of palette blocks, beads, lace, vase treasures, a bold ink cross beneath the palace reaching out to the four vases, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, with minute filled orange and green cloud scrolls (a domain-warped noise GLSL TOP on a quad inside the render) growing outward behind them and over the cross, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.',
     'generative',
     'advanced',
     '[]',
-    414,
+    461,
     'POP,CHOP,MAT,TOP',
     'ver-mandala',
-    'thumbnails/2a7658dd6e020569da6a082341cedb21e7e1e910848a4b4c91c646e7f542f519',
+    'thumbnails/811918e8427c34cd3444dc7091f58f8db153009af08f0b2b9f213b88fe8a0973',
     'CC-BY-4.0',
     'public',
     'featured',
@@ -264,7 +264,7 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-plasma-interference', 'sp-plasma-interference', 1, '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', '85dd9eb6e4ca3002f81faf1bab51d1eb1540b3465b4cdca79a949a20b3e77e21', 34394, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
-  ('ver-mandala', 'sp-mandala', 1, '0f6dc25638c06ce9bce250cb55049f4b973ea5d7680f1a0840d4c1325b0a10bd', '0f6dc25638c06ce9bce250cb55049f4b973ea5d7680f1a0840d4c1325b0a10bd', 281840, 414, 'scan-mandala', NULL, 'First-party specimen.');
+  ('ver-mandala', 'sp-mandala', 1, '5c07aeacd9f8034b7094e7ac01c75bebe80187a28ae88205f763ab04374157a6', '5c07aeacd9f8034b7094e7ac01c75bebe80187a28ae88205f763ab04374157a6', 318796, 461, 'scan-mandala', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -361,7 +361,7 @@ SELECT rowid, 'prismatic-strata', 'Prismatic Strata', 'Stacked jagged strata lit
 FROM specimens WHERE id = 'sp-prismatic-strata';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'mandala', 'Thangka Mandala', 'A Tibetan-thangka mandala drawn from POP geometry: 29 parameterised layers (rippling field lines, petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP'
+SELECT rowid, 'mandala', 'Thangka Mandala', 'A Tibetan-thangka mandala drawn from POP geometry: 32 parameterised layers (rippling field lines, petal rings, gold rings, a slowly turning candy-cane ring of palette blocks, beads, lace, vase treasures, a bold ink cross beneath the palace reaching out to the four vases, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, with minute filled orange and green cloud scrolls (a domain-warped noise GLSL TOP on a quad inside the render) growing outward behind them and over the cross, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP shuffleCHOP lineMAT constantMAT glslTOP rectanglePOP'
 FROM specimens WHERE id = 'sp-mandala';
 
 -- Category membership (multi). Seed the join table from each specimen's primary

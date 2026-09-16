@@ -155,7 +155,7 @@
     "name": "Thangka Mandala",
     "category": "generative",
     "level": "advanced",
-    "description": "A Tibetan-thangka mandala drawn from POP geometry: 29 parameterised layers (rippling field lines, petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
+    "description": "A Tibetan-thangka mandala drawn from POP geometry: 32 parameterised layers (rippling field lines, petal rings, gold rings, a slowly turning candy-cane ring of palette blocks, beads, lace, vase treasures, a bold ink cross beneath the palace reaching out to the four vases, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, with minute filled orange and green cloud scrolls (a domain-warped noise GLSL TOP on a quad inside the render) growing outward behind them and over the cross, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
     "tags": [
       "generative",
       "pop",
@@ -167,7 +167,7 @@
       "vj"
     ],
     "requires": [],
-    "operator_count": 414,
+    "operator_count": 461,
     "key_ops": [
       "glslPOP",
       "copyPOP",
@@ -176,7 +176,8 @@
       "shuffleCHOP",
       "lineMAT",
       "constantMAT",
-      "glslTOP"
+      "glslTOP",
+      "rectanglePOP"
     ]
   }
 ]
