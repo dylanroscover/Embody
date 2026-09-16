@@ -149,5 +149,34 @@
       "renderselectTOP",
       "bloomTOP"
     ]
+  },
+  {
+    "slug": "mandala",
+    "name": "Thangka Mandala",
+    "category": "generative",
+    "level": "advanced",
+    "description": "A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
+    "tags": [
+      "generative",
+      "pop",
+      "glsl",
+      "mandala",
+      "geometry",
+      "line",
+      "loop",
+      "vj"
+    ],
+    "requires": [],
+    "operator_count": 343,
+    "key_ops": [
+      "glslPOP",
+      "copyPOP",
+      "circlePOP",
+      "mergePOP",
+      "shuffleCHOP",
+      "lineMAT",
+      "constantMAT",
+      "glslTOP"
+    ]
   }
 ]

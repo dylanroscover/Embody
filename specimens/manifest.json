@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 7,
+  "specimen_count": 8,
   "specimens": [
     {
       "slug": "murmuration",
@@ -138,6 +138,26 @@
       "prompt_path": "generative/prismatic-strata.prompt.md",
       "operator_count": 18,
       "warmup_frames": 8,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "mandala",
+      "name": "Thangka Mandala",
+      "category": "generative",
+      "difficulty": "advanced",
+      "description": "A Tibetan-thangka mandala drawn from POP geometry: 24 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the red palace square with gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
+      "tags": ["generative", "pop", "glsl", "mandala", "geometry", "line", "loop", "vj"],
+      "key_ops": ["glslPOP", "copyPOP", "circlePOP", "mergePOP", "shuffleCHOP", "lineMAT", "constantMAT", "glslTOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdxn_path": "generative/mandala.tdxn",
+      "thumbnail_path": "generative/mandala.jpg",
+      "prompt_path": "generative/mandala.prompt.md",
+      "operator_count": 343,
+      "warmup_frames": 4,
       "preview": true,
       "author": "Embody",
       "license": "CC-BY-4.0"

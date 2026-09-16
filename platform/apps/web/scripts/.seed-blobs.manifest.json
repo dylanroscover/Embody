@@ -124,5 +124,23 @@
     "size": 185802,
     "content_type": "image/jpeg",
     "path": "specimens/generative/prismatic-strata.jpg"
+  },
+  {
+    "slug": "mandala",
+    "kind": "tdxn",
+    "key": "8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13",
+    "sha256": "8a0a6e1800392dd39ef2efebe4130c2c7581b6e579745c1839150f38071e5a13",
+    "size": 224434,
+    "content_type": "application/json",
+    "path": "specimens/generative/mandala.tdxn"
+  },
+  {
+    "slug": "mandala",
+    "kind": "thumbnail",
+    "key": "thumbnails/6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f",
+    "sha256": "6bc2530e9d9841f078740906fed6753f5378ee54edb85fe3f295de9da9afd65f",
+    "size": 358350,
+    "content_type": "image/jpeg",
+    "path": "specimens/generative/mandala.jpg"
   }
 ]
