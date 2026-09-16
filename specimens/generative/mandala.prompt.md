@@ -1,22 +1,24 @@
 # Thangka Mandala
 
-A Tibetan-thangka mandala drawn entirely from POP geometry: a green field disc inside a
+A Tibetan-thangka mandala drawn entirely from POP geometry: a green field disc, veined with
+rippling nested rosette lines that breathe and drift at staggered rates, inside a
 four-colour ring of petals, gold rings, bead and tick rings, lace and garland scrollwork,
 eight vase treasures, the palace square with nested colour bands behind one heavy ink wall
 and gold corner brackets, T-gates and corner medallions, a dotted lotus seat, two counter-rotating lotus rings, and a rosette, star and
-dot at the centre. Every element is a parameterised layer (27 of them) whose outline,
+dot at the centre. Every element is a parameterised layer (29 of them) whose outline,
 symmetry, colours, nesting and animation are dialled from custom parameters, and the whole
 thing breathes: petals tumble and travel in waves, colours cross-fade around the rings,
 nested rings spin at different rates, tips flex between round and pointed. A GLSL finish
 ages it into a worn cloth painting -- patchy fade toward paper, paper-fibre grunge only in
-those patches, a soft vignette and grain. With Loop on, every rate is snapped so the whole
+those patches, a soft vignette, grain and sparse shimmering specks of light (Sparkle Density, Clumping,
+Shimmer on the Wear page). With Loop on, every rate is snapped so the whole
 mandala repeats exactly every Loop Length seconds.
 
 ## What it teaches
 - **One shader for every layer.** Each layer is a static chain (circle -> LayerId/IsFill
   attributes -> Nest copies -> Count copies) merged into ONE line stream and ONE fill stream.
   Three GLSL POPs (line, ink contour, fill) then compute outline, nesting, placement, animation and the
-  per-point `Color` / `LineWidth` for all 27 layers at once. Per frame only those three POPs,
+  per-point `Color` / `LineWidth` for all 29 layers at once. Per frame only those three POPs,
   the render and the finish cook: about 1 ms for 40,000 points.
 - **Parameters travel in a texture buffer, not as uniforms.** Every layer owns a 64-channel
   Constant CHOP bound to its Layer + Animate pages; `merge_params` joins them in layer order
@@ -80,7 +82,9 @@ mandala repeats exactly every Loop Length seconds.
 > the point Color and LineWidth, and a Constant MAT for the fans, over a deep-blue field;
 > finish with global saturation and a GLSL wear pass that fades patchy regions toward paper,
 > adds paper-fibre grunge only there, a vignette and grain. Add a Loop mode that snaps every
-> rate and spin to whole cycles per loop. Compose 27 layers: field disc, dark framing ring, four-colour outer
+> rate and spin to whole cycles per loop. Compose 29 layers: field disc, a family of thin rippling nested rosette lines (16 nested
+> copies alternating cream and gold, a slow per-ring Nest Spin, breathing amplitude and spacing;
+> a second family is included switched off), dark framing ring, four-colour outer
 > petal ring, gold rings, lace border, eight vase treasures, bead and tick rings, palace
 > square with nested bands, a heavy ink wall and gold corner brackets (Gap cuts the middle
 > of each edge), thin nested lines, gates on top, corner medallions, dotted lotus

@@ -720,6 +720,32 @@ custom_pars:
     clampMax: true
     normMax: 0.2
     help: Animated film grain added last. 0.03-0.06 is subtle.
+  - name: Sparkle
+    style: Float
+    label: Sparkle Density
+    startSection: true
+    default: 1.0e-05
+    max: 0.05
+    clampMin: true
+    clampMax: true
+    normMax: 0.0005
+    help: Fraction of pixels that carry a bright shimmering speck (0.00001 = 0.001 percent). Very sparse by design; raise to 0.0001 for a visible dusting.
+  - name: Sparkleclump
+    style: Float
+    label: Sparkle Clumping
+    default: 0.7
+    clampMin: true
+    clampMax: true
+    help: How much the specks gather into a few clusters instead of spreading evenly.
+  - name: Sparklerate
+    style: Float
+    label: Sparkle Shimmer
+    default: 2.5
+    max: 100.0
+    clampMin: true
+    clampMax: true
+    normMax: 8.0
+    help: Twinkle speed of the specks in radians per second (snapped to whole cycles in Loop mode).
 parameters:
   parentshortcut: Mandala
 flags:
@@ -1185,6 +1211,18 @@ operators:
       valuex: =parent.Mandala.par.Grain
     - name: uTime
       valuex: =((parent.Mandala.par.Manualtime if parent.Mandala.par.Timemode.eval() == 'manual' else absTime.seconds) if parent.Mandala.par.Grain > 0 else 0)
+    - name: uSparkle
+      valuex: =parent.Mandala.par.Sparkle
+    - name: uSparkleClump
+      valuex: =parent.Mandala.par.Sparkleclump
+    - name: uSparkleRate
+      valuex: =parent.Mandala.par.Sparklerate
+    - name: uLoop
+      valuex: =parent.Mandala.par.Loop
+    - name: uLoopLen
+      valuex: =parent.Mandala.par.Looplength / max(parent.Mandala.par.Speedmult, 1e-6)
+    - name: uSeed
+      valuex: =parent.Mandala.par.Seed
   position: [3400, -1400]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -2185,6 +2223,8 @@ operators:
     - {}
     - {}
     - {}
+    - {}
+    - {}
   position: [600, -1800]
   inputs:
   - source: field_disc
@@ -2241,10 +2281,16 @@ operators:
     out: 2
   - source: palace_gold_frame
     out: 2
+  - source: field_ripples_a
+    out: 2
+  - source: field_ripples_b
+    out: 2
 - name: merge_line
   type: mergePOP
   sequences:
     input:
+    - {}
+    - {}
     - {}
     - {}
     - {}
@@ -2301,6 +2347,8 @@ operators:
   - outer_ink_ring
   - palace_shadow_squares
   - palace_gold_frame
+  - field_ripples_a
+  - field_ripples_b
 - name: center_star
   type: baseCOMP
   custom_pars:
@@ -3928,6 +3976,10 @@ operators:
   - source: palace_shadow_squares
     out: 1
   - source: palace_gold_frame
+    out: 1
+  - source: field_ripples_a
+    out: 1
+  - source: field_ripples_b
     out: 1
 - name: palace_lines
   type: baseCOMP
@@ -6429,6 +6481,510 @@ operators:
   color: [0.67, 0.67, 0.67]
   inputs:
   - merge_params
+- name: field_ripples_a
+  type: baseCOMP
+  custom_pars:
+    Layer:
+      $t: layer
+      Shape: rosette
+      Order: 2
+      Radius: 0.86
+      Amplitude: 0.012
+      Detail: 256
+      Nest: 16
+      Nestgap: 0.03
+      Speed: 0.2
+      Alternate: nest
+      Opacity: 0.3
+      Linewidth: 0.45
+      Wobble: 0.0008
+      Wobblescale: 4
+    Animate:
+      $t: animate
+      Nestspin: 0.1
+      Wobblerate: 0.1
+      Amplitudeanim: 0.004
+      Amplituderate: 0.6
+      Nestgapanim: 0.004
+      Nestgaprate: 0.35
+      Linewidthanim: 0.1
+      Linewidthrate: 0.7
+      Opacityanim: 0.05
+      Opacityrate: 0.6
+  position: [0, -5400]
+  children:
+  - name: params
+    type: constantCHOP
+    sequences:
+      const:
+      - name: Active
+        value: =parent.Layer.par.Active
+      - name: Shape
+        value: =parent.Layer.par.Shape.menuIndex
+      - name: Style
+        value: =parent.Layer.par.Style.menuIndex
+      - name: Order
+        value: =parent.Layer.par.Order
+      - name: Radius
+        value: =parent.Layer.par.Radius
+      - name: Lobes
+        value: =parent.Layer.par.Lobes
+      - name: Amplitude
+        value: =parent.Layer.par.Amplitude
+      - name: Sharpness
+        value: =parent.Layer.par.Sharpness
+      - name: Length
+        value: =parent.Layer.par.Length
+      - name: Width
+        value: =parent.Layer.par.Width
+      - name: Count
+        value: =parent.Layer.par.Count
+      - name: Nest
+        value: =parent.Layer.par.Nest
+      - name: Nestgap
+        value: =parent.Layer.par.Nestgap
+      - name: Rotate
+        value: =parent.Layer.par.Rotate
+      - name: Speed
+        value: =parent.Layer.par.Speed
+      - name: Pulse
+        value: =parent.Layer.par.Pulse
+      - name: Pulserate
+        value: =parent.Layer.par.Pulserate
+      - name: ColAr
+        value: =parent.Mandala.par['Col%dr' % int(parent.Layer.par.Colora)]
+      - name: ColAg
+        value: =parent.Mandala.par['Col%dg' % int(parent.Layer.par.Colora)]
+      - name: ColAb
+        value: =parent.Mandala.par['Col%db' % int(parent.Layer.par.Colora)]
+      - name: ColBr
+        value: =parent.Mandala.par['Col%dr' % int(parent.Layer.par.Colorb)]
+      - name: ColBg
+        value: =parent.Mandala.par['Col%dg' % int(parent.Layer.par.Colorb)]
+      - name: ColBb
+        value: =parent.Mandala.par['Col%db' % int(parent.Layer.par.Colorb)]
+      - name: ColLr
+        value: =parent.Mandala.par['Col%dr' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: ColLg
+        value: =parent.Mandala.par['Col%dg' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: ColLb
+        value: =parent.Mandala.par['Col%db' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: Uselinecol
+        value: =1 if parent.Layer.par.Linecolor > 0 else 0
+      - name: Alternate
+        value: =parent.Layer.par.Alternate.menuIndex
+      - name: Opacity
+        value: =parent.Layer.par.Opacity
+      - name: Linewidth
+        value: =parent.Layer.par.Linewidth
+      - name: Wobble
+        value: =parent.Layer.par.Wobble
+      - name: Wobblescale
+        value: =parent.Layer.par.Wobblescale
+      - name: Seed
+        value: =parent.Mandala.par.Seed + next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - name: Wave
+        value: =parent.Layer.par.Wave
+      - name: Waverate
+        value: =parent.Layer.par.Waverate
+      - name: Wavecycles
+        value: =parent.Layer.par.Wavecycles
+      - name: Colorwave
+        value: =parent.Layer.par.Colorwave
+      - name: Colorrate
+        value: =parent.Layer.par.Colorrate
+      - name: Tumble
+        value: =parent.Layer.par.Tumble
+      - name: Tumblerate
+        value: =parent.Layer.par.Tumblerate
+      - name: Nestspin
+        value: =parent.Layer.par.Nestspin
+      - name: Wobblerate
+        value: =parent.Layer.par.Wobblerate
+      - name: Radiusanim
+        value: =parent.Layer.par.Radiusanim
+      - name: Radiusrate
+        value: =parent.Layer.par.Radiusrate
+      - name: Amplitudeanim
+        value: =parent.Layer.par.Amplitudeanim
+      - name: Amplituderate
+        value: =parent.Layer.par.Amplituderate
+      - name: Sharpnessanim
+        value: =parent.Layer.par.Sharpnessanim
+      - name: Sharpnessrate
+        value: =parent.Layer.par.Sharpnessrate
+      - name: Lengthanim
+        value: =parent.Layer.par.Lengthanim
+      - name: Lengthrate
+        value: =parent.Layer.par.Lengthrate
+      - name: Widthanim
+        value: =parent.Layer.par.Widthanim
+      - name: Widthrate
+        value: =parent.Layer.par.Widthrate
+      - name: Nestgapanim
+        value: =parent.Layer.par.Nestgapanim
+      - name: Nestgaprate
+        value: =parent.Layer.par.Nestgaprate
+      - name: Linewidthanim
+        value: =parent.Layer.par.Linewidthanim
+      - name: Linewidthrate
+        value: =parent.Layer.par.Linewidthrate
+      - name: Opacityanim
+        value: =parent.Layer.par.Opacityanim
+      - name: Opacityrate
+        value: =parent.Layer.par.Opacityrate
+      - name: Ink
+        value: =parent.Layer.par.Ink
+      - name: Gap
+        value: =parent.Layer.par.Gap
+      - name: pad60
+      - name: pad61
+      - name: pad62
+      - name: pad63
+    position: [0, -600]
+  - name: out_fill
+    type: outPOP
+    parameters:
+      connectorder: 1
+    position: [1600, -200]
+    inputs:
+    - copy_radial_f
+  - name: out_line
+    type: outPOP
+    position: [1600, 200]
+    inputs:
+    - copy_radial
+  - name: attr_fill
+    type: attributePOP
+    sequences:
+      attr:
+      - customname: LayerId
+        type: int
+        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - customname: IsFill
+        type: int
+        value0: 1
+    position: [400, -200]
+    inputs:
+    - circle_fill
+  - name: attr_line
+    type: attributePOP
+    sequences:
+      attr:
+      - customname: LayerId
+        type: int
+        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - customname: IsFill
+        type: int
+    position: [400, 200]
+    inputs:
+    - circle_line
+  - name: copy_nest
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Nest
+      copyidname: NestId
+    position: [800, 200]
+    inputs:
+    - attr_line
+  - name: out_params
+    type: outCHOP
+    position: [400, -600]
+    inputs:
+    - params
+  - name: circle_fill
+    type: circlePOP
+    parameters:
+      connectivity: surface
+    position: [0, -200]
+  - name: circle_line
+    type: circlePOP
+    position: [0, 200]
+  - name: copy_nest_f
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Nest
+      copyidname: NestId
+    position: [800, -200]
+    inputs:
+    - attr_fill
+  - name: copy_radial
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Count
+    position: [1200, 200]
+    inputs:
+    - copy_nest
+  - name: copy_radial_f
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Count
+    position: [1200, -200]
+    inputs:
+    - copy_nest_f
+  annotations:
+  - name: annotate1
+    mode: annotate
+    title: 'Layer element: static copy chains + parameter channels'
+    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
+    position: [-70, -670]
+    size: [1870, 1130]
+    color: [0.55, 0.35, 0.25]
+    opacity: 0.35
+- name: field_ripples_b
+  type: baseCOMP
+  custom_pars:
+    Layer:
+      $t: layer
+      Active: false
+      Shape: rosette
+      Order: 2
+      Radius: 0.845
+      Amplitude: 0.012
+      Detail: 256
+      Nest: 13
+      Nestgap: 0.036
+      Rotate: 4
+      Speed: 0.2
+      Colora: 3
+      Colorb: 5
+      Alternate: nest
+      Opacity: 0.22
+      Linewidth: 0.45
+      Wobble: 0.001
+      Wobblescale: 4
+    Animate:
+      $t: animate
+      Nestspin: 0.12
+      Wobblerate: 0.1
+      Amplitudeanim: 0.004
+      Amplituderate: 0.6
+      Nestgapanim: 0.004
+      Nestgaprate: 0.35
+      Linewidthanim: 0.1
+      Linewidthrate: 0.7
+      Opacityanim: 0.05
+      Opacityrate: 0.6
+  position: [0, -5600]
+  children:
+  - name: params
+    type: constantCHOP
+    sequences:
+      const:
+      - name: Active
+        value: =parent.Layer.par.Active
+      - name: Shape
+        value: =parent.Layer.par.Shape.menuIndex
+      - name: Style
+        value: =parent.Layer.par.Style.menuIndex
+      - name: Order
+        value: =parent.Layer.par.Order
+      - name: Radius
+        value: =parent.Layer.par.Radius
+      - name: Lobes
+        value: =parent.Layer.par.Lobes
+      - name: Amplitude
+        value: =parent.Layer.par.Amplitude
+      - name: Sharpness
+        value: =parent.Layer.par.Sharpness
+      - name: Length
+        value: =parent.Layer.par.Length
+      - name: Width
+        value: =parent.Layer.par.Width
+      - name: Count
+        value: =parent.Layer.par.Count
+      - name: Nest
+        value: =parent.Layer.par.Nest
+      - name: Nestgap
+        value: =parent.Layer.par.Nestgap
+      - name: Rotate
+        value: =parent.Layer.par.Rotate
+      - name: Speed
+        value: =parent.Layer.par.Speed
+      - name: Pulse
+        value: =parent.Layer.par.Pulse
+      - name: Pulserate
+        value: =parent.Layer.par.Pulserate
+      - name: ColAr
+        value: =parent.Mandala.par['Col%dr' % int(parent.Layer.par.Colora)]
+      - name: ColAg
+        value: =parent.Mandala.par['Col%dg' % int(parent.Layer.par.Colora)]
+      - name: ColAb
+        value: =parent.Mandala.par['Col%db' % int(parent.Layer.par.Colora)]
+      - name: ColBr
+        value: =parent.Mandala.par['Col%dr' % int(parent.Layer.par.Colorb)]
+      - name: ColBg
+        value: =parent.Mandala.par['Col%dg' % int(parent.Layer.par.Colorb)]
+      - name: ColBb
+        value: =parent.Mandala.par['Col%db' % int(parent.Layer.par.Colorb)]
+      - name: ColLr
+        value: =parent.Mandala.par['Col%dr' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: ColLg
+        value: =parent.Mandala.par['Col%dg' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: ColLb
+        value: =parent.Mandala.par['Col%db' % max(1, int(parent.Layer.par.Linecolor))]
+      - name: Uselinecol
+        value: =1 if parent.Layer.par.Linecolor > 0 else 0
+      - name: Alternate
+        value: =parent.Layer.par.Alternate.menuIndex
+      - name: Opacity
+        value: =parent.Layer.par.Opacity
+      - name: Linewidth
+        value: =parent.Layer.par.Linewidth
+      - name: Wobble
+        value: =parent.Layer.par.Wobble
+      - name: Wobblescale
+        value: =parent.Layer.par.Wobblescale
+      - name: Seed
+        value: =parent.Mandala.par.Seed + next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - name: Wave
+        value: =parent.Layer.par.Wave
+      - name: Waverate
+        value: =parent.Layer.par.Waverate
+      - name: Wavecycles
+        value: =parent.Layer.par.Wavecycles
+      - name: Colorwave
+        value: =parent.Layer.par.Colorwave
+      - name: Colorrate
+        value: =parent.Layer.par.Colorrate
+      - name: Tumble
+        value: =parent.Layer.par.Tumble
+      - name: Tumblerate
+        value: =parent.Layer.par.Tumblerate
+      - name: Nestspin
+        value: =parent.Layer.par.Nestspin
+      - name: Wobblerate
+        value: =parent.Layer.par.Wobblerate
+      - name: Radiusanim
+        value: =parent.Layer.par.Radiusanim
+      - name: Radiusrate
+        value: =parent.Layer.par.Radiusrate
+      - name: Amplitudeanim
+        value: =parent.Layer.par.Amplitudeanim
+      - name: Amplituderate
+        value: =parent.Layer.par.Amplituderate
+      - name: Sharpnessanim
+        value: =parent.Layer.par.Sharpnessanim
+      - name: Sharpnessrate
+        value: =parent.Layer.par.Sharpnessrate
+      - name: Lengthanim
+        value: =parent.Layer.par.Lengthanim
+      - name: Lengthrate
+        value: =parent.Layer.par.Lengthrate
+      - name: Widthanim
+        value: =parent.Layer.par.Widthanim
+      - name: Widthrate
+        value: =parent.Layer.par.Widthrate
+      - name: Nestgapanim
+        value: =parent.Layer.par.Nestgapanim
+      - name: Nestgaprate
+        value: =parent.Layer.par.Nestgaprate
+      - name: Linewidthanim
+        value: =parent.Layer.par.Linewidthanim
+      - name: Linewidthrate
+        value: =parent.Layer.par.Linewidthrate
+      - name: Opacityanim
+        value: =parent.Layer.par.Opacityanim
+      - name: Opacityrate
+        value: =parent.Layer.par.Opacityrate
+      - name: Ink
+        value: =parent.Layer.par.Ink
+      - name: Gap
+        value: =parent.Layer.par.Gap
+      - name: pad60
+      - name: pad61
+      - name: pad62
+      - name: pad63
+    position: [0, -600]
+  - name: out_fill
+    type: outPOP
+    parameters:
+      connectorder: 1
+    position: [1600, -200]
+    inputs:
+    - copy_radial_f
+  - name: out_line
+    type: outPOP
+    position: [1600, 200]
+    inputs:
+    - copy_radial
+  - name: attr_fill
+    type: attributePOP
+    sequences:
+      attr:
+      - customname: LayerId
+        type: int
+        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - customname: IsFill
+        type: int
+        value0: 1
+    position: [400, -200]
+    inputs:
+    - circle_fill
+  - name: attr_line
+    type: attributePOP
+    sequences:
+      attr:
+      - customname: LayerId
+        type: int
+        value0: =next((i for i, o in enumerate(parent.Mandala.op('merge_params').inputs) if o.path.startswith(parent.Layer.path)), 0)
+      - customname: IsFill
+        type: int
+    position: [400, 200]
+    inputs:
+    - circle_line
+  - name: copy_nest
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Nest
+      copyidname: NestId
+    position: [800, 200]
+    inputs:
+    - attr_line
+  - name: out_params
+    type: outCHOP
+    position: [400, -600]
+    inputs:
+    - params
+  - name: circle_fill
+    type: circlePOP
+    parameters:
+      connectivity: surface
+    position: [0, -200]
+  - name: circle_line
+    type: circlePOP
+    position: [0, 200]
+  - name: copy_nest_f
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Nest
+      copyidname: NestId
+    position: [800, -200]
+    inputs:
+    - attr_fill
+  - name: copy_radial
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Count
+    position: [1200, 200]
+    inputs:
+    - copy_nest
+  - name: copy_radial_f
+    type: copyPOP
+    parameters:
+      ncy: =parent.Layer.par.Count
+    position: [1200, -200]
+    inputs:
+    - copy_nest_f
+  annotations:
+  - name: annotate1
+    mode: annotate
+    title: 'Layer element: static copy chains + parameter channels'
+    text: 'Top row: line strip chain -> out_line. Bottom row: filled fan chain -> out_fill. params CHOP = 64 channels bound to the Layer + Animate pages; the parent''s glsl_line / glsl_fill do all per-frame work.'
+    position: [-70, -670]
+    size: [1870, 1130]
+    color: [0.55, 0.35, 0.25]
+    opacity: 0.35
 - name: glsl_wear_pixel
   type: textDAT
   parameters:
@@ -6437,7 +6993,7 @@ operators:
   - viewer
   position: [3400, -1520]
   dock: glsl_wear
-  dat_content: "// Worn-thangka finish: patchy fade toward paper, paper-fiber grunge inside the patches,\n// a soft vignette, and animated grain. Inputs: 0 = image, 1 = fiber noise, 2 = patch noise.\n// Uniform values come from the Vectors page (GLSL TOP uniforms must be declared here).\n\nuniform float uGrunge;\nuniform float uFade;\nuniform vec3 uPaper;\nuniform float uCoverage;\nuniform float uVignette;\nuniform float uGrain;\nuniform float uTime;\n\nout vec4 fragColor;\n\nvoid main() {\n\tvec2 uv = vUV.st;\n\tvec4 img = texture(sTD2DInputs[0], uv);\n\tfloat fiber = texture(sTD2DInputs[1], uv).r;\n\tfloat patchNoise = texture(sTD2DInputs[2], uv).r;\n\n\t// patchy coverage: threshold the low-frequency noise softly ('patch' is a GLSL keyword)\n\tfloat edge = 0.24;\n\tfloat m = smoothstep(1.0 - uCoverage - edge, 1.0 - uCoverage + edge, patchNoise);\n\tfloat wear = m * (0.35 + 0.65 * fiber);\n\n\tvec3 c = img.rgb;\n\tc = mix(c, uPaper, clamp(uFade * wear, 0.0, 1.0));\n\tc *= 1.0 + uGrunge * m * (fiber - 0.5) * 1.3;\n\n\tvec2 d = uv - 0.5;\n\tfloat r = length(d) * 1.41421356;\n\tc *= 1.0 - uVignette * smoothstep(0.5, 1.05, r);\n\n\tfloat g = fract(sin(dot(uv * 1417.0 + vec2(uTime * 13.7, uTime * 7.1), vec2(12.9898, 78.233))) * 43758.5453);\n\tc += (g - 0.5) * uGrain;\n\n\tfragColor = TDOutputSwizzle(vec4(c, 1.0));\n}\n"
+  dat_content: "// Worn-thangka finish: patchy fade toward paper, paper-fibre grunge inside the patches,\n// a soft vignette, animated grain, and sparse shimmering specks of light.\n// Inputs: 0 = image, 1 = fiber noise, 2 = patch noise.\n// Uniform values come from the Vectors page (GLSL TOP uniforms must be declared here).\n\nuniform float uGrunge;\nuniform float uFade;\nuniform vec3 uPaper;\nuniform float uCoverage;\nuniform float uVignette;\nuniform float uGrain;\nuniform float uTime;\nuniform float uSparkle;\nuniform float uSparkleClump;\nuniform float uSparkleRate;\nuniform float uLoop;\nuniform float uLoopLen;\nuniform float uSeed;\n\nout vec4 fragColor;\n\n#define TAU 6.28318530718\n\nfloat hash21(vec2 p) {\n\tp = fract(p * vec2(123.34, 456.21));\n\tp += dot(p, p + 45.32);\n\treturn fract(p.x * p.y);\n}\n\nvoid main() {\n\tvec2 uv = vUV.st;\n\tvec4 img = texture(sTD2DInputs[0], uv);\n\tfloat fiber = texture(sTD2DInputs[1], uv).r;\n\tfloat patchNoise = texture(sTD2DInputs[2], uv).r;\n\n\t// patchy coverage: threshold the low-frequency noise softly ('patch' is a GLSL keyword)\n\tfloat edge = 0.24;\n\tfloat m = smoothstep(1.0 - uCoverage - edge, 1.0 - uCoverage + edge, patchNoise);\n\tfloat wear = m * (0.35 + 0.65 * fiber);\n\n\tvec3 c = img.rgb;\n\tc = mix(c, uPaper, clamp(uFade * wear, 0.0, 1.0));\n\tc *= 1.0 + uGrunge * m * (fiber - 0.5) * 1.3;\n\n\tvec2 d = uv - 0.5;\n\tfloat r = length(d) * 1.41421356;\n\tc *= 1.0 - uVignette * smoothstep(0.5, 1.05, r);\n\n\tfloat g = fract(sin(dot(uv * 1417.0 + vec2(uTime * 13.7, uTime * 7.1), vec2(12.9898, 78.233))) * 43758.5453);\n\tc += (g - 0.5) * uGrain;\n\n\t// sparkles: fixed seeded positions on a 3px lattice, a few hot regions (clumping), each speck twinkling\n\tif (uSparkle > 0.0) {\n\t\tvec2 px = uv * uTD2DInfos[0].res.zw;\n\t\tvec2 cell = floor(px / 3.0);\n\t\tvec2 coarse = floor(px / 64.0);\n\t\tfloat hot = pow(hash21(coarse + uSeed * 0.37), 4.0) * 8.0;\n\t\tfloat dens = uSparkle * 9.0 * mix(1.0, hot, uSparkleClump);\n\t\tfloat h = hash21(cell + uSeed * 3.1);\n\t\tif (h < dens) {\n\t\t\tvec2 jitter = (vec2(hash21(cell + 7.7), hash21(cell + 9.1)) - 0.5) * 1.5;\n\t\t\tvec2 centre = (cell + 0.5 + jitter) * 3.0;\n\t\t\tfloat dist = length(px - centre);\n\t\t\tfloat rate = uSparkleRate;\n\t\t\tif (uLoop > 0.5 && rate > 0.0)\n\t\t\t\trate = max(1.0, floor(rate * uLoopLen / TAU + 0.5)) * TAU / uLoopLen;\n\t\t\tfloat tw = 0.55 + 0.45 * sin(uTime * rate + hash21(cell + 3.3) * TAU);\n\t\t\tfloat s = smoothstep(1.7, 0.2, dist) * tw;\n\t\t\tc += vec3(1.0, 0.97, 0.88) * s * 1.3;\n\t\t}\n\t}\n\n\tfragColor = TDOutputSwizzle(vec4(c, 1.0));\n}\n"
   dat_content_format: text
 - name: treasure_petals
   type: baseCOMP
@@ -7968,8 +8524,8 @@ annotations:
   mode: annotate
   title: Layers (24 x ring / petal / palace elements)
   text: 'Each layer_NN is one mandala element. Its Layer page sets shape, radius, symmetry, colours (palette slots 1-8), nesting and outline style; its Animate page adds waves, tumble, colour waves and LFOs on nearly every attribute. Master knobs: Mandala page (Scale, Rotate, Speed Multiplier, Energy, Line Width), Palette page, Wear page. Draw Order stacks layers; duplicate a layer COMP and wire its three outputs into the merges (same input index on all three) to add an element.'
-  position: [-70, -5270]
-  size: [300, 5570]
+  position: [-70, -5670]
+  size: [300, 5970]
   color: [0.55, 0.35, 0.25]
   opacity: 0.35
 - name: annotate2

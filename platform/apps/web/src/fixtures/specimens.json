@@ -155,7 +155,7 @@
     "name": "Thangka Mandala",
     "category": "generative",
     "level": "advanced",
-    "description": "A Tibetan-thangka mandala drawn from POP geometry: 27 parameterised layers (petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
+    "description": "A Tibetan-thangka mandala drawn from POP geometry: 29 parameterised layers (rippling field lines, petal rings, gold rings, beads, lace, vase treasures, the palace square behind a heavy ink wall with gold corner brackets, gates and medallions, lotus rings, a rosette and star at the centre) that breathe, tumble, spin and cross-fade colour in travelling waves, aged by a patchy worn-cloth finish. Every layer is a static copy chain; two GLSL POPs read all layer parameters from a texture buffer and do the whole drawing per frame. Loop mode snaps every rate for seamless renders.",
     "tags": [
       "generative",
       "pop",
@@ -167,7 +167,7 @@
       "vj"
     ],
     "requires": [],
-    "operator_count": 388,
+    "operator_count": 414,
     "key_ops": [
       "glslPOP",
       "copyPOP",
