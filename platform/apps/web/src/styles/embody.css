@@ -773,7 +773,13 @@ pre {
    The anchor's own aria-label still names the link, so hiding the SVG (which
    carries its own aria-label) costs nothing in the a11y tree. */
 @media (max-width: 1024px) {
-  .navbar__word { display: none; }
+  /* Specificity, NOT just source order. The SVG carries both .wordmark and
+     .navbar__word, and the base `.wordmark { display: block }` is declared
+     LATER in this file (see the Wordmark section). A media query adds no
+     specificity, so a bare `.navbar__word` (0,1,0) LOSES the tie to it and the
+     wordmark stayed visible -- shipped exactly that way once. Scoping to the
+     brand makes it 0,2,0, which wins wherever either rule sits in the file. */
+  .navbar__mark .navbar__word { display: none; }
 
   /* Symmetric inset so the pill reads as a circle centred on the glyph,
      instead of keeping the right-hand room the wordmark used to occupy. */
