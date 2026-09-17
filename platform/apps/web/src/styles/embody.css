@@ -765,6 +765,25 @@ pre {
   transition: transform 180ms ease, opacity 180ms ease;
 }
 
+/* Narrow: the brand collapses to just the 'e' badge. The wordmark is a fixed
+   ~56px SVG (1.03em tall, ~4:1) that never scales down, and the measure script
+   deliberately never overflows it -- so once the item row starts collapsing
+   into "...", the wordmark is only crowding the items while rendering too small
+   to read. Dropping it buys that space back and leaves a clean round badge.
+   The anchor's own aria-label still names the link, so hiding the SVG (which
+   carries its own aria-label) costs nothing in the a11y tree. */
+@media (max-width: 1024px) {
+  .navbar__word { display: none; }
+
+  /* Symmetric inset so the pill reads as a circle centred on the glyph,
+     instead of keeping the right-hand room the wordmark used to occupy. */
+  .navbar__mark {
+    gap: 0;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+}
+
 /* Below this width the inline item row would overflow the pill; collapse it
    into a dropdown panel that drops from the (still single) pill. The panel
    keeps the same one-pill discipline: rounded, blurred, uniform-height rows. */
