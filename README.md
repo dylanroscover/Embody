@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.56** — a venv whose Python stops running is repaired in place instead of deleted, on a background thread, keeping installed packages; enabling Envoy no longer freezes TD; devalue security bump
 - **6.2.55** — new specimen Serenity and Beauty with a cover video; enabled clones of a sibling COMP export as their values (the mandala `.tdxn` 9,599 → 2,834 lines); embody.tools source viewer renders in the browser; Embot allowed in TDXN COMPs; new shipped rule `tdxn-economy`
 - **6.2.52** — tuplet custom parameters (RGB, XYZ, multi-component Float/Int) at a non-zero default import with that value instead of 0
 - **6.2.51** — seven agent-rule gotchas from issue #94 verified live before shipping; embody.tools covers come from the specimen row, never a baked list; new specimen Prismatic Strata
