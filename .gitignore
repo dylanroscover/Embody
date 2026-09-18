@@ -17,6 +17,7 @@ dev/embody/unit_tests/test_sandbox/
 dev/embody/unit_tests/results.tsv
 dev/release_testing/*
 !dev/release_testing/smoke_bootstrap.py
+!dev/release_testing/smoke_run.py
 !dev/release_testing/smoke_template.toe
 !dev/release_testing/convoy_hardware_e2e.py
 !dev/release_testing/test_convoy_hardware_e2e.py

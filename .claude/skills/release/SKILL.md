@@ -210,16 +210,41 @@ The vendored DATs are `syncfile=True`, so copying the file is the whole re-vendo
 
 Note `convoy_install.HOST_MODULES` is a hardcoded manifest and has gone stale twice already. It is not the gate; the parity test is. If you add a daemon module, the test tells you what else to do.
 
-## 5. Fresh-Install Smoke (before the release is announced)
+## 5. Fresh-Install Smoke (before the release commit)
 
 Cold-open smoke of the DEV project is not enough: a fresh install runs a
-different path (the shipped `.tox` dropped into a virgin project -- `init()`
-lifecycle, baked par values, no dev checkout, no externalized files). After
-exporting the release `.tox`, drag it into a NEW empty project (or a scratch
-`.toe`) and verify: no errors, the Advanced-page status/read-only pars show
-their intended fresh-install values (e.g. `Updatestatus` = `Disabled`, never
-blank), Envoy opt-in prompts behave, and the manager opens. The v6.0.145
+different path (the shipped `.tox` in a virgin project -- `init()` lifecycle,
+baked par values, no dev checkout, no externalized files). The v6.0.145
 empty-Update-Status miss shipped precisely because this step was skipped.
+
+Run it after step 0's save (it reads the manifest that save wrote), from the
+repo root -- one command, same on Windows and macOS:
+
+```
+dev/.venv-tests/Scripts/python.exe dev/release_testing/smoke_run.py
+```
+
+(`python3 dev/release_testing/smoke_run.py` on a CI runner.) Options: `--tox`,
+`--td`, `--out` (default `RUNNER_TEMP` or the system temp dir; it REFUSES a
+path inside the repo), `--timeout`, `--no-mcp`, `--keep-td`.
+
+It takes the `.tox` that `release/embody-release.json` names and refuses on a
+sha256/size mismatch (never a directory glob); stages a fresh
+`<out>/embody-smoke/<platform>-<timestamp>/` with the template, the bootstrap
+and a `smoke_run.json` sidecar; launches TD by absolute path; waits for
+`ready.flag`, then `features.flag` (both written INTO the run dir, and
+`ready.flag` stamps `run_id` / `platform` / `tox`); probes MCP over HTTP;
+quits only the TD it launched. It deletes nothing.
+
+PASS reads `ready PASS`, `features 7/7`, every MCP step ok, last line
+`result: PASS`. Exit **0** all PASS, **1** a verdict failed, **2** could not
+run (no TD, bad manifest, no flag by the deadline) -- a 2 is never a green.
+Evidence: `result.json` in the run dir (its path ends the summary), beside
+`ready.flag` and `features.flag`.
+
+The Convoy leg installs and starts the REAL per-user Convoy host app on the
+machine that runs it. Run the same command on the Mac -- that leg is written
+against the bridge's darwin paths but has NOT yet run on real Mac hardware.
 
 ## 5b. Live Product Check -- MANDATORY before ANY readiness or confidence claim
 
@@ -229,9 +254,11 @@ in-TD run (4245/4369), smoke 7/7 and an MCP probe 9/9 were all reported as
 `Install failed -- see log` with 0 nodes -- visible in the Embody panel
 the whole time. Dylan found it by looking. Never again: no sentence
 containing "confident", "ready", "green" or "release" is written until
-every row below has been read from the LIVE dev instance (and, for a
-release, from the fresh-install smoke instance too) AFTER the last test
-run, save, or smoke -- test runs and smoke instances mutate this state.
+every row below has been read from the LIVE dev instance AFTER the last
+test run, save, or smoke -- test runs and smoke instances mutate this
+state. For a release, the smoke instance's rows come from its run
+directory instead (`result.json`, `ready.flag`, `features.flag`): step 5
+quits that TD, so those files are the only evidence left.
 
 | Surface | Read it from | Must be |
 |---|---|---|

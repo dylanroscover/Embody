@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **153 test suites** and **4,965 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **154 test suites** and **5,051 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -60,6 +60,77 @@ Use the `run_tests` Envoy tool:
 run_tests()                              # Run all suites
 run_tests(suite_name='test_path_utils')  # Run one suite
 ```
+
+### Fresh-install smoke (release gate)
+
+Unit tests run inside a project that already has Embody in it. The release
+smoke runs the other path: the shipped `.tox` dropped into a **virgin**
+project and driven headlessly to a verdict. One command, the same on Windows
+and macOS:
+
+```bash
+dev/.venv-tests/Scripts/python.exe dev/release_testing/smoke_run.py
+# python3 dev/release_testing/smoke_run.py    # CI runner / macOS
+```
+
+Options: `--tox` (smoke a specific build instead of the manifest's asset),
+`--td` (TouchDesigner executable or `.app`), `--out` (where run directories
+go -- default `RUNNER_TEMP` or the system temp dir; a path inside the repo is
+refused), `--timeout` (overall ceiling, default 900 s), `--no-mcp`,
+`--keep-td`.
+
+The orchestrator, `dev/release_testing/smoke_run.py`:
+
+1. picks the `.tox` that `release/embody-release.json` names and verifies its
+   sha256 and size -- a mismatch is refused, and it is never a directory glob
+   (`Embody-v6.2.9.tox` sorts after `v6.2.56`);
+2. stages a fresh `<out>/embody-smoke/<platform>-<timestamp>/` holding
+   `smoke_template.toe`, `smoke_bootstrap.py` and a `smoke_run.json` sidecar
+   (run id, platform, repo root, tox path, flags dir) -- old run directories
+   are never deleted;
+3. launches TouchDesigner on the template by explicit absolute path
+   (`open -n -a` on macOS, with the pid resolved by diffing the process list;
+   a direct spawn on Windows);
+4. waits for `ready.flag` (startup health, `verdict=PASS` required; the flag
+   also stamps `run_id=`, `platform=` and `tox=`), then for `features.flag` --
+   all seven legs must read PASS (`embody_core`, `tdn_roundtrip`,
+   `autosave_checkpoint`, `portable_export`, `viz_status`, `envoy_config`,
+   `convoy`), where `PENDING` means keep waiting and `SKIP` is "not reached",
+   a failure. Both flags are written into the run directory (`flags_dir` from
+   the sidecar); a hand-run without a sidecar still writes them to
+   `dev/release_testing/`;
+5. probes the MCP server over HTTP -- `initialize`, `tools/list`, then a
+   `create_op` / `set_parameter` / `query_network` / `get_op_errors` /
+   `delete_op` round-trip;
+6. quits only the TD it launched (its pid must name the run directory in its
+   command line), writes `result.json` in the run directory and prints a
+   one-screen summary.
+
+Exit codes: **0** every verdict PASS, **1** a verdict failed, **2** the smoke
+could not run (no TouchDesigner, bad manifest, no flag by the deadline). 2 is
+deliberately not 0 -- a run that never happened must never read as green.
+
+Two things to know before starting one:
+
+- **The Convoy leg installs and starts the real per-user Convoy host app** on
+  the machine that runs the smoke. That is the point (a virgin install's
+  host-app install is exactly what can break behind a green boot), but it is a
+  real installation, not a sandbox.
+- **The macOS leg has not yet been run on real Mac hardware.** It is written
+  against the same darwin paths the Envoy bridge uses; treat the first Mac run
+  as new ground.
+
+Why a sidecar rather than an environment variable: `EMBODY_SMOKE_REPO` does
+not survive `open` on macOS -- LaunchServices drops the shell's environment --
+and the bootstrap's failure mode for a missing repo root is to return before
+scheduling anything, so there is no flag and no error. The variable still
+works for a hand-run (see the `smoke_bootstrap.py` docstring).
+
+`dev/embody/unit_tests/test_smoke_run.py` pins the pure halves under pytest:
+manifest selection, flag parsing, staging, exit codes, and the seeded dialog
+titles -- those are module constants checked against the source, and a
+`__smoke_sentinel__` key keeps the seeded response store non-empty so an
+unattended run can never fall through to a blocking modal.
 
 ## Test Coverage
 
@@ -237,7 +308,8 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_release_hooks` | 59 | `ExportPortableTox` release hooks (issue #74) |
 | `test_updater` | 93 | UpdaterExt self-update logic (no network, no swap) |
 | `test_config_migration` | 41 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`), and retiring the old `.tdxn` git diff driver |
-| `test_embody_pyenv` | 63 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
+| `test_embody_pyenv` | 79 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection, the venv interpreter probe and in-place repair |
+| `test_smoke_run` | 70 | The fresh-install smoke orchestrator and the pure helpers of its in-TD bootstrap: manifest-driven `.tox` selection, seeded-dialog parity + sentinel, sidecar/flag directory, flag parsing (PENDING vs SKIP), staging, the MCP probe with an injected transport (identity check, fail-closed replies, delete verification, budget), the pid ownership guard and the quit ladder, exit codes |
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |

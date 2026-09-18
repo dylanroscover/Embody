@@ -1,4 +1,4 @@
-"""
+r"""
 Smoke test bootstrap - execute DAT callbacks for the template .toe.
 
 This script goes into a text DAT (named 'execute', extension .py, callbacks
@@ -20,7 +20,17 @@ enabled) inside the smoke test template project. When the template .toe opens:
 
 HOW TO RUN IT (isolated -- the only safe way):
 
-    Copy the template OUT of the repo first, then launch it there:
+    The orchestrator does all of this, on Windows and macOS, and reads
+    the verdicts back:
+
+        python dev/release_testing/smoke_run.py
+
+    It stages a fresh per-run directory holding the template, this script
+    and a `smoke_run.json` sidecar (repo_root, tox_path, flags_dir,
+    run_id, platform). The sidecar is how this script learns where the
+    repo is: an environment variable cannot be relied on, because macOS
+    `open` launches through LaunchServices, which drops the shell's
+    environment. EMBODY_SMOKE_REPO still works for a hand-run:
 
         mkdir %TEMP%\embody_smoke
         copy dev\release_testing\smoke_template.toe %TEMP%\embody_smoke\
@@ -65,11 +75,10 @@ def onStart():
     # run isolated (the recommended path -- see the module docstring),
     # otherwise two levels up, which holds only when running in place from
     # dev/release_testing/.
-    repo_root = os.environ.get('EMBODY_SMOKE_REPO')
-    if repo_root and os.path.isdir(repo_root):
-        repo_root = os.path.normpath(repo_root)
-    else:
-        repo_root = os.path.normpath(os.path.join(project.folder, '..', '..'))
+    run_cfg = _read_run_config(project.folder)
+    repo_root = _resolve_repo_root(
+        [(run_cfg or {}).get('repo_root'), os.environ.get('EMBODY_SMOKE_REPO')],
+        os.path.join(project.folder, '..', '..'))
 
     # A poisoned launch is detectable BEFORE the per-run reset below: this
     # storage key only ever exists in a mid-run save, so seeing it at
@@ -84,22 +93,25 @@ def onStart():
     # Per-run reset: storage persists through a project save, so a saved
     # run would otherwise leak flags into the next one.
     for key in ('headless_setup_done', 'embody_path', 'tox_path',
-                '_feature_results'):
+                '_feature_results', 'flags_dir', 'run_id', 'run_platform'):
         try:
             me.unstore(key)
         except Exception:
             pass
     me.store('repo_root', repo_root)
+    me.store('flags_dir', _resolve_flags_dir(run_cfg, repo_root))
+    me.store('run_id', str((run_cfg or {}).get('run_id') or ''))
+    me.store('run_platform', str((run_cfg or {}).get('platform') or ''))
 
     # Clean up artifacts from previous runs - keep ONLY the pristine
-    # template and the .py scripts. Notably NOT smoke_template.N.toe:
-    # the feature phase saves the project, and a leftover incremental
-    # save gets opened IN PLACE OF the pristine template on the next
-    # launch, booting mid-run state (see the warning above).
-    keep_names = {'smoke_template.toe'}
+    # template, the sidecar and the .py scripts. Notably NOT
+    # smoke_template.N.toe: the feature phase saves the project, and a
+    # leftover incremental save gets opened IN PLACE OF the pristine
+    # template on the next launch, booting mid-run state (see the warning
+    # above).
     failed = []
     for entry in os.listdir(project.folder):
-        if entry in keep_names or entry.endswith('.py'):
+        if entry in KEEP_NAMES or entry.endswith('.py'):
             continue
         path = os.path.join(project.folder, entry)
         try:
@@ -119,10 +131,16 @@ def onStart():
     else:
         _log('Cleaned test directory')
 
-    # Find the latest release .tox
-    tox_path = _find_latest_release_tox(repo_root)
+    # The release .tox: the sidecar's explicit path, else the one the
+    # manifest names (never string order -- v6.2.9 sorts after v6.2.56).
+    tox_path = _select_release_tox(repo_root, (run_cfg or {}).get('tox_path'))
     if not tox_path:
-        _log('ERROR: No release .tox found in release/')
+        wanted = (run_cfg or {}).get('tox_path') or os.path.join(
+            repo_root, 'release', 'embody-release.json -> asset')
+        _log(f'ERROR: release .tox not found ({wanted})')
+        # Say so in the flag: an orchestrator would otherwise burn its
+        # whole ready timeout and report only "no ready.flag".
+        _write_abort_flag(f'release .tox not found: {wanted}')
         return
 
     me.store('tox_path', tox_path)
@@ -159,11 +177,152 @@ def onProjectPostSave():
 # Bootstrap helpers (not TD callbacks)
 # =========================================================================
 
-def _find_latest_release_tox(repo_root):
-    """Find the newest Embody-v*.tox in the release/ directory."""
-    import os, glob
-    pattern = os.path.join(repo_root, 'release', 'Embody-v*.tox')
-    candidates = sorted(glob.glob(pattern))
+# Files the per-run cleanup sweep must leave alone (plus every *.py).
+KEEP_NAMES = frozenset({'smoke_template.toe', 'smoke_run.json'})
+
+# The seeded response store self-destructs when its last key is consumed,
+# and an EMPTY store is what lets an unanticipated dialog fall through to a
+# real, blocking ui.messageBox (EmbodyExt._messageBox). This key names no
+# dialog, is never consumed, and keeps the store alive for the whole run --
+# the unattended guarantee, made explicit (it used to rest on two dead
+# keys by accident).
+SMOKE_SENTINEL = '__smoke_sentinel__'
+
+# Init dialogs, by their EXACT ui.messageBox titles (test_smoke_run.py
+# checks each one against the source):
+#   - 'Embody': the duplicate-instance dialog, 'Ok' (button 0); should not
+#     fire in a fresh project
+#   - Envoy opt-in: 'Enable Envoy' (button 1)
+#   - the git prompt: 'Start Without Git' (button 3); the wizard path the
+#     smoke drives never reaches it, so this is a belt-and-braces entry
+SMOKE_RESPONSES = {
+    'Embody': 0,
+    'Embody - AI Coding Assistant Integration': 1,
+    'Envoy -- Git Repository Recommended': 3,
+    SMOKE_SENTINEL: 0,
+}
+
+# Seeded just before the Convoy leg enables Convoy (ConvoyExt titles).
+SMOKE_CONVOY_RESPONSES = {
+    'Embody - Enable Convoy': 1,
+    'Embody - Upgrade Convoy Access': 1,
+}
+
+
+def _resolve_repo_root(candidates, fallback):
+    """The first candidate that is a directory (sidecar, then
+    EMBODY_SMOKE_REPO), else `fallback` -- two levels up, which only holds
+    for an in-place run from dev/release_testing/."""
+    import os
+    for cand in candidates:
+        if cand and os.path.isdir(str(cand)):
+            return os.path.normpath(str(cand))
+    return os.path.normpath(fallback)
+
+
+def _write_atomic(path, text):
+    """Write `text` to `path` via a sibling temp file + os.replace, so a
+    reader polling the flag never sees a torn, half-written file."""
+    import os
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def _write_abort_flag(reason):
+    """A FAIL ready.flag for an abort before Embody even loaded."""
+    path = _flag_path('ready.flag')
+    if not path:
+        return
+    try:
+        _write_atomic(path, ''.join([
+            'verdict=FAIL\n', f'problems={reason}\n', 'version=\n',
+            'status=NOT_LOADED\n', 'envoy_enabled=False\n',
+            'envoy_status=NOT_LOADED\n', 'updatestatus=\n',
+            'autosavestatus=\n', 'filecleanup=\n', 'clipboardautopaste=\n',
+            'convoy_enabled=False\n', 'convoy_status=\n', 'script_errors=\n',
+            'embody_path=\n', 'settled_after_attempts=0\n',
+            f'run_id={me.fetch("run_id", "", search=False)}\n',
+            f'platform={me.fetch("run_platform", "", search=False)}\n',
+            'tox=\n']))
+        _write_features_flag({}, final=True)
+    except Exception as e:
+        _log(f'ERROR writing abort flag: {e}')
+
+
+def _read_run_config(folder):
+    """The orchestrator's `smoke_run.json` beside the template, or None
+    (a hand-run has none; a broken file is treated as absent)."""
+    import os, json
+    path = os.path.join(folder, 'smoke_run.json')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+    except Exception:
+        return None
+    if not isinstance(cfg, dict):
+        return None
+    # Only non-empty strings count: a wrong-typed or blank value must fall
+    # through to the next source, never be used as a path.
+    return {k: v for k, v in cfg.items()
+            if isinstance(v, str) and v.strip()}
+
+
+def _resolve_flags_dir(run_cfg, repo_root):
+    """Where ready.flag / features.flag go: the sidecar's `flags_dir` (the
+    per-run directory, so two legs never write the same file), else the
+    hand-run location inside the repo."""
+    import os
+    flags_dir = (run_cfg or {}).get('flags_dir')
+    if flags_dir:
+        return os.path.normpath(str(flags_dir))
+    return os.path.join(repo_root, 'dev', 'release_testing')
+
+
+def _flag_path(name):
+    import os
+    flags_dir = me.fetch('flags_dir', None, search=False)
+    if not flags_dir:
+        repo_root = me.fetch('repo_root', None, search=False)
+        if not repo_root:
+            return None
+        flags_dir = os.path.join(repo_root, 'dev', 'release_testing')
+    return os.path.join(flags_dir, name)
+
+
+def _select_release_tox(repo_root, explicit=None):
+    """The release .tox to smoke.
+
+    `explicit` (the sidecar's tox_path) wins. Otherwise the asset the
+    release manifest names -- the manifest is what the self-updater ships
+    from, so it is the one file that is the release. A manifest that is
+    present but unusable (unreadable, no asset, asset missing on disk)
+    returns None rather than a different build. Only with no manifest at
+    all does this fall back to the newest by NUMERIC version.
+    """
+    import os, re, json, glob
+    if explicit:
+        return explicit if os.path.isfile(explicit) else None
+    release_dir = os.path.join(repo_root, 'release')
+    manifest = os.path.join(release_dir, 'embody-release.json')
+    if os.path.isfile(manifest):
+        try:
+            with open(manifest, 'r', encoding='utf-8') as f:
+                asset = json.load(f).get('asset')
+        except Exception:
+            return None
+        if not asset:
+            return None
+        path = os.path.join(release_dir, str(asset))
+        return path if os.path.isfile(path) else None
+    candidates = glob.glob(os.path.join(release_dir, 'Embody-v*.tox'))
+
+    def version_key(path):
+        m = re.search(r'Embody-v(\d+(?:\.\d+)*)\.tox$', os.path.basename(path))
+        return tuple(int(x) for x in m.group(1).split('.')) if m else ()
+
+    candidates.sort(key=version_key)
     return candidates[-1] if candidates else None
 
 def _load_release_tox(tox_path=None):
@@ -268,17 +427,7 @@ def _seed_responses():
         _log('ERROR: Cannot find Embody COMP for response seeding')
         return
 
-    # Auto-respond to all init dialogs:
-    #   - Duplicate instance check: 'Ok' (button 0) - shouldn't fire in fresh project
-    #   - Envoy opt-in: 'Enable Envoy' (button 1)
-    # (The old Skip/Re-scan upgrade prompt is gone -- the upgrade path now
-    #  validates quietly via _validateTrackedOperators; 'Embody': 0 remains
-    #  for the duplicate-instance dialog, which shares that title.)
-    responses = {
-        'Embody': 0,
-        'Embody - AI Coding Assistant Integration': 1,
-        'Envoy \u2014 Git Repository Recommended': 3,  # 'Start Without Git'
-    }
+    responses = dict(SMOKE_RESPONSES)  # see the constant for each title
     embody.store('_smoke_test_responses', responses)
     _log(f'Seeded {len(responses)} auto-responses on {embody.path}')
 
@@ -318,13 +467,15 @@ def _check_running_inside_repo():
     repo_root = me.fetch('repo_root', None, search=False)
     if not repo_root:
         return
-    here = os.path.normpath(project.folder)
-    if os.path.normpath(here).lower().startswith(
-            os.path.normpath(repo_root).lower()):
+    # realpath + normcase: macOS reports a $TMPDIR project as /private/var/...
+    # while the repo path may be un-resolved, and .lower() alone is a
+    # Windows-ism on a case-sensitive volume.
+    here = os.path.normcase(os.path.realpath(project.folder))
+    if here.startswith(os.path.normcase(os.path.realpath(repo_root))):
         _log('WARNING: smoke project runs INSIDE the Embody repo (%s). Its '
              'AI config deploys to the repo root and will overwrite the dev '
-             'session\'s .mcp.json. Copy the template to a temp dir and set '
-             'EMBODY_SMOKE_REPO to run a truly isolated smoke.' % here)
+             'session\'s .mcp.json. Run dev/release_testing/smoke_run.py, '
+             'which stages an isolated copy, instead.' % here)
 
 def _envoy_settled(embody):
     """(settled, status) for the Envoy server.
@@ -394,7 +545,7 @@ def _write_ready_flag(attempt=0):
     else:
         envoy_status = 'NO_EMBODY'
 
-    flag_path = os.path.join(repo_root, 'dev', 'release_testing', 'ready.flag')
+    flag_path = _flag_path('ready.flag')
     try:
         def _par(name, default='NOT_FOUND'):
             try:
@@ -460,22 +611,29 @@ def _write_ready_flag(attempt=0):
                     f'up: Convoystatus={convoy_status!r}')
         verdict = 'PASS' if not problems else 'FAIL'
 
-        with open(flag_path, 'w') as f:
-            f.write(f'verdict={verdict}\n')
-            f.write(f'problems={"; ".join(problems) if problems else "none"}\n')
-            f.write(f'version={version}\n')
-            f.write(f'status={status}\n')
-            f.write(f'envoy_enabled={enabled}\n')
-            f.write(f'envoy_status={envoy_status}\n')
-            f.write(f'updatestatus={upd}\n')
-            f.write(f'autosavestatus={autosave}\n')
-            f.write(f'filecleanup={filecleanup}\n')
-            f.write(f'clipboardautopaste={clip}\n')
-            f.write(f'convoy_enabled={convoy_enabled}\n')
-            f.write(f'convoy_status={convoy_status}\n')
-            f.write(f'script_errors={errors}\n')
-            f.write(f'embody_path={embody_path}\n')
-            f.write(f'settled_after_attempts={attempt}\n')
+        # Run stamp (last three lines), so a reader can tell a fresh flag
+        # from a leftover and which build a leg actually smoked. Written
+        # atomically: a poll can never see a torn file.
+        _write_atomic(flag_path, ''.join([
+            f'verdict={verdict}\n',
+            f'problems={"; ".join(problems) if problems else "none"}\n',
+            f'version={version}\n',
+            f'status={status}\n',
+            f'envoy_enabled={enabled}\n',
+            f'envoy_status={envoy_status}\n',
+            f'updatestatus={upd}\n',
+            f'autosavestatus={autosave}\n',
+            f'filecleanup={filecleanup}\n',
+            f'clipboardautopaste={clip}\n',
+            f'convoy_enabled={convoy_enabled}\n',
+            f'convoy_status={convoy_status}\n',
+            f'script_errors={errors}\n',
+            f'embody_path={embody_path}\n',
+            f'settled_after_attempts={attempt}\n',
+            f'run_id={me.fetch("run_id", "", search=False)}\n',
+            f'platform={me.fetch("run_platform", "", search=False)}\n',
+            f'tox={os.path.basename(str(me.fetch("tox_path", "", search=False)))}\n',
+        ]))
         _log(f'Ready flag written ({verdict}) to {flag_path}')
         if problems:
             _log(f'SMOKE FAIL: {"; ".join(problems)}')
@@ -486,13 +644,26 @@ def _write_ready_flag(attempt=0):
         if verdict == 'PASS':
             run("args[0](args[1])", _save_then_exercise, 0, delayFrames=30)
         else:
-            _write_features_flag({})
+            _write_features_flag({}, final=True)
     except Exception as e:
         _log(f'ERROR writing ready flag: {e}')
 
 def _log(msg):
-    """Print to textport with a prefix."""
-    print(f'[smoke-test] {msg}')
+    """Print to textport with a prefix, and mirror into bootstrap.log in
+    the flags dir: Embody's own file log only starts after the feature
+    phase's save, so on a wedged startup this mirror is the only evidence
+    an orchestrator can collect."""
+    line = f'[smoke-test] {msg}'
+    print(line)
+    try:
+        import os, time
+        flags_dir = me.fetch('flags_dir', None, search=False)
+        if flags_dir:
+            with open(os.path.join(flags_dir, 'bootstrap.log'), 'a',
+                      encoding='utf-8') as f:
+                f.write(time.strftime('%H:%M:%S ') + line + '\n')
+    except Exception:
+        pass
 
 
 # =========================================================================
@@ -521,18 +692,26 @@ CONVOY_POLL_FRAMES = 120
 CONVOY_POLL_MAX = 90
 
 
-def _write_features_flag(results):
-    """One line per feature: NAME=VERDICT|detail. Rewritten as it grows."""
-    import os
-    repo_root = me.fetch('repo_root', None, search=False)
-    if not repo_root:
+def _features_flag_text(results, final=False):
+    """One line per feature, NAME=VERDICT|detail, in FEATURE_ORDER.
+
+    A leg without a result is PENDING while the phase is still running
+    (the file is rewritten after every leg, and a reader polling between
+    two legs must keep waiting, not count the rest as failed) and SKIP
+    only on the `final` write: the phase ended without reaching it.
+    """
+    filler = ('SKIP', 'not reached') if final else ('PENDING', 'not reached')
+    return ''.join('%s=%s|%s\n' % (name, *results.get(name, filler))
+                   for name in FEATURE_ORDER)
+
+
+def _write_features_flag(results, final=False):
+    """Rewritten atomically after every leg (see _features_flag_text)."""
+    path = _flag_path('features.flag')
+    if not path:
         return
-    path = os.path.join(repo_root, 'dev', 'release_testing', 'features.flag')
     try:
-        with open(path, 'w') as f:
-            for name in FEATURE_ORDER:
-                verdict, detail = results.get(name, ('SKIP', 'not reached'))
-                f.write('%s=%s|%s\n' % (name, verdict, detail))
+        _write_atomic(path, _features_flag_text(results, final))
     except Exception as e:
         _log('ERROR writing features flag: %s' % (e,))
 
@@ -547,7 +726,10 @@ def _feature(results, name, fn):
         import traceback
         tb = traceback.format_exc().strip().splitlines()
         where = tb[-2].strip() if len(tb) > 1 else ''
-        results[name] = ('FAIL', '%s @ %s' % (e, where))
+        # One line per leg: a newline inside the message would split the
+        # flag line and could forge the next leg's verdict.
+        detail = ('%s @ %s' % (e, where)).replace('\r', ' ').replace('\n', ' ')
+        results[name] = ('FAIL', detail)
         _log('FEATURE %s: FAIL -- %s' % (name, e))
     # Persist after EVERY feature: a crash mid-run must still leave
     # per-feature evidence, not an absent flag the orchestrator times
@@ -755,15 +937,15 @@ def _exercise_features(attempt=0):
     me.store('_feature_results', results)
     try:
         responses = embody.fetch('_smoke_test_responses', {}, search=False)
-        responses['Embody - Enable Convoy'] = 1
-        responses['Embody - Upgrade Convoy Access'] = 1
+        responses.update(SMOKE_CONVOY_RESPONSES)
+        responses.setdefault(SMOKE_SENTINEL, 0)
         embody.store('_smoke_test_responses', responses)
         embody.par.Convoyenable = True
         run('args[0](args[1])', _await_convoy, 0,
             delayFrames=CONVOY_POLL_FRAMES)
     except Exception as e:
         results['convoy'] = ('FAIL', 'enable raised: %s' % (e,))
-        _write_features_flag(results)
+        _write_features_flag(results, final=True)
 
 
 def _await_convoy(attempt):
@@ -776,17 +958,17 @@ def _await_convoy(attempt):
     low = status.lower()
     if low.startswith('connected'):
         results['convoy'] = ('PASS', status)
-        _write_features_flag(results)
+        _write_features_flag(results, final=True)
         _log('FEATURE convoy: PASS (%s)' % status)
         return
     if low.startswith(('error', 'refused', 'install failed')):
         results['convoy'] = ('FAIL', status)
-        _write_features_flag(results)
+        _write_features_flag(results, final=True)
         _log('FEATURE convoy: FAIL -- %s' % status)
         return
     if attempt >= CONVOY_POLL_MAX:
         results['convoy'] = ('FAIL', 'timed out at: %s' % status)
-        _write_features_flag(results)
+        _write_features_flag(results, final=True)
         _log('FEATURE convoy: FAIL -- timed out at %r' % status)
         return
     results['convoy'] = ('PENDING', status)
