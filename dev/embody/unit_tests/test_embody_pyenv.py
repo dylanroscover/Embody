@@ -30,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import shutil
+import threading
 import types
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -943,3 +944,220 @@ class TestTdPyEnvManagerDetection(_PyenvCase):
         level, msg = pyenv.tdpyenvmanager_notice(finding)
         self.assertEqual(level, 'WARNING')
         self.assertIn('CONDA', msg)
+
+
+class TestVenvPythonProbe(_PyenvCase):
+    """probe_venv_python classifies a failing venv interpreter. The verdict
+    decides whether Embody touches the venv at all, so 'slow' and 'refused'
+    must never read as 'broken' -- an OSError-means-corrupt rule destroyed
+    healthy venvs on every restart (WinError 50, v5.0.393 era)."""
+
+    def setUp(self):
+        super().setUp()
+        self._real_subprocess = pyenv.subprocess
+
+    def tearDown(self):
+        pyenv.subprocess = self._real_subprocess
+        super().tearDown()
+
+    def _raising(self, exc):
+        """Swap in a subprocess stand-in whose run() raises `exc`."""
+        real = self._real_subprocess
+
+        def run(*a, **k):
+            raise exc
+
+        pyenv.subprocess = types.SimpleNamespace(
+            run=run, DEVNULL=real.DEVNULL,
+            TimeoutExpired=real.TimeoutExpired,
+            CalledProcessError=real.CalledProcessError)
+
+    def test_real_interpreter_is_ok(self):
+        verdict, detail = pyenv.probe_venv_python(sys.executable)
+        self.assertEqual(verdict, 'ok')
+        self.assertEqual(detail, '')
+
+    def test_missing_binary_is_broken(self):
+        verdict, _ = pyenv.probe_venv_python(
+            os.path.join(self.root, 'nope', 'python.exe'))
+        self.assertEqual(verdict, 'broken')
+
+    def test_nonzero_exit_is_broken_and_quotes_stderr(self):
+        self._raising(subprocess.CalledProcessError(
+            103, 'python', stderr=b"No Python at '/gone/python.exe'"))
+        verdict, detail = pyenv.probe_venv_python('python.exe')
+        self.assertEqual(verdict, 'broken')
+        self.assertIn('103', detail)
+        self.assertIn('No Python at', detail)
+
+    def test_timeout_is_not_broken(self):
+        self._raising(subprocess.TimeoutExpired('python', 5))
+        verdict, _ = pyenv.probe_venv_python('python.exe')
+        self.assertEqual(verdict, 'timeout')
+
+    def test_permission_denied_is_not_broken(self):
+        """AV / AppLocker / a file lock refuses the spawn. The venv is
+        unproven, not condemned -- repairing here would be a guess."""
+        self._raising(PermissionError(13, 'Access is denied'))
+        verdict, detail = pyenv.probe_venv_python('python.exe')
+        self.assertEqual(verdict, 'unavailable')
+        self.assertIn('PermissionError', detail)
+
+    def test_wrong_architecture_is_broken(self):
+        self._raising(OSError(8, 'Exec format error'))
+        self.assertEqual(pyenv.probe_venv_python('python.exe')[0], 'broken')
+
+    def test_windows_bad_exe_format_is_broken(self):
+        exc = OSError(22, 'is not a valid Win32 application')
+        exc.winerror = 193
+        self._raising(exc)
+        self.assertEqual(pyenv.probe_venv_python('python.exe')[0], 'broken')
+
+
+class TestRepairVenvInterpreter(_PyenvCase):
+    """repair_venv_interpreter rewrites pyvenv.cfg + launchers via
+    `uv venv --allow-existing`. It must NEVER clear or delete the venv: the
+    MCP server is already running from those packages when it is called."""
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.probes = []
+        self.logs = []
+        self._orig = {n: getattr(pyenv, n) for n in
+                      ('run_uv', 'find_or_install_uv', 'probe_venv_python')}
+        pyenv.find_or_install_uv = lambda python_exe, log=None: 'uv-fake'
+        pyenv.run_uv = self._ok_run
+        pyenv.probe_venv_python = self._ok_probe
+        # A venv that looks installed, with a witness file the repair must keep.
+        os.makedirs(self.spec['site_packages'], exist_ok=True)
+        self.witness = os.path.join(self.spec['site_packages'], 'mcp_marker')
+        with open(self.witness, 'w', encoding='utf-8') as f:
+            f.write('installed')
+        self._write_cfg(self.spec['python_tag'])
+
+    def tearDown(self):
+        for name, fn in self._orig.items():
+            setattr(pyenv, name, fn)
+        super().tearDown()
+
+    def _write_cfg(self, tag):
+        with open(os.path.join(self.spec['venv_dir'], 'pyvenv.cfg'), 'w',
+                  encoding='utf-8') as f:
+            f.write(f'version_info = {tag}.0\n')
+
+    def _ok_run(self, uv, args, timeout=None, hardened=False):
+        self.calls.append(list(args))
+        return types.SimpleNamespace(stdout='', stderr='')
+
+    def _ok_probe(self, venv_python, timeout=5.0):
+        self.probes.append(str(venv_python))
+        return 'ok', ''
+
+    def _log(self, m, lvl='INFO'):
+        self.logs.append((lvl, m))
+
+    def _run_on_worker(self, spec=None):
+        """repair_venv_interpreter is worker-only; drive it like Envoy does."""
+        out = {}
+
+        def body():
+            out['ok'] = pyenv.repair_venv_interpreter(spec or self.spec,
+                                                      self._log)
+
+        t = threading.Thread(target=body)
+        t.start()
+        t.join(30)
+        self.assertFalse(t.is_alive(), 'repair worker never finished')
+        return out['ok']
+
+    def _levels(self):
+        return [lvl for lvl, _ in self.logs]
+
+    def test_main_thread_call_refuses(self):
+        """The whole point is to keep the install off the main thread."""
+        self.assertFalse(pyenv.repair_venv_interpreter(self.spec, self._log))
+        self.assertEqual(self.calls, [], 'refusal must not run uv')
+        self.assertIn('ERROR', self._levels())
+
+    def test_repairs_in_place_and_keeps_packages(self):
+        self.assertTrue(self._run_on_worker())
+        self.assertLen(self.calls, 1)
+        args = self.calls[0]
+        self.assertEqual(args[0], 'venv')
+        self.assertEqual(args[1], self.spec['venv_dir'])
+        self.assertIn('--allow-existing', args)
+        self.assertNotIn('--clear', args)
+        self.assertIn('--python', args)
+        self.assertTrue(os.path.isfile(self.witness),
+                        'repair must not remove installed packages')
+        self.assertEqual(self.probes, [self.spec['venv_python']],
+                         'repair must re-probe the interpreter it fixed')
+
+    def test_python_version_change_refuses_in_place_repair(self):
+        """A Python bump needs the --clear rebuild environment_needs_install
+        schedules for the next start, before anything is imported."""
+        self._write_cfg('3.9')
+        self.assertFalse(self._run_on_worker())
+        self.assertEqual(self.calls, [])
+        self.assertIn('ERROR', self._levels())
+        self.assertTrue(os.path.isfile(self.witness))
+
+    def test_absent_venv_refuses(self):
+        """Nothing installed at that root -- there is no interpreter layer to
+        rewrite, so uv must never run (spec points at a never-created dir)."""
+        absent = pyenv.venv_paths(os.path.join(self.root, 'no_such_project'),
+                                  '2.0.0')
+        self.assertFalse(os.path.exists(absent['site_packages']))
+        self.assertFalse(self._run_on_worker(absent))
+        self.assertEqual(self.calls, [])
+
+    def test_no_uv_returns_false(self):
+        pyenv.find_or_install_uv = lambda python_exe, log=None: None
+        self.assertFalse(self._run_on_worker())
+        self.assertEqual(self.calls, [])
+        self.assertTrue(os.path.isfile(self.witness))
+
+    def test_uv_failure_returns_false_and_reports_stderr(self):
+        def boom(uv, args, timeout=None, hardened=False):
+            raise subprocess.CalledProcessError(2, 'uv', stderr='no such option')
+        pyenv.run_uv = boom
+        self.assertFalse(self._run_on_worker())
+        self.assertTrue(any('no such option' in m for _, m in self.logs))
+
+    def test_still_broken_after_repair_is_reported(self):
+        pyenv.probe_venv_python = lambda p, timeout=5.0: ('broken', 'exit 103')
+        self.assertFalse(self._run_on_worker())
+        self.assertTrue(any('Restart TouchDesigner' in m for _, m in self.logs))
+
+    def test_install_lock_is_released(self):
+        self.assertTrue(self._run_on_worker())
+        self.assertFalse(os.path.exists(self.spec['install_lock_path']),
+                         'the install lock must not outlive the repair')
+
+    def test_live_lock_holder_defers_on_a_fake_clock(self):
+        """A second TD instance mid-install holds the lock. The wait is bounded
+        and must give up with an ERROR -- on an injected clock, so a slow CI
+        runner cannot turn this into a 30-minute test."""
+        os.makedirs(os.path.dirname(self.spec['install_lock_path']),
+                    exist_ok=True)
+        with open(self.spec['install_lock_path'], 'w', encoding='utf-8') as f:
+            json.dump({'pid': os.getpid(), 'time': 1e12, 'purpose': 'core',
+                       'token': 'someone-else'}, f)
+        real_time = pyenv.time
+        clock = {'t': 0.0}
+
+        def _sleep(seconds):
+            clock['t'] += seconds
+
+        pyenv.time = types.SimpleNamespace(
+            monotonic=lambda: clock['t'], sleep=_sleep, time=real_time.time,
+            monotonic_ns=real_time.monotonic_ns)
+        try:
+            self.assertFalse(self._run_on_worker())
+        finally:
+            pyenv.time = real_time
+        self.assertEqual(self.calls, [], 'must not run uv without the lock')
+        self.assertIn('ERROR', self._levels())
+        self.assertTrue(os.path.exists(self.spec['install_lock_path']),
+                        "another holder's lock must survive")
