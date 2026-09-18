@@ -19,18 +19,18 @@
     "@lezer/highlight": "^1.2.3",
     "astro": "^7.3.2",
     "better-auth": "^1.7.3",
-    "html2canvas-pro": "^2.4.1",
+    "html2canvas-pro": "^2.4.2",
     "kysely": "^0.29.5",
     "kysely-d1": "^0.4.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@playwright/test": "^1.63.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "typescript": "^7.0.2"
   },
   "scripts": {
