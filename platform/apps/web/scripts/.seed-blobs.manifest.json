@@ -110,9 +110,9 @@
   {
     "slug": "prismatic-strata",
     "kind": "tdxn",
-    "key": "2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049",
-    "sha256": "2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049",
-    "size": 34347,
+    "key": "381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b",
+    "sha256": "381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b",
+    "size": 34243,
     "content_type": "application/json",
     "path": "specimens/generative/prismatic-strata.tdxn"
   },
@@ -128,9 +128,9 @@
   {
     "slug": "mandala",
     "kind": "tdxn",
-    "key": "7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5",
-    "sha256": "7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5",
-    "size": 88254,
+    "key": "d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf",
+    "sha256": "d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf",
+    "size": 89703,
     "content_type": "application/json",
     "path": "specimens/generative/mandala.tdxn"
   },
