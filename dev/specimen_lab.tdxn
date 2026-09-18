@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 10
-generator: Embody/6.2.54
+generator: Embody/6.2.55
 td_build: 099.2025.33230
 network_path: /specimen_lab
 options:
@@ -372,7 +372,7 @@ operators:
       normMin: 2.0
       normMax: 16.0
       help: Size of the ornament. Higher = finer, more squiggles.
-      value: 14.5699996948
+      value: 14.57
     - name: Scrolldetail
       style: Int
       label: Detail
@@ -394,7 +394,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
-      value: 0.5299999714
+      value: 0.53
     - name: Scrolldensity
       style: Float
       label: Line Density
@@ -406,7 +406,7 @@ operators:
       normMin: 1.0
       normMax: 12.0
       help: Number of contour squiggles across the field.
-      value: 1.5299999714
+      value: 1.53
     - name: Scrollleaves
       style: Float
       label: Squiggle Lines
@@ -435,7 +435,7 @@ operators:
       normMin: 0.3
       normMax: 0.8
       help: Where the ornament starts (scene units; the palace wall sits at about 0.47).
-      value: 0.4399999976
+      value: 0.44
     - name: Scrollouter
       style: Float
       label: Outer Radius
@@ -445,7 +445,7 @@ operators:
       clampMax: true
       normMin: 0.5
       help: Where the ornament stops (the beads sit at 0.86).
-      value: 0.7950000167
+      value: 0.795
     - name: Scrollflow
       style: Float
       label: Growth Stretch
@@ -455,7 +455,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: Radial elongation of the ornament lobes along their growth direction (0 = round, 1 = twice as long radially).
-      value: 0.2199999988
+      value: 0.22
     - name: Scrollevolve
       style: Float
       label: Growth Speed
@@ -465,7 +465,7 @@ operators:
       clampMax: true
       normMax: 2.0
       help: Outward growth speed of the ornament in pattern units per second (snapped to whole pattern periods per loop in Loop mode). Always outward from the centre.
-      value: 0.4199999869
+      value: 0.42
     - name: Scrolllinecolor
       style: Int
       label: Fill Color A

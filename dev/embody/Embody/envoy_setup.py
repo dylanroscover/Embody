@@ -138,10 +138,7 @@ def configure_mcp_client(ext, port, target_dir=None):
         else:
             venv_python = project_dir / '.venv' / 'bin' / 'python3'
 
-        # Windows: keep the probe's console window from flashing over
-        # TD's GUI (subprocess of a GUI process opens a console briefly).
-        _probe_flags = (subprocess.CREATE_NO_WINDOW
-                        if sys.platform == 'win32' else 0)
+        system_python = 'python' if sys.platform == 'win32' else 'python3'
 
         if (venv_python.is_file()
                 and getattr(ext, '_venv_probe_ok', '') == str(venv_python)):
@@ -156,76 +153,31 @@ def configure_mcp_client(ext, port, target_dir=None):
             # interpreter, not the venv python binary itself.
             python_cmd = str(venv_python).replace('\\', '/')
         elif venv_python.is_file():
-            # Verify the venv Python actually executes -- catches stale
-            # pyvenv.cfg pointing to an uninstalled TD version, or
-            # code-signing mismatches after macOS TD upgrades.
-            # stdin=DEVNULL: without it, subprocess.run inside TD on
-            # Windows raises [WinError 50] (DuplicateHandle on TD's
-            # non-duplicatable GUI stdin handle) -- which then triggers
-            # the rmtree path below and destroys a healthy venv.
-            try:
-                subprocess.run(
-                    [str(venv_python), '-c',
-                     'import sys; print(sys.version)'],
-                    capture_output=True, timeout=5, check=True,
-                    stdin=subprocess.DEVNULL, creationflags=_probe_flags)
+            # Verify the venv Python actually executes (stale pyvenv.cfg
+            # home after a TD reinstall, macOS code-signing). The server is
+            # already running from this venv's packages, so a failure never
+            # deletes it: 'broken' repairs the interpreter layer in place on
+            # a worker (EnvoyExt._beginAsyncVenvRepair); slow or refused
+            # probes just fall back and re-probe on the next start.
+            verdict, detail = mod.embody_pyenv.probe_venv_python(venv_python)
+            if verdict == 'ok':
                 python_cmd = str(venv_python).replace('\\', '/')
                 ext._venv_probe_ok = str(venv_python)
-            except subprocess.TimeoutExpired:
-                # Slow is not corrupt: a cold disk or AV scan can stall a
-                # healthy interpreter past the timeout. Never rmtree a
-                # venv for being slow -- fall back to system Python for
-                # this config write and let a later Start() re-probe.
+            elif verdict == 'broken':
+                python_cmd = system_python
                 ext._log(
-                    'Venv Python probe timed out; using system Python '
-                    'for now (will re-probe on next start)', 'WARNING')
-                python_cmd = ('python' if sys.platform == 'win32'
-                              else 'python3')
-            except (subprocess.CalledProcessError, OSError) as e:
-                if not ext._venv_recreated:
-                    ext._venv_recreated = True
-                    ext._log(
-                        f'Venv corrupted ({type(e).__name__}: {e}), '
-                        f'recreating...', 'WARNING')
-                    import shutil
-                    shutil.rmtree(str(project_dir / '.venv'),
-                                  ignore_errors=True)
-                    op.Embody.ext.Embody._setupEnvironment()
-                    # Re-check after recreation
-                    if venv_python.is_file():
-                        try:
-                            subprocess.run(
-                                [str(venv_python), '-c',
-                                 'import sys; print(sys.version)'],
-                                capture_output=True, timeout=5,
-                                check=True,
-                                stdin=subprocess.DEVNULL,
-                                creationflags=_probe_flags)
-                            python_cmd = str(venv_python).replace(
-                                '\\', '/')
-                            ext._venv_probe_ok = str(venv_python)
-                            ext._log('Venv recreated successfully',
-                                     'SUCCESS')
-                        except Exception as e2:
-                            ext._log(
-                                f'Venv recreation failed: {e2}. '
-                                f'Using system Python.', 'ERROR')
-                            python_cmd = ('python' if sys.platform == 'win32'
-                                          else 'python3')
-                    else:
-                        ext._log(
-                            'Venv recreation did not produce Python '
-                            'binary. Using system Python.', 'ERROR')
-                        python_cmd = ('python' if sys.platform == 'win32'
-                                      else 'python3')
-                else:
-                    ext._log(
-                        f'Venv Python still broken after recreation: '
-                        f'{e}. Using system Python.', 'WARNING')
-                    python_cmd = ('python' if sys.platform == 'win32'
-                                  else 'python3')
+                    f'Venv Python at {venv_python} does not run ({detail}); '
+                    f'using system Python for the MCP bridge until it is '
+                    f'repaired', 'WARNING')
+                ext._beginAsyncVenvRepair()
+            else:
+                python_cmd = system_python
+                ext._log(
+                    f'Venv Python probe {verdict} ({detail}); using system '
+                    f'Python for now (will re-probe on next start)',
+                    'WARNING')
         else:
-            python_cmd = 'python' if sys.platform == 'win32' else 'python3'
+            python_cmd = system_python
 
         # --- Retire the TDXN git diff driver older versions installed ---
         retire_tdxn_diff_driver(ext, target_dir)

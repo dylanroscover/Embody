@@ -174,7 +174,7 @@ WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'strata', 'displace', 'chromatic', 'streaks', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -198,7 +198,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -484,23 +484,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('raymarching-sdf');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'raymarching-sdf' FROM specimens AS s WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- prismatic-strata: specimens/generative/prismatic-strata.tdxn sha256=2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049 size=34347
+-- prismatic-strata: specimens/generative/prismatic-strata.tdxn sha256=381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b size=34243
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-prismatic-strata-2804515388c7e777', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049', '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049', 34347, 18, 'scan-prismatic-strata-2804515388c7e777', NULL, 'First-party sync of specimens/generative/prismatic-strata.tdxn'
+SELECT 'ver-prismatic-strata-381c27de97a267e4', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', 34243, 18, 'scan-prismatic-strata-381c27de97a267e4', NULL, 'First-party sync of specimens/generative/prismatic-strata.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-prismatic-strata-2804515388c7e777', 'ver-prismatic-strata-2804515388c7e777', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-prismatic-strata-2804515388c7e777') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-prismatic-strata-2804515388c7e777');
+SELECT 'scan-prismatic-strata-381c27de97a267e4', 'ver-prismatic-strata-381c27de97a267e4', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-prismatic-strata-381c27de97a267e4') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-prismatic-strata-381c27de97a267e4');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Prismatic Strata', description = 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.', category = 'generative', level = 'advanced', requires = '[]', op_count = 18, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b')
   AND (
       s.title IS NOT 'Prismatic Strata'
    OR s.description IS NOT 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.'
@@ -513,7 +513,7 @@ WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '2804515388c7e777e274dac986334bc0c69535feee26341974a3296f6bff2049'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'strata', 'displace', 'chromatic', 'streaks', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -525,23 +525,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- mandala: specimens/generative/mandala.tdxn sha256=7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5 size=88254
+-- mandala: specimens/generative/mandala.tdxn sha256=d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf size=89703
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-mandala-7b2b4c83c18a9fd6', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5', '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5', 88254, 461, 'scan-mandala-7b2b4c83c18a9fd6', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
+SELECT 'ver-mandala-d29ba179aa592ea6', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf', 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf', 89703, 461, 'scan-mandala-d29ba179aa592ea6', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-mandala-7b2b4c83c18a9fd6', 'ver-mandala-7b2b4c83c18a9fd6', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-7b2b4c83c18a9fd6') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-7b2b4c83c18a9fd6');
+SELECT 'scan-mandala-d29ba179aa592ea6', 'ver-mandala-d29ba179aa592ea6', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-d29ba179aa592ea6') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-d29ba179aa592ea6');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Serenity and Beauty', description = 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', category = 'generative', level = 'advanced', requires = '[]', op_count = 461, family_summary = 'POP,CHOP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf')
   AND (
       s.title IS NOT 'Serenity and Beauty'
    OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
@@ -554,7 +554,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '7b2b4c83c18a9fd625f746d8f87f44fa23071434cc59bf5a2fe588df9e4292c5'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

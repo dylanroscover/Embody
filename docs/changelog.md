@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.56
+
+A broken venv repairs itself instead of being deleted, and enabling Envoy no longer freezes TouchDesigner.
+
+- **A venv whose Python stops running is repaired in place.** After a TouchDesigner reinstall, `pyvenv.cfg` can point at an interpreter that no longer exists. Embody now rewrites the venv's interpreter layer on a background thread, keeping every installed package including your `python.extras`; the bridge runs on system Python until it finishes. The old path deleted the whole `.venv` — and counted a probe blocked by antivirus or a file lock as "corrupt", destroying healthy venvs. Those now fall back and re-probe next start.
+- **Enabling Envoy no longer blocks the UI.** The classic prompt builds the venv off the main thread, as the setup wizard already did.
+- **embody.tools:** the nav's glass snapshot no longer lands inside the landing page's opening animation.
+- **Dependencies.** devalue 5.9.2 (security), vitest 5, a minor-patch group, and zizmor-action 0.6.4.
+
 ## v6.2.55
 
 A published mandala, clone-aware TDXN, and a lighter embody.tools.

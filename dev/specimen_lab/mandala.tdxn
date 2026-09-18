@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 3
-generator: Embody/6.2.54
+generator: Embody/6.2.55
 td_build: 099.2025.33230
 network_path: /specimen_lab/mandala
 options:
@@ -792,7 +792,7 @@ custom_pars:
     normMin: 2.0
     normMax: 16.0
     help: Size of the ornament. Higher = finer, more squiggles.
-    value: 14.5699996948
+    value: 14.57
   - name: Scrolldetail
     style: Int
     label: Detail
@@ -814,7 +814,7 @@ custom_pars:
     clampMax: true
     normMax: 2.0
     help: 'Domain warp strength: how much the lines curl and swirl (the liquid look).'
-    value: 0.5299999714
+    value: 0.53
   - name: Scrolldensity
     style: Float
     label: Line Density
@@ -826,7 +826,7 @@ custom_pars:
     normMin: 1.0
     normMax: 12.0
     help: Number of contour squiggles across the field.
-    value: 1.5299999714
+    value: 1.53
   - name: Scrollleaves
     style: Float
     label: Squiggle Lines
@@ -855,7 +855,7 @@ custom_pars:
     normMin: 0.3
     normMax: 0.8
     help: Where the ornament starts (scene units; the palace wall sits at about 0.47).
-    value: 0.4399999976
+    value: 0.44
   - name: Scrollouter
     style: Float
     label: Outer Radius
@@ -865,7 +865,7 @@ custom_pars:
     clampMax: true
     normMin: 0.5
     help: Where the ornament stops (the beads sit at 0.86).
-    value: 0.7950000167
+    value: 0.795
   - name: Scrollflow
     style: Float
     label: Growth Stretch
@@ -875,7 +875,7 @@ custom_pars:
     clampMax: true
     normMax: 2.0
     help: Radial elongation of the ornament lobes along their growth direction (0 = round, 1 = twice as long radially).
-    value: 0.2199999988
+    value: 0.22
   - name: Scrollevolve
     style: Float
     label: Growth Speed
@@ -885,7 +885,7 @@ custom_pars:
     clampMax: true
     normMax: 2.0
     help: Outward growth speed of the ornament in pattern units per second (snapped to whole pattern periods per loop in Loop mode). Always outward from the centre.
-    value: 0.4199999869
+    value: 0.42
   - name: Scrolllinecolor
     style: Int
     label: Fill Color A
@@ -1168,34 +1168,74 @@ operators:
       valuex: =parent.Mandala.par.Grunge
     - name: uFade
       valuex: =parent.Mandala.par.Fade
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uPaper
       valuex: =parent.Mandala.par.Paperr
       valuey: =parent.Mandala.par.Paperg
       valuez: =parent.Mandala.par.Paperb
+      valuew: 1
     - name: uCoverage
       valuex: =parent.Mandala.par.Coverage
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uVignette
       valuex: =parent.Mandala.par.Vignette
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uGrain
       valuex: =parent.Mandala.par.Grain
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uTime
       valuex: =((parent.Mandala.par.Manualtime if parent.Mandala.par.Timemode.eval() == 'manual' else (absTime.seconds % 86400.0)) if parent.Mandala.par.Grain > 0 else 0)
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSparkle
       valuex: =parent.Mandala.par.Sparkle
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSparkleClump
       valuex: =parent.Mandala.par.Sparkleclump
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSparkleRate
       valuex: =parent.Mandala.par.Sparklerate
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uLoop
       valuex: =parent.Mandala.par.Loop
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uLoopLen
       valuex: =parent.Mandala.par.Looplength / max(parent.Mandala.par.Speedmult, 1e-6)
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSeed
       valuex: =parent.Mandala.par.Seed
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uGrungeBase
       valuex: =parent.Mandala.par.Grungebase
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uRes
       valuex: =parent.Mandala.par.Resolution
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [3400, -1400]
   inputs:
   - hsv_age
@@ -1663,50 +1703,104 @@ operators:
       valuex: =(parent.Mandala.par.Manualtime if parent.Mandala.par.Timemode.eval() == 'manual' else (absTime.seconds % 86400.0))
     - name: uLoop
       valuex: =parent.Mandala.par.Loop
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uLoopLen
       valuex: =parent.Mandala.par.Looplength / max(parent.Mandala.par.Speedmult, 1e-6)
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSeed
       valuex: =parent.Mandala.par.Seed
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAmount
       valuex: =parent.Mandala.par.Scrollwork
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uScale
       valuex: =parent.Mandala.par.Scrollscale
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uWarp
       valuex: =parent.Mandala.par.Scrollwarp
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uDensity
       valuex: =parent.Mandala.par.Scrolldensity
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uLeaves
       valuex: =parent.Mandala.par.Scrollleaves
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uInner
       valuex: =parent.Mandala.par.Scrollinner
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uOuter
       valuex: =parent.Mandala.par.Scrollouter
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uFlow
       valuex: =parent.Mandala.par.Scrollflow
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uEvolve
       valuex: =parent.Mandala.par.Scrollevolve
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uSymmetry
       valuex: =parent.Mandala.par.Scrollsymmetry
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uLineColor
       valuex: =parent.Mandala.par['Col%dr' % int(parent.Mandala.par.Scrolllinecolor)]
       valuey: =parent.Mandala.par['Col%dg' % int(parent.Mandala.par.Scrolllinecolor)]
       valuez: =parent.Mandala.par['Col%db' % int(parent.Mandala.par.Scrolllinecolor)]
+      valuew: 1
     - name: uLeafColor
       valuex: =parent.Mandala.par['Col%dr' % int(parent.Mandala.par.Scrollleafcolor)]
       valuey: =parent.Mandala.par['Col%dg' % int(parent.Mandala.par.Scrollleafcolor)]
       valuez: =parent.Mandala.par['Col%db' % int(parent.Mandala.par.Scrollleafcolor)]
+      valuew: 1
     - name: uInkColor
       valuex: =parent.Mandala.par['Col%dr' % int(parent.Mandala.par.Inkcolor)]
       valuey: =parent.Mandala.par['Col%dg' % int(parent.Mandala.par.Inkcolor)]
       valuez: =parent.Mandala.par['Col%db' % int(parent.Mandala.par.Inkcolor)]
+      valuew: 1
     - name: uDetail
       valuex: =parent.Mandala.par.Scrolldetail
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uRes
       valuex: =parent.Mandala.par.Resolution
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uMorph
       valuex: =parent.Mandala.par.Scrollmorph.eval()
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uMorphRate
       valuex: =parent.Mandala.par.Scrollmorphrate.eval()
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [2200, -2500]
 - name: lace_border
   type: baseCOMP

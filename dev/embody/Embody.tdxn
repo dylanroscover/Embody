@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1233
-generator: Embody/6.2.55
+generator: Embody/6.2.56
 td_build: 099.2025.33230
 network_path: /embody/Embody
 options:
@@ -853,7 +853,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.55
+    value: 6.2.56
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -937,17 +937,6 @@ sequences:
   - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
     name: CatalogManager
     promote: true
-  - {}
-  - {}
-  - {}
-  - {}
-  - {}
-  - {}
-  - {}
-  Convoynodes:
-  - {}
-  - {}
-  - {}
   - {}
   - {}
   - {}

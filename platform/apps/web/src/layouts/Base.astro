@@ -848,19 +848,42 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
         canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); header.classList.remove("has-gl-glass"); ready = false; }, false);
         canvas.addEventListener("webglcontextrestored", () => { ready = false; snapshot(); }, false);
 
+        // The hero's opening beat owns the first seconds: Embot's entrance hop
+        // runs from ~1s. A snapshot inside it is visible jank, so hold until the
+        // beat is over -- or until the first scroll, which is the moment the
+        // refraction has something moving to show. Measured on the landing page
+        // (2026-09-18, 1440x900): the two snapshots cost 295ms + 221ms and
+        // landed at t=1.6s and t=1.95s, ~640ms of the page's 909ms of blocking
+        // and two thirds of its dropped frames.
+        const HERO_BEAT_MS = 4500;
+        const afterHeroBeat = (fn: () => void) => {
+          let fired = false;
+          const go = () => {
+            if (fired) return;
+            fired = true;
+            window.removeEventListener("scroll", go);
+            fn();
+          };
+          window.addEventListener("scroll", go, { passive: true });
+          window.setTimeout(go, HERO_BEAT_MS);
+        };
+
         // Load html2canvas-pro lazily and OFF the critical path. The cheap WebGL
         // setup above has already succeeded, so the lens WILL be used -- only now
         // is the ~238KB library worth fetching. requestIdleCallback keeps it off
-        // the load-critical main thread; the first snapshot (and a re-snapshot
-        // once fonts settle) fire once it resolves. Failure leaves the CSS
-        // clear-glass in place.
+        // the load-critical main thread. ONE snapshot, taken once fonts have
+        // settled (a webfont swap changes the raster, and capturing before it
+        // bought a second full-page rasterisation) and the hero beat has passed.
+        // Failure leaves the CSS clear-glass in place.
         const begin = () => {
           import("html2canvas-pro")
             .then((m) => {
               html2canvas = (m.default ?? m) as unknown as Html2Canvas;
               measure();
-              snapshot();
-              if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => snapshot());
+              const fonts = document.fonts && document.fonts.ready
+                ? document.fonts.ready : Promise.resolve();
+              fonts.then(() => afterHeroBeat(snapshot),
+                         () => afterHeroBeat(snapshot));
             })
             .catch(() => { /* leave CSS clear-glass */ });
         };

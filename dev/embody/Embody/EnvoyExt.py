@@ -5156,7 +5156,6 @@ class EnvoyExt:
         self._runtime_port: Optional[int] = None
         self._startup_event: Optional[Event] = None
         self._startup_deadline: float = 0.0
-        self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
         # Guard: probe each venv python binary at most once per session --
         # Start() re-runs on every watchdog revive, and re-probing each time
         # was a recurring synchronous main-thread stall (issue #60). Holds
@@ -6035,6 +6034,88 @@ class EnvoyExt:
         except Exception:
             pass
         self._continueStart(git_root)
+
+    def _beginAsyncVenvRepair(self) -> None:
+        """Repair a venv whose interpreter no longer runs, on a worker thread,
+        then rewrite the MCP client config (embody_pyenv.repair_venv_interpreter).
+
+        Called by envoy_setup.configure_mcp_client on a 'broken' probe. The
+        server is already running from this venv's packages, so the repair
+        never deletes anything. One attempt per venv per TD process: the
+        state lives on sys so an extension reinit cannot re-arm a failing
+        repair on every watchdog revive. The result is published on sys and
+        polled through op(path).ext.Envoy, so a reinit mid-repair adopts it.
+        """
+        spec = op.Embody.ext.Embody._venvPaths()
+        states = getattr(sys, '_embody_venv_repair_state', None)
+        if states is None:
+            states = sys._embody_venv_repair_state = {}
+        key = os.path.normcase(os.path.abspath(spec['venv_dir']))
+        state = states.get(key)
+        if state == 'running':
+            self._log('Venv interpreter repair already in progress', 'DEBUG')
+            return
+        if state is not None:
+            self._log(
+                f'Venv interpreter repair already attempted this session '
+                f'({state}) -- restart TouchDesigner to retry', 'WARNING')
+            return
+        states[key] = 'running'
+        results = getattr(sys, '_embody_venv_repair_results', None)
+        if results is None:
+            results = sys._embody_venv_repair_results = {}
+        results.pop(key, None)
+        repair = mod.embody_pyenv.repair_venv_interpreter
+
+        def worker():
+            msgs = []
+            try:
+                ok = repair(spec, lambda m, lvl='INFO': msgs.append((lvl, m)))
+            except BaseException as e:
+                ok = False
+                msgs.append(('ERROR', f'Venv interpreter repair crashed: {e}'))
+            # Single dict-item assignment: atomic under the GIL.
+            results[key] = (ok, msgs)
+
+        Thread(target=worker, daemon=True).start()
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._pollVenvRepair({key!r})",
+            fromOP=self.ownerComp, delayFrames=30)
+
+    def _pollVenvRepair(self, key: str) -> None:
+        """Main-thread poll for _beginAsyncVenvRepair: replay the worker's log,
+        then regenerate client config so it points back at the venv Python."""
+        result = sys._embody_venv_repair_results.pop(key, None)
+        if result is None:
+            run(f"op({self.ownerComp.path!r}).ext.Envoy._pollVenvRepair({key!r})",
+                fromOP=self.ownerComp, delayFrames=30)
+            return
+        ok, msgs = result
+        sys._embody_venv_repair_state[key] = 'repaired' if ok else 'failed'
+        for lvl, m in msgs:
+            self._log(m, lvl)
+        if not ok:
+            return
+        self._venv_probe_ok = ''
+        # Only a live, client-configuring server has config to rewrite; the
+        # next Start() picks the venv Python up on its own otherwise.
+        if not self.ownerComp.par.Envoyenable.eval():
+            return
+        if not str(self.ownerComp.par.Envoystatus.eval()).startswith(
+                ('Running', 'Starting')):
+            return
+        if not self._shouldConfigureAIClient(self.ownerComp.par.Aiclient.eval()):
+            return
+        port = (getattr(self, '_runtime_port', None)
+                or int(self.ownerComp.par.Envoyport.eval()))
+        Embody = op.Embody.ext.Embody
+        # Same write posture as _continueStart: an Advanced-mode guard defers
+        # with a breadcrumb instead of popping a modal from a timer.
+        prior_pass = Embody._startup_config_pass
+        Embody._startup_config_pass = True
+        try:
+            self._configureMCPClient(port, target_dir=Embody._findProjectRoot())
+        finally:
+            Embody._startup_config_pass = prior_pass
 
     @staticmethod
     def _shouldConfigureAIClient(client) -> bool:

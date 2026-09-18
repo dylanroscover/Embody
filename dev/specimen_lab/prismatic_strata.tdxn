@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.53
+generator: Embody/6.2.55
 td_build: 099.2025.33230
 network_path: /specimen_lab/prismatic_strata
 options:
@@ -366,8 +366,6 @@ operators:
     - name: uDetail
       valuex: =parent.Specimen.par.Causticgain.eval()
       valuey: =parent.Specimen.par.Layergain.eval()
-      valuez: 0
-      valuew: 0
   position: [2800, 0]
   inputs:
   - glsl_strata
@@ -408,12 +406,9 @@ operators:
       valuex: =parent.Specimen.par.Layers.eval()
       valuey: =parent.Specimen.par.Scroll.eval()
       valuez: =parent.Specimen.par.Grain.eval()
-      valuew: 0
     - name: uPulse
       valuex: =parent.Specimen.par.Pulses.eval()
       valuey: =parent.Specimen.par.Pulsegain.eval()
-      valuez: 0
-      valuew: 0
   flags:
   - viewer
   position: [1400, 0]
@@ -423,9 +418,9 @@ operators:
   type: rampTOP
   parameters:
     dat: ramp_strata_keys
-    color1: 0.400000006
-    color2: 0.2700000107
-    color3: 0.200000003
+    color1: 0.4
+    color2: 0.27
+    color3: 0.2
     extendleft: hold
     outputresolution: custom
     resolutionw: 512

@@ -267,14 +267,25 @@ Envoy scans 10 ports (default: 9870–9879). If all are occupied, it can't start
 
 **Cause:** The `.venv` was created from a TouchDesigner Python installation that has since been upgraded or removed. The `home` key in `.venv/pyvenv.cfg` points to a path that no longer exists (common on Windows with versioned TD directories like `TouchDesigner.2025.32460/`).
 
-**Fix:**
+**Fix:** Envoy repairs this itself. When the venv interpreter fails to run, it
+switches the bridge to the system Python, then rewrites the venv's interpreter
+layer (`pyvenv.cfg` and the launchers) on a background thread and points
+`.mcp.json` back at the repaired venv. Installed packages — including your
+declared `python.extras` — are kept; nothing is deleted. Reopen your AI client
+session afterwards so the bridge restarts on the repaired Python.
 
-1. Delete the broken venv: `rm -rf <project_dir>/.venv`
-2. Toggle Envoy off and on in TouchDesigner (or restart TD) — Envoy will recreate the venv automatically, re-installing your declared `python.extras` with it
-3. Reopen your Claude Code session so the bridge reconnects with the new venv Python
+If the Textport reports the repair failed:
+
+1. Restart TouchDesigner (one repair is attempted per venv per session)
+2. Still broken? Close TD, remove `<project_dir>/.venv` yourself, and reopen the
+   project — Envoy rebuilds it from scratch and re-installs your extras
 
 !!! note
-    Envoy validates the venv Python on startup. If the venv interpreter fails to execute, Envoy falls back to the system Python and logs a warning to the Textport. Check for "failed to execute" warnings after TD upgrades.
+    A Python **version** change is a different case: Envoy rebuilds the venv at
+    the next start, before anything is imported, because binary wheels are tied
+    to the interpreter. A slow or blocked probe (antivirus, a file lock) is not
+    treated as a broken venv at all — Envoy falls back to the system Python for
+    that session and re-probes on the next start.
 
 ## Log Files
 
