@@ -1768,8 +1768,8 @@ class EmbodyExt:
             'be removed, then Uninstall to undo everything above.\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
             'Change this later via the Envoyenable parameter.\n\n'
-            'Note: TD will be unresponsive for a few seconds while\n'
-            'dependencies install.',
+            'Dependencies install in the background; MCP connects\n'
+            'when they finish.',
             buttons=['Skip', 'Enable Envoy'])
 
         # choice == -1 means _messageBox suppressed the dialog (a test run OR a
@@ -1786,12 +1786,12 @@ class EmbodyExt:
             self.Log('Envoy skipped. Enable later via Envoyenable parameter.', 'INFO')
 
     def _enableEnvoy(self):
-        """Enable Envoy: git check, install deps, extract AI config, start server."""
+        """Enable Envoy: git check, extract AI config, start server. Start()
+        builds the venv on a worker (_beginAsyncBootstrap), as the wizard's
+        _enableEnvoyResolved does -- never _setupEnvironment() here."""
         self.Log('Setting up Envoy...', 'INFO')
 
-        # Git check runs FIRST -- immediately after the user clicks "Enable Envoy",
-        # before the slow deps install. This keeps all dialogs at the start of the
-        # setup flow so nothing surprising appears after TD goes unresponsive.
+        # Git check runs FIRST so every dialog comes before any setup work.
         git_root = self.my.ext.Envoy._checkOrInitGitRepo()
         if git_root is None:
             # User cancelled -- abort Envoy setup entirely.
@@ -1800,10 +1800,8 @@ class EmbodyExt:
         # Store so Start() skips re-prompting for git.
         self.my.store('_git_root', str(git_root))
 
-        # Install Python dependencies
-        self._setupEnvironment()
-
         # Extract AI coding assistant config files to project/repo root
+        # (fast, needs no venv).
         self._extractAIConfig()
 
         # Enable Envoy (triggers Start() via parexec.py)
@@ -1813,7 +1811,7 @@ class EmbodyExt:
         client_label = self.my.par.Aiclient.label
         self.Log(
             f'Envoy enabled! Config generated for {client_label}. '
-            f'Connect your AI coding assistant via MCP.',
+            f'Dependencies install in the background; MCP connects when ready.',
             'SUCCESS'
         )
 
@@ -2304,8 +2302,8 @@ class EmbodyExt:
         - FIRST RUN (Envoy off): optionally write AI config, then flip
           Envoyenable so
           parexec launches Start(), whose async bootstrap builds the venv OFF
-          the main thread (do NOT call _setupEnvironment() here -- that is the
-          blocking path _enableEnvoy uses).
+          the main thread (do NOT call _setupEnvironment() here -- it blocks;
+          _enableEnvoy follows the same Start() path).
         - RE-RUN (Envoy already on, via the Setup Wizard button): the param
           changes above already regenerated config through parexec; a
           `Envoyenable = True` would be a no-op and never restart the server, so
