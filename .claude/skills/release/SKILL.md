@@ -243,8 +243,11 @@ Evidence: `result.json` in the run dir (its path ends the summary), beside
 `ready.flag` and `features.flag`.
 
 The Convoy leg installs and starts the REAL per-user Convoy host app on the
-machine that runs it. Run the same command on the Mac -- that leg is written
-against the bridge's darwin paths but has NOT yet run on real Mac hardware.
+machine that runs it (on a machine that already has it, the summary says
+`host app reused` -- the install path was not exercised). Run the same
+command on the Mac (TEC-MBA: `git pull --ff-only origin dev`, then
+`python3 dev/release_testing/smoke_run.py`); first verified there 2026-09-18
+on the default port, teardown via Envoy.
 
 ## 5b. Live Product Check -- MANDATORY before ANY readiness or confidence claim
 

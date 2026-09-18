@@ -238,8 +238,8 @@ def launch_td(td_exe, toe_path, platform=None, popen=None):
     (Contents/MacOS/<CFBundleExecutable>, resolved from Info.plist), the
     way Convoy's launcher does it: `open -n -a` would hand the document
     over as an Apple Event and leave argv without it, and LaunchServices
-    would drop the environment too. NOTE: the darwin path has not yet run
-    on real Mac hardware.
+    would drop the environment too. Verified on a real Mac 2026-09-18
+    (TEC-MBA: window opened, Envoy served, quit via Envoy by argv match).
     """
     platform = platform or sys.platform
     popen = popen or subprocess.Popen

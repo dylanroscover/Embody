@@ -116,9 +116,10 @@ Two things to know before starting one:
   the machine that runs the smoke. That is the point (a virgin install's
   host-app install is exactly what can break behind a green boot), but it is a
   real installation, not a sandbox.
-- **The macOS leg has not yet been run on real Mac hardware.** It is written
-  against the same darwin paths the Envoy bridge uses; treat the first Mac run
-  as new ground.
+- **The macOS leg is verified on real hardware** (first run 2026-09-18: PASS on
+  the default port, teardown via Envoy). It launches the bundle's inner
+  executable directly rather than `open -a`, so the `.toe` is in argv for the
+  ownership check and the sidecar is found without the shell environment.
 
 Why a sidecar rather than an environment variable: `EMBODY_SMOKE_REPO` does
 not survive `open` on macOS -- LaunchServices drops the shell's environment --
