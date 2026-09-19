@@ -229,8 +229,13 @@ def find_td(build, override=None, platform=None):
     return exe, warning
 
 
-def launch_td(td_exe, toe_path, platform=None, popen=None):
-    """Start TD on `toe_path` by explicit absolute path; returns the pid.
+def launch_td(td_exe, toe_path, platform=None, popen=None, console=None):
+    """Start TD on `toe_path` by explicit absolute path; returns (pid, proc).
+
+    `console` is a file object for TD's stdout/stderr (the run dir's
+    td-console.log): on macOS TD prints its textport there, including
+    the traceback of an execute-DAT callback that died before the
+    bootstrap could log anything itself.
 
     Both platforms spawn the executable directly and get a real pid with
     the .toe in argv -- the ownership check (owns_process) relies on that
@@ -251,9 +256,10 @@ def launch_td(td_exe, toe_path, platform=None, popen=None):
         if not exe:
             raise SmokeSetupError(
                 f'{td_exe} has no executable under Contents/MacOS')
-    proc = popen([exe, toe_path],
-                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return proc.pid
+    out = console if console is not None else subprocess.DEVNULL
+    proc = popen([exe, toe_path], stdout=out, stderr=subprocess.STDOUT
+                 if console is not None else subprocess.DEVNULL)
+    return proc.pid, proc
 
 
 def process_cmdline(pid, platform=None, run=None):
@@ -327,7 +333,8 @@ def _mcp_quit(port):
 
 
 def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
-                  hard_quit=None, clock=None, sleep=None, is_td=None):
+                  hard_quit=None, clock=None, sleep=None, is_td=None,
+                  reap=None):
     """Quit the TD this run launched -- and only that one.
 
     Order: refuse unless the pid's command line names the run dir; ask
@@ -336,8 +343,15 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
     closes and force-kills after its grace period. `method` says which
     path worked: 'mcp', 'close', or 'forced' -- a forced kill is reported,
     never hidden behind 'ok'.
+
+    `reap(pid)` -> exit code or None: this process is TD's PARENT, so a
+    killed TD is a zombie until it is waited on, and the bridge's
+    kill(pid, 0) liveness test reports a zombie as alive ("could not be
+    terminated" on the first CI run, 2026-09-18). A reaped exit code means
+    it is gone.
     """
     alive = alive or envoy_bridge.is_td_process_alive
+    reap = reap or (lambda p: None)
     mcp_quit = mcp_quit or _mcp_quit
     hard_quit = hard_quit or (lambda p: envoy_bridge.quit_td(
         p, graceful_timeout=QUIT_TIMEOUT_S))
@@ -362,6 +376,8 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
         except Exception as e:  # server already gone, or refused: fall back
             pass
     ok, message = hard_quit(pid)
+    if not ok and reap(pid) is not None:
+        ok, message = True, f'{message} -- reaped: it had exited (zombie)'
     method = 'close' if ok and 'gracefully' in message else (
         'forced' if ok else 'failed')
     return {'ok': bool(ok), 'method': method, 'message': message}
@@ -648,7 +664,8 @@ def collect_logs(run_dir, lines=40):
     the newest file alone holds none of the boot phase, including its
     WARNING lines."""
     logs_dir = os.path.join(run_dir, 'logs')
-    files = [os.path.join(run_dir, 'bootstrap.log')]
+    files = [os.path.join(run_dir, 'td-console.log'),
+             os.path.join(run_dir, 'bootstrap.log')]
     try:
         files += sorted((os.path.join(logs_dir, n) for n in
                          os.listdir(logs_dir) if n.endswith('.log')),
@@ -797,6 +814,8 @@ def main(argv=None):
               'log_tail': '', 'log_warnings': [], 'error': '',
               'elapsed_s': 0.0, 'result_path': ''}
     pid = None
+    proc = None
+    console = None
     run = None
     convoy_before = convoy_install_mtime()
     try:
@@ -814,7 +833,10 @@ def main(argv=None):
         result['result_path'] = os.path.join(run['dir'], 'result.json')
         print(f"[smoke_run] staged {run['dir']}", file=sys.stderr)
 
-        pid = launch_td(td_exe, os.path.join(run['dir'], 'smoke_template.toe'))
+        console = open(os.path.join(run['dir'], 'td-console.log'), 'ab')
+        pid, proc = launch_td(td_exe,
+                              os.path.join(run['dir'], 'smoke_template.toe'),
+                              console=console)
         result['pid'] = pid
         print(f'[smoke_run] launched TouchDesigner pid {pid}', file=sys.stderr)
 
@@ -870,7 +892,11 @@ def main(argv=None):
     try:
         if pid is not None and not args.keep_td:
             port = (result['ready'] or {}).get('envoy_port')
-            result['teardown'] = quit_smoke_td(pid, run['dir'], port)
+            result['teardown'] = quit_smoke_td(
+                pid, run['dir'], port,
+                reap=(lambda p: proc.poll()) if proc is not None else None)
+        if console is not None:
+            console.close()
         if result['outcome'] != 'ERROR':
             result['outcome'] = compute_outcome(
                 result['ready'], result['features'], result['mcp'],

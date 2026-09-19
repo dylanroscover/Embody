@@ -790,6 +790,44 @@ class TestQuitSmokeTd(_Case):
         self.assertEqual(state['mcp_calls'], 0)
         self.assertEqual(r['method'], 'close')
 
+    def test_zombie_after_kill_counts_as_terminated(self):
+        """We are TD's parent: a killed child is a zombie the bridge's
+        kill(pid, 0) test still calls alive. A reaped exit code settles it
+        (first CI run on the Mac, 2026-09-18)."""
+        t = {'now': 0.0}
+        with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
+        orig = smoke.process_cmdline
+        smoke.process_cmdline = with_cmd
+        try:
+            r = smoke.quit_smoke_td(
+                7, self.root, None, alive=lambda pid: True,
+                mcp_quit=lambda p: None,
+                hard_quit=lambda pid: (False, 'TouchDesigner (PID 7) could '
+                                               'not be terminated'),
+                clock=lambda: t['now'], sleep=lambda s: None, is_td=IS_TD,
+                reap=lambda pid: -9)
+        finally:
+            smoke.process_cmdline = orig
+        self.assertTrue(r['ok'])
+        self.assertEqual(r['method'], 'forced')
+        self.assertIn('reaped', r['message'])
+
+    def test_unreaped_kill_failure_stays_failed(self):
+        with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
+        orig = smoke.process_cmdline
+        smoke.process_cmdline = with_cmd
+        try:
+            r = smoke.quit_smoke_td(
+                7, self.root, None, alive=lambda pid: True,
+                mcp_quit=lambda p: None,
+                hard_quit=lambda pid: (False, 'could not be terminated'),
+                clock=lambda: 0.0, sleep=lambda s: None, is_td=IS_TD,
+                reap=lambda pid: None)
+        finally:
+            smoke.process_cmdline = orig
+        self.assertFalse(r['ok'])
+        self.assertEqual(r['method'], 'failed')
+
 
 class TestLogsAndConvoyState(_Case):
 
@@ -810,6 +848,14 @@ class TestLogsAndConvoyState(_Case):
     def test_collect_logs_without_logs_dir(self):
         self.assertEqual(smoke.collect_logs(self.root),
                          {'tail': '', 'warnings': []})
+
+    def test_td_console_log_is_read_first(self):
+        """TD's own stdout (the textport on macOS) holds the traceback of a
+        callback that died before the bootstrap could log."""
+        with open(os.path.join(self.root, 'td-console.log'), 'w') as f:
+            f.write('Traceback (most recent call last):\n  boom\n')
+        got = smoke.collect_logs(self.root)
+        self.assertIn('Traceback', got['tail'])
 
     def test_bootstrap_mirror_log_is_read_before_embody_logs(self):
         """Before the feature phase's save there is no Embody log at all;

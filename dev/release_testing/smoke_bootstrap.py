@@ -331,20 +331,33 @@ def _load_release_tox(tox_path=None):
     tox_path = tox_path or me.fetch('tox_path', None, search=False)
     if not tox_path or not os.path.isfile(tox_path):
         _log(f'ERROR: .tox not found at {tox_path}')
+        _write_abort_flag(f'.tox not found at {tox_path}')
         return
 
     _log(f'Loading {os.path.basename(tox_path)}...')
 
-    # Destroy any stale Embody from a previous test run saved in the .toe
-    existing = op('/Embody')
-    if existing:
-        _log(f'Destroying stale Embody at {existing.path}')
-        existing.destroy()
+    # An exception here would go to the textport only, and the orchestrator
+    # would wait its whole ready budget for a flag that never comes (first
+    # CI run on the Mac, 2026-09-18: the log ended at "Destroying stale
+    # Embody" with no trace of why). Log the traceback AND abort loudly.
+    try:
+        # Destroy any stale Embody from a previous test run saved in the .toe
+        existing = op('/Embody')
+        if existing:
+            _log(f'Destroying stale Embody at {existing.path}')
+            existing.destroy()
 
-    # Load the .tox - creates the Embody COMP and triggers onCreate()
-    embody = op('/').loadTox(tox_path)
+        # Load the .tox - creates the Embody COMP and triggers onCreate()
+        embody = op('/').loadTox(tox_path)
+    except Exception as e:
+        import traceback
+        _log('ERROR: loading the release .tox raised:\n'
+             + traceback.format_exc())
+        _write_abort_flag(f'loadTox raised {type(e).__name__}: {e}')
+        return
     if not embody:
         _log('ERROR: loadTox returned None')
+        _write_abort_flag('loadTox returned None')
         return
 
     me.store('embody_path', embody.path)
