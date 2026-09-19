@@ -82,5 +82,6 @@ jobs:
             ${{ runner.temp }}/embody-smoke/*/result.json
             ${{ runner.temp }}/embody-smoke/*/ready.flag
             ${{ runner.temp }}/embody-smoke/*/features.flag
+            ${{ runner.temp }}/embody-smoke/*/td-console.log
             ${{ runner.temp }}/embody-smoke/*/bootstrap.log
             ${{ runner.temp }}/embody-smoke/*/logs/*.log

@@ -786,6 +786,16 @@ def summarize(result):
         lines.append(f"error     {r['error']}")
     lines.append(f"result: {r.get('outcome')}  ({r.get('elapsed_s', 0):.0f}s)"
                  f"  ->  {r.get('result_path', '')}")
+    if r.get('outcome') != 'PASS':
+        # A failing run prints its evidence: a CI step log survives when the
+        # artifact upload does not (ETIMEDOUT from the Mac runner, 2026-09-18).
+        if warnings:
+            lines.append('--- WARNING/ERROR lines ---')
+            lines.extend(f"  {w[:240]}" for w in warnings[:20])
+        tail = (r.get('log_tail') or '').rstrip()
+        if tail:
+            lines.append('--- log tail (td-console, bootstrap, embody) ---')
+            lines.extend(f"  {l[:240]}" for l in tail.splitlines()[-40:])
     return '\n'.join(lines)
 
 
