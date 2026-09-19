@@ -249,6 +249,14 @@ command on the Mac (TEC-MBA: `git pull --ff-only origin dev`, then
 `python3 dev/release_testing/smoke_run.py`); first verified there 2026-09-18
 on the default port, teardown via Envoy.
 
+In CI, `.github/workflows/release-smoke.yml` runs the macOS leg on the
+TEC-MBA self-hosted runner on every push to dev/main (and tags) that touches
+the release asset, the harness or Embody's source; the run directory is the
+uploaded artifact. The preflight treats a red run as a blocker, so check
+`gh run list --workflow=release-smoke.yml -L 3` before the release push. A
+job that sits queued while the runner flaps online/offline is the Mac's
+network (a dead WireGuard tunnel did this on 2026-09-18), not the smoke.
+
 ## 5b. Live Product Check -- MANDATORY before ANY readiness or confidence claim
 
 Green tests and a green smoke are NOT the product. On 2026-09-05 a full
