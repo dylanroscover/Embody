@@ -93,7 +93,8 @@ def onStart():
     # Per-run reset: storage persists through a project save, so a saved
     # run would otherwise leak flags into the next one.
     for key in ('headless_setup_done', 'embody_path', 'tox_path',
-                '_feature_results', 'flags_dir', 'run_id', 'run_platform'):
+                '_feature_results', 'flags_dir', 'run_id', 'run_platform',
+                'envoy_reassert_done'):
         try:
             me.unstore(key)
         except Exception:
@@ -455,6 +456,9 @@ def _reassert_envoy(attempt=0):
         return
     if attempt < 6:
         run("args[0](args[1])", _reassert_envoy, attempt + 1, delayFrames=30)
+    else:
+        # The chain is done; a 'Disabled' from here on is the real answer.
+        me.store('envoy_reassert_done', True)
 
 def _close_wizard_again():
     embody_path = me.fetch('embody_path', None, search=False)
@@ -558,7 +562,22 @@ def _envoy_settled(embody):
     pending = ('starting', 'installing', 'warming', 'restarting', 'reviving')
     if any(tok in lowered for tok in pending):
         return False, status
+    # 'Disabled' is 'not enabled YET' until the smoke's own setup has run
+    # and the re-assert chain has finished: this harness enables Envoy
+    # itself, and a deferred init callback can Stop() it moments after
+    # (execute.py:19-25). A poll landing in either window used to settle
+    # FAIL on a healthy install -- 'settled after 7 polls Disabled' on the
+    # macOS runner. The attempt cap still bounds it, so an Envoy that is
+    # genuinely off is still reported.
+    if lowered.startswith('disabled') and not _envoy_decided():
+        return False, status
     return True, status
+
+
+def _envoy_decided() -> bool:
+    """Has this harness finished having its say about Envoy?"""
+    return bool(me.fetch('headless_setup_done', False, search=False)
+                and me.fetch('envoy_reassert_done', False, search=False))
 
 def _write_ready_flag(attempt=0):
     """Write the ready flag once Envoy reaches a terminal state.
