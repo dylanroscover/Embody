@@ -88,9 +88,11 @@ The orchestrator, `dev/release_testing/smoke_run.py`:
    `smoke_template.toe`, `smoke_bootstrap.py` and a `smoke_run.json` sidecar
    (run id, platform, repo root, tox path, flags dir) -- old run directories
    are never deleted;
-3. launches TouchDesigner on the template by explicit absolute path
-   (`open -n -a` on macOS, with the pid resolved by diffing the process list;
-   a direct spawn on Windows);
+3. launches TouchDesigner on the template by explicit absolute path -- a
+   direct spawn of the executable on both platforms (on macOS the bundle's
+   own binary under `Contents/MacOS`, so the `.toe` is in argv and the
+   sidecar is found without the shell environment), giving a real pid and
+   TD's stdout in `td-console.log`;
 4. waits for `ready.flag` (startup health, `verdict=PASS` required; the flag
    also stamps `run_id=`, `platform=` and `tox=`), then for `features.flag` --
    all seven legs must read PASS (`embody_core`, `tdn_roundtrip`,
