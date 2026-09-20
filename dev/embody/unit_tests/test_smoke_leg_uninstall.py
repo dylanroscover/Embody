@@ -13,7 +13,13 @@ must turn the leg red:
 - .embody/ or the .venv left behind; an externalized .tdxn removed;
 - a 'review' item deleted; settings.local.json rewritten;
 - a plan that omits a manifest-recorded path, or lists a user file;
-- a plan rooted anywhere but the run dir (refused BEFORE anything runs);
+- a plan that is not manifest-derived at all, or whose record was renamed
+  out from under it (an EMPTY recorded set must not read as 'all covered');
+- a shared file deleted instead of stripped; an Embody MCP server renamed
+  and left behind;
+- a plan rooted anywhere but the run dir, or with an entry resolving
+  outside it, or a budget too short to watch the uninstall in (all three
+  refused BEFORE anything runs);
 - a summary that never appears, or says ran=False (the confirm cancelled);
 - an Envoy that outlives its own uninstall;
 - any change to a repo-checkout witness file.
@@ -26,6 +32,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -107,6 +114,7 @@ class _FakeTD:
         self.budget_left = 3600.0
         self.project_folder = run_dir
         self.envoy_up = True
+        self.platform = 'win32'
         self.scripts = []
         self.waits = []
         self.logs = []
@@ -130,6 +138,8 @@ class _FakeTD:
         self.reborn_manifest = False
         self.leave_planned = None
         self.strip_user_server = False
+        self.rename_envoy_server = False
+        self.delete_gitignore = False
         self.remove_mcp_json = False
         self.delete_review = False
         self.mutate_settings = False
@@ -139,7 +149,10 @@ class _FakeTD:
         self.plan_omit = None
         self.plan_extra_delete = None
         self.plan_root = None
-        self.wiring = {'style': 'Pulse', 'routers': ['parexec']}
+        self.plan_sources = ['manifest', 'fallback']
+        self.plan_absolute_escape = None
+        self.wiring = {'style': 'Pulse', 'handler': True,
+                       'routers': ['parexec']}
         self._install()
 
     # --- the installed project ---------------------------------------
@@ -191,11 +204,14 @@ class _FakeTD:
         if self.plan_extra_delete:
             delete.append({'path': self.plan_extra_delete, 'kind': 'file',
                            'why': 'injected by a test'})
+        if self.plan_absolute_escape:
+            delete.append({'path': self.plan_absolute_escape,
+                           'kind': 'file', 'why': 'injected by a test'})
         if self.plan_omit:
             delete = [e for e in delete if e['path'] != self.plan_omit]
         return {
             'root': self.plan_root or self.run_dir,
-            'sources': ['manifest', 'fallback'],
+            'sources': list(self.plan_sources),
             'delete': delete,
             'strip': [{'path': '.mcp.json', 'kind': 'mcp_config',
                        'marker': 'mcpServers.envoy', 'why': 'key only'},
@@ -269,12 +285,19 @@ class _FakeTD:
         else:
             cfg = json.loads(_read(os.path.join(self.run_dir, '.mcp.json')))
             servers = cfg.get('mcpServers', {})
-            servers.pop('envoy', None)
+            if self.rename_envoy_server:
+                servers['envoy-td'] = servers.pop('envoy', None)
+            else:
+                servers.pop('envoy', None)
             if self.strip_user_server:
                 servers.clear()
             _write(os.path.join(self.run_dir, '.mcp.json'),
                    json.dumps(cfg, indent=2) + '\n')
-        _write(os.path.join(self.run_dir, '.gitignore'), 'build/\n')
+        if self.delete_gitignore:
+            self._rm('.gitignore')
+        else:
+            _write(os.path.join(self.run_dir, '.gitignore'),
+                   'build/\n')
         for rel in self.EMPTY_DIRS:
             self._rmdir_if_empty(rel)
         if self.delete_user_file:
@@ -352,7 +375,8 @@ class _FakeTD:
                 'build': {'version': '6.2.57'},
                 'installed': {'version': '6.2.57'}, 'upgrade_from': None,
                 'port': self.port, 'set_port': lambda p: None,
-                'pid': self.pid, 'td_exe': 'td.exe', 'platform': 'win32',
+                'pid': self.pid, 'td_exe': 'td.exe',
+                'platform': self.platform,
                 'call': self.call, 'py': self.py,
                 'log': self.logs.append,
                 'budget': lambda: self.budget_left - (self.now - 1000.0),
@@ -418,11 +442,15 @@ class TestHappyPath(_Case):
         self.assertEqual(res['error'], '')
         for name in ('leg.target', 'plant_user_content', 'repo_baseline',
                      'uninstall_button_wired', 'preview_plan',
-                     'plan_root_is_run_dir', 'plan_covers_manifest',
+                     'plan_root_is_run_dir', 'plan_stays_inside_run_dir',
+                     'plan_covers_manifest',
                      'plan_removes_state_and_venv', 'plan_spares_user_files',
-                     'leaves_td_running', 'uninstall_ran', 'envoy_stopped',
+                     'leaves_td_running',
+                     'budget_for_a_supervised_uninstall',
+                     'uninstall_ran', 'envoy_stopped',
                      'generated_removed', 'user_files_intact',
-                     'mcp_json_reversed', 'review_items_kept',
+                     'mcp_json_reversed', 'stripped_files_kept',
+                     'review_items_kept',
                      'settings_local_kept', 'venv_removed',
                      'embody_state_removed', 'untouched_paths_kept',
                      'outside_run_dir_untouched'):
@@ -499,6 +527,44 @@ class TestSafetyFences(_Case):
         self.assertEqual(self.td.scripts, [], 'it uninstalled anyway')
         self.assertEqual(_tree(self.repo), before)
 
+    def test_a_plan_root_that_does_not_exist_is_refused(self):
+        """samefile RAISES on a missing path, so the fence falls to its
+        string fallback -- the branch that decides the dangerous case and
+        that no fixture with real paths ever reaches."""
+        self.td.plan_root = os.path.join(self.root, 'never-created')
+        res = self.go()
+        self.assertStepFailed('plan_root_is_run_dir')
+        self.assertIn('refusing to run Uninstall', res['error'])
+        self.assertEqual(self.td.scripts, [], 'it uninstalled anyway')
+
+    def test_a_plan_entry_outside_the_run_dir_is_refused(self):
+        """The root can be right while an ENTRY is absolute and elsewhere
+        (compute_uninstall_plan keeps the absolute path when it does not
+        sit under the root, and the executor unlinks a plain file with no
+        containment check). This is the 2026-07-27 class."""
+        before = _tree(self.repo)
+        self.td.plan_absolute_escape = os.path.join(self.repo, 'CLAUDE.md')
+        res = self.go()
+        self.assertStepFailed('plan_stays_inside_run_dir')
+        self.assertIn('refusing to run Uninstall', res['error'])
+        self.assertEqual(self.td.scripts, [], 'it uninstalled anyway')
+        self.assertEqual(_tree(self.repo), before)
+
+    def test_gitignored_repo_drift_is_reported_not_condemned(self):
+        """A developer TD with the checkout open rewrites .mcp.json and
+        .embody/manifest.json there on its own save schedule -- naming
+        that as the smoke's doing would block a release on noise."""
+        _write(os.path.join(self.repo, '.mcp.json'), '{}\n')
+
+        def drift():
+            _FakeTD.uninstall(self.td)
+            _write(os.path.join(self.repo, '.mcp.json'), '{"n": 1}\n')
+        self.td.uninstall = drift
+        self.go()
+        self.assertStepOk('outside_run_dir_untouched')
+        self.assertIn('.mcp.json',
+                      self.step('outside_run_dir_untouched')['detail'])
+
     def test_a_repo_witness_file_that_changes_fails_the_leg(self):
         self.td.touch_repo = True
         self.go()
@@ -569,6 +635,37 @@ class TestPlanIsManifestDerived(_Case):
         self.td.plan_omit = None
         plan = self.td.plan()
         self.assertIn('.gitignore', [e['path'] for e in plan['strip']])
+        self.go()
+        self.assertStepOk('plan_covers_manifest')
+
+    def test_a_plan_not_derived_from_the_manifest_fails(self):
+        """A marker-scan-only plan deletes plenty and proves nothing about
+        the install record -- the invariant this leg exists for."""
+        self.td.plan_sources = ['fallback']
+        self.go()
+        self.assertStepFailed('plan_covers_manifest')
+        self.assertIn('not manifest-derived',
+                      self.step('plan_covers_manifest')['detail'])
+
+    def test_an_install_record_with_renamed_keys_cannot_pass_vacuously(self):
+        """Rename files_created and `recorded` is EMPTY: nothing is missed,
+        so the step would report '0 recorded path(s) all accounted for'
+        while the plan came entirely from the fallback scan."""
+        _write(os.path.join(self.run_dir, '.embody/manifest.json'),
+               json.dumps({'version': 1, 'files_made': ['CLAUDE.md'],
+                           'venv': {'path': '.venv'}}) + '\n')
+        self.go()
+        self.assertStepFailed('plan_covers_manifest')
+        self.assertIn('0 recorded',
+                      self.step('plan_covers_manifest')['detail'])
+
+    def test_a_recorded_path_absent_from_disk_needs_no_plan_entry(self):
+        """compute_uninstall_plan drops a recorded MCP config that is
+        already gone without recording it in `missing` (embody_admin
+        ~197). There is nothing left to plan, so the leg must not red on
+        it -- product gap, reported, tolerated here."""
+        real = self.td.plan
+        self.td.plan = lambda: dict(real(), missing=[])
         self.go()
         self.assertStepOk('plan_covers_manifest')
 
@@ -708,8 +805,78 @@ class TestFootprintIsReversed(_Case):
         self.assertIn('manifest.json',
                       self.step('embody_state_removed')['detail'])
 
+    def test_a_renamed_embody_server_left_behind_fails_the_leg(self):
+        """`envoy` not in servers is vacuously true once the product
+        writes its entry under another key: what must remain is exactly
+        the one server the leg planted."""
+        self.td.rename_envoy_server = True
+        self.go()
+        self.assertStepFailed('mcp_json_reversed')
+        self.assertIn('envoy-td', self.step('mcp_json_reversed')['detail'])
+
+    def test_a_shared_file_deleted_instead_of_stripped_fails_the_leg(self):
+        """survivors() excludes every strip path, so only this step sees
+        a .gitignore unlinked instead of having its block removed."""
+        self.td.delete_gitignore = True
+        self.go()
+        self.assertStepFailed('stripped_files_kept')
+        self.assertIn('.gitignore',
+                      self.step('stripped_files_kept')['detail'])
+
+    def test_a_summary_that_ran_but_carries_an_error_fails_the_leg(self):
+        """ran=True AND error set: the two clauses have to be separable,
+        or dropping the error check reads as covered."""
+        self.td.summary = {'ran': True, 'deleted': 9,
+                           'error': 'RuntimeError: boom'}
+        self.go()
+        self.assertStepFailed('uninstall_ran')
+        self.assertIn('boom', self.step('uninstall_ran')['detail'])
+
+    def test_a_summary_reporting_errors_fails_the_leg(self):
+        """execute_uninstall_plan counts what it could not remove or strip
+        and still returns ran=True."""
+        self.td.summary = {'ran': True, 'deleted': 6, 'errors': 3}
+        self.go()
+        self.assertStepFailed('uninstall_ran')
+
+    def test_a_recorded_venv_already_gone_is_reported_not_skipped(self):
+        """Nulling it would leave the '.venv is deleted' half of the
+        contract unexercised behind a green step naming None."""
+        for rel in _FakeTD.VENV_FILES:
+            os.remove(os.path.join(self.run_dir, rel))
+        os.rmdir(os.path.join(self.run_dir, '.venv', 'Scripts'))
+        os.rmdir(os.path.join(self.run_dir, '.venv'))
+        self.go()
+        self.assertStepFailed('venv_recorded_present')
+        self.assertIsNone(self.step('venv_removed'))
+
     def test_a_venv_left_behind_fails_the_leg(self):
         self.td.keep_venv = True
+        self.go()
+        self.assertStepFailed('venv_removed')
+
+    def test_a_windows_locked_venv_passes_once_pyvenv_cfg_is_gone(self):
+        """Windows will not unlink a mapped .pyd and TD has this venv's
+        pydantic_core loaded, so remove_tree_within leaves the tree.
+        Product limitation, not a reversal failure -- named, not red."""
+        self.td.keep_venv = True
+
+        def locked():
+            _FakeTD.uninstall(self.td)
+            os.remove(os.path.join(self.run_dir, '.venv/pyvenv.cfg'))
+        self.td.uninstall = locked
+        self.go()
+        self.assertStepOk('venv_removed')
+        self.assertIn('holds open', self.step('venv_removed')['detail'])
+
+    def test_the_same_locked_venv_is_a_failure_off_windows(self):
+        self.td.platform = 'darwin'
+        self.td.keep_venv = True
+
+        def locked():
+            _FakeTD.uninstall(self.td)
+            os.remove(os.path.join(self.run_dir, '.venv/pyvenv.cfg'))
+        self.td.uninstall = locked
         self.go()
         self.assertStepFailed('venv_removed')
 
@@ -796,7 +963,22 @@ class TestSummaryHandoff(_Case):
         self.assertStepFailed('uninstall_ran')
         self.assertIn('boom', self.step('uninstall_ran')['detail'])
 
-    def test_an_unparsable_summary_fails_the_leg(self):
+    def test_a_torn_summary_read_is_not_taken_as_arrived(self):
+        """A half-written file is what the arrival predicate exists for:
+        accepting it would feed json.loads a prefix and red a run whose
+        uninstall actually succeeded."""
+        self.td.execute = True
+
+        def torn():
+            _FakeTD.uninstall(self.td)
+            _write(os.path.join(self.run_dir, leg.SUMMARY_FILE),
+                   '{"ran": tr')
+        self.td.uninstall = torn
+        self.go()
+        self.assertStepFailed('uninstall_ran')
+        self.assertIn('text=', self.step('uninstall_ran')['detail'])
+
+    def test_an_unparsable_but_complete_summary_fails_the_leg(self):
         self.td.execute = True
 
         def junk():
@@ -806,14 +988,16 @@ class TestSummaryHandoff(_Case):
         self.td.uninstall = junk
         self.go()
         self.assertStepFailed('uninstall_ran')
+        self.assertIn('unparsable', self.step('uninstall_ran')['detail'])
 
     def test_the_summary_wait_leaves_room_for_teardown(self):
-        self.td.budget_left = 90.0
+        """The literal is the point: deriving it from TEARDOWN_RESERVE_S
+        lets the reserve be zeroed with the suite still green, and a
+        smoke that ends with TD still running is a FAIL."""
+        self.td.budget_left = 200.0
         self.go()
         wait = [w for w in self.td.waits if w['name'] == leg.SUMMARY_FILE][0]
-        self.assertLessEqual(wait['timeout'],
-                             90.0 - leg.TEARDOWN_RESERVE_S + 0.01)
-        self.assertGreaterEqual(wait['timeout'], 5.0)
+        self.assertEqual(wait['timeout'], 140.0)
 
     def test_the_summary_wait_is_capped_even_with_a_huge_budget(self):
         self.td.budget_left = 100000.0
@@ -821,11 +1005,24 @@ class TestSummaryHandoff(_Case):
         wait = [w for w in self.td.waits if w['name'] == leg.SUMMARY_FILE][0]
         self.assertEqual(wait['timeout'], float(leg.SUMMARY_TIMEOUT_S))
 
-    def test_an_exhausted_budget_still_waits_a_little(self):
+    def test_an_exhausted_budget_refuses_to_start_the_uninstall(self):
+        """Destructive and unwatchable is worse than not run: the leg
+        would otherwise read a directory being deleted under it and
+        scatter meaningless reds, with TD SIGTERMed mid-delete."""
         self.td.budget_left = 1.0
+        res = self.go()
+        self.assertStepFailed('budget_for_a_supervised_uninstall')
+        self.assertIn('refusing', res['error'])
+        self.assertEqual(self.td.scripts, [], 'it uninstalled anyway')
+        self.assertEqual(self.td.waits, [])
+        self.assertTrue(self.exists('.embody/manifest.json'))
+
+    def test_a_budget_just_over_the_window_still_runs(self):
+        self.td.budget_left = (leg.MIN_UNINSTALL_WINDOW_S
+                               + leg.TEARDOWN_RESERVE_S)
         self.go()
-        wait = [w for w in self.td.waits if w['name'] == leg.SUMMARY_FILE][0]
-        self.assertEqual(wait['timeout'], 5.0)
+        self.assertStepOk('budget_for_a_supervised_uninstall')
+        self.assertStepOk('uninstall_ran')
 
 
 # ===========================================================================
@@ -840,11 +1037,17 @@ class TestDriversAndContract(_Case):
         self.go()
         sent = self.td.scripts[-1]
         self.assertIn('from td import run as _run', sent)
-        self.assertIn('delayMilliSeconds=', sent)
+        self.assertIn('delayMilliSeconds=1500', sent)
 
     def test_it_calls_the_handler_the_uninstall_button_calls(self):
+        """The CALL line, not the token: 'uninstallHandler' also occurs
+        in the script's own error text, so a substring test stays green
+        against a swap to the non-interactive Uninstall(confirm=True) --
+        which never raises the confirm dialog this leg exists to drive.
+        """
         script = leg.uninstall_script()
-        self.assertIn('uninstallHandler', script)
+        self.assertIn('_s = _emb.ext.Embody.uninstallHandler()', script)
+        self.assertNotIn('Uninstall(confirm', script)
         self.assertNotIn('_executeUninstallPlan', script)
         self.assertNotIn('remove_tree_within', script)
 
@@ -884,10 +1087,14 @@ class TestDriversAndContract(_Case):
         source = _read(_ADMIN)
         start = source.index('def uninstall_handler')
         body = source[start:start + 3000]
-        titles = {"'Embody -- Uninstall'", "'Embody -- Uninstall Complete'"}
+        titles = set(re.findall(r"_messageBox\(\s*'([^']+)'", body))
+        self.assertTrue(titles, 'the scan found no ui.messageBox title '
+                        '-- the scan broke, not the product')
+        self.assertIn('Embody -- Uninstall', titles)
         for title in titles:
-            self.assertIn(title, body)
-            self.assertIn(title.strip("'"), leg.DIALOG_RESPONSES)
+            self.assertIn(title, leg.DIALOG_RESPONSES,
+                          '%r is raised by uninstall_handler but never '
+                          'seeded -- it answers -1 (a cancel)' % title)
 
     def test_the_seed_merges_and_keeps_the_bootstrap_sentinel(self):
         script = leg.uninstall_script()
@@ -896,15 +1103,28 @@ class TestDriversAndContract(_Case):
         self.assertIn(leg.SMOKE_SENTINEL, script)
         self.assertIn("'Embody -- Uninstall': 1", script)
 
-    def test_an_unwired_uninstall_button_fails_the_leg(self):
-        self.td.wiring = {'style': 'Pulse', 'routers': []}
+    def test_an_unreachable_handler_fails_the_leg(self):
+        """The handler is what the leg calls; a renamed or removed one is
+        the break, and it is reported before the uninstall is driven."""
+        self.td.wiring = {'style': 'Pulse', 'handler': False,
+                          'routers': ['parexec']}
         self.go()
         self.assertStepFailed('uninstall_button_wired')
-        self.assertIn('NOTHING',
+
+    def test_no_dat_naming_the_handler_is_reported_not_failed(self):
+        """parameters.md schedules the parexec elif chain's replacement by
+        a _on<Par>Pulse dispatcher. After it no DAT names uninstallHandler
+        and the product is healthy -- gating on that text is a false red."""
+        self.td.wiring = {'style': 'Pulse', 'handler': True, 'routers': []}
+        res = self.go()
+        self.assertStepOk('uninstall_button_wired')
+        self.assertTrue(res['ok'], res['error'])
+        self.assertIn('no DAT naming it',
                       self.step('uninstall_button_wired')['detail'])
 
     def test_a_non_pulse_uninstall_parameter_fails_the_leg(self):
-        self.td.wiring = {'style': 'Toggle', 'routers': ['parexec']}
+        self.td.wiring = {'style': 'Toggle', 'handler': True,
+                          'routers': ['parexec']}
         self.go()
         self.assertStepFailed('uninstall_button_wired')
 
