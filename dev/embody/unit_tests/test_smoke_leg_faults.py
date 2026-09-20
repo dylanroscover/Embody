@@ -1522,3 +1522,31 @@ class TestAskFollowsAMovedServer(_Case):
         self.ctx['py'] = never
         self.assertEqual(probe.ask(self.ctx, self.sm, 'x', 5.0, default='(none)'),
                          '(none)')
+
+
+class TestSettleAdoptsOnlyOurOwnServer(_Case):
+    """A socket that accepts proves nothing: our own server accepts before
+    the app serves, and another TouchDesigner accepts forever. settle used
+    to adopt on the TCP connect and check whose project it was afterwards,
+    so a foreign port captured the leg first and was rejected second."""
+
+    def test_a_port_serving_another_project_is_never_adopted(self):
+        was = self.ctx['port']
+        self.ctx['py'] = lambda code, timeout=30: (
+            'C:/someone/else/project' if 'project.folder' in code else '')
+        st = {'port': was, 'gen': 0, 'restore': []}
+        self.assertIsNone(probe.settle(self.ctx, self.sm, st, 5.0))
+        self.assertEqual(st['port'], was, 'the leg was repointed anyway')
+
+    def test_the_refusal_remembers_whose_it_was(self):
+        self.ctx['py'] = lambda code, timeout=30: (
+            'C:/someone/else/project' if 'project.folder' in code else '')
+        probe.settle(self.ctx, self.sm, {'port': self.ctx['port'], 'gen': 0,
+                                         'restore': []}, 5.0)
+        self.assertIn('else', self.ctx.get('_foreign_folder', ''))
+
+    def test_our_own_server_is_still_adopted(self):
+        st = {'port': 1, 'gen': 0, 'restore': []}
+        got = probe.settle(self.ctx, self.sm, st, 30.0)
+        self.assertTrue(got, 'the real run dir must still settle')
+        self.assertEqual(st['port'], got)

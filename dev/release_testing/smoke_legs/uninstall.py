@@ -391,7 +391,23 @@ def button_wiring(ctx):
         "    if 'uninstallHandler' in (_d.text or ''):\n"
         "        _out['routers'].append(_d.name)\n"
         "result = json.dumps(_out)\n")
-    return json.loads(str(ctx['py'](code)))
+    # First call after the feature handover: retry rather than let a
+    # blip escape the leg as an exception.
+    return json.loads(_read(ctx, code, '{}'))
+
+
+def _read(ctx, code, default, tries=4, sleep=None):
+    """execute_python that survives a momentarily absent server. The
+    uninstall leg runs after two legs that restart Envoy repeatedly."""
+    sleep = sleep or time.sleep
+    for attempt in range(tries):
+        try:
+            return str(ctx['py'](code))
+        except Exception:
+            if attempt == tries - 1:
+                return default
+            sleep(2.0)
+    return default
 
 
 def envoy_is_down(ctx, timeout=ENVOY_DOWN_TIMEOUT_S, clock=None, sleep=None):

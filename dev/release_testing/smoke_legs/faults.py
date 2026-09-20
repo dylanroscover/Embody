@@ -309,7 +309,14 @@ def _confirm_target(ctx, rec, sm, quiet=False) -> bool:
 def _settled(ctx, rec, sm, st, timeout, avoid=()):
     """Envoy answers again AND is still the smoke instance. None otherwise:
     the caller reports its own step, the gate failure is already recorded."""
+    ctx.pop('_foreign_folder', None)
     port = P.settle(ctx, sm, st, timeout, avoid)
+    if not port and ctx.get('_foreign_folder'):
+        # Settled on nothing, but something DID answer -- for someone else.
+        rec.check('leg.target', False,
+                  'a restart landed on %s, not the run dir -- nothing was '
+                  'injected' % ctx['_foreign_folder'])
+        return None
     if port and not _confirm_target(ctx, rec, sm, quiet=True):
         return None
     return port

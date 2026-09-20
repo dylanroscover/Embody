@@ -337,13 +337,20 @@ class _Upgrade:
         self._fail(step, f'{detail} within {window:.0f}s; last seen '
                          f'{_brief(last)}')
 
-    def _tool(self, name, arguments, key):
-        """One MCP read; None when the tool errors (itself a failure the
-        caller reports)."""
-        try:
-            return self.ctx['call'](name, arguments, 30).get(key)
-        except Exception:
-            return None
+    def _tool(self, name, arguments, key, tries=4):
+        """One MCP read, retried across a restart. None only when it never
+        answered -- and the callers treat None as a hard failure, so a
+        single dropped socket during a swap must not produce one.
+        """
+        for attempt in range(tries):
+            try:
+                return self.ctx['call'](name, arguments, 30).get(key)
+            except Exception:
+                if attempt == tries - 1:
+                    return None
+                self._reconnect()
+                self.sleep(_POLL_S)
+        return None
 
     def _errors(self):
         return self._tool('get_op_errors',

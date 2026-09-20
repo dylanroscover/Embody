@@ -395,9 +395,39 @@ def live_port(ctx, sm, avoid=()):
     return None
 
 
+def serves_run_dir(ctx, port) -> bool:
+    """Does the instance on `port` answer FOR THIS RUN DIR? A socket that
+    accepts proves nothing: our own server accepts before the app serves,
+    and another TouchDesigner would accept forever."""
+    here = ctx['port']
+    try:
+        ctx['set_port'](port)
+        folder = str(ctx['py']('result = project.folder'))
+        if same_path(folder, ctx['run_dir']):
+            return True
+        # Remember whose it was: refusing silently would lose the only
+        # evidence that a restart landed on another TouchDesigner.
+        ctx['_foreign_folder'] = folder
+        return False
+    except Exception:
+        return False
+    finally:
+        if ctx['port'] != here:
+            ctx['set_port'](here)
+
+
 def settle(ctx, sm, st, timeout, avoid=()):
-    """Wait for Envoy to answer again and point ctx's MCP calls at it."""
-    port = until(ctx, sm, lambda: live_port(ctx, sm, avoid), timeout, 2.0)
+    """Wait for Envoy to answer again and point ctx's MCP calls at it.
+
+    A candidate is adopted only once it SERVES this run dir -- checking
+    that after the repoint let a port that merely accepts capture the leg
+    first and be rejected second.
+    """
+    def candidate():
+        port = live_port(ctx, sm, avoid)
+        return port if port and serves_run_dir(ctx, port) else None
+
+    port = until(ctx, sm, candidate, timeout, 2.0)
     if port:
         st['port'] = port
         ctx['set_port'](port)

@@ -713,3 +713,37 @@ class TestFailureModes(_Case):
         self.assertFalse(res['ok'])
         self.assertIn('Envoy did not answer', res['error'])
         self.assertIsInstance(res['steps'], list)
+
+
+class TestToolReadsRetryAcrossASwap(_Case):
+    """_tool swallowed any exception into None, and both call sites turn
+    None into a HARD failure (_health asserts errors is not None; the
+    externalizations step compares two reads). A single dropped socket
+    during one of the leg's three swaps therefore red a healthy update."""
+
+    def _leg(self, call=None):
+        ctx = self._ctx()
+        if call is not None:
+            ctx['call'] = call
+        leg = upgrade._Upgrade(ctx, self.clock, self.clock.advance)
+        return leg
+
+    def test_a_dropped_call_is_retried_not_turned_into_a_failure(self):
+        calls = {'n': 0}
+        base = self._ctx()['call']
+
+        def flaky(name, arguments, timeout=30):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise OSError('Connection refused')
+            return base(name, arguments, timeout)
+        got = self._leg(flaky)._tool('get_op_errors', {'op_path': '/Embody'},
+                                     'errorCount')
+        self.assertIsNotNone(got, 'one blip must not read as a tool failure')
+        self.assertGreaterEqual(calls['n'], 2)
+
+    def test_a_read_that_never_answers_is_still_none(self):
+        def dead(*a, **k):
+            raise OSError('Connection refused')
+        self.assertIsNone(self._leg(dead)._tool('get_op_errors', {},
+                                                'errorCount'))
