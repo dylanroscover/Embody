@@ -1440,3 +1440,45 @@ class TestWedgeStandsDownAfterTheRevive(_Case):
         faults._fault_watchdog(self.ctx, self.rec, self.sm, self.st)
         step = self.step('watchdog.running')
         self.assertTrue(step['ok'], step['detail'])
+
+
+class TestReadsSurviveADisturbedServer(_Case):
+    """A repair or a restart closes the socket between two steps. A bare
+    ctx['py'] then raises URLError out of the leg instead of waiting for
+    the server it just disturbed (macOS CI 2026-09-20, Errno 61)."""
+
+    def test_ask_waits_out_a_refused_connection(self):
+        calls = {'n': 0}
+
+        def flaky(code, timeout=30):
+            calls['n'] += 1
+            if calls['n'] < 3:
+                raise OSError('Connection refused')
+            return 'answered'
+        ctx = dict(self.ctx, py=flaky)
+        self.assertEqual(probe.ask(ctx, self.sm, 'x', 60.0), 'answered')
+        self.assertGreaterEqual(calls['n'], 3)
+
+    def test_ask_returns_its_default_when_it_never_answers(self):
+        def dead(code, timeout=30):
+            raise OSError('Connection refused')
+        ctx = dict(self.ctx, py=dead)
+        self.assertEqual(probe.ask(ctx, self.sm, 'x', 5.0, default='(none)'),
+                         '(none)')
+
+    def test_the_venv_fault_survives_a_repair_that_drops_the_socket(self):
+        """The macOS shape: the repair restarts the server, so the read of
+        the repair state lands on a closed socket."""
+        real = self.td.py
+        state = {'drop': 2}
+
+        def dropping(code, timeout=30):
+            if 'sorted(getattr' in code and state['drop'] > 0:
+                state['drop'] -= 1
+                raise OSError('Connection refused')
+            return real(code, timeout)
+        self.td.py = dropping
+        self.ctx['py'] = dropping
+        self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                           self.st))
+        self.assertStepOk('venv.repair')

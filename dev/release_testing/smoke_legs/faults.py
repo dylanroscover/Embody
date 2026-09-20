@@ -303,12 +303,14 @@ def _settled(ctx, rec, sm, st, timeout, avoid=()):
     return port
 
 
-def _check_running(ctx, rec, step, port) -> bool:
+def _check_running(ctx, rec, sm, step, port) -> bool:
     """Envoy says Running on the port the leg is talking to, and answers.
     The port in the status has to BE that port: a status naming a dead port
     is the 6.36/6.37 wedge, not a recovery."""
-    status = str(ctx['py'](
-        "result = op.Embody.par.Envoystatus.eval()")).strip()
+    # Read through the waiting reader: this runs right after a restart.
+    status = P.ask(ctx, sm,
+                   "result = op.Embody.par.Envoystatus.eval()",
+                   60.0, default='(no answer)').strip()
     if not status.startswith('Running on port'):
         return rec.fail(step, 'Envoystatus is %r' % status)
     if status.split()[-1] != str(int(port)):
@@ -414,7 +416,8 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
         return bail('venv.repair', 'no success logged (embody_pyenv.py:1046)')
     back = P.until(ctx, sm, lambda: P.is_venv_command(P.mcp_command(run_dir),
                                                       run_dir), _UP_S, 2.0)
-    state = str(ctx['py'](_REPAIR_STATE))
+    # The repair restarts the server; wait it back rather than raising.
+    state = P.ask(ctx, sm, _REPAIR_STATE, _UP_S, default='(no answer)')
     now, healed = P.entries(site), P.home_of(P.read(cfg))
     # The invariant is that NOTHING was deleted: the running server is
     # importing from this site-packages. An addition is reported, not failed.
@@ -438,7 +441,7 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
         if not rec.check(step, good, detail):
             _restore(st)
             return False
-    if not _check_running(ctx, rec, 'venv.running', st['port']):
+    if not _check_running(ctx, rec, sm, 'venv.running', st['port']):
         _restore(st)
         return False
     # uv rewrote the interpreter that was displaced (venv.runs_again proved
@@ -469,7 +472,7 @@ def _fault_port(ctx, rec, sm, st) -> bool:
                                                          st['gen'])))
         rec.ok('port.fallback',
                'moved %d -> %d (_findAvailablePort)' % (old, port))
-        return _check_running(ctx, rec, 'port.running', port)
+        return _check_running(ctx, rec, sm, 'port.running', port)
     finally:
         try:
             held.close()
@@ -503,7 +506,9 @@ def _fault_watchdog(ctx, rec, sm, st) -> bool:
                    lambda: P.log_count(run_dir, _REVIVING) > seen, 30.0, 2.0)
     fired = [name for name, needle in _BRANCHES
              if P.log_count(run_dir, needle) > branch_before[name]]
-    on = str(ctx['py']("result = int(op.Embody.par.Envoyenable.eval())"))
+    on = P.ask(ctx, sm,
+               "result = int(op.Embody.par.Envoyenable.eval())",
+               60.0, default='(no answer)')
     for step, good, detail in (
             ('watchdog.revive', said,
              'revived on %d by the watchdog (_reviveDeadServer logged '
@@ -513,7 +518,7 @@ def _fault_watchdog(ctx, rec, sm, st) -> bool:
              'Envoyenable=%s throughout' % on.strip())):
         if not rec.check(step, good, detail):
             return False
-    return _check_running(ctx, rec, 'watchdog.running', port)
+    return _check_running(ctx, rec, sm, 'watchdog.running', port)
 
 
 # --- 4. corrupt instance registry ---
@@ -547,7 +552,7 @@ def _fault_registry(ctx, rec, sm, st) -> bool:
                      % (len(rows), port, pids)):
         _restore(st)
         return False
-    if not _check_running(ctx, rec, 'registry.running', port):
+    if not _check_running(ctx, rec, sm, 'registry.running', port):
         _restore(st)
         return False
     st['restore'] = []

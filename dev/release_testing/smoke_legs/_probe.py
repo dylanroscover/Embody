@@ -337,6 +337,15 @@ def defer(ctx, script, delay_ms=1500):
                      "result = 'scheduled'" % (script, int(delay_ms)))
 
 
+def ask(ctx, sm, code, timeout=60.0, default=''):
+    """execute_python that survives the server being down. A repair or a
+    restart can close the socket between two steps, and a bare ctx['py']
+    then raises URLError out of the leg instead of waiting for the thing
+    it just disturbed to come back (macOS CI 2026-09-20, Errno 61)."""
+    got = until(ctx, sm, lambda: (str(ctx['py'](code)),), timeout, 2.0)
+    return got[0] if got else default
+
+
 def until(ctx, sm, pred, timeout, poll=1.0):
     """Poll pred() until truthy, or None once `timeout` passed. Running out
     of the RUN's budget raises BudgetExhausted instead: a leg that outruns
