@@ -223,7 +223,7 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'prismatic-strata'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
-SELECT 'mandala' AS slug, 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf' AS repo_sha, 89703 AS repo_size,
+SELECT 'mandala' AS slug, 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b' AS repo_sha, 89571 AS repo_size,
   s.id AS specimen_id, u.handle AS author_handle,
   CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
   CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
@@ -231,7 +231,7 @@ SELECT 'mandala' AS slug, 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e
   s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
   s.thumbnail_key AS live_thumbnail_key, 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463' AS repo_thumbnail_key,
   (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
-     AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+     AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
   CASE WHEN s.id IS NULL THEN NULL WHEN (
       s.title IS NOT 'Serenity and Beauty'
    OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
@@ -244,7 +244,7 @@ SELECT 'mandala' AS slug, 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
