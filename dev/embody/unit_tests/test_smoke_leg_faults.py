@@ -622,9 +622,19 @@ class TestVenvFault(_Case):
         """uv may rewrite pyvenv.cfg's home with different separators."""
         self.assertTrue(faults._same_path(self.home.replace(os.sep, '/'),
                                           self.home))
-        self.assertTrue(faults._same_path(self.home.upper(), self.home))
         self.assertFalse(faults._same_path(self.home + '-gone', self.home))
         self.assertFalse(faults._same_path('', self.home))
+
+    def test_case_follows_the_filesystem_not_the_platform(self):
+        """Windows and a default APFS volume accept either case; a
+        case-sensitive volume does not. Asserting the Windows answer
+        everywhere reddened macos-latest (CI 2026-09-20), so ask the
+        filesystem the same question the code does."""
+        other = self.home.upper()
+        if other == self.home:
+            self.skipTest('temp path has no case to flip')
+        insensitive = os.path.isdir(other)
+        self.assertEqual(faults._same_path(other, self.home), insensitive)
 
     def test_a_missing_pyvenv_cfg_is_a_clean_failure(self):
         os.rename(self.td.cfg, self.td.cfg + '.away')

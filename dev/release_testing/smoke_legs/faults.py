@@ -237,12 +237,20 @@ def _settled(ctx, rec, sm, st, timeout, avoid=()):
 
 
 def _same_path(a, b) -> bool:
-    """Same existing directory, whatever the separators and case -- uv may
-    rewrite pyvenv.cfg's home with a different spelling of one path."""
+    """Same existing directory, whatever the spelling -- uv may rewrite
+    pyvenv.cfg's home with different separators, and a case-insensitive
+    volume (Windows, default APFS) accepts either case. samefile is the
+    only answer that holds on every platform: normcase folds case ONLY on
+    Windows, so a re-cased home compared unequal on macOS (CI
+    2026-09-20). normcase stays as the fallback for a home that no longer
+    exists to stat."""
     if not a or not os.path.isdir(a):
         return False
-    return (os.path.normcase(os.path.abspath(a))
-            == os.path.normcase(os.path.abspath(b)))
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return (os.path.normcase(os.path.abspath(a))
+                == os.path.normcase(os.path.abspath(b)))
 
 
 def _check_running(ctx, rec, step, port) -> bool:
