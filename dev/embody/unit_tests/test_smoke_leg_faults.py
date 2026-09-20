@@ -1482,3 +1482,29 @@ class TestReadsSurviveADisturbedServer(_Case):
         self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
                                            self.st))
         self.assertStepOk('venv.repair')
+
+
+class TestAskFollowsAMovedServer(_Case):
+    """A restart can MOVE Envoy. On macOS the repair bounced it
+    9870 -> 9871 -> 9870, and a reader pinned to the old port waited out
+    its whole budget against a healthy server (CI 2026-09-20)."""
+
+    def test_ask_re_points_at_the_registered_port(self):
+        moved = {'to': 9873}
+        self.td.write_registry(moved['to'])
+        self.td.listening = {moved['to']}
+
+        def only_on_new_port(code, timeout=30):
+            if self.ctx['port'] != moved['to']:
+                raise OSError('Connection refused')
+            return 'answered'
+        self.ctx['py'] = only_on_new_port
+        self.assertEqual(probe.ask(self.ctx, self.sm, 'x', 60.0), 'answered')
+        self.assertEqual(self.ctx['port'], moved['to'])
+
+    def test_ask_gives_up_when_no_registered_port_answers(self):
+        def never(code, timeout=30):
+            raise OSError('Connection refused')
+        self.ctx['py'] = never
+        self.assertEqual(probe.ask(self.ctx, self.sm, 'x', 5.0, default='(none)'),
+                         '(none)')

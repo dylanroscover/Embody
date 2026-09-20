@@ -338,11 +338,26 @@ def defer(ctx, script, delay_ms=1500):
 
 
 def ask(ctx, sm, code, timeout=60.0, default=''):
-    """execute_python that survives the server being down. A repair or a
-    restart can close the socket between two steps, and a bare ctx['py']
-    then raises URLError out of the leg instead of waiting for the thing
-    it just disturbed to come back (macOS CI 2026-09-20, Errno 61)."""
-    got = until(ctx, sm, lambda: (str(ctx['py'](code)),), timeout, 2.0)
+    """execute_python that survives the server being down OR MOVED.
+
+    A repair or a restart can close the socket between two steps, and a
+    bare ctx['py'] then raises URLError out of the leg instead of waiting
+    (macOS CI 2026-09-20, Errno 61). Retrying alone is not enough either:
+    the restart can bind a different port -- the same run bounced
+    9870 -> 9871 -> 9870 -- so a retry loop pinned to the old one waits out
+    its whole budget against a healthy server. Re-point from the registry
+    between attempts, which is rewritten on every bind.
+    """
+    def attempt():
+        try:
+            return (str(ctx['py'](code)),)
+        except Exception:
+            port = live_port(ctx, sm)
+            if port and port != ctx['port']:
+                ctx['set_port'](port)
+                ctx['port'] = port
+            raise
+    got = until(ctx, sm, attempt, timeout, 2.0)
     return got[0] if got else default
 
 
