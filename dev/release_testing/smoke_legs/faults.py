@@ -23,6 +23,7 @@ step fails; nothing outside run_dir is touched; run() reports, never raises.
 
 from __future__ import annotations
 
+import json
 import os
 
 from . import _probe as P
@@ -42,7 +43,18 @@ _GARBAGE = '{"instances": not-json,,, ]]] corrupted by the smoke faults leg\n'
 _FELL_BACK = 'using system Python'
 _BROKEN = 'does not run ('
 _REPAIRED = 'Venv interpreter repaired'
-_REVIVING = 'Watchdog: enabled but socket dead'
+# _reviveDeadServer's own line (EnvoyExt.py:6687). It is watchdog-only:
+# nothing but _watchdogTick calls it (EnvoyExt.py:6575, 6593), so it
+# proves the WATCHDOG revived the socket and not _scheduleRestart's
+# backoff -- while surviving which branch noticed. Pinning the
+# socket-dead branch alone went red on 2026-09-20: _scheduleRestart
+# rewrites Envoystatus ~1s after Stop(), so the tick found a stuck
+# status rather than a stale 'Running on port N' one.
+_REVIVING = 'unreachable while enabled'
+# One file per window generation; the re-enables append to it.
+_WINDOW_CRUMB = 'faults_window_%d.json'
+_BRANCHES = (('socket dead', 'Watchdog: enabled but socket dead'),
+             ('status stuck', 'Watchdog: status stuck at'))
 
 # The probe caches per venv path and the repair is capped at one attempt per
 # TD process; both have to go or the restart reuses the healthy answer taken
@@ -87,19 +99,68 @@ def _bump(st) -> int:
     return st['gen']
 
 
-def _window(up_ms, gen) -> str:
+def _window(up_ms, gen, run_dir='') -> str:
     """Envoyenable off, then back on after `up_ms` -- the only deterministic
     way to hold the port free for a fixed window. Stop() alone leaves
     Envoyenable True and the worker's exit hook auto-restarts ~1s later
-    (EnvoyExt._onServerSuccess:7637), far too soon to bind under it."""
+    (EnvoyExt._onServerSuccess:7637), far too soon to bind under it.
+
+    The re-enable is armed TWICE, on the wall clock and on frames: one
+    missed dispatch left Envoy down for the rest of the leg (live
+    2026-09-20, stop at frame 3634 with no re-enable after it), and with
+    the socket gone there is no MCP call left to rescue it. Both are
+    generation-guarded and skip a par that is already on, so whichever
+    fires second is a no-op. Each writes a breadcrumb naming what it saw,
+    so a window that never reopens says why instead of just timing out.
+    """
+    crumb = os.path.join(run_dir or '.', _WINDOW_CRUMB % int(gen))
     on = ("o = op.Embody\n"
-          "if o.fetch('_smoke_gen', 0) == %d:\n"
-          "    o.par.Envoyenable = True" % int(gen))
+          "g = o.fetch('_smoke_gen', 0)\n"
+          "was = int(o.par.Envoyenable.eval())\n"
+          "if g == %d and not was:\n"
+          "    o.par.Envoyenable = True\n"
+          "try:\n"
+          "    import json as _j\n"
+          "    with open(%r, 'a') as _f:\n"
+          "        _j.dump({'by': %%r, 'gen': g, 'want': %d, 'was': was}, _f)\n"
+          "        _f.write('\\n')\n"
+          "except Exception:\n"
+          "    pass" % (int(gen), crumb, int(gen)))
+    frames = max(1, int(round(int(up_ms) / 1000.0 * 60)))
     return ("o = op.Embody\n"
             "o.store('_smoke_gen', %d)\n"
             "o.par.Envoyenable = False\n"
-            "run(%r, fromOP=o, delayMilliSeconds=%d, wallTime=True)"
-            % (int(gen), on, int(up_ms)))
+            "run(%r, fromOP=o, delayMilliSeconds=%d, wallTime=True)\n"
+            "run(%r, fromOP=o, delayFrames=%d)"
+            % (int(gen), on % 'clock', int(up_ms), on % 'frames', frames))
+
+
+def _why_shut(run_dir, gen) -> str:
+    """Why the window never reopened, in one clause: which re-enable
+    dispatched, and what its guard saw. No crumb at all means TD never ran
+    either callback -- the failure mode that once read as a product bug."""
+    crumbs = _window_crumbs(run_dir, gen)
+    if not crumbs:
+        return ('neither re-enable dispatched (no breadcrumb) -- TD ran no '
+                'run() callback for generation %d' % int(gen))
+    return '; '.join('%s saw gen=%s enable=%s'
+                     % (c.get('by'), c.get('gen'), c.get('was'))
+                     for c in crumbs)
+
+
+def _window_crumbs(run_dir, gen) -> list:
+    """What the armed re-enables reported, oldest first."""
+    out = []
+    try:
+        for line in P.read(os.path.join(run_dir,
+                                        _WINDOW_CRUMB % int(gen))).splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    except OSError:
+        pass
+    return out
 
 
 def _watchdog_kill(port, gen) -> str:
@@ -246,12 +307,12 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
     # Restarting through the master switch, not a bare Stop(): Stop() alone
     # leaves the exit hook to auto-restart ~1s later (EnvoyExt.py:7637), a
     # window too short to observe the socket ever having closed.
-    P.defer(ctx, _window(15000, _bump(st)))
+    P.defer(ctx, _window(15000, _bump(st), ctx['run_dir']))
     if not _down(ctx, sm, old):
         return bail('venv.restart', 'port %d never closed' % old)
     if not _settled(ctx, rec, sm, st, _UP_S):
         return bail('venv.restart', 'Envoy never came back for this '
-                    'run dir')
+                    'run dir: %s' % _why_shut(ctx['run_dir'], st['gen']))
     rec.ok('venv.restart', 'stopped, then answering on %d' % st['port'])
     if not P.until(ctx, sm,
                    lambda: P.log_count(run_dir, _FELL_BACK) > fell, 60.0, 2.0):
@@ -297,7 +358,7 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
 
 def _fault_port(ctx, rec, sm, st) -> bool:
     old = st['port']
-    P.defer(ctx, _window(15000, _bump(st)))
+    P.defer(ctx, _window(15000, _bump(st), ctx['run_dir']))
     # Bind-retry rather than free-then-bind: the gap between a free check
     # and the bind is exactly where Envoy could take the port back.
     held = P.until(ctx, sm, lambda: sm['hold'](old), _DOWN_S)
@@ -310,8 +371,9 @@ def _fault_port(ctx, rec, sm, st) -> bool:
         port = _settled(ctx, rec, sm, st, _UP_S, avoid=(old,))
         if not port:
             return rec.fail('port.fallback',
-                            'never came back for this run dir '
-                            'while %d was held' % old)
+                            'never came back for this run dir while %d was '
+                            'held: %s' % (old, _why_shut(ctx['run_dir'],
+                                                         st['gen'])))
         rec.ok('port.fallback',
                'moved %d -> %d (_findAvailablePort)' % (old, port))
         return _check_running(ctx, rec, 'port.running', port)
@@ -334,6 +396,8 @@ def _fault_watchdog(ctx, rec, sm, st) -> bool:
     P.defer(ctx, _watchdog_kill(old, _bump(st)))
     if not _down(ctx, sm, old):
         return rec.fail('watchdog.kill', 'port %d never closed' % old)
+    branch_before = {name: P.log_count(run_dir, needle)
+                     for name, needle in _BRANCHES}
     rec.ok('watchdog.kill', "socket %d closed; the same script left the "
                             "status at 'Running on port %d'" % (old, old))
     port = _settled(ctx, rec, sm, st, _REVIVE_S)
@@ -343,10 +407,14 @@ def _fault_watchdog(ctx, rec, sm, st) -> bool:
                         'within %.0fs' % _REVIVE_S)
     said = P.until(ctx, sm,
                    lambda: P.log_count(run_dir, _REVIVING) > seen, 30.0, 2.0)
+    fired = [name for name, needle in _BRANCHES
+             if P.log_count(run_dir, needle) > branch_before[name]]
     on = str(ctx['py']("result = int(op.Embody.par.Envoyenable.eval())"))
     for step, good, detail in (
             ('watchdog.revive', said,
-             'revived on %d, and the log says the watchdog did it' % port),
+             'revived on %d by the watchdog (_reviveDeadServer logged '
+             '%r); branch: %s' % (port, _REVIVING,
+                                  ', '.join(fired) or 'none logged')),
             ('watchdog.enable_flag', on.strip() == '1',
              'Envoyenable=%s throughout' % on.strip())):
         if not rec.check(step, good, detail):
@@ -364,7 +432,7 @@ def _fault_registry(ctx, rec, sm, st) -> bool:
     # Corrupt it only once the server is DOWN: a live Stop() reads the file
     # on its way out, and any healthy rewrite before Start would leave
     # nothing for write_envoy_config to prove.
-    P.defer(ctx, _window(15000, _bump(st)))
+    P.defer(ctx, _window(15000, _bump(st), ctx['run_dir']))
     if not _down(ctx, sm, old):
         return rec.fail('registry.inject', 'port %d never closed' % old)
     P.write(path, _GARBAGE)

@@ -29,6 +29,7 @@ on:
       - 'release/Embody-v*.tox'
       - 'dev/release_testing/smoke_run.py'
       - 'dev/release_testing/smoke_bootstrap.py'
+      - 'dev/release_testing/smoke_legs/**'
       - 'dev/release_testing/smoke_template.toe'
       - 'dev/embody/Embody/**'
       - '.github/workflows/release-smoke.yml'
@@ -58,19 +59,24 @@ jobs:
     concurrency:
       group: release-smoke-${{ matrix.os }}
       cancel-in-progress: false
-    # ready ~7 min + features ~6 min + probe + a cold venv build, with room
-    # for a laptop that is awake but busy. A sleeping Mac never starts the
-    # job, so this only bounds a job that did start.
-    timeout-minutes: 25
+    # ready ~7 min + features ~6 min + probe + a cold venv build, then the
+    # upgrade / faults / uninstall legs (~10 min together), with room for a
+    # laptop that is awake but busy. A sleeping Mac never starts the job,
+    # so this only bounds a job that did start.
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The upgrade leg installs the PREVIOUS release first, extracted
+          # from git history by tag (smoke_run.previous_release); a depth-1
+          # checkout has neither the tags nor the blobs.
+          fetch-depth: 0
 
-      - name: Fresh-install smoke
-        run: ${{ matrix.python }} dev/release_testing/smoke_run.py --out "${{ runner.temp }}"
+      - name: Fresh-install smoke + upgrade, faults, uninstall legs
+        run: ${{ matrix.python }} dev/release_testing/smoke_run.py --out "${{ runner.temp }}" --legs upgrade,faults,uninstall
 
       - name: Upload run directory
         if: always()
@@ -85,3 +91,7 @@ jobs:
             ${{ runner.temp }}/embody-smoke/*/td-console.log
             ${{ runner.temp }}/embody-smoke/*/bootstrap.log
             ${{ runner.temp }}/embody-smoke/*/logs/*.log
+            ${{ runner.temp }}/embody-smoke/*/uninstall_summary.json
+            ${{ runner.temp }}/embody-smoke/*/faults_backup/*
+            ${{ runner.temp }}/embody-smoke/*/.embody/envoy.json
+            ${{ runner.temp }}/embody-smoke/*/.mcp.json

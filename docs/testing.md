@@ -112,6 +112,54 @@ Exit codes: **0** every verdict PASS, **1** a verdict failed, **2** the smoke
 could not run (no TouchDesigner, bad manifest, no flag by the deadline). 2 is
 deliberately not 0 -- a run that never happened must never read as green.
 
+#### Release legs: `--legs upgrade,faults,uninstall`
+
+After the fresh-install verdict and the MCP probe, `--legs` runs extra legs
+against the same smoke TD -- always in this order, whatever the flag lists
+(`dev/release_testing/smoke_legs/`, one module per leg; the contract is its
+`__init__.py` docstring). The release gate is all three:
+
+- **`upgrade`** -- the run first installs the PREVIOUS release (the asset
+  extracted from git history by tag, or `--upgrade-from <tag|tox>`), then the
+  leg drives that build's own self-updater to the build under test: a real
+  `ApplyUpdate` (backup export, in-place swap, `VerifyUpdate`), the
+  leftover-sentinel recovery back to the backup (`VerifyRollback`), then a
+  second update so the project ends on the new build. Hermetic: the manifest
+  and the asset come from the checkout, never GitHub. Proof is the component's
+  identity (a fingerprint of the extension DATs, a new `EmbodyExt` op id, the
+  cleared sentinel), 0 errors, Envoy running and the externalization table
+  intact -- never `Updatestatus`, which the reloaded component's own startup
+  check overwrites within seconds.
+- **`faults`** -- breaks four things Embody claims to self-heal and proves each
+  recovery from the run's files and logs: a venv interpreter that no longer
+  runs (system-Python fallback, then the in-place repair -- site-packages
+  count unchanged, `.mcp.json` pointing back at the venv), an occupied port
+  (Envoy moves), a dead socket while `Envoyenable` stays on (the liveness
+  watchdog revives it -- the watchdog's log line is the proof, not the
+  comeback), and a corrupt `.embody/envoy.json` (rewritten valid). Every kill
+  is deferred through `run()`, every corrupted file is copied to
+  `faults_backup/` first, and nothing is injected until the port answers for
+  the run directory.
+- **`uninstall`** -- removes Embody the way a user does, then checks what
+  survives. It plants four pieces of USER content first (a plain file, a
+  hand-written rule inside Embody's own `.claude/rules/`, a second server
+  in `.mcp.json`, a key in `settings.local.json`), takes the plan from
+  `PreviewUninstall`, drives the real `Uninstall`, then reads the answer
+  off the filesystem -- Embody stops Envoy on its way out, so nothing
+  after that can be an MCP call and the in-TD side hands its summary back
+  through a file. The plan has to come from `.embody/manifest.json` (a
+  file Embody recorded creating appears in it; a file the user wrote never
+  does), the externalized `.tdxn`/`.tox`/`.py` and the `.toe` have to
+  survive, and every Embody-owned file in the repo checkout is hashed
+  before and after -- the fence for the 2026-07-27 incident, where a smoke
+  rooted in the repo stripped 16 committed files. The leg deletes nothing
+  itself.
+
+A failed `upgrade` or `faults` leg stops the chain (a project in an unknown
+state proves nothing about uninstall). Any failed leg is a FAIL verdict (exit
+1); the summary prints the failed step, and every leg's steps land in
+`result.json` under `legs`. The CI workflow runs all three on every push.
+
 Two things to know before starting one:
 
 - **The Convoy leg installs and starts the real per-user Convoy host app** on
@@ -314,6 +362,9 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_config_migration` | 41 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`), and retiring the old `.tdxn` git diff driver |
 | `test_embody_pyenv` | 79 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection, the venv interpreter probe and in-place repair |
 | `test_smoke_run` | 70 | The fresh-install smoke orchestrator and the pure helpers of its in-TD bootstrap: manifest-driven `.tox` selection, seeded-dialog parity + sentinel, sidecar/flag directory, flag parsing (PENDING vs SKIP), staging, the MCP probe with an injected transport (identity check, fail-closed replies, delete verification, budget), the pid ownership guard and the quit ladder, exit codes |
+| `test_smoke_leg_upgrade` | 39 | The `upgrade` smoke leg on a scripted TD: staged asset, `ApplyUpdate` driven through the product API, the port re-read across a swap, identity/health/rollback failure modes, a busy updater, a foreign project on the port |
+| `test_smoke_leg_faults` | 67 | The `faults` smoke leg on a fake TD (fake clock, fake ports, a real temp run dir): each of the four recoveries is a switch a test flips off, deferred-only kills, the target gate, the probe kit |
+| `test_smoke_leg_uninstall` | 81 | The `uninstall` smoke leg on a fake TD with a real run directory: the manifest-derived plan, planted user content that must survive, the summary handed back through a file once Envoy dies, the run-dir and plan-root gates, and the repo-checkout fence |
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |

@@ -210,6 +210,37 @@ def previous_release(repo, current_version, dest_dir, tag=None, run=None):
 # 2. staging
 # ---------------------------------------------------------------------------
 
+def check_out_dir(out, repo):
+    """Raise unless `out` is a safe home for run directories."""
+    if _inside(out, repo):
+        raise SmokeSetupError(
+            f'refusing to stage inside the repo ({out}); pass --out outside '
+            f'{repo}')
+    checkout = _git_checkout_above(out) if os.path.exists(out) else \
+        _git_checkout_above(os.path.dirname(os.path.abspath(out)))
+    if checkout:
+        raise SmokeSetupError(
+            f'refusing to stage inside a git checkout ({checkout}); the smoke '
+            f'would deploy its AI config there')
+
+
+BASE_TIMEOUT_S = 900.0
+LEG_TIMEOUT_S = 500.0
+
+
+def run_timeout(explicit, legs):
+    """The run's overall ceiling. Startup alone can spend READY + FEATURES
+    (780s) before a leg starts, so each requested leg buys its own headroom:
+    a --legs run on the bare 900s ceiling reached its legs with almost
+    nothing left, and a leg out of clock reports inconclusive, which is not
+    a gate (field 2026-09-20). Keep it under the CI job's timeout-minutes so
+    the run writes result.json rather than being killed mid-leg.
+    """
+    if explicit is not None:
+        return float(explicit)
+    return BASE_TIMEOUT_S + LEG_TIMEOUT_S * len(legs or ())
+
+
 def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
     """A fresh run directory under `out`: harness files + sidecar.
 
@@ -225,16 +256,7 @@ def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
     """
     platform = platform or sys.platform
     now = now or time.time
-    if _inside(out, repo):
-        raise SmokeSetupError(
-            f'refusing to stage inside the repo ({out}); pass --out outside '
-            f'{repo}')
-    checkout = _git_checkout_above(out) if os.path.exists(out) else \
-        _git_checkout_above(os.path.dirname(os.path.abspath(out)))
-    if checkout:
-        raise SmokeSetupError(
-            f'refusing to stage inside a git checkout ({checkout}); the smoke '
-            f'would deploy its AI config there')
+    check_out_dir(out, repo)
     stamp = time.strftime('%Y%m%d-%H%M%S', time.localtime(now()))
     base = os.path.join(os.path.abspath(out), 'embody-smoke')
     run_id = f'{platform}-{stamp}'
@@ -365,22 +387,75 @@ def owns_process(pid, run_dir, cmdline=None, realpath=None, is_td=None):
     return any(w and w in have for w in wants)
 
 
-def _mcp_quit(port):
+def teardown_port(run_dir, ready_port, registry=None):
+    """The port to ask for a quit. A leg may move Envoy (the faults leg
+    does), so the boot-time port can answer for something else by
+    teardown; the run's own registry is what tracks the move."""
+    registry = registry or registry_ports
+    for port in registry(run_dir):
+        return port
+    return ready_port
+
+
+def registry_ports(run_dir):
+    """Ports registered in this run's .embody/envoy.json, active first."""
+    try:
+        with open(os.path.join(run_dir, '.embody', 'envoy.json'),
+                  encoding='utf-8') as f:
+            data = json.load(f)
+        rows = data.get('instances') or {}
+        names = ([data.get('active')] if data.get('active') in rows else [])
+        names += [n for n in rows if n != data.get('active')]
+        return [int(rows[n]['port']) for n in names
+                if isinstance(rows.get(n), dict) and rows[n].get('port')]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _mcp_quit(port, run_dir=None):
     """Ask the smoke instance's own Envoy to quit TD, deferred out of the
     request stack (the pattern EnvoyExt's Convoy quit uses) so the reply
     returns before the process goes away. project.quit(force=True) skips
-    the save prompt a modified project would otherwise block on."""
+    the save prompt a modified project would otherwise block on.
+
+    Refuses unless the instance answers for `run_dir`: the message is a
+    forced quit, and a port that drifted (or was taken over after a leg
+    moved Envoy) would otherwise take down a developer's session.
+    """
     _rpc(f'http://127.0.0.1:{int(port)}/mcp',
          {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
           'params': {'protocolVersion': '2025-06-18', 'capabilities': {},
                      'clientInfo': {'name': 'smoke_run', 'version': '1'}}},
          10)
+    if run_dir:
+        got = _tool_result(_rpc(
+            f'http://127.0.0.1:{int(port)}/mcp',
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+             'params': {'name': 'execute_python',
+                        'arguments': {'code': 'result = project.folder'}}},
+            10))
+        folder = str(got.get('result') or '')
+        if not _same_dir(folder, run_dir):
+            raise SmokeSetupError(
+                f'port {port} answers for {folder!r}, not {run_dir} -- '
+                f'refusing to send it a forced quit')
     _rpc(f'http://127.0.0.1:{int(port)}/mcp',
          {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
           'params': {'name': 'execute_python', 'arguments': {
               'code': 'run("project.quit(force=True)", delayFrames=3)\n'
                       'result = "quit scheduled"'}}},
          15)
+
+
+def _same_dir(a, b):
+    """Same directory, whatever the spelling -- TD reports project.folder
+    with forward slashes, and macOS temp paths have a /private twin."""
+    if not a or not b:
+        return False
+    return bool({os.path.normcase(os.path.abspath(a)),
+                 os.path.normcase(os.path.realpath(a))}
+                & {os.path.normcase(os.path.abspath(b)),
+                   os.path.normcase(os.path.realpath(b))})
 
 
 def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
@@ -416,7 +491,7 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
                            f'command line -- left running, not ours to quit'}
     if port:
         try:
-            mcp_quit(port)
+            mcp_quit(port, run_dir)
             deadline = clock() + QUIT_TIMEOUT_S
             while clock() < deadline:
                 if not alive(pid):
@@ -442,7 +517,7 @@ def parse_ready(text):
     """ready.flag -> dict. `split('=', 1)`: the problems line itself may
     hold '=' and ';'."""
     out = {}
-    for line in text.lstrip('﻿').splitlines():
+    for line in text.lstrip('\ufeff').splitlines():
         if '=' in line:
             k, v = line.split('=', 1)
             out[k.strip()] = v.strip()
@@ -911,8 +986,9 @@ def main(argv=None):
     ap.add_argument('--out', default=(os.environ.get('RUNNER_TEMP')
                                       or tempfile.gettempdir()),
                     help='where run directories go (never inside the repo)')
-    ap.add_argument('--timeout', type=float, default=900,
-                    help='overall ceiling in seconds')
+    ap.add_argument('--timeout', type=float, default=None,
+                    help='overall ceiling in seconds (default: 900, '
+                         'plus 500 per --legs leg)')
     ap.add_argument('--no-mcp', action='store_true',
                     help='skip the MCP probe')
     ap.add_argument('--keep-td', action='store_true',
@@ -940,6 +1016,10 @@ def main(argv=None):
     except ValueError as e:
         print(f'[smoke_run] {e}', file=sys.stderr)
         return 2
+    timeout = run_timeout(args.timeout, legs)
+    if legs:
+        print(f'[smoke_run] legs {",".join(legs)}; ceiling {timeout:.0f}s',
+              file=sys.stderr)
     pid = None
     proc = None
     console = None
@@ -956,6 +1036,9 @@ def main(argv=None):
         if warning:
             print(f'[smoke_run] {warning}', file=sys.stderr)
         build['repo'] = repo
+        # Staging refuses an --out inside the repo or any checkout; take
+        # that verdict BEFORE previous_release extracts a tox into it.
+        check_out_dir(args.out, repo)
         upgrade_from = None
         install_tox = None
         if 'upgrade' in legs:
@@ -991,7 +1074,7 @@ def main(argv=None):
         print(f'[smoke_run] launched TouchDesigner pid {pid}', file=sys.stderr)
 
         def budget():
-            return max(0.0, args.timeout - (time.monotonic() - t0))
+            return max(0.0, timeout - (time.monotonic() - t0))
 
         # The bootstrap writes the flag atomically; `tox=` is its last line,
         # so requiring it guards against an older bootstrap that still
@@ -1052,7 +1135,8 @@ def main(argv=None):
     # verdict failed) for what is really "could not run".
     try:
         if pid is not None and not args.keep_td:
-            port = (result['ready'] or {}).get('envoy_port')
+            port = teardown_port(run['dir'],
+                                 (result['ready'] or {}).get('envoy_port'))
             result['teardown'] = quit_smoke_td(
                 pid, run['dir'], port,
                 reap=(lambda p: proc.poll()) if proc is not None else None)

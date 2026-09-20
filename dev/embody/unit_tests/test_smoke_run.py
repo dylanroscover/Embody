@@ -729,8 +729,9 @@ class TestQuitSmokeTd(_Case):
         t = {'now': 0.0}
         state = {'alive': True, 'mcp_calls': 0, 'hard_calls': 0}
 
-        def mcp_quit(p):
+        def mcp_quit(p, run_dir=None):
             state['mcp_calls'] += 1
+            state['quit_run_dir'] = run_dir
             if not mcp_ok:
                 raise OSError('refused')
 
@@ -767,6 +768,13 @@ class TestQuitSmokeTd(_Case):
         self.assertTrue(r['ok'])
         self.assertEqual(r['method'], 'mcp')
         self.assertEqual(state['hard_calls'], 0)
+
+    def test_the_quit_carries_the_run_dir_for_the_identity_gate(self):
+        # _mcp_quit refuses a port that answers for another project: the
+        # message is project.quit(force=True), and a leg may have moved
+        # Envoy off the boot-time port.
+        r, state = self._quit()
+        self.assertEqual(state['quit_run_dir'], self.root)
 
     def test_falls_back_to_pid_scoped_quit_and_names_the_force(self):
         r, state = self._quit(mcp_ok=False)
@@ -879,3 +887,128 @@ class TestLogsAndConvoyState(_Case):
             'darwin', env={}, home='/Users/x'))
         self.assertIn('.local', smoke.convoy_data_dir(
             'linux', env={}, home='/home/x'))
+
+
+class TestRunCeiling(_Case):
+    """The overall ceiling scales with --legs. A --legs run on the bare 900s
+    ceiling reached its legs with almost nothing left, and a leg that runs
+    out of clock reports inconclusive -- which is not a gate."""
+
+    def test_a_bare_run_keeps_the_historic_ceiling(self):
+        self.assertEqual(smoke.run_timeout(None, ()), 900.0)
+
+    def test_every_leg_buys_its_own_headroom(self):
+        self.assertEqual(smoke.run_timeout(None, ('upgrade',)), 1400.0)
+        self.assertEqual(smoke.run_timeout(
+            None, ('upgrade', 'faults', 'uninstall')), 2400.0)
+
+    def test_the_ceiling_stays_under_the_ci_job_timeout(self):
+        # release-smoke.yml sets timeout-minutes: 45. The RUN must expire
+        # first, so the job writes result.json instead of being killed with
+        # no evidence. Raising one without the other breaks that.
+        self.assertLess(smoke.run_timeout(
+            None, ('upgrade', 'faults', 'uninstall')), 45 * 60)
+
+    def test_an_explicit_timeout_still_wins(self):
+        self.assertEqual(smoke.run_timeout(7.0, ('upgrade', 'faults')), 7.0)
+        self.assertEqual(smoke.run_timeout(0, ('upgrade',)), 0.0)
+
+
+class TestOutDirGuard(_Case):
+    """check_out_dir is taken BEFORE previous_release extracts a tox, so a
+    refused --out never gets written to."""
+
+    def test_a_plain_temp_dir_is_accepted(self):
+        out = os.path.join(self.root, 'runs')
+        self.assertIsNone(smoke.check_out_dir(out, os.path.join(
+            self.root, 'repo')))
+
+    def test_inside_the_repo_is_refused(self):
+        repo = os.path.join(self.root, 'repo')
+        os.makedirs(repo, exist_ok=True)
+        with self.assertRaises(smoke.SmokeSetupError) as cm:
+            smoke.check_out_dir(os.path.join(repo, 'tmp'), repo)
+        self.assertIn('inside the repo', str(cm.exception))
+
+    def test_any_git_checkout_is_refused(self):
+        other = os.path.join(self.root, 'other')
+        os.makedirs(os.path.join(other, '.git'), exist_ok=True)
+        with self.assertRaises(smoke.SmokeSetupError) as cm:
+            smoke.check_out_dir(os.path.join(other, 'runs'),
+                                os.path.join(self.root, 'repo'))
+        self.assertIn('git checkout', str(cm.exception))
+
+    def test_staging_still_refuses_through_the_shared_guard(self):
+        repo = os.path.join(self.root, 'repo')
+        os.makedirs(repo, exist_ok=True)
+        with self.assertRaises(smoke.SmokeSetupError):
+            smoke.stage_run(repo, {'tox': 'x', 'version': '1'},
+                            os.path.join(repo, 'out'))
+
+
+class TestTeardownPort(_Case):
+    """Which port teardown asks to quit. The faults leg deliberately moves
+    Envoy, so the boot-time port can belong to something else by then."""
+
+    def _registry(self, data):
+        d = os.path.join(self.root, '.embody')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, 'envoy.json'), 'w') as f:
+            json.dump(data, f)
+
+    def test_the_registered_port_wins_over_the_boot_port(self):
+        self._registry({'active': 'a',
+                        'instances': {'a': {'port': 9873, 'td_pid': 7}}})
+        self.assertEqual(smoke.teardown_port(self.root, 9871), 9873)
+
+    def test_the_active_instance_is_preferred(self):
+        self._registry({'active': 'b', 'instances': {
+            'a': {'port': 9871}, 'b': {'port': 9875}}})
+        self.assertEqual(smoke.teardown_port(self.root, 9871), 9875)
+
+    def test_a_missing_or_broken_registry_falls_back_to_the_boot_port(self):
+        self.assertEqual(smoke.teardown_port(self.root, 9871), 9871)
+        self._registry({'instances': 'not a dict'})
+        self.assertEqual(smoke.teardown_port(self.root, 9871), 9871)
+        with open(os.path.join(self.root, '.embody', 'envoy.json'), 'w') as f:
+            f.write('{ not json')
+        self.assertEqual(smoke.teardown_port(self.root, 9871), 9871)
+
+
+class TestQuitIdentityGate(_Case):
+    """A forced quit never goes to a port that answers for another
+    project -- the same gate the MCP probe and the legs take."""
+
+    def _mcp_quit(self, folder):
+        calls = []
+
+        def rpc(url, payload, timeout):
+            calls.append(payload)
+            name = (payload.get('params') or {}).get('name')
+            if name != 'execute_python':
+                return {'jsonrpc': '2.0', 'id': payload.get('id'),
+                        'result': {}}
+            return {'jsonrpc': '2.0', 'id': payload.get('id'), 'result': {
+                'content': [{'type': 'text',
+                             'text': json.dumps({'result': folder})}]}}
+        orig = smoke._rpc
+        smoke._rpc = rpc
+        try:
+            smoke._mcp_quit(9871, self.root)
+        finally:
+            smoke._rpc = orig
+        return calls
+
+    def test_a_matching_project_folder_is_quit(self):
+        calls = self._mcp_quit(self.root.replace(os.sep, '/'))
+        sent = [json.dumps(c) for c in calls]
+        self.assertTrue(any('project.quit' in s for s in sent), sent)
+
+    def test_a_foreign_project_folder_is_refused(self):
+        with self.assertRaises(smoke.SmokeSetupError) as cm:
+            self._mcp_quit('C:/Users/someone/dev/their-project')
+        self.assertIn('refusing', str(cm.exception))
+
+    def test_an_unreadable_answer_is_refused(self):
+        with self.assertRaises(smoke.SmokeSetupError):
+            self._mcp_quit('')

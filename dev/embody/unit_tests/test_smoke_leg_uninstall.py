@@ -1173,3 +1173,34 @@ class TestDriversAndContract(_Case):
         Uninstall is the liveness probe, which is expected to fail."""
         res = self.go()
         self.assertTrue(res['ok'], res['error'])
+
+
+class TestVenvVerdictIsNotDoubleCounted(_Case):
+    """venv_removed owns the venv's verdict. generated_removed counting it
+    too made a correct uninstall red: live 2026-09-20 the .venv directory
+    outlived it holding 7 loaded .pyd files Windows will not unlink, while
+    everything removable was gone."""
+
+    def _locked_venv(self):
+        self.td.keep_venv = True
+
+        def locked():
+            _FakeTD.uninstall(self.td)
+            os.remove(os.path.join(self.run_dir, '.venv/pyvenv.cfg'))
+        self.td.uninstall = locked
+
+    def test_a_locked_venv_does_not_also_red_generated_removed(self):
+        self._locked_venv()
+        self.go()
+        self.assertStepOk('venv_removed')
+        self.assertStepOk('generated_removed')
+        self.assertIn('venv left to venv_removed',
+                      self.step('generated_removed')['detail'])
+
+    def test_a_non_venv_leftover_still_fails_it(self):
+        """The exclusion is the venv path alone, not a blanket amnesty."""
+        self._locked_venv()
+        self.td.leave_planned = 'AGENTS.md'
+        self.go()
+        self.assertStepFailed('generated_removed')
+        self.assertIn('AGENTS.md', self.step('generated_removed')['detail'])

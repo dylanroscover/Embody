@@ -96,6 +96,8 @@ class _FakeTD:
         self.move_port = True
         self.watchdog = True
         self.watchdog_logs = True
+        self.watchdog_revive_logs = True
+        self.watchdog_branch = 'socket dead'
         self.fix_registry = True
         self.write_registry(port)
         self.write_mcp(self.venv_python)
@@ -252,10 +254,23 @@ class _FakeTD:
         if not self.watchdog:
             return
         if self.watchdog_logs:
-            self.at(12.0, lambda: self.log(
-                "WARNING Watchdog: enabled but socket dead (status 'Running "
-                "on port %d') -- reviving" % self.last_port))
+            self.at(12.0, self._watchdog_logs)
         self.start(14.0)
+
+    def _watchdog_logs(self):
+        """Both lines the product writes: the branch that noticed, then
+        _reviveDeadServer's own (EnvoyExt.py:6687). Only the second is
+        proof -- nothing but _watchdogTick reaches it."""
+        if self.watchdog_branch == 'socket dead':
+            self.log("WARNING Watchdog: enabled but socket dead (status "
+                     "'Running on port %d') -- reviving" % self.last_port)
+        else:
+            self.log("WARNING Watchdog: status stuck at 'Restarting "
+                     "(attempt 8)...' ~24s while enabled -- forcing restart")
+        if self.watchdog_revive_logs:
+            self.log("WARNING Watchdog: MCP socket on port %d unreachable "
+                     "while enabled (running=True) -- reviving server"
+                     % self.last_port)
 
     # --- the ctx callables -------------------------------------------
     @staticmethod
@@ -418,16 +433,37 @@ class TestInjectionScripts(_Case):
         self.assertLess(script.index("store('envoy_running', True)"),
                         script.index('Envoystatus'))
 
-    def test_window_turns_the_master_switch_off_then_back_on_once(self):
-        """One re-enable, guarded by the generation it was armed under: the
-        second backstop this used to carry fired inside a LATER fault."""
-        script = faults._window(15000, 4)
+    def test_window_arms_the_re_enable_on_two_independent_clocks(self):
+        """One dispatch is a single point of failure: live 2026-09-20 the
+        stop landed and the re-enable never did, and with the socket gone
+        there was no MCP call left to rescue it. Both are guarded by the
+        generation they were armed under, and both skip a par already on,
+        so whichever fires second is a no-op."""
+        script = faults._window(15000, 4, 'C:/run')
         self.assertIn('o.par.Envoyenable = False', script)
-        self.assertEqual(script.count('Envoyenable = True'), 1)
-        self.assertEqual(script.count('delayMilliSeconds'), 1)
-        self.assertIn('delayMilliSeconds=15000', script)
+        self.assertEqual(script.count('delayMilliSeconds=15000'), 1)
+        self.assertEqual(script.count('delayFrames=900'), 1)
+        self.assertEqual(script.count('Envoyenable = True'), 2)
+        self.assertEqual(script.count('if g == 4 and not was:'), 2)
         self.assertIn("store('_smoke_gen', 4)", script)
-        self.assertIn("if o.fetch('_smoke_gen', 0) == 4:", script)
+        for part in ("'by': 'clock'", "'by': 'frames'"):
+            self.assertIn(part, script)
+
+    def test_every_armed_script_compiles(self):
+        for script in (faults._window(15000, 4, 'C:/run'),
+                       faults._watchdog_kill(9871, 5)):
+            compile(script, '<armed>', 'exec')
+
+    def test_a_window_that_never_reopened_names_the_reason(self):
+        """No breadcrumb means TD dispatched neither callback -- the
+        failure that first read as a product bug."""
+        self.assertIn('neither re-enable dispatched',
+                      faults._why_shut(self.root, 9))
+        probe.write(os.path.join(self.root, faults._WINDOW_CRUMB % 9),
+                    '{"by": "clock", "gen": 8, "was": 1}' + chr(10))
+        why = faults._why_shut(self.root, 9)
+        self.assertIn('clock saw gen=8', why)
+        self.assertIn('enable=1', why)
 
     def test_a_timer_from_an_earlier_fault_cannot_re_enable_envoy(self):
         """The frame-exact failure this guard exists for: fault 1's timer
@@ -979,3 +1015,27 @@ class TestProbeKit(_Case):
         rec.check('b', 0, 'nope')
         self.assertEqual([(s['step'], s['ok']) for s in rec.steps],
                          [('a', True), ('b', False)])
+
+
+class TestWatchdogProof(_Case):
+    """Fault 3 proves the WATCHDOG revived the socket, not the restart
+    backoff. The proof is _reviveDeadServer's line, which only
+    _watchdogTick reaches (EnvoyExt.py:6575, 6593 -> 6687), never the
+    branch that happened to notice."""
+
+    def test_the_status_stuck_branch_is_also_proof(self):
+        # Live 2026-09-20: _scheduleRestart rewrote Envoystatus ~1s after
+        # Stop(), so the tick found a stuck status, not a stale one. The
+        # watchdog still revived it; pinning the other branch went red.
+        self.td.watchdog_branch = 'status stuck'
+        self.assertTrue(faults._fault_watchdog(self.ctx, self.rec, self.sm,
+                                               self.st))
+        self.assertStepOk('watchdog.revive')
+        self.assertIn('status stuck', self.step('watchdog.revive')['detail'])
+
+    def test_a_branch_line_without_the_revive_line_is_not_proof(self):
+        self.td.watchdog_revive_logs = False
+        self.td.watchdog_branch = 'status stuck'
+        self.assertFalse(faults._fault_watchdog(self.ctx, self.rec, self.sm,
+                                                self.st))
+        self.assertStepFailed('watchdog.revive')

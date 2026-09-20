@@ -591,10 +591,17 @@ def run(ctx):
         empty_dirs = {e.get('path', '') for e in plan.get('delete', [])
                       if e.get('kind') == 'emptydir'}
         reborn = {_norm(p) for p in REBORN}
+        # The venv is venv_removed's verdict, not this one's: an interpreter
+        # whose extension modules this very TouchDesigner has mapped cannot
+        # be unlinked on Windows, so the directory legitimately outlives the
+        # uninstall with only locked files in it (live 2026-09-20: 7 .pyd).
+        # Counting it here reds a leg that removed everything it could.
         stubborn = [p for p in left
-                    if p not in empty_dirs and _norm(p) not in reborn]
+                    if p not in empty_dirs and _norm(p) not in reborn
+                    and not (venv_rel and _norm(p) == venv_rel)]
         step('generated_removed', not stubborn,
-             '%d/%d planned removals gone; kept dirs %s'
+             '%d/%d planned removals gone; kept dirs %s (user content still '
+             'in them); venv left to venv_removed'
              % (len(plan.get('delete', [])) - len(left),
                 len(plan.get('delete', [])),
                 sorted(p for p in left if p in empty_dirs))

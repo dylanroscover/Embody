@@ -23,7 +23,12 @@ follow it) and `upgrade` must see the freshly installed OLD build first.
                  (== build unless --upgrade-from staged an older tox)
     upgrade_from {'tox', 'version', 'tag'} or None -- the older build that was
                  staged for the upgrade leg
-    port         the smoke Envoy's port (int)
+    port         the smoke Envoy's port (int) -- a SNAPSHOT taken when the
+                 leg starts; after anything restarts Envoy, read the port
+                 back (.embody/envoy.json in run_dir, or Envoystatus) and
+                 hand it to set_port(p) so call()/py() follow it
+    set_port(p)  repoint call()/py() at port p for the rest of the run --
+                 the legs that follow inherit it
     pid          the smoke TD's pid
     td_exe       the TouchDesigner executable / .app
     platform     sys.platform
@@ -39,7 +44,7 @@ follow it) and `upgrade` must see the freshly installed OLD build first.
                  poll a file in run_dir (same helper the orchestrator uses)
 
 A leg may restart the smoke TD's Envoy (the port may change: read it back
-from `.embody/envoy.json` in run_dir or from Envoystatus) but must leave a
+and call set_port, see above) but must leave a
 TD running at `pid` for the orchestrator's teardown -- except `uninstall`,
 which may leave the project without Embody but must not quit TD.
 """
