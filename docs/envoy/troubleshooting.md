@@ -188,6 +188,26 @@ every ~10–25 seconds, with noticeable freezes or frame drops as the watchdog k
 
 Do **not** patch `.venv/.../uvicorn/logging.py` by hand — the edit is lost whenever the virtual environment is rebuilt (TD upgrades, dependency floor bumps, venv repair).
 
+## A Cloned Project Has No `.mcp.json`
+
+**Symptoms:** You cloned a teammate's TouchDesigner project (or were handed one), opened your AI client in it, and it reports no Envoy MCP server — often concluding it has "no way into TouchDesigner."
+
+This is expected, and the project is not broken. `.mcp.json` is gitignored on purpose: it hard-codes absolute paths to one machine's Python venv and Envoy bridge, so a committed copy would point every teammate at a venv that does not exist for them. What *does* travel is the instructions — `CLAUDE.md`, `AGENTS.md` and `.claude/rules/` are committed — so your AI client knows Embody and Envoy are here before any MCP config exists.
+
+To get connected:
+
+1. **Open the project's `.toe` in TouchDesigner.**
+2. **Envoy should start by itself.** The sender's project declares it in the committed `.embody/project.json`, and a machine with no settings of its own adopts that declaration. If the toolbar shows no port, the project predates the declaration or it was never committed — turn on **Enable Envoy** on the Embody COMP by hand. (Embody resets the toggle on every open and normally restores it from `.embody/config.json`, which is gitignored and does not travel.)
+3. **Wait for the port** to appear beside the Envoy toggle. On a machine that has not opened this project before, Embody builds the `.venv/` next to the `.toe` first, so this start takes noticeably longer than later ones.
+4. **Restart your AI client** and approve the server when prompted — a config written while the client is running is not live until it reloads.
+
+Two settings stop step 2 from writing anything:
+
+- **Embody Mode** set to `Advanced - ask first` defers config writes that happen during project open, logging a breadcrumb instead of writing. Run `op.Embody.InitEnvoy()` from the textport to apply them, or switch the mode to Auto.
+- **Configure For** set to None writes no MCP config at all.
+
+If you need a config while TD is already running, see [Manual Configuration](setup.md#manual-configuration) — and use the port the **Envoy Status** parameter reports, not the **Envoy Port** value: when 9870 is busy Envoy moves to 9871+ and deliberately leaves the parameter alone.
+
 ## Claude Code Can't Connect
 
 **Symptoms:** Claude Code says "MCP server not found" or tool calls time out.
@@ -196,6 +216,7 @@ Do **not** patch `.venv/.../uvicorn/logging.py` by hand — the edit is lost whe
 2. **Check `.mcp.json`:** Look for `.mcp.json` at your AI Project Root — the git repo root by default, or the `.toe`'s folder / a custom path if you've changed the **AI Project Root** parameter. It should contain a server entry for `envoy` with the correct port. If it's missing:
     - Confirm the **AI Project Root** parameter points where you expect (a non-git project still gets `.mcp.json` written to the project folder)
     - Re-enable Envoy (toggle off, then on) to regenerate it
+    - Just cloned this project? See [A Cloned Project Has No `.mcp.json`](#a-cloned-project-has-no-mcpjson) above — Envoy starts disabled on a clone
     - Or create it manually — see [Manual Configuration](setup.md#manual-configuration)
 3. **Restart Claude Code:** After Envoy generates `.mcp.json`, you need to start a **new** Claude Code session for it to pick up the config. Run `claude` again in your project directory.
 4. **Port mismatch:** Ensure the port in `.mcp.json` matches the Envoy Port parameter in TD. If you changed the port, `.mcp.json` should update automatically — but check it.

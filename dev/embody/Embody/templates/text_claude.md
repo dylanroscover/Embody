@@ -8,6 +8,31 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 - **Embody** externalizes COMP and DAT operators to version-controlled files (.py, .json, .xml, .tdxn for text; .tox and .toe stay opaque binary) so they can be diffed and merged in git
 - **Envoy** lets you create, modify, connect, and query TouchDesigner operators via MCP tools -- plus manage externalizations
 
+## No Envoy MCP tools? (fresh clone or handed-over project)
+
+`.mcp.json` is **deliberately not committed**: it hard-codes absolute paths to one machine's Python venv and Envoy bridge, so a copy from someone else's machine points at a venv that does not exist here. A clone arrives with `CLAUDE.md`, `AGENTS.md` and `.claude/` but no `.mcp.json`.
+
+**A missing `.mcp.json` never means "this project has no path into TD."** It means Envoy has not run on this machine yet. Say exactly that, then walk the user through it:
+
+1. Open the project's `.toe` in TouchDesigner.
+2. Envoy should start by itself. The sender's project declares it in `.embody/project.json`, which IS committed, and a machine with no local settings of its own adopts that declaration. If the Embody toolbar shows no port, the project predates the declaration or it was never committed -- turn on **Enable Envoy** on the Embody COMP by hand. (Embody resets the toggle on every open and normally restores it from `.embody/config.json`, which is gitignored and does not travel.)
+3. Envoy starts, allocates a port, and writes `.mcp.json` for this machine.
+4. Restart Claude Code so it picks the new server up, and approve it when prompted -- a config written mid-session is not live until the client reloads.
+
+Nothing written? Two settings suppress it: with **Embody Mode** on `Advanced - ask first`, config writes during project open are deferred with a log breadcrumb instead of applied, and with **Configure For** on None no MCP config is written at all. `op.Embody.InitEnvoy()` applies the deferred writes -- it is an extension method, not a button, so run it from the textport or through `execute_python`.
+
+While TD is already running, this portable entry needs no machine-specific paths. Use the port Envoy actually bound: the **Envoy Status** parameter reports it and `.embody/envoy.json` records it. It is not necessarily the **Envoy Port** parameter (9870 by default) -- when that port is busy Envoy moves to 9871+ and deliberately leaves the parameter alone.
+
+```json
+{
+  "mcpServers": {
+    "envoy": { "type": "http", "url": "http://127.0.0.1:9870/mcp" }
+  }
+}
+```
+
+Envoy's next start replaces that with the stdio bridge entry, which is worth having: `get_td_status`, `launch_td`, `restart_td` and `switch_instance` are bridge-only tools, absent under a plain HTTP entry, and only the bridge serves a cached tool list while TD is down.
+
 ## Critical Rules
 
 1. **Prefer the externalized network file for reading TDXN-externalized COMPs** -- these are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. **Never glob for an extension:** Embody writes `.tdxn` (and keeps writing `.tdn` for any COMP externalized before Embody 6.1 -- both are read and round-tripped forever, so a project can legitimately hold a mix). Instead, let `externalizations.tsv` or `get_externalizations` name the exact file for each COMP. **The strategy column value is `tdxn`** -- it read `tdn` before 6.2.30, and both are accepted on read. To edit: modify the file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDXN operators. For **project-wide** questions -- who references this operator, what is the signal-flow topology, where is X used -- read the project-wide snapshot with Grep/Read before making MCP calls; Embody's Externalize Full Project writes one. One grep over that file answers what would otherwise cost many round-trips.
@@ -56,19 +81,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 
 ## Envoy MCP Server
 
-The MCP server runs inside TouchDesigner on the configured port (default: 9870). It auto-creates `.mcp.json` in the project root on startup.
-
-Manual configuration if needed:
-```json
-{
-  "mcpServers": {
-    "envoy": {
-      "type": "http",
-      "url": "http://127.0.0.1:9870/mcp"
-    }
-  }
-}
-```
+The MCP server runs inside TouchDesigner on the port Envoy allocates -- the **Envoy Port** parameter's value (9870 by default), or the next free port above it. Envoy writes `.mcp.json` in the project root when it starts, and leaves the file alone when the entry is already correct. No `.mcp.json` at all? See "No Envoy MCP tools?" above -- that is a fresh clone, not a dead end.
 
 ## Convoy (LAN work relay)
 

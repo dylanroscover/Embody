@@ -2890,9 +2890,103 @@ def rebind_convoy_to_candidate(ext, expected_id) -> str:
     return expected
 
 
+# --------------------------------------------------------------------------
+# The 'envoy' key in .embody/project.json
+# --------------------------------------------------------------------------
+# Envoyenable otherwise lives ONLY in .embody/config.json, which is
+# gitignored. init() scrubs the toggle off on every open and relies on
+# restore_settings to put it back -- a matched pair that breaks across a
+# handoff, because only half of it travels. The receiving session then finds
+# no .mcp.json and concludes the project has no path into TD (field report
+# 2026-09-19). Shape:
+#
+#     "envoy": {"enabled": true}
+#
+# Declares a PROJECT property ("this project is set up for Envoy"), not one
+# machine's toggle: only ever written true, so a collaborator who turns Envoy
+# off locally neither churns the tracked file nor revokes the declaration for
+# everyone else. Their off lives in config.json and wins on their machine --
+# the declaration is consulted ONLY when a machine has no config.json at all.
+ENVOY_KEY = 'envoy'
+
+
+def read_envoy_enabled(ext) -> bool:
+    """True when the committed project metadata declares Envoy in use.
+
+    Read-only and TOTAL, mirroring read_convoy_entry: an unreadable file, a
+    missing key, or a wrong-shaped value all read as "not declared".
+
+    Strict about the value: it must be a real JSON `true`, not a truthy
+    string. Anything looser disagrees with record_envoy_enabled's own
+    `is True` idempotency check, so a hand-typed `"enabled": "true"` would
+    read as declared while the writer still considered it unwritten.
+    """
+    data, readable = _load_project_json(ext, 'reading the Envoy declaration')
+    if not readable or not data:
+        return False
+    entry = data.get(ENVOY_KEY)
+    return entry.get('enabled') is True if isinstance(entry, dict) else False
+
+
+def record_envoy_enabled(ext) -> None:
+    """Declare Envoy in the COMMITTED project.json so a clone can adopt it.
+
+    KEY-LEVEL OWNERSHIP exactly as ensure_convoy_id: owns 'envoy' and
+    nothing else, never overwrites an unreadable file, creates a missing one
+    with an EXCLUSIVE create. No-ops once the declaration stands, so its
+    frequent caller (save_settings) costs one read and produces no diff.
+    """
+    data, readable = _load_project_json(ext, 'recording the Envoy declaration')
+    if not readable:
+        return
+    entry = data.get(ENVOY_KEY)
+    if isinstance(entry, dict) and entry.get('enabled') is True:
+        return
+    data[ENVOY_KEY] = {'enabled': True}
+    path = project_json_path(ext)
+    try:
+        if path.is_file():
+            _write_json_atomic(path, data)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with open(path, 'x', encoding='utf-8', newline='\n') as f:
+                    f.write(json.dumps(data, indent=2) + '\n')
+            except FileExistsError:
+                return   # co-writer landed it; the next save records the key
+        ext.Log('Declared Envoy in .embody/project.json -- commit it so a '
+                'clone starts Envoy without being hand-enabled', 'DEBUG')
+    except Exception as e:
+        ext.Log(f'Could not record the Envoy declaration: {e}', 'WARNING')
+
+
+def adopt_committed_envoy(ext, kick_envoy: bool) -> bool:
+    """Turn Envoy on from the committed declaration. Returns True if it did.
+
+    Called ONLY when this machine has no config.json to read. A machine that
+    HAS one holds an opinion -- including a deliberate off -- and that
+    opinion always wins, so this never fights a local opt-out.
+    """
+    if ext.my.par.Envoyenable.eval() or not read_envoy_enabled(ext):
+        return False
+    ext._restoring_settings = True
+    try:
+        ext.my.par.Envoyenable = True
+    finally:
+        ext._restoring_settings = False
+    ext.Log('Envoy enabled from committed project metadata -- first open of '
+            'this clone (.embody/config.json does not travel)', 'INFO')
+    if kick_envoy:
+        run(f"op('{ext.my}').ext.Envoy.Start()", delayFrames=3)
+    return True
+
+
 def save_settings(ext) -> None:
     """Persist whitelisted parameter values to .embody/config.json."""
     ext._settings_save_pending = False
+    # Mirror the one bit a clone cannot otherwise learn (see ENVOY_KEY).
+    if ext.my.par.Envoyenable.eval():
+        record_envoy_enabled(ext)
     params = {}
     # Sort names so JSON output is stable across TD sessions. _PERSISTED_PARAMS
     # is a frozenset, and Python's hash randomization gives each process a
@@ -3028,6 +3122,10 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
                 ext.my.store('_init_complete', True)
                 return False
         else:
+            # No local settings at all -- the fresh-clone case. The sender's
+            # committed declaration is the only surviving evidence that this
+            # project uses Envoy.
+            adopt_committed_envoy(ext, kick_envoy)
             ext.my.store('_init_complete', True)
             return False
     try:
