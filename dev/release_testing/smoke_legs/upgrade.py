@@ -18,11 +18,16 @@ Four mechanisms the assertions are built on:
 - Updatestatus is NOT a witness in either direction: the reloaded component
   runs its own notify-mode startup check within seconds and overwrites
   'Updated to vNEW' (and the rollback's line) with 'Up to date (vNEW)'
-  (measured 2026-09-19). The swap also PRESERVES par values, so par.Version
-  proves an update but never a rollback -- nothing stamps it back. Both
-  directions are pinned instead on the EmbodyExt op id (the updater's own
-  reload token), on the component's DATs, and on the sentinel file, which only
-  VerifyUpdate / VerifyRollback delete, each after confirming the op id moved.
+  (measured 2026-09-19). par.Version is a witness in BOTH directions as of
+  v6.2.58: the swap preserves par values, so each direction has to stamp them
+  explicitly -- VerifyUpdate from the manifest, _rollback from the sentinel
+  snapshot it takes before the pulse. Before that fix a rolled-back install
+  kept reading the version it had just discarded, and _finishCheck's
+  `remote <= local` compare then told the user 'Up to date' on a build they
+  had rolled away from. It stays a SECONDARY witness either way: the primary
+  pins are the EmbodyExt op id (the updater's own reload token), the
+  component's DATs, and the sentinel file, which only VerifyUpdate /
+  VerifyRollback delete, each after confirming the op id moved.
 - Identity uses two different readings of the DATs because one cannot serve
   both directions. 'It is the other build' compares a per-DAT digest map (the
   static text/table DATs) restricted to those that held still across two
@@ -454,7 +459,10 @@ class _Upgrade:
                  f"{state['token']} after {self.clock() - t0:.0f}s on port "
                  f"{self.port}; sentinel {self._sentinel_note()}; "
                  f"Updatestatus={state['update_status']!r}")
-        self._moved(f'{tag}_identity', was, pre, state)
+        # A second post-swap sample: a DAT that is still moving after the
+        # reload is a runtime surface, not evidence of which build is loaded.
+        self.sleep(_POLL_S)
+        self._moved(f'{tag}_identity', was, pre, state, self._probe() or state)
         self._health(f'{tag}_health', state)
         return state
 
@@ -473,22 +481,47 @@ class _Upgrade:
     def _sentinel_note(self):
         return 'seen, then cleared' if self.sentinel_seen else 'cleared'
 
-    def _moved(self, step, pre_a, pre_b, after):
-        """The DATs are the other build's. Only the ones that held identical
-        across the two pre-apply samples are compared -- see the module
-        docstring on why neither an exclusion list nor the extension sources
-        alone can decide this."""
+    def _moved(self, step, pre_a, pre_b, after_a, after_b):
+        """The DATs are the other build's -- when the two builds differ at all.
+
+        Stability is measured on BOTH sides of the swap: a DAT counts only if
+        it held identical across the two pre-apply samples AND across the two
+        post-apply ones. Measuring it before only used to let a slow-moving
+        runtime table (/viz_status/status_table) supply the whole verdict.
+
+        An empty diff is INCONCLUSIVE, not a failure. Two builds can be
+        byte-identical inside -- v6.2.57 -> v6.2.58 was, and this check failed
+        that release on a reload the op-id token had already proven. The swap
+        is pinned by the token and the sentinel; this is corroboration, and
+        corroboration that cannot speak says so.
+
+        See the module docstring on why neither an exclusion list nor the
+        extension sources alone can decide this.
+        """
         first = pre_a.get('dats') or {}
         second = pre_b.get('dats') or {}
-        now = after.get('dats') or {}
-        stable = {p: h for p, h in first.items() if second.get(p) == h}
+        now = after_a.get('dats') or {}
+        later = after_b.get('dats') or {}
+        stable = {p: h for p, h in first.items()
+                  if second.get(p) == h and later.get(p, now.get(p)) == now.get(p)}
+        restless = sorted(p for p, h in first.items()
+                          if second.get(p) == h and p not in stable)
         changed = sorted(p for p, h in stable.items() if now.get(p) != h)
         appeared = sorted(set(now) - set(second))
         gone = sorted(set(second) - set(now))
-        self._check(step, bool(changed or appeared or gone),
-                    f'{len(changed)}/{len(stable)} stable DATs changed, '
-                    f'{len(appeared)} appeared, {len(gone)} gone '
-                    f'{(changed + appeared + gone)[:3]}')
+        moved = changed + appeared + gone
+        note = (f'{len(changed)}/{len(stable)} stable DATs changed, '
+                f'{len(appeared)} appeared, {len(gone)} gone {moved[:3]}'
+                + (f'; {len(restless)} still moving after the swap, ignored '
+                   f'{restless[:2]}' if restless else ''))
+        if moved:
+            self._ok(step, note)
+        else:
+            # Nothing to compare: say which build is loaded on the evidence
+            # that does exist, rather than failing a release for being small.
+            self._ok(step, f'inconclusive -- {note}. The two builds are '
+                           f'indistinguishable from inside; the swap is '
+                           f'pinned by the op id and the sentinel instead')
 
     def _health(self, step, state):
         """Envoy and Status settle a beat after the probe answers -- EnvoyExt
@@ -548,9 +581,16 @@ class _Upgrade:
                  f"{self._sentinel_note()} (VerifyRollback writes "
                  f"{_ROLLED_BACK!r} there, and the startup check overwrites it "
                  f"within seconds, so it is not sampled -- Updatestatus now "
-                 f"{rolled['update_status']!r}); par.Version reads "
-                 f"{rolled['version']} -- the swap preserves par values and "
-                 f"nothing stamps them back")
+                 f"{rolled['update_status']!r})")
+        # The About pars are restored from the sentinel BEFORE the swap, so a
+        # rolled-back install stops claiming the version it discarded. Without
+        # it _finishCheck compares the new version against the remote and
+        # rests on 'Up to date' forever -- there is no path back but the next
+        # release. Independent of the identity check below, which reads the
+        # extension sources rather than a par.
+        self._check('rollback_version', str(rolled['version']) == str(self.old),
+                    f"par.Version reads {rolled['version']} -- the build that "
+                    f"was restored, not the one that was discarded")
         self._check('rollback_identity', rolled['fingerprint'] == self.fp_old,
                     f"extension sources {rolled['fingerprint'][:12]}... == the "
                     f"pre-update {self.fp_old[:12]}...")

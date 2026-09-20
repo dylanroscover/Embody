@@ -114,12 +114,18 @@ class _FakeTD:
         self.settle_at = 0.0
         self.envoy_settle_s = 0.0
         self.dats = dict(_DATS_OLD)
+        # Set to a path to model a runtime table that holds still before the
+        # swap and then moves on its own -- /viz_status/status_table did, and
+        # supplied the entire update_identity verdict on a real run.
+        self.restless_after_swap = None
         # What each swap does, independently switchable.
         self.update_changes = {'version': _NEW, 'fingerprint': _FP_NEW}
         self.update_dats = dict(_DATS_NEW)
         self.update_token = True
         self.update_clear = True
-        self.rollback_changes = {'fingerprint': _FP_OLD}
+        # _rollback restores the About pars from the sentinel before the
+        # swap, so the version comes back with the build (v6.2.58).
+        self.rollback_changes = {'version': _OLD, 'fingerprint': _FP_OLD}
         self.rollback_dats = dict(_DATS_OLD)
         self.rollback_token = True
         self.rollback_clear = True
@@ -228,6 +234,8 @@ class _FakeTD:
         self.log_n += 1   # the log FIFO moves on its own, every read
         snap = dict(self.state)
         snap['dats'] = dict(self.dats, **{'/fifo1': f'log{self.log_n}'})
+        if self.restless_after_swap and self.applies:
+            snap['dats'][self.restless_after_swap] = f'tick{self.log_n}'
         return json.dumps(snap)
 
 
@@ -316,7 +324,8 @@ class TestHappyPath(_Case):
                      'stage_update', 'apply_update', 'verify_update',
                      'update_identity', 'update_health', 'externalizations',
                      'up_to_date', 'backup', 'rollback_trigger', 'rollback',
-                     'rollback_identity', 'rollback_health', 'stage_reupdate',
+                     'rollback_version', 'rollback_identity',
+                     'rollback_health', 'stage_reupdate',
                      'apply_reupdate', 'verify_reupdate', 'reupdate_identity',
                      'reupdate_health', 'build_restored'):
             self.assertTrue(self._step(res, name)['ok'], name)
@@ -428,25 +437,53 @@ class TestIdentity(_Case):
         those three alone would fail a healthy release -- a false red on a
         gate that blocks releases."""
         self.td.update_changes = {'version': _NEW}      # fingerprint unmoved
-        self.td.rollback_changes = {}
+        self.td.rollback_changes = {'version': _OLD}
         res = self._run()
         self.assertTrue(res['ok'], res['error'])
         self.assertIn('stable DATs changed',
                       self._step(res, 'update_identity')['detail'])
 
-    def test_a_component_whose_dats_never_changed_fails(self):
-        """Only the log FIFO moved. Counting runtime noise as evidence would
-        make the identity step pass on any reload at all."""
+    def test_two_builds_with_identical_dats_are_inconclusive_not_failed(self):
+        """v6.2.57 -> v6.2.58 carried no product change at all, and the old
+        check read that as 'the swap did not happen' -- a false red on a
+        reload the op id had already proven. Absence of difference between
+        identical builds is not absence of a swap."""
         self.td.update_dats = dict(_DATS_OLD)
         res = self._run()
+        self.assertTrue(res['ok'], res['error'])
+        detail = self._step(res, 'update_identity')['detail']
+        self.assertIn('inconclusive', detail)
+        self.assertIn('pinned by the op id', detail)
+
+    def test_a_dat_still_moving_after_the_swap_is_not_evidence(self):
+        """The false green: /viz_status/status_table held still across both
+        pre-apply samples, then changed on its own, and supplied the whole
+        verdict. A runtime table says nothing about which build is loaded, so
+        stability is measured on BOTH sides of the swap."""
+        restless = '/Embody/viz_status/status_table'
+        self.td.dats = dict(_DATS_OLD, **{restless: 'held-still'})
+        self.td.update_dats = dict(_DATS_OLD)   # the build itself is identical
+        self.td.restless_after_swap = restless
+        res = self._run()
+        detail = self._step(res, 'update_identity')['detail']
+        self.assertIn('still moving after the swap', detail)
+        self.assertIn('inconclusive', detail,
+                      'a verdict resting only on a restless DAT is no verdict')
+
+    def test_a_rollback_that_leaves_the_version_stale_fails(self):
+        """The bug the leg used to document as a fact of life: the swap
+        preserves par values, so a rollback that stamps nothing back keeps
+        claiming the version it discarded -- and _finishCheck then rests on
+        'Up to date' forever."""
+        self.td.rollback_changes = {'fingerprint': _FP_OLD}   # version unmoved
+        res = self._run()
         self.assertFalse(res['ok'])
-        self.assertIn('update_identity', res['error'])
-        self.assertIn('0/', self._step(res, 'update_identity')['detail'])
+        self.assertIn('rollback_version', res['error'])
 
     def test_rollback_that_restores_the_wrong_component_fails(self):
         """The swap happens (a new op id, the sentinel clears) but what came
         back is not the pre-update build."""
-        self.td.rollback_changes = {'fingerprint': 'c' * 64}
+        self.td.rollback_changes = {'version': _OLD, 'fingerprint': 'c' * 64}
         res = self._run()
         self.assertFalse(res['ok'])
         self.assertIn('rollback_identity', res['error'])
@@ -466,7 +503,10 @@ class TestIdentity(_Case):
         self.td.py = py
         res = self._run()
         self.assertFalse(res['ok'])
-        self.assertIn('reupdate_identity', res['error'])
+        # The DAT diff can no longer speak here (both builds look the same
+        # from inside), so the fingerprint is what catches it -- which is
+        # exact, where the diff was only suggestive.
+        self.assertIn('build_restored', res['error'])
 
 
 class TestFailureModes(_Case):

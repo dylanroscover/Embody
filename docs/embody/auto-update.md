@@ -119,9 +119,12 @@ replacement, and the new version revalidates every tracked operator on boot
   at the new `.tox` — verification is re-armed rather than prompting, so the
   install completes instead of stalling half-applied.
 - **Rollback**: a failed verification automatically reloads the pre-update
-  backup. If even the rollback fails, the updater tells you to close
-  *without saving* and reopen — the saved `.toe` still holds the previous
-  working state.
+  backup, and restores the version metadata with it — the About page and
+  Update Status describe the build you are actually running, so a later check
+  offers the update again instead of reporting you are up to date on a
+  version you rolled away from. If even the rollback fails, the updater tells
+  you to close *without saving* and reopen — the saved `.toe` still holds the
+  previous working state.
 - **Undo**: the swap is excluded from the undo stack. A stray Ctrl+Z cannot
   half-resurrect the old version.
 
@@ -199,4 +202,5 @@ invisible to the updater** — users on auto-update simply won't receive it.
 | "Update Recovery" dialog at startup | A previous update was interrupted. `Restore Backup` returns to the pre-update version; `Keep Current State` leaves things as they are. It never appears for an update that is merely still finishing — if you see it, the update really did stop. |
 | "N settings no longer exist in this version and were removed" | The new version retired those parameters; their values are gone with them. It arrives inside the update's own success dialog, never as a separate alarm, and it never names Convoy node rows or any other runtime-populated sequence — those are a live readout, not settings, and an update leaves them alone. |
 | Status shows an old version after update | The verify step stamps version metadata a few seconds after the reload; if it still shows stale info, check the Embody log for a rollback report. |
+| Status shows the NEW version after a rollback | Fixed in v6.2.58. Older builds preserved the parameter values across the reload without stamping them back, so a rolled-back install kept claiming the version it had discarded — and, because the update check compares against that number, rested on "Up to date" indefinitely. Update to v6.2.58 or later; the version is now restored as part of the rollback. |
 | Updater refuses in the dev repo | Intended — see above. Use `git pull`. |
