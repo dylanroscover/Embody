@@ -276,29 +276,41 @@ def _spoil(st, run_dir, path) -> bool:
 
 
 def _down(ctx, sm, port) -> bool:
-    """The deferred kill actually closed the socket we were talking to."""
+    """The deferred kill actually closed the socket we were talking to.
+
+    Requires an alive -> dead TRANSITION. Waiting only for 'not alive'
+    passes instantly on a port nothing was using, which is how a stale
+    port turned a stop that had not happened into a green step.
+    """
+    if not sm['alive'](port):
+        return False
     return bool(P.until(ctx, sm, lambda: not sm['alive'](port), _DOWN_S))
 
 
-def _confirm_target(ctx, rec, quiet=False) -> bool:
+def _confirm_target(ctx, rec, sm, quiet=False) -> bool:
     """Refuse to inject anything until the instance on this port says its
     project.folder IS the run dir -- a collided or stale port would carry
     every fault into whatever else is listening, the developer's own session
     included (the gate smoke_run.probe_mcp takes before it mutates
     anything). Re-taken after every restart, since each one can land on a
     port another TD registered; a re-check is silent unless it fails."""
-    folder = str(ctx['py']('result = project.folder'))
+    # The first real call after a restart: settle only proves a socket
+    # accepted a connection, not that the app is serving yet.
+    folder = P.ask(ctx, sm, 'result = project.folder', 60.0, default='')
     ok = P.same_path(folder, ctx['run_dir'])
     if ok and quiet:
         return True
-    return rec.check('leg.target', ok, 'project.folder=%s' % folder)
+    detail = ('project.folder=%s' % folder if folder else
+              'no answer from port %s (%s)'
+              % (ctx.get('port'), ctx.get('_last_read_error', 'no reason')))
+    return rec.check('leg.target', ok, detail)
 
 
 def _settled(ctx, rec, sm, st, timeout, avoid=()):
     """Envoy answers again AND is still the smoke instance. None otherwise:
     the caller reports its own step, the gate failure is already recorded."""
     port = P.settle(ctx, sm, st, timeout, avoid)
-    if port and not _confirm_target(ctx, rec, quiet=True):
+    if port and not _confirm_target(ctx, rec, sm, quiet=True):
         return None
     return port
 
@@ -564,14 +576,16 @@ def run(ctx):
     st = {'port': 0, 'gen': 0, 'restore': [], 'displaced': []}
     error, ok = '', False
     try:
-        st['port'] = int(ctx['port'])
+        # The registry is what Envoy rewrites on every bind; ctx's value
+        # is only where it was when the leg started.
+        st['port'] = P.live_port(ctx, sm) or int(ctx['port'] or 0)
         left = ctx['budget']()
         if left < _MIN_S:
             return {'ok': False, 'steps': rec.steps,
                     'error': 'inconclusive: %.0fs of run budget left, under '
                              'the %.0fs this leg needs -- nothing was '
                              'injected' % (left, _MIN_S)}
-        if not _confirm_target(ctx, rec):
+        if not _confirm_target(ctx, rec, sm):
             return {'ok': False, 'steps': rec.steps,
                     'error': 'the port does not answer for the run dir -- '
                              'nothing was injected'}

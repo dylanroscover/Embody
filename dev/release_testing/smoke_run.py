@@ -941,10 +941,17 @@ def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
     def py(code, timeout=30):
         return call('execute_python', {'code': code}, timeout).get('result')
 
-    def set_port(p):
-        state['port'] = int(p)
+    ctx = {}
 
-    return {
+    def set_port(p):
+        # Both, always: py()/call() read the closure, but a leg that reads
+        # ctx['port'] used to get the frozen boot value. The faults leg then
+        # aimed at a port nothing was listening on and passed vacuously
+        # (macOS CI 2026-09-20, where every restart moves the port).
+        state['port'] = int(p)
+        ctx['port'] = int(p)
+
+    ctx.update({
         'run_dir': run['dir'], 'repo': build.get('repo'), 'build': build,
         'installed': installed, 'upgrade_from': upgrade_from,
         'port': state['port'], 'set_port': set_port, 'pid': pid,
@@ -952,7 +959,8 @@ def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
         'call': call, 'py': py, 'log': log, 'budget': budget,
         'wait_for_flag': lambda name, timeout, done: wait_for(
             os.path.join(run['dir'], name), timeout, done),
-    }
+    })
+    return ctx
 
 
 def exit_code(result):

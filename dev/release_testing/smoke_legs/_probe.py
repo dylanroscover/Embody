@@ -351,7 +351,10 @@ def ask(ctx, sm, code, timeout=60.0, default=''):
     def attempt():
         try:
             return (str(ctx['py'](code)),)
-        except Exception:
+        except Exception as e:
+            # Keep the reason: swallowing it turns 'the bridge is gone'
+            # into a bare 'no answer', which reads like a product fault.
+            ctx['_last_read_error'] = '%s: %s' % (type(e).__name__, e)
             port = live_port(ctx, sm)
             if port and port != ctx['port']:
                 ctx['set_port'](port)

@@ -1086,7 +1086,9 @@ class TestLeg(_Case):
         self.ctx['py'] = boom
         got = faults.run(self.ctx)
         self.assertFalse(got['ok'])
-        self.assertIn('bridge is gone', got['error'])
+        self.assertIn('bridge is gone',
+                      got['error'] + ' '.join(s['detail']
+                                              for s in got['steps']))
         self.assertIsInstance(got['steps'], list)
 
     def test_leaving_without_a_reachable_envoy_is_recorded(self):
@@ -1115,12 +1117,24 @@ class TestLeg(_Case):
         self.assertIn('inconclusive', got['error'])
         self.assertEqual(got['steps'], [])
 
-    def test_a_ctx_without_a_port_is_reported_not_raised(self):
+    def test_a_ctx_without_a_port_recovers_from_the_registry(self):
+        """ctx's port is only where Envoy was when the leg started; the
+        registry is rewritten on every bind. A leg that can read a live
+        port there has no reason to fail -- and on macOS every restart
+        moves the port, so the handed-down value is routinely stale."""
         self.ctx['port'] = None
         got = faults.run(self.ctx)
+        self.assertTrue(got['ok'], got)
+
+    def test_no_port_anywhere_is_reported_not_raised(self):
+        self.ctx['port'] = None
+        self.td.fix_registry = False
+        probe.write(os.path.join(self.root, '.embody', 'envoy.json'), '{}')
+        self.td.listening = set()
+        got = faults.run(self.ctx)
         self.assertFalse(got['ok'])
-        self.assertIn('TypeError', got['error'])
-        self.assertEqual([s for s in got['steps'] if not s['ok']], [])
+        bad = [s for s in got['steps'] if not s['ok']]
+        self.assertTrue(bad, 'a leg with no reachable port must say so')
 
     def test_the_leg_cancels_its_own_timers_before_returning(self):
         """Whatever is still armed must no-op once the uninstall leg starts
