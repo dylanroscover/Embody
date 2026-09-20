@@ -198,7 +198,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -525,23 +525,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- mandala: specimens/generative/mandala.tdxn sha256=d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf size=89703
+-- mandala: specimens/generative/mandala.tdxn sha256=b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b size=89571
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-mandala-d29ba179aa592ea6', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf', 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf', 89703, 461, 'scan-mandala-d29ba179aa592ea6', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
+SELECT 'ver-mandala-b721e10ce05b6d41', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 89571, 461, 'scan-mandala-b721e10ce05b6d41', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-mandala-d29ba179aa592ea6', 'ver-mandala-d29ba179aa592ea6', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-d29ba179aa592ea6') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-d29ba179aa592ea6');
+SELECT 'scan-mandala-b721e10ce05b6d41', 'ver-mandala-b721e10ce05b6d41', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-b721e10ce05b6d41') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-b721e10ce05b6d41');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Serenity and Beauty', description = 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', category = 'generative', level = 'advanced', requires = '[]', op_count = 461, family_summary = 'POP,CHOP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b')
   AND (
       s.title IS NOT 'Serenity and Beauty'
    OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
@@ -554,7 +554,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

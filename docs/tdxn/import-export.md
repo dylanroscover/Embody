@@ -90,7 +90,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
-| 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. |
+| 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. Absolute OP references inside the document's `network_path` (sequence blocks and custom parameters written by Embody 6.2.56 or earlier) are remapped onto the destination -- see the specification's [OP-Reference Values](specification.md#op-reference-values). |
 | 4 | **Set flags** | Array entries without `-` → `true`; with `-` → `false`. |
 | 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
 | 6 | **Set DAT content** | Text or table data loaded into DATs. |

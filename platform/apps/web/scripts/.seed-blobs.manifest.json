@@ -128,9 +128,9 @@
   {
     "slug": "mandala",
     "kind": "tdxn",
-    "key": "d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf",
-    "sha256": "d29ba179aa592ea611595508ffe55c908c08d898931abb42d001e9d9c4b0dbbf",
-    "size": 89703,
+    "key": "b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b",
+    "sha256": "b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b",
+    "size": 89571,
     "content_type": "application/json",
     "path": "specimens/generative/mandala.tdxn"
   },

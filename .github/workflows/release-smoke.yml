@@ -1,0 +1,87 @@
+name: release-smoke
+
+# The fresh-install release smoke, on the two machines that have
+# TouchDesigner: the Windows dev box and TEC-MBA (macOS). Each job runs
+# dev/release_testing/smoke_run.py -- the shipped .tox from
+# release/embody-release.json, dropped into a virgin project, driven to a
+# verdict, MCP probed, quit -- and uploads the run directory (result.json,
+# both flags, the logs) as the evidence. Exit 2 (could not run) fails the
+# job like exit 1 does, so a wedged runner never reads as green.
+#
+# Self-hosted runners execute whatever the workflow says, so this workflow
+# runs ONLY on pushes to our own branches and tags, and on manual dispatch.
+# Never on pull_request: a fork's PR must not reach these machines. The
+# runners are registered with the extra label `embody-smoke` so no other
+# workflow can land on them by accident.
+#
+# TouchDesigner needs a GUI session: on the Mac the runner is a LaunchAgent
+# in the logged-in session (./svc.sh install); on Windows it runs
+# interactively (run.cmd from a logon task), NOT as a Windows service.
+# dev/release_preflight.py treats a red run of this workflow on dev or main
+# as a release blocker, which is the point.
+
+on:
+  push:
+    branches: [dev, main]
+    tags: ['v*']
+    paths:
+      - 'release/embody-release.json'
+      - 'release/Embody-v*.tox'
+      - 'dev/release_testing/smoke_run.py'
+      - 'dev/release_testing/smoke_bootstrap.py'
+      - 'dev/release_testing/smoke_template.toe'
+      - 'dev/embody/Embody/**'
+      - '.github/workflows/release-smoke.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      # A job whose runner does not exist queues until GitHub fails it a
+      # day later -- a red run the release preflight would then block on.
+      # So a leg is listed here only once its runner is registered:
+      # macOS (TEC-MBA) first; the Windows leg joins when the dev box has an
+      # interactive runner (a logon task running run.cmd, not a service).
+      matrix:
+        include:
+          - os: macos
+            runs-on: [self-hosted, macOS, embody-smoke]
+            python: python3
+    runs-on: ${{ matrix.runs-on }}
+    # One smoke per machine at a time: two would fight over ports and the
+    # per-user Convoy host app. Never cancel a running one -- its teardown
+    # is what quits the TD it launched.
+    concurrency:
+      group: release-smoke-${{ matrix.os }}
+      cancel-in-progress: false
+    # ready ~7 min + features ~6 min + probe + a cold venv build, with room
+    # for a laptop that is awake but busy. A sleeping Mac never starts the
+    # job, so this only bounds a job that did start.
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fresh-install smoke
+        run: ${{ matrix.python }} dev/release_testing/smoke_run.py --out "${{ runner.temp }}"
+
+      - name: Upload run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-smoke-${{ matrix.os }}-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/embody-smoke/*/result.json
+            ${{ runner.temp }}/embody-smoke/*/ready.flag
+            ${{ runner.temp }}/embody-smoke/*/features.flag
+            ${{ runner.temp }}/embody-smoke/*/td-console.log
+            ${{ runner.temp }}/embody-smoke/*/bootstrap.log
+            ${{ runner.temp }}/embody-smoke/*/logs/*.log

@@ -880,3 +880,84 @@ class TestProjectJsonStewardship(EmbodyTestCase):
             '.embody/local.json must be gitignored -- a tracked '
             'machine-local pin reintroduces the per-machine churn A-14 '
             'removed')
+
+    # -- the 'envoy' declaration (what a clone adopts) ----------------
+
+    def _write_pjson(self, obj):
+        import json
+        (self.tmp / '.embody' / 'project.json').write_text(
+            json.dumps(obj, indent=2), encoding='utf-8')
+
+    def _fake_ext(self, envoy_on=False):
+        """An ext whose Envoyenable can be flipped without touching the
+        LIVE toggle -- flipping the real one would stop the Envoy server
+        this test session is talking through."""
+        tmp = self.tmp
+        par = type('P', (), {'eval': lambda _s: envoy_on})()
+        return type('FakeExt', (), {
+            '_findProjectRoot': lambda _s: tmp,
+            '_restoring_settings': False,
+            'Log': lambda _s, msg, level='INFO': None,
+            'my': type('My', (), {'par': type('Pars', (), {
+                'Envoyenable': par})()})(),
+        })()
+
+    def test_no_declaration_reads_false(self):
+        self.assertFalse(self.admin.read_envoy_enabled(self.embody_ext))
+
+    def test_recording_declares_envoy_and_keeps_foreign_keys(self):
+        """Key-level ownership: a co-writer's convoy block must survive."""
+        self._write_pjson({'convoy': {'id': 'cv_0123456789abcdef'}})
+        self.admin.record_envoy_enabled(self.embody_ext)
+        data = self._read('project.json')
+        self.assertEqual(data['envoy'], {'enabled': True})
+        self.assertEqual(data['convoy']['id'], 'cv_0123456789abcdef')
+        self.assertTrue(self.admin.read_envoy_enabled(self.embody_ext))
+
+    def test_recording_is_idempotent(self):
+        """save_settings calls this on every settings write -- a second
+        call must produce NO write, or the tracked file churns forever.
+        Proven by write count, never mtime (see the class docstring)."""
+        self.admin.record_envoy_enabled(self.embody_ext)
+        before = list(self._writes)
+        self.admin.record_envoy_enabled(self.embody_ext)
+        self.admin.record_envoy_enabled(self.embody_ext)
+        self.assertEqual(self._writes, before,
+                         'a standing declaration must not be rewritten')
+
+    def test_unreadable_project_json_is_never_overwritten(self):
+        (self.tmp / '.embody' / 'project.json').write_text(
+            '{not json', encoding='utf-8')
+        self.admin.record_envoy_enabled(self.embody_ext)
+        self.assertEqual(
+            (self.tmp / '.embody' / 'project.json').read_text(
+                encoding='utf-8'), '{not json',
+            'a tracked file with co-writers is never clobbered blind')
+        self.assertFalse(self.admin.read_envoy_enabled(self.embody_ext))
+
+    def test_a_clone_adopts_the_declaration(self):
+        """THE fix: no config.json travels, so the committed declaration
+        is the only evidence the sender used Envoy."""
+        self._write_pjson({'envoy': {'enabled': True}})
+        ext = self._fake_ext(envoy_on=False)
+        self.assertTrue(self.admin.adopt_committed_envoy(ext, False))
+        self.assertIs(ext.my.par.Envoyenable, True)
+
+    def test_no_declaration_leaves_envoy_off(self):
+        self._write_pjson({'convoy': {'id': 'cv_0123456789abcdef'}})
+        ext = self._fake_ext(envoy_on=False)
+        self.assertFalse(self.admin.adopt_committed_envoy(ext, False))
+        self.assertIsNot(ext.my.par.Envoyenable, True)
+
+    def test_adoption_is_a_no_op_when_envoy_is_already_on(self):
+        self._write_pjson({'envoy': {'enabled': True}})
+        ext = self._fake_ext(envoy_on=True)
+        self.assertFalse(self.admin.adopt_committed_envoy(ext, False))
+
+    def test_a_wrong_shaped_declaration_reads_false(self):
+        """A hand-edited file must not crash a project open."""
+        for bad in ('yes', ['enabled'], {'enabled': 'true'}, {}, None):
+            self._write_pjson({'envoy': bad})
+            self.assertFalse(
+                self.admin.read_envoy_enabled(self.embody_ext),
+                f'{bad!r} must read as "not declared"')

@@ -14,6 +14,22 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 ---
 
+## No Envoy MCP tools? (fresh clone or handed-over project)
+
+MCP config is deliberately not committed: every client's config file hard-codes absolute paths to one machine's Python venv and Envoy bridge. A clone arrives with this file and the rules/skills folders but no MCP config. Which file is missing depends on the client -- `.mcp.json` (Claude Code, and the baseline Embody always writes), `.cursor/mcp.json`, `.vscode/mcp.json` (VS Code, Copilot), `.gemini/settings.json`, `.codex/config.toml`, `.agents/mcp_config.json` (Antigravity), `opencode.json`.
+
+**A missing MCP config never means "this project has no path into TD."** It means Envoy has not run on this machine yet. Tell the user:
+
+1. Open the project's `.toe` in TouchDesigner.
+2. Envoy should start by itself -- the sender's committed `.embody/project.json` declares it, and a machine with no local settings adopts that. If the toolbar shows no port, turn on **Enable Envoy** on the Embody COMP by hand (the project may predate the declaration).
+3. Restart the AI client once the Embody toolbar shows a port.
+
+If nothing is written: **Embody Mode** on `Advanced - ask first` defers config writes during project open (a log breadcrumb says so), and **Configure For** on None writes no MCP config at all. `op.Embody.InitEnvoy()` applies the deferred writes -- an extension method, not a button.
+
+**Windsurf is the exception.** Cascade reads only `~/.codeium/windsurf/mcp_config.json`, which is shared by every project the user opens, so Embody never writes it -- pointing one global file at this project's bridge would hijack all their other projects. That config is always a one-time manual paste.
+
+---
+
 ## Critical Rules
 
 1. **Prefer the externalized network file for reading TDXN-externalized COMPs** - these are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. **Never glob for an extension:** Embody writes `.tdxn`, and keeps writing `.tdn` for any COMP externalized before Embody 6.1 - both are read and round-tripped forever, so a project can hold a mix. Let `externalizations.tsv` or `get_externalizations` name the exact file instead. **The strategy column value is `tdxn`** - it read `tdn` before 6.2.30, and both are accepted on read. To edit: modify the file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDXN operators.

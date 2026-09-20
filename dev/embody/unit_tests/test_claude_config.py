@@ -162,6 +162,28 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertIn(self.MARKER, dat.text,
 			'text_agents_md DAT missing marker')
 
+	def test_A14b_ai_docs_carry_the_no_tools_branch(self):
+		"""Both AI docs must say what a MISSING .mcp.json means.
+
+		Without it a session that finds no Envoy tools reasons from the
+		absence and concludes the project has no path into TD -- the exact
+		field report this text exists to prevent."""
+		templates_comp = self.embody_ext.my.op('templates')
+		for name in ('text_claude', 'text_agents_md'):
+			dat = templates_comp.op(name)
+			self.assertIn('No Envoy MCP tools?', dat.text,
+				f'{name} lost the fresh-clone section')
+			self.assertIn('never means', dat.text,
+				f'{name} lost the "never means no path into TD" line')
+
+	def test_A14c_connectivity_rule_has_a_no_tools_branch(self):
+		"""td-connectivity is the rule an agent reads when tools are missing,
+		and it ships to every client -- its 'If tools exist' step is useless
+		without the else."""
+		dat = self.embody_ext.my.op('templates/text_rule_td_connectivity')
+		self.assertIn('If NO Envoy tools exist at all', dat.text,
+			'the connectivity rule lost its no-tools branch')
+
 	def test_A15_rule_slugs_are_simple_strings(self):
 		"""_TEMPLATE_MAP_RULES values should be simple slugs (no path separators)."""
 		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():

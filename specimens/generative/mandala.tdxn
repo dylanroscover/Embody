@@ -1109,10 +1109,10 @@ operators:
       valuex: =parent.Mandala.par.Inkwidth
     array:
     - name: uP
-      chop: /specimen_lab/mandala/shuffle_params
+      chop: shuffle_params
       arraytype: texturebuffer
     - name: uPal
-      chop: /specimen_lab/mandala/shuffle_palette
+      chop: shuffle_palette
       arraytype: texturebuffer
   position: [1000, -1800]
   inputs:
@@ -1147,10 +1147,10 @@ operators:
       valuex: =parent.Mandala.par.Inkwidth
     array:
     - name: uP
-      chop: /specimen_lab/mandala/shuffle_params
+      chop: shuffle_params
       arraytype: texturebuffer
     - name: uPal
-      chop: /specimen_lab/mandala/shuffle_palette
+      chop: shuffle_palette
       arraytype: texturebuffer
   flags:
   - viewer
@@ -2056,10 +2056,10 @@ operators:
       valuex: =parent.Mandala.par.Inkwidth
     array:
     - name: uP
-      chop: /specimen_lab/mandala/shuffle_params
+      chop: shuffle_params
       arraytype: texturebuffer
     - name: uPal
-      chop: /specimen_lab/mandala/shuffle_palette
+      chop: shuffle_palette
       arraytype: texturebuffer
   position: [1000, -1500]
   inputs:
