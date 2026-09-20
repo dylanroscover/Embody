@@ -400,6 +400,17 @@ def _apply_headless_setup(attempt=0):
             run("args[0](args[1])", _apply_headless_setup, attempt + 1,
                 delayFrames=30)
         return
+    # Embody stores _init_complete once its settings restore has run. Apply
+    # the setup BEFORE that and init's continuation overwrites it: the
+    # wizard enables Envoy and it is Disabled two frames later, so the
+    # install comes up dead (macOS CI 2026-09-20). delayFrames alone cannot
+    # express this -- the frame init lands on moves with the machine.
+    if not embody.fetch('_init_complete', False):
+        if attempt < 40:
+            run("args[0](args[1])", _apply_headless_setup, attempt + 1,
+                delayFrames=15)
+            return
+        _log('WARNING: _init_complete never set; applying setup anyway')
     me.store('headless_setup_done', True)
     try:
         wizard_window = embody.op('window_wizard')
@@ -419,6 +430,31 @@ def _apply_headless_setup(attempt=0):
     # Late-open cover: if the wizard's frame-scheduled open slipped past
     # this apply, close it again once, well after.
     run("args[0]()", _close_wizard_again, delayFrames=95)
+    # And cover the stale-callback race: init() set Envoyenable=False to
+    # stop an auto-start, TD defers that onValueChange, and parexec can
+    # process it AFTER this enable -- Stop() then disables Envoy for the
+    # whole run (execute.py:19-25 documents the hazard).
+    run("args[0](args[1])", _reassert_envoy, 0, delayFrames=30)
+
+
+def _reassert_envoy(attempt=0):
+    """Put Envoy back if a deferred init callback turned it off after the
+    setup enabled it. Checked several times: the callback's frame is not
+    ours to predict."""
+    embody_path = me.fetch('embody_path', None, search=False)
+    embody = op(embody_path) if embody_path else None
+    if not embody:
+        return
+    try:
+        if not embody.par.Envoyenable.eval():
+            embody.par.Envoyenable = True
+            _log('Re-enabled Envoy: a deferred init callback had disabled it '
+                 'after the headless setup (execute.py:19-25 race)')
+    except Exception as e:
+        _log(f'WARNING: could not re-assert Envoyenable: {e}')
+        return
+    if attempt < 6:
+        run("args[0](args[1])", _reassert_envoy, attempt + 1, delayFrames=30)
 
 def _close_wizard_again():
     embody_path = me.fetch('embody_path', None, search=False)
