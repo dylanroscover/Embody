@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.59
+
+Two first-run bugs the new release gate found: a clone that lost Envoy, and a rollback that lied about its version.
+
+- **A fresh clone keeps the Envoy it adopts.** 6.2.57 taught a clone to turn Envoy on from committed project metadata; the first-run check turned it straight back off, then wrote that off into `config.json` so every later open repeated it.
+- **A rollback no longer claims the version it discarded.** The About page and Update Status kept describing the build that had just failed -- and the update check compares against that number, so it rested on "Up to date" with no way back.
+- **The release gate stopped lying both ways.** Its identity check could fail a healthy release whose contents matched the previous one, and pass on a table that changes by itself.
+- **Tests.** +335, most of them the release gate's own. The self-updater's source guards had been running on no machine at all.
+
 ## v6.2.57
 
 TDXN keeps operator references as you wrote them, a clone knows it uses Envoy, and the release smoke runs itself on both platforms.
