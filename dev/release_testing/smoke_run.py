@@ -51,7 +51,9 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(DEFAULT_REPO, 'dev', 'embody'))
+sys.path.insert(0, HERE)
 import envoy_bridge  # noqa: E402  (stdlib-only; TD discovery, pids, quit)
+import smoke_legs  # noqa: E402  (the extra legs: upgrade, faults, uninstall)
 
 # The bootstrap self-polls Envoy for up to 240 x 1 s before it writes
 # ready.flag, on top of TD's own boot; the Convoy leg then polls for up to
@@ -159,12 +161,61 @@ def select_build(repo, tox=None):
             'td_build': manifest.get('td_build')}
 
 
+def previous_release(repo, current_version, dest_dir, tag=None, run=None):
+    """The previous release's .tox, extracted from git history into
+    `dest_dir`, sha256-verified against the manifest committed at that tag.
+
+    The upgrade leg installs THIS build first and then updates to the
+    current one, so the old side of the test needs no network: every
+    shipped .tox and its manifest are in the repo's history. `tag`
+    overrides the choice (default: the newest v* tag that is not the
+    current version).
+    """
+    run = run or subprocess.run
+
+    def git(*args, **kw):
+        return run(['git', '-C', repo] + list(args), check=True,
+                   capture_output=True, **kw)
+
+    if not tag:
+        tags = git('tag', '--sort=-creatordate', '--list', 'v*',
+                   text=True).stdout.split()
+        tags = [t for t in tags if t.lstrip('v') != str(current_version)]
+        if not tags:
+            raise SmokeSetupError('no previous release tag in this checkout')
+        tag = tags[0]
+    try:
+        manifest = json.loads(
+            git('show', f'{tag}:release/embody-release.json', text=True).stdout)
+    except (subprocess.CalledProcessError, ValueError) as e:
+        raise SmokeSetupError(f'{tag} has no readable release manifest: {e}')
+    asset = manifest.get('asset')
+    if not asset or not manifest.get('sha256'):
+        raise SmokeSetupError(f'{tag}: manifest names no verifiable asset')
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, asset)
+    with open(dest, 'wb') as f:
+        run(['git', '-C', repo, 'show', f'{tag}:release/{asset}'],
+            check=True, stdout=f)
+    digest = _sha256(dest)
+    if digest != manifest['sha256']:
+        raise SmokeSetupError(
+            f'{asset} from {tag} hashes {digest[:12]}..., manifest says '
+            f'{manifest["sha256"][:12]}...')
+    return {'tox': dest, 'version': str(manifest.get('version') or ''),
+            'tag': tag, 'sha256': digest}
+
+
 # ---------------------------------------------------------------------------
 # 2. staging
 # ---------------------------------------------------------------------------
 
-def stage_run(repo, build, out, platform=None, now=None):
+def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
     """A fresh run directory under `out`: harness files + sidecar.
+
+    `install_tox` overrides the .tox the smoke TD boots (the upgrade leg
+    starts on the previous release); the sidecar's tox_path is what the
+    bootstrap loads, `build` stays the release under test.
 
     Refuses an `out` inside the repo: a smoke rooted in the repo makes the
     repo its git root, deploys its AI config there and, on 2026-07-27,
@@ -201,7 +252,7 @@ def stage_run(repo, build, out, platform=None, now=None):
             raise SmokeSetupError(f'harness file missing: {src}')
         shutil.copyfile(src, os.path.join(run_dir, name))
     sidecar = {'run_id': run_id, 'platform': platform,
-               'repo_root': repo, 'tox_path': build['tox'],
+               'repo_root': repo, 'tox_path': install_tox or build['tox'],
                'flags_dir': run_dir, 'started_at': time.strftime(
                    '%Y-%m-%dT%H:%M:%S', time.localtime(now()))}
     with open(os.path.join(run_dir, 'smoke_run.json'), 'w',
@@ -718,19 +769,59 @@ def convoy_install_state(before, after):
     return 'reused'
 
 
-def compute_outcome(ready, features, mcp, teardown, no_mcp=False):
+def compute_outcome(ready, features, mcp, teardown, no_mcp=False, legs=None):
     """PASS only when every gate held: startup verdict, all feature legs,
-    the MCP probe (unless skipped) AND the teardown -- a run that leaves
-    its TouchDesigner behind is not green."""
+    the MCP probe (unless skipped), every extra leg that was asked for, AND
+    the teardown -- a run that leaves its TouchDesigner behind is not
+    green."""
     if not ready or ready.get('verdict') != 'PASS':
         return 'FAIL'
     if not features or not features.get('passed'):
         return 'FAIL'
     if not no_mcp and not (mcp or {}).get('ok'):
         return 'FAIL'
+    if legs is not None and not legs.get('_ok'):
+        return 'FAIL'
     if teardown is not None and not teardown.get('ok'):
         return 'FAIL'
     return 'PASS'
+
+
+def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
+                     budget, rpc=None, log=None):
+    """The `ctx` every smoke_legs module receives (contract in
+    smoke_legs/__init__.py)."""
+    rpc = rpc or _rpc
+    log = log or (lambda m: print(f'[smoke_run] {m}', file=sys.stderr))
+    state = {'port': int(port), 'seq': 100}
+
+    def call(name, arguments, timeout=30):
+        state['seq'] += 1
+        url = f"http://127.0.0.1:{state['port']}/mcp"
+        reply = rpc(url, {'jsonrpc': '2.0', 'id': state['seq'],
+                          'method': 'tools/call',
+                          'params': {'name': name, 'arguments': arguments}},
+                    min(float(timeout), max(1.0, budget())))
+        res = _tool_result(reply)
+        if 'error' in res:
+            raise RuntimeError(f'{name}: {res["error"]}')
+        return res
+
+    def py(code, timeout=30):
+        return call('execute_python', {'code': code}, timeout).get('result')
+
+    def set_port(p):
+        state['port'] = int(p)
+
+    return {
+        'run_dir': run['dir'], 'repo': build.get('repo'), 'build': build,
+        'installed': installed, 'upgrade_from': upgrade_from,
+        'port': state['port'], 'set_port': set_port, 'pid': pid,
+        'td_exe': td_exe, 'platform': sys.platform,
+        'call': call, 'py': py, 'log': log, 'budget': budget,
+        'wait_for_flag': lambda name, timeout, done: wait_for(
+            os.path.join(run['dir'], name), timeout, done),
+    }
 
 
 def exit_code(result):
@@ -765,6 +856,18 @@ def summarize(result):
         lines.append(f"mcp       {okc}/{len(mcp.get('steps', []))}  "
                      f"{mcp.get('tools', 0)} tools listed"
                      + (f"  {mcp['error']}" if mcp.get('error') else ''))
+    legs = r.get('legs') or {}
+    for name, leg in legs.items():
+        if name.startswith('_'):
+            continue
+        okc = sum(1 for s in leg.get('steps', []) if s.get('ok'))
+        lines.append(f"{name:<9} {'PASS' if leg.get('ok') else 'FAIL'}  "
+                     f"{okc}/{len(leg.get('steps', []))} steps  "
+                     f"{leg.get('elapsed_s', 0)}s"
+                     + (f"  {leg['error']}" if leg.get('error') else ''))
+        for s in leg.get('steps', []):
+            if not s.get('ok'):
+                lines.append(f"          {s.get('step')}: {s.get('detail', '')}")
     if r.get('convoy_host'):
         lines.append(f"convoy    host app {r['convoy_host']}"
                      + ('' if r['convoy_host'] == 'fresh_install' else
@@ -814,15 +917,29 @@ def main(argv=None):
                     help='skip the MCP probe')
     ap.add_argument('--keep-td', action='store_true',
                     help='leave the smoke TouchDesigner running')
+    ap.add_argument('--legs', default='',
+                    help='extra legs after the fresh-install verdict, comma '
+                         'separated: upgrade, faults, uninstall (run in '
+                         'that order; see smoke_legs/__init__.py)')
+    ap.add_argument('--upgrade-from', default=None,
+                    help='for the upgrade leg: a release tag (vX.Y.Z) or a '
+                         '.tox path to install FIRST; default: the previous '
+                         'release tag, extracted from git history')
     args = ap.parse_args(argv)
 
     t0 = time.monotonic()
     result = {'outcome': 'ERROR', 'platform': sys.platform, 'run_id': None,
               'version': None, 'tox': None, 'td': None, 'ready': None,
-              'features': None, 'mcp': None, 'teardown': None,
+              'features': None, 'mcp': None, 'legs': None, 'teardown': None,
+              'installed': None, 'upgrade_from': None,
               'default_port': None, 'convoy_host': None,
               'log_tail': '', 'log_warnings': [], 'error': '',
               'elapsed_s': 0.0, 'result_path': ''}
+    try:
+        legs = smoke_legs.parse_legs(args.legs)
+    except ValueError as e:
+        print(f'[smoke_run] {e}', file=sys.stderr)
+        return 2
     pid = None
     proc = None
     console = None
@@ -838,7 +955,30 @@ def main(argv=None):
         result['td'] = td_exe
         if warning:
             print(f'[smoke_run] {warning}', file=sys.stderr)
-        run = stage_run(repo, build, args.out)
+        build['repo'] = repo
+        upgrade_from = None
+        install_tox = None
+        if 'upgrade' in legs:
+            builds_dir = os.path.join(os.path.abspath(args.out), 'embody-smoke',
+                                      '_builds')
+            if args.upgrade_from and os.path.isfile(args.upgrade_from):
+                p = os.path.abspath(args.upgrade_from)
+                upgrade_from = {'tox': p, 'version': '', 'tag': '',
+                                'sha256': _sha256(p)}
+            else:
+                upgrade_from = previous_release(repo, build['version'],
+                                                builds_dir,
+                                                tag=args.upgrade_from)
+            install_tox = upgrade_from['tox']
+            print(f"[smoke_run] upgrade leg: installing "
+                  f"{os.path.basename(install_tox)} first "
+                  f"({upgrade_from.get('tag') or 'file'}), then updating to "
+                  f"v{build['version']}", file=sys.stderr)
+        result['upgrade_from'] = upgrade_from
+        result['installed'] = {'tox': install_tox or build['tox'],
+                               'version': (upgrade_from or {}).get('version')
+                               if install_tox else build['version']}
+        run = stage_run(repo, build, args.out, install_tox=install_tox)
         result['run_id'] = run['run_id']
         result['result_path'] = os.path.join(run['dir'], 'result.json')
         print(f"[smoke_run] staged {run['dir']}", file=sys.stderr)
@@ -888,6 +1028,17 @@ def main(argv=None):
                                               timeout=min(MCP_TIMEOUT_S,
                                                           budget()),
                                               expect_dir=run['dir'])
+            mcp_ok = args.no_mcp or bool((result['mcp'] or {}).get('ok'))
+            if legs and mcp_ok and ready['envoy_port']:
+                ctx = make_leg_context(run, build, result['installed'],
+                                       upgrade_from, ready['envoy_port'], pid,
+                                       td_exe, budget)
+                result['legs'] = smoke_legs.run_legs(legs, ctx)
+            elif legs:
+                result['legs'] = {'_ok': False, 'skipped': {
+                    'ok': False, 'steps': [],
+                    'error': 'legs not run: the fresh-install verdict or '
+                             'the MCP probe already failed'}}
         result['outcome'] = 'PENDING_TEARDOWN'
     except SmokeSetupError as e:
         result['outcome'] = 'ERROR'
@@ -910,7 +1061,7 @@ def main(argv=None):
         if result['outcome'] != 'ERROR':
             result['outcome'] = compute_outcome(
                 result['ready'], result['features'], result['mcp'],
-                result['teardown'], no_mcp=args.no_mcp)
+                result['teardown'], no_mcp=args.no_mcp, legs=result['legs'])
         if run:
             logs = collect_logs(run['dir'])
             result['log_tail'] = logs['tail']
