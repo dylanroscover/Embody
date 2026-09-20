@@ -2,35 +2,50 @@
 Smoke leg `upgrade`: the installed PREVIOUS release self-updates to the build
 under test, rolls back to the updater's own backup, then updates again.
 
-HERMETIC -- nothing here reaches GitHub. UpdaterExt exposes no manifest/asset
-override, so the leg seeds the updater's `_pending` slot (the dict a check
-would have produced) from the repo's release/embody-release.json and a copy of
-ctx['build']['tox'] staged in .embody/updates, where a real download lands.
-Everything after that is the product's own path: ApplyUpdate -> backup export
--> in-place swap -> VerifyUpdate, then the leftover-sentinel recovery ->
-_rollback -> VerifyRollback. The network CHECK stage is therefore NOT covered
-here (a fresh install ships Autoupdate=notify, so the smoke's own startup
-already runs it).
+The LEG makes no network call. UpdaterExt exposes no manifest/asset override,
+so it seeds the updater's `_pending` slot (the dict a check would have
+produced) from the repo's release/embody-release.json -- through the product's
+own validateManifest gate -- and a copy of ctx['build']['tox'] staged in
+.embody/updates, where a real download lands. Everything after that is the
+product's own path: ApplyUpdate -> backup export -> in-place swap ->
+VerifyUpdate, then the leftover-sentinel recovery -> _rollback ->
+VerifyRollback. The RUN is not hermetic though: a fresh install ships
+Autoupdate=notify, so every reloaded component runs its own api.github.com
+check -- which is why each apply waits the updater's busy latch out and
+retries a refusal that names it.
 
-Three mechanisms the assertions are built on:
+Four mechanisms the assertions are built on:
 - Updatestatus is NOT a witness in either direction: the reloaded component
   runs its own notify-mode startup check within seconds and overwrites
   'Updated to vNEW' (and the rollback's line) with 'Up to date (vNEW)'
   (measured 2026-09-19). The swap also PRESERVES par values, so par.Version
   proves an update but never a rollback -- nothing stamps it back. Both
-  directions are pinned instead on a fingerprint of the extension DAT sources
-  (the component's identity) and on the sentinel file, which only
-  VerifyUpdate / VerifyRollback delete, each after confirming the EmbodyExt
-  op id changed.
+  directions are pinned instead on the EmbodyExt op id (the updater's own
+  reload token), on the component's DATs, and on the sentinel file, which only
+  VerifyUpdate / VerifyRollback delete, each after confirming the op id moved.
+- Identity uses two different readings of the DATs because one cannot serve
+  both directions. 'It is the other build' compares a per-DAT digest map (the
+  static text/table DATs) restricted to those that held still across two
+  pre-apply samples -- the log FIFO and the runtime tables move on their own,
+  and a release can
+  legitimately leave the extension sources untouched (v6.2.50 -> v6.2.51 did),
+  so neither a fixed exclusion list nor the extension sources alone can decide
+  it without a false red on a gate that blocks releases. 'It is the SAME build
+  again' (rollback, re-update) compares the extension-source fingerprint,
+  which is stable by construction.
 - The swap REPLACES the COMP's contents, wiping the storage that holds
   _smoke_test_responses -- without it EmbodyExt._messageBox opens a REAL modal
-  and freezes the smoke TD, so staggered run()s re-arm the seed across a swap.
+  and freezes the smoke TD, so staggered run()s restore the seed across a swap.
+  They restore it only while the store is ABSENT: re-storing a consumed answer
+  would put 'Embody Update' -> 0 back in reach of _finishCheck's Install
+  dialog, and the smoke would install a live GitHub release.
 - An Envoy call must never swap its own host synchronously (issue #110): the
   rollback trigger is deferred as one run() string. ApplyUpdate is safe called
   directly (its phase 2 is 150 frames out).
 
-The final re-update is budget-gated: it is what leaves the project on the NEW
-build for any leg that follows, so when it is skipped the step says so.
+The final re-update is what leaves the project on the NEW build for the legs
+that follow, so a run with no budget left for it FAILS rather than reporting a
+pass for a project sitting on the previous release.
 """
 
 from __future__ import annotations
@@ -43,9 +58,12 @@ import time
 
 _POLL_S = 2.0
 _RELOAD_TIMEOUT_S = 180.0   # swap + boot chain + Envoy restart, generously
-_RESERVE_S = 25.0           # left for the orchestrator's teardown
+_RESERVE_S = 25.0           # left before the RUN's ceiling; teardown itself
+                            # is not budget-gated (up to 2x QUIT_TIMEOUT_S)
 _PROBE_TIMEOUT_S = 10.0
-_MIN_BACKUP_BYTES = 100_000  # UpdaterExt._MIN_BACKUP_BYTES
+_SETTLE_S = 20.0            # entry probe, and post-swap Envoy/status settling
+_BUSY_TIMEOUT_S = 90.0
+_MIN_BACKUP_BYTES = 100_000  # fallback only; the live floor is probed
 _SENTINEL_KEY = '__smoke_sentinel__'
 
 # --- code run inside the smoke TD (execute_python returns str(result)) ------
@@ -58,6 +76,16 @@ src = []
 for n in ('EmbodyExt', 'EnvoyExt', 'TDXNExt'):
     d = emb.op(n)
     src.append(d.text if d is not None else '')
+dats = {}
+for d in emb.findChildren(type=td.DAT):
+    if d.type not in ('text', 'table'):
+        continue   # reading .text force-cooks a script/folder/file-in DAT
+    try:
+        t = d.text
+    except Exception as e:
+        t = repr(e)
+    dats[d.path[len(emb.path):]] = hashlib.sha256(
+        t.encode('utf-8')).hexdigest()[:12]
 result = json.dumps({
     'path': emb.path,
     'folder': str(td.project.folder),
@@ -68,33 +96,51 @@ result = json.dumps({
     'update_status': str(emb.par.Updatestatus.eval()),
     'autoupdate': str(emb.par.Autoupdate.eval()),
     'fingerprint': hashlib.sha256('\\n'.join(src).encode('utf-8')).hexdigest(),
+    'dats': dats,
     'updates_dir': str(u._updatesDir(True)),
+    'min_backup': int(getattr(u, '_MIN_BACKUP_BYTES', 0)),
     'busy': bool(getattr(u, '_busy', False)),
     'busy_phase': str(getattr(u, '_busy_phase', '')),
     'ready': bool(emb.extensionsReady),
 })
 """
 
+# MERGES into whatever is stored: smoke_bootstrap seeded the install dialogs
+# ('Embody - AI Coding Assistant Integration', the Convoy titles) and an
+# overwrite would drop them for every boot chain after a swap. The staggered
+# re-arms are RESTORATIVE (store absent only) -- see the module docstring.
 _SEED = """
 import td
 emb = op.Embody
-seed = %r
+seed = dict(emb.fetch('_smoke_test_responses', None, search=False) or {})
+seed.update(%r)
 emb.store('_smoke_test_responses', dict(seed))
-for f in range(30, 1801, 120):
+for f in list(range(20, 1801, 20)) + list(range(1920, 10801, 240)):
     td.run("op(args[1]).store('_smoke_test_responses', dict(args[0]))"
-           " if op(args[1]) else None", seed, emb.path, delayFrames=f)
+           " if op(args[1]) is not None and op(args[1]).fetch("
+           "'_smoke_test_responses', None, search=False) is None else None",
+           seed, emb.path, delayFrames=f)
 result = emb.path
 """
 
+# validateManifest is the product's gate on the manifest (asset traversal,
+# size cap, custom_pars / builtin_pars types). Seeding _pending bypasses
+# _finishCheck, which is where a real user meets it, so the leg runs it here:
+# a shipped manifest the product would refuse must never install in the smoke.
 _APPLY = """
 import json
 u = op.Embody.op('updater').ext.UpdaterExt
 with open(%r, encoding='utf-8') as f:
     mf = json.load(f)
-u._pending = {'tag': mf.get('tag') or ('v' + str(mf['version'])),
-              'version': str(mf['version']), 'asset_url': '',
-              'manifest': mf, 'notes': '', 'tox_path': %r}
-result = json.dumps(u.ApplyUpdate(interactive=False))
+bad = u.validateManifest(mf)
+if bad:
+    result = json.dumps({'error': 'validateManifest refused the shipped '
+                                  'manifest: ' + str(bad)})
+else:
+    u._pending = {'tag': mf.get('tag') or ('v' + str(mf['version'])),
+                  'version': str(mf['version']), 'asset_url': '',
+                  'manifest': mf, 'notes': '', 'tox_path': %r}
+    result = json.dumps(u.ApplyUpdate(interactive=False))
 """
 
 _UPTODATE = """
@@ -113,7 +159,7 @@ result = 'armed'
 """
 
 # What VerifyRollback writes before the startup check overwrites it --
-# reported as evidence, never waited on.
+# reported as context, never waited on and never claimed as observed.
 _ROLLED_BACK = 'Update failed -- previous version restored'
 
 
@@ -190,11 +236,14 @@ class _Upgrade:
         self.error = ''
         self.port = int(ctx.get('port') or 0)
         self.embody = '/Embody'
-        self.old = str((ctx.get('installed') or {}).get('version') or '')
+        installed = ctx.get('installed') or {}
+        self.old = str(installed.get('version') or '')
+        self.old_tox = installed.get('tox')
         self.new = str((ctx.get('build') or {}).get('version') or '')
         self.fp_old = ''
         self.errors_before = 0
         self.probe_error = ''
+        self.sentinel_seen = False
         self.run_dir = os.path.realpath(str(ctx['run_dir']))
 
     # ---- steps -----------------------------------------------------------
@@ -208,6 +257,11 @@ class _Upgrade:
 
     def _check(self, step, ok, detail):
         (self._ok if ok else self._fail)(step, detail)
+
+    def _installed(self, version, tox):
+        """The legs that follow inherit ctx and describe the build they think
+        is running, so it tracks every swap -- in both directions."""
+        self.ctx['installed'] = {'tox': tox, 'version': version}
 
     # ---- talking to the smoke TD ----------------------------------------
 
@@ -240,15 +294,33 @@ class _Upgrade:
             self.ctx['log'](f'upgrade: Envoy came back on port {port}')
             self.port = port
 
-    def _wait(self, step, want, detail, timeout=_RELOAD_TIMEOUT_S):
+    def _entry_probe(self, timeout=_SETTLE_S):
+        """The leg's first read polls like every other one: the MCP probe
+        phase that runs just before it can leave Envoy mid-restart, and one
+        transient miss must not abort the leg."""
+        deadline = self.clock() + max(
+            0.0, min(timeout, self.ctx['budget']() - _RESERVE_S))
+        while True:
+            state = self._probe()
+            if state is not None:
+                return state
+            if self.clock() >= deadline:
+                return None
+            self._reconnect()
+            self.sleep(_POLL_S)
+
+    def _wait(self, step, want, detail, timeout=_RELOAD_TIMEOUT_S, watch=None):
         """Poll the component until `want(state)`, re-reading the port each
-        round. Fails the step (and the leg) on timeout or an empty budget."""
+        round. Fails the step (and the leg) on timeout or an empty budget.
+        `watch` runs every round, answered or not."""
         window = min(timeout, max(0.0, self.ctx['budget']() - _RESERVE_S))
         if window <= 0:
             self._fail(step, f'{detail}: no budget left in the run')
         deadline = self.clock() + window
         last = None
         while self.clock() < deadline:
+            if watch is not None:
+                watch()
             state = self._probe()
             if state is None:
                 self._reconnect()
@@ -324,6 +396,29 @@ class _Upgrade:
                     f'(manifest {str(manifest.get("sha256"))[:12]}...)')
         return dest.replace('\\', '/')
 
+    def _apply(self, tag, manifest_path, staged):
+        """Wait the updater's busy latch out, then apply; returns the last
+        pre-apply state. The wait and the call are two round trips and the
+        reloaded component's notify-mode startup check can re-arm the latch
+        between them, so a refusal naming it is retried rather than reported
+        (measured 2026-09-19: the re-update fired ~1s after the rollback and
+        was refused)."""
+        reply = {}
+        for attempt in range(3):
+            pre = self._wait(f'apply_{tag}', lambda s: not s['busy'],
+                             'the updater never left its busy phase',
+                             timeout=_BUSY_TIMEOUT_S)
+            reply = json.loads(self._py(_APPLY % (manifest_path, staged), 30))
+            if reply.get('status') == 'applying':
+                self._ok(f'apply_{tag}',
+                         f'ApplyUpdate(interactive=False) -> {reply}'
+                         + (f' (attempt {attempt + 1})' if attempt else ''))
+                return pre
+            if 'already running' not in str(reply.get('error') or ''):
+                break
+            self.sleep(_POLL_S)
+        self._fail(f'apply_{tag}', f'ApplyUpdate(interactive=False) -> {reply}')
+
     def _update(self, manifest, manifest_path, updates_dir, tag, was):
         """Seed _pending and drive one real ApplyUpdate to a verified new
         version. `was` is the state before the apply: a new EmbodyExt op id
@@ -331,27 +426,24 @@ class _Upgrade:
         says VerifyUpdate accepted it, and the cleared sentinel says it
         finished."""
         staged = self._stage(updates_dir, manifest, f'stage_{tag}')
-        # A component that just booted runs its own notify-mode check, and
-        # ApplyUpdate refuses while that latch is up -- what a user clicking
-        # Install mid-check gets. Measured 2026-09-19: the re-update fired
-        # ~1s after the rollback and was refused.
-        self._wait(f'apply_{tag}', lambda s: not s['busy'],
-                   'the updater never left its busy phase', timeout=90)
-        reply = json.loads(self._py(_APPLY % (manifest_path, staged), 30))
-        self._check(f'apply_{tag}', reply.get('status') == 'applying',
-                    f'ApplyUpdate(interactive=False) -> {reply}')
+        pre = self._apply(tag, manifest_path, staged)
         t0 = self.clock()
+        self.sentinel_seen = False
         state = self._wait(f'verify_{tag}',
                            lambda s: (s['token'] != was['token']
                                       and s['version'] == self.new
                                       and s['ready']
                                       and self._sentinel_cleared(updates_dir)),
-                           f'the component never became a verified v{self.new}')
+                           f'the component never became a verified v{self.new}',
+                           watch=lambda: self._note_sentinel(updates_dir))
+        self._installed(self.new, self.ctx['build']['tox'])
         self._ok(f'verify_{tag}',
                  f"Version={state['version']} EmbodyExt id {was['token']} -> "
                  f"{state['token']} after {self.clock() - t0:.0f}s on port "
-                 f"{self.port}; VerifyUpdate cleared the sentinel; "
+                 f"{self.port}; sentinel {self._sentinel_note()}; "
                  f"Updatestatus={state['update_status']!r}")
+        self._moved(f'{tag}_identity', was, pre, state)
+        self._health(f'{tag}_health', state)
         return state
 
     def _sentinel_cleared(self, updates_dir):
@@ -359,12 +451,48 @@ class _Upgrade:
         confirms a real reload -- the one race-free witness on disk."""
         return not os.path.isfile(os.path.join(updates_dir, 'pending.json'))
 
+    def _note_sentinel(self, updates_dir):
+        """Evidence, not a gate: the sentinel's life overlaps the window where
+        Envoy is down, so 'never seen' is normal on a fast swap and must not
+        fail a step."""
+        if not self._sentinel_cleared(updates_dir):
+            self.sentinel_seen = True
+
+    def _sentinel_note(self):
+        return 'seen, then cleared' if self.sentinel_seen else 'cleared'
+
+    def _moved(self, step, pre_a, pre_b, after):
+        """The DATs are the other build's. Only the ones that held identical
+        across the two pre-apply samples are compared -- see the module
+        docstring on why neither an exclusion list nor the extension sources
+        alone can decide this."""
+        first = pre_a.get('dats') or {}
+        second = pre_b.get('dats') or {}
+        now = after.get('dats') or {}
+        stable = {p: h for p, h in first.items() if second.get(p) == h}
+        changed = sorted(p for p, h in stable.items() if now.get(p) != h)
+        appeared = sorted(set(now) - set(second))
+        gone = sorted(set(second) - set(now))
+        self._check(step, bool(changed or appeared or gone),
+                    f'{len(changed)}/{len(stable)} stable DATs changed, '
+                    f'{len(appeared)} appeared, {len(gone)} gone '
+                    f'{(changed + appeared + gone)[:3]}')
+
     def _health(self, step, state):
+        """Envoy and Status settle a beat after the probe answers -- EnvoyExt
+        writes 'Running on port N' only once the bind is confirmed, and a
+        watchdog revive can land after a swap -- so the predicate polls like
+        every other read instead of hard-failing one sample."""
+        def healthy(s):
+            return (s['status'] == 'Enabled'
+                    and s['envoy'] == f'Running on port {self.port}')
+
+        if not healthy(state):
+            state = self._wait(step, healthy,
+                               'the component never settled to Status=Enabled '
+                               'with Envoy running', timeout=_SETTLE_S)
         errors = self._errors()
-        self._check(step, (state['status'] == 'Enabled'
-                           and errors is not None
-                           and errors <= self.errors_before
-                           and state['envoy'] == f'Running on port {self.port}'),
+        self._check(step, errors is not None and errors <= self.errors_before,
                     f"Status={state['status']} errorCount={errors} "
                     f"(was {self.errors_before}) "
                     f"Envoystatus={state['envoy']!r}")
@@ -374,18 +502,23 @@ class _Upgrade:
         backup, then CheckForUpdate -> 'Restore Backup' -> _rollback."""
         backup = os.path.join(updates_dir, f'backup-v{self.old}.tox')
         size = os.path.getsize(backup) if os.path.isfile(backup) else 0
-        self._check('backup', size >= _MIN_BACKUP_BYTES,
-                    f'{backup} {size} bytes (a fresh ExportPortableTox of the '
-                    f'live v{self.old} COMP, so its sha256 is deliberately '
-                    f'NOT the installed tox\'s)')
+        floor = int(was.get('min_backup') or _MIN_BACKUP_BYTES)
+        self._check('backup', size >= floor,
+                    f'{backup} {size} bytes (floor {floor}; a fresh '
+                    f'ExportPortableTox of the live v{self.old} COMP, so its '
+                    f'sha256 is deliberately NOT the installed tox\'s)')
         sentinel = {'from_version': self.old, 'to_version': self.new,
                     'tag': f'v{self.new}', 'tox_path': '',
                     'backup_path': backup.replace('\\', '/'),
                     'backup_sha256': _sha256(backup), 'phase': 'reloading',
                     'session': {'pid': 0, 'started': 0}}
         # 'Embody Update' -> button 0 IS the Restore Backup answer; the
-        # sentinel key keeps the store alive after it is consumed.
+        # sentinel key keeps the store alive after it is consumed. Deliberately
+        # NOT seeded: StartupCheck's own 'Embody Update Recovery' prompt, which
+        # this forged (pid 0) sentinel can raise -- -1 leaves the sentinel for
+        # VerifyRollback, while its button 1 would steal it.
         self._arm_dialogs({'Embody Update': 0})
+        self.sentinel_seen = False
         self._check('rollback_trigger',
                     self._py(_ROLLBACK_ARM % (json.dumps(sentinel),), 30)
                     == 'armed',
@@ -395,17 +528,20 @@ class _Upgrade:
                             lambda s: (s['token'] != was['token']
                                        and s['ready']
                                        and self._sentinel_cleared(updates_dir)),
-                            'the backup was never reloaded')
+                            'the backup was never reloaded',
+                            watch=lambda: self._note_sentinel(updates_dir))
+        self._installed(self.old, self.old_tox)
         self._ok('rollback',
-                 f"EmbodyExt id {was['token']} -> {rolled['token']}; "
-                 f"VerifyRollback cleared the sentinel after writing "
-                 f"{_ROLLED_BACK!r}; Updatestatus now "
-                 f"{rolled['update_status']!r}; par.Version reads "
+                 f"EmbodyExt id {was['token']} -> {rolled['token']}; sentinel "
+                 f"{self._sentinel_note()} (VerifyRollback writes "
+                 f"{_ROLLED_BACK!r} there, and the startup check overwrites it "
+                 f"within seconds, so it is not sampled -- Updatestatus now "
+                 f"{rolled['update_status']!r}); par.Version reads "
                  f"{rolled['version']} -- the swap preserves par values and "
                  f"nothing stamps them back")
         self._check('rollback_identity', rolled['fingerprint'] == self.fp_old,
-                    f"{rolled['fingerprint'][:12]}... == the pre-update "
-                    f"{self.fp_old[:12]}...")
+                    f"extension sources {rolled['fingerprint'][:12]}... == the "
+                    f"pre-update {self.fp_old[:12]}...")
         self._health('rollback_health', rolled)
         return rolled
 
@@ -417,7 +553,7 @@ class _Upgrade:
                        f'nothing to upgrade: installed v{self.old!r}, build '
                        f'v{self.new!r} -- --legs upgrade stages the previous '
                        f'release before boot')
-        state = self._probe()
+        state = self._entry_probe()
         if state is None:
             self._fail('installed_version',
                        f'Envoy did not answer on port {self.port}: '
@@ -437,20 +573,18 @@ class _Upgrade:
                     f"errorCount={self.errors_before}")
         self._check('dialog_guard', bool(self._arm_dialogs()),
                     'a swap wipes the seeded _smoke_test_responses; staggered '
-                    'run()s re-arm it so no modal can freeze TD')
+                    'run()s restore it so no modal can freeze TD')
         manifest, manifest_path = self._manifest()
         updates_dir = state['updates_dir']
 
         state = self._update(manifest, manifest_path, updates_dir, 'update',
                              before)
         fp_new = state['fingerprint']
-        self._check('update_identity', fp_new != self.fp_old,
-                    f'{self.fp_old[:12]}... -> {fp_new[:12]}... (the extension '
-                    f"DATs are the new build's)")
-        self._health('update_health', state)
         ext_after = self._tool('get_externalizations', {}, 'count')
-        self._check('externalizations', ext_after == ext_before,
-                    f'{ext_before} rows before, {ext_after} after')
+        self._check('externalizations',
+                    ext_before is not None and ext_after == ext_before,
+                    f'{ext_before} rows before, {ext_after} after (None means '
+                    f'the table was never read)')
         self._check('up_to_date',
                     self._py(_UPTODATE % (f'v{self.new}',), 30)
                     == f'Up to date (v{self.new})',
@@ -459,18 +593,21 @@ class _Upgrade:
 
         rolled = self._rollback(updates_dir, state)
 
-        # The re-update is what leaves the project on the NEW build for any
-        # leg that follows, so it runs whenever the ceiling still allows a
-        # full swap; a skip says so rather than reading as coverage.
+        # The re-update is what leaves the project on the NEW build for the
+        # legs that follow, so no budget for it FAILS the leg: passing here
+        # would report the gate green for a project sitting on the previous
+        # release, with `faults` and `uninstall` testing that one.
         left = self.ctx['budget']() - _RESERVE_S
         if left < _RELOAD_TIMEOUT_S / 2:
-            self._ok('reupdate', f'skipped -- {left:.0f}s of budget left, '
-                                 f'needs {_RELOAD_TIMEOUT_S / 2:.0f}s; the '
-                                 f'project is left on the pre-update build')
-            return
+            self._fail('reupdate',
+                       f'no time to put the build under test back: {left:.0f}s '
+                       f'left, needs {_RELOAD_TIMEOUT_S / 2:.0f}s. The project '
+                       f'is on the pre-update v{self.old}, so anything after '
+                       f'this would test the wrong build -- raise the run '
+                       f'ceiling (smoke_run.py --timeout)')
         self._arm_dialogs()
         state = self._update(manifest, manifest_path, updates_dir, 'reupdate',
                              rolled)
-        self._check('reupdate_identity', state['fingerprint'] == fp_new,
-                    f"back to {fp_new[:12]}... (the build under test)")
-        self._health('reupdate_health', state)
+        self._check('build_restored', state['fingerprint'] == fp_new,
+                    f"extension sources back to {fp_new[:12]}... (the build "
+                    f"under test)")
