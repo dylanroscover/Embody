@@ -6,7 +6,7 @@ asserts, this module only reports what it found.
 
 Every environment touch (clock, sleep, sockets) goes through `seams(ctx)`
 so the unit tests can drive a whole leg on a fake clock and fake ports:
-ctx['_seams'] = {'clock': ..., 'sleep': ..., 'alive': ..., 'hold': ...}.
+ctx['_seams'] = {'clock', 'sleep', 'alive', 'hold', 'runs'}.
 """
 
 from __future__ import annotations
@@ -15,10 +15,18 @@ import json
 import os
 import shutil
 import socket
+import subprocess
+import sys
 import time
 
 BACKUP = 'faults_backup'
 RESERVE_S = 45.0    # never spend the run's last seconds; teardown needs them
+
+
+class BudgetExhausted(Exception):
+    """The run ran out of clock while a leg was waiting. Raised instead of
+    reported, so a slow runner reads as inconclusive and never as a product
+    regression -- the two were one `None` return before (field 2026-09-19)."""
 
 
 def alive(port) -> bool:
@@ -31,11 +39,15 @@ def alive(port) -> bool:
 
 
 def hold(port):
-    """A listening socket on `port` held by THIS process, or None. Plain
-    bind, no SO_REUSEADDR -- the probe _findAvailablePort itself uses
-    (EnvoyExt.py:5559), so taking it this way is what Envoy will see."""
+    """A listening socket on `port` held by THIS process, or None. On posix
+    SO_REUSEADDR matches what the server binds with (asyncio defaults it on,
+    uvicorn sets it): without it a TIME_WAIT TCB locks the leg out of a port
+    Envoy could still take. Never on win32, where SO_REUSEADDR would let the
+    bind succeed UNDER a live listener and the hold would prove nothing."""
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        if sys.platform != 'win32':
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('127.0.0.1', int(port)))
         s.listen(1)
     except (OSError, ValueError):
@@ -49,7 +61,8 @@ def seams(ctx) -> dict:
     return {'clock': s.get('clock') or time.monotonic,
             'sleep': s.get('sleep') or time.sleep,
             'alive': s.get('alive') or alive,
-            'hold': s.get('hold') or hold}
+            'hold': s.get('hold') or hold,
+            'runs': s.get('runs') or runs}
 
 
 # --- run_dir reads ---
@@ -156,6 +169,27 @@ def venv_paths(run_dir) -> tuple:
     return os.path.join(venv, 'pyvenv.cfg'), site
 
 
+def venv_python(run_dir) -> str:
+    """The venv interpreter envoy_setup probes (envoy_setup.py:136-140)."""
+    venv = os.path.join(run_dir, '.venv')
+    return (os.path.join(venv, 'Scripts', 'python.exe')
+            if sys.platform == 'win32'
+            else os.path.join(venv, 'bin', 'python3'))
+
+
+def runs(python_path, timeout=10.0) -> bool:
+    """Whether that interpreter still starts -- the same one-liner
+    probe_venv_python runs, from the orchestrator process. Lets a fault
+    verify it is injectable on THIS platform instead of assuming it."""
+    try:
+        return subprocess.run(
+            [str(python_path), '-c', 'import sys; print(sys.version)'],
+            capture_output=True, timeout=timeout,
+            stdin=subprocess.DEVNULL).returncode == 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
 def home_of(text) -> str:
     """pyvenv.cfg's `home` -- the base interpreter the venv delegates to."""
     for line in str(text).splitlines():
@@ -183,15 +217,19 @@ def defer(ctx, script, delay_ms=1500):
     mandatory for anything that stops the server, since the reply to this
     very call travels over the socket the script is about to close. `run` is
     not in execute_python's namespace (EnvoyExt._execNamespace), hence the
-    import; the scheduled string runs in a normal TD script context."""
+    import; the scheduled string runs in a normal TD script context, on
+    wall time because every deadline a leg holds is time.monotonic."""
     return ctx['py']("from td import run as _run\n"
-                     "_run(%r, fromOP=op.Embody, delayMilliSeconds=%d)\n"
+                     "_run(%r, fromOP=op.Embody, delayMilliSeconds=%d,\n"
+                     "     wallTime=True)\n"
                      "result = 'scheduled'" % (script, int(delay_ms)))
 
 
 def until(ctx, sm, pred, timeout, poll=1.0):
-    """Poll pred() until truthy. Bounded by `timeout` AND by the run's own
-    ceiling -- a leg that outruns budget() takes teardown down with it."""
+    """Poll pred() until truthy, or None once `timeout` passed. Running out
+    of the RUN's budget raises BudgetExhausted instead: a leg that outruns
+    budget() takes teardown down with it, and "the clock ran out" is not
+    the same answer as "the product never did it"."""
     deadline = sm['clock']() + timeout
     while True:
         try:
@@ -200,7 +238,11 @@ def until(ctx, sm, pred, timeout, poll=1.0):
             got = None
         if got:
             return got
-        if sm['clock']() >= deadline or ctx['budget']() <= RESERVE_S:
+        left = ctx['budget']()
+        if left <= RESERVE_S:
+            raise BudgetExhausted('%.0fs left, under the %.0fs teardown '
+                                  'reserve' % (left, RESERVE_S))
+        if sm['clock']() >= deadline:
             return None
         sm['sleep'](poll)
 
