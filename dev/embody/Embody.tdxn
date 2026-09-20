@@ -2011,7 +2011,7 @@ operators:
     - name: Windowcomp
       style: COMP
       label: Window COMP
-      value: /embody/Embody/window_manager
+      value: window_manager
   position: [300, 300]
   size: [160, 76]
   color: [0.3, 0.5, 0.9]

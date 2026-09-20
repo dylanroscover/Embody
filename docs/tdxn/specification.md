@@ -280,6 +280,12 @@ A constant parameter is included only if its current value differs from its defa
 - **OP-reference parameters**: `None` and `""` are treated as equivalent (both mean "no operator connected")
 - **All other types**: standard equality comparison (`!=`)
 
+### OP-Reference Values
+
+A constant-mode OP-reference parameter -- a `TOP`/`CHOP`/`DAT`/`COMP`/`OP`-style built-in, a sequence block's operator slot such as a GLSL MAT sampler's `top`, or a custom `OP`-style parameter -- is written **as authored**: the typed string, normally a sibling name or a relative path, including a name that does not resolve yet and a pattern such as `constant*`. It is never the resolved operator's absolute path. (Embody 6.2.56 and earlier wrote sequence-block and custom values as `str(p.eval())` -- an absolute path, or nothing when the name did not resolve; see [issue #132](https://github.com/dylanroscover/Embody/issues/132).)
+
+**Repair of absolute values.** A sequence-block or custom OP value that is an absolute path *inside* the exported network is rewritten relative to its owner on export (`/proj/comp/tex` on `/proj/comp/glsl` becomes `tex`; from one level down, `../tex`), and such a value in an older file is remapped onto the destination COMP on import, so a copy or a clone drives its own operators. The repair is deliberately narrow: only those two parameter classes (a top-level built-in was always written as authored, so an absolute value there is the user's and is kept); only a single literal path (a pattern or a space-separated multi-operator value stays as authored); never for a whole-project document (`network_path: /`). An export does not modify the live parameter; it takes the relative form on its next reconstruction.
+
 ### Divergent Defaults and the Creation-Defaults Catalog
 
 Some TouchDesigner operators reset certain parameters during initialization, meaning the value reported by `p.default` differs from the value TouchDesigner actually assigns when the operator is created. For example:
@@ -1309,7 +1315,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
 | 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
-| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. A custom parameter whose `value`/`values` was omitted (it equalled its default) is seeded from `default` on every component. |
+| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. A custom parameter whose `value`/`values` was omitted (it equalled its default) is seeded from `default` on every component. An absolute OP-reference value inside the document's `network_path` (a sequence block or custom parameter, from an Embody 6.2.56-or-earlier export) is remapped relative to its owner in the destination -- see [OP-Reference Values](#op-reference-values). |
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
@@ -1420,6 +1426,7 @@ For most networks, export → import → re-export produces identical `.tdxn` ou
 - **Target COMP metadata** (v1.1+): type, flags, color, tags, comment, storage
 - Operator names, types, and hierarchy
 - Non-default parameter values (constant, expression, and bind modes)
+- Constant OP-reference strings as authored, including unresolved names and patterns (see [OP-Reference Values](#op-reference-values))
 - Custom parameter definitions (all fields, all styles)
 - Flags, connections, positions, sizes, colors, comments, tags
 - Operator storage (serializable entries only — see [Operator Storage](#operator-storage))

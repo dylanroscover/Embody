@@ -21,6 +21,7 @@ import json
 import math
 import time
 import os
+import posixpath
 import shutil
 import sys
 import tempfile
@@ -591,6 +592,10 @@ class TDXNExt:
 		# (op_path, par_name) pairs already warned about bad tdn_omit
 		# tags; cleared per export so a standing typo warns once per run.
 		self._omit_warned: set = set()
+		# Absolute-OP-reference repair scope (see _relativeOPValue): the
+		# export root, and (source network_path, dest COMP) for an import.
+		self._export_root_path: Optional[str] = None
+		self._import_rebase: Optional[tuple] = None
 		# Palette clones whose unanswered prompt (outside a save) already
 		# WARNed; repeats log at DEBUG. Cleared per save (issue #109).
 		self._palette_unanswered_warned: set = set()
@@ -1605,7 +1610,13 @@ class TDXNExt:
 			'include_storage': include_storage,
 			'max_depth': max_depth,
 			'embed_all': embed_all,
+			'root_path': root_op.path,
 		}
+
+		# Saved/restored: a checkpoint export can land between two frames
+		# of an async one. _exportSingleOp re-asserts it per operator.
+		prev_export_root = self._export_root_path
+		self._export_root_path = root_op.path
 
 		try:
 			# Live-op caches only: _seq_default_blocks_cache deliberately
@@ -1633,7 +1644,7 @@ class TDXNExt:
 				'source_file': project.name,
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
-				'network_path': root_path,
+				'network_path': root_op.path,
 				'options': {
 					'include_dat_content': include_dat_content,
 					'include_storage': include_storage,
@@ -1647,7 +1658,10 @@ class TDXNExt:
 			# Target COMP's own type (v1.1+)
 			tdn['type'] = root_op.OPType
 
-			# Target COMP's own parameters (custom + non-default built-in)
+			# Target COMP's own parameters (custom + non-default built-in).
+			# The child walk above can yield to a palette-handling modal,
+			# during which an async batch may have swapped the scope.
+			self._export_root_path = root_op.path
 			root_custom_pars = self._exportCustomPars(root_op)
 			if root_custom_pars:
 				tdn['custom_pars'] = root_custom_pars
@@ -1805,6 +1819,7 @@ class TDXNExt:
 			self._log(f'Export failed: {e}', 'ERROR')
 			return {'error': f'Export failed: {e}'}
 		finally:
+			self._export_root_path = prev_export_root
 			self._cleanupScanWorkspace()
 
 	# Ops-count threshold above which the progress dialog auto-opens
@@ -1938,8 +1953,9 @@ class TDXNExt:
 				'include_storage': include_storage,
 				'max_depth': max_depth,
 				'embed_all': embed_all,
+				'root_path': root_op.path,
 			},
-			'root_path': root_path,
+			'root_path': root_op.path,
 			'output_file': resolved_path,
 			'metadata': metadata,
 			'before_tdxn': before_tdxn,
@@ -2098,6 +2114,7 @@ class TDXNExt:
 			# async export was refused as "already in progress" (TDXN
 			# review 2026-08-30). Release it and fail loud instead.
 			self._export_state = None
+			self._export_root_path = None
 			done_event.set()
 			msg = ('Thread Manager at capacity -- async export NOT started. '
 				   'Retry, or restart Envoy to free stale threads.')
@@ -2239,6 +2256,10 @@ class TDXNExt:
 		if state is None or state['done']:
 			return
 
+		# Re-asserted per batch (and per op in _exportSingleOp): a sync
+		# export between two of our frames restores ITS predecessor.
+		self._export_root_path = state['root_path']
+
 		# Cancellation lands on a batch boundary: no file is written (the
 		# worker sees the error and raises into _onExportError, which
 		# cleans up), and processing stops immediately.
@@ -2340,6 +2361,7 @@ class TDXNExt:
 		"""SuccessHook: Log completion (main thread)."""
 		self._cleanupScanWorkspace()
 		self._closeExportProgress()
+		self._export_root_path = None
 		state = self._export_state
 		if state and state.get('result'):
 			result = state['result']
@@ -2383,6 +2405,7 @@ class TDXNExt:
 		self._closeExportProgress()
 		self._log(f'Export failed: {e}', 'ERROR')
 		self._export_state = None
+		self._export_root_path = None
 		self._reexport_queue = None
 		run("args[0]._refreshList()", self, delayFrames=2)
 
@@ -2662,6 +2685,13 @@ class TDXNExt:
 		# use to trigger backup rollback) instead of escaping.
 		# ------------------------------------------------------------------
 		captured_externals = []
+		# Repair scope for a pre-fix file's absolute OP references (see
+		# _relativeOPValue). Saved/restored: Phase 8.6 recurses into
+		# ImportNetwork, and Phases 8.7/9 set parameters after it returns.
+		# A bare operators list names no source root, so nothing remaps.
+		prev_import_rebase = self._import_rebase
+		self._import_rebase = (
+			(tdn.get('network_path') if isinstance(tdn, dict) else None), dest)
 		try:
 			# Capture external wires on dest's own connectors before clear
 			# so they can be re-wired after the rebuild. When dest has no
@@ -3007,6 +3037,8 @@ class TDXNExt:
 			except Exception:
 				pass
 			return {'error': f'Import failed: {e}'}
+		finally:
+			self._import_rebase = prev_import_rebase
 
 	def importNetworkFromFile(self, file_path: str, target_path: str = '/',
 							   clear_first: bool = False) -> dict[str, Any]:
@@ -3150,6 +3182,8 @@ class TDXNExt:
 		# why nested excluded COMPs serialize as normal content instead).
 		if depth == 0 and self._hasExcludeTag(target):
 			return None
+		# Per-op re-assert of the repair scope (see _relativeOPValue).
+		self._export_root_path = options.get('root_path', self._export_root_path)
 		data = {
 			'name': target.name,
 			'type': target.OPType,
@@ -4207,11 +4241,97 @@ class TDXNExt:
 			elif p.mode == ParMode.BIND:
 				return '~' + p.bindExpr
 			elif p.mode == ParMode.CONSTANT:
+				if p.isOP:
+					# p.val, never p.eval(): the resolved OP's str() is an
+					# absolute path, and None (unresolved name, pattern)
+					# was dropped as a default. See _relativeOPValue (#132).
+					return self._serializeValue(self._relativeOPValue(p))
 				return self._serializeValue(p.eval())
 			return None
 		except Exception as e:
 			self._log(f'Error reading value for param {p.name}: {e}', 'DEBUG')
 			return None
+
+	# Absolute OP references (#132). Through 6.2.56 a sequence-block or
+	# custom OP par exported as str(p.eval()), an absolute path, so a COMP
+	# rebuilt from that file points into its SOURCE (a clone drives the
+	# master). The repair rewrites an in-root absolute value relative to
+	# its owner: on export (_relativeOPValue, a live COMP already rebuilt
+	# from a bad file) and on import (_rebaseImportedOPValue, the file).
+	# Scope, narrow on purpose: those two par classes only (top-level
+	# built-ins were always written as authored -- an absolute one is the
+	# user's); one literal path only (a pattern or multi-op value stays
+	# as authored: op() matches its first token); never at root '/' (no
+	# outside). Lexical, so a tdn_ref shell's target need not exist yet.
+
+	@staticmethod
+	def _isLiteralOpPath(value: str) -> bool:
+		"""One absolute op path: no pattern characters, whitespace
+		(a multi-op value), empty, '.' or '..' segments."""
+		if not value.startswith('/') or any(c in value for c in ' \t*?[]'):
+			return False
+		return all(seg not in ('', '.', '..') for seg in value[1:].split('/'))
+
+	@staticmethod
+	def _pathUnderRoot(value: str, root_path: Optional[str]) -> Optional[str]:
+		"""Suffix of literal absolute path `value` strictly below
+		`root_path`; None when outside, not literal, at the root itself,
+		or the root is '/'."""
+		root = (root_path or '').rstrip('/')
+		if not root or not TDXNExt._isLiteralOpPath(value):
+			return None
+		if value.startswith(root + '/'):
+			return value[len(root) + 1:]
+		return None
+
+	@staticmethod
+	def _relativeOpPath(owner_path: str, target_path: str) -> str:
+		"""OP.relativePath from paths alone: a reference resolves against
+		the owner's parent network, and a COMP reaching its own descendant
+		needs './'. Pinned to the live method by test_tdxn_op_refs."""
+		if target_path.startswith(owner_path + '/'):
+			return './' + target_path[len(owner_path) + 1:]
+		return posixpath.relpath(
+			target_path, posixpath.dirname(owner_path) or '/')
+
+	def _relativeOPValue(self, p: 'Par') -> str:
+		"""p.val, with an absolute path inside the export root rewritten
+		owner-relative (repair; see the #132 note above). Read-only: the
+		live parameter heals on its next reconstruction."""
+		val = p.val
+		if (not isinstance(val, str) or not val.startswith('/')
+				or TDXNExt._pathUnderRoot(val, self._export_root_path) is None):
+			return val
+		try:
+			rel = TDXNExt._relativeOpPath(p.owner.path, val)
+		except Exception as e:
+			self._log(f'Left {p.owner.path}.{p.name} = {val!r} absolute: {e}',
+					  'DEBUG')
+			return val
+		self._log(f'Rebased {p.owner.path}.{p.name}: {val!r} -> {rel!r}', 'DEBUG')
+		return rel
+
+	def _rebaseImportedOPValue(self, par: 'Par', value: str) -> str:
+		"""A pre-fix file's absolute value remapped onto the destination
+		(repair; see the #132 note above). Anything else as authored."""
+		rebase = self._import_rebase
+		if not rebase or not value.startswith('/'):
+			return value
+		try:
+			if not (par.isOP and (par.isCustom or par.sequence is not None)):
+				return value
+			source_root, dest = rebase
+			suffix = TDXNExt._pathUnderRoot(value, source_root)
+			if not suffix:
+				return value
+			rel = TDXNExt._relativeOpPath(par.owner.path, f'{dest.path}/{suffix}')
+		except Exception as e:
+			self._log(f'Left {par.owner.path}.{par.name} = {value!r} absolute: '
+					  f'{e}', 'DEBUG')
+			return value
+		self._log(f'Rebased {par.owner.path}.{par.name}: {value!r} -> {rel!r}',
+				  'DEBUG')
+		return rel
 
 	def _exportFlags(self, target):
 		"""Export flags that differ from defaults as a string array.
@@ -5712,7 +5832,7 @@ class TDXNExt:
 						par.bindExpr = value[1:]
 						par.mode = ParMode.BIND
 				else:
-					par.val = value
+					par.val = self._rebaseImportedOPValue(par, value)
 			elif isinstance(value, dict):
 				# Legacy v1.0 format support
 				if 'expr' in value:

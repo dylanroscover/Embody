@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **154 test suites** and **5,051 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **155 test suites** and **5,067 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -135,7 +135,7 @@ unattended run can never fall through to a blocking modal.
 
 ## Test Coverage
 
-The tables below cover 150 suites. The remaining three are the
+The tables below cover 151 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
@@ -214,7 +214,7 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_capture_op` | 9 | `capture_op`: any operator through a transient OP Viewer TOP, waiting out the empty frames a freshly aimed viewer returns |
 | `test_shader_diagnostics` | 16 | GLSL compile failures surfaced on `get_op_errors` (TD only warns; the details live in the Info DAT) |
 
-### TDXN Format (23 suites, 878 tests)
+### TDXN Format (24 suites, 894 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -241,6 +241,7 @@ AI-client connectivity tier, listed separately under
 | `test_tdxn_migration` | 18 | The v6.1 migration of existing `.tdn` files (`migrateToTDXN`), the one path that moves user files, on a full three-level project |
 | `test_tdxn_par_key_migration` | 7 | `config.json` key migration for the renamed TDXN parameters, so a stored setting survives the rename |
 | `test_tdxn_schema` | 2 | Every committed TDXN document validates against the shipped `docs/tdxn.schema.yaml` (contract C7) |
+| `test_tdxn_op_refs` | 16 | Constant OP references written as authored (sequence blocks, custom pars, unresolved names, patterns); absolute in-root values repaired owner-relative on export and on import; clone re-sync and rename (issue #132) |
 
 ### Community & Collection (7 suites, 129 tests)
 
