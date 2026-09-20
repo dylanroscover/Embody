@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 8
+    rows: 17
     cols: 5
   flags:
   - viewer

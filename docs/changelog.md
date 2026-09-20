@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.57
+
+TDXN keeps operator references as you wrote them, a clone knows it uses Envoy, and the release smoke runs itself on both platforms.
+
+- **TDXN op references are exported as authored, not evaluated.** Sequence-block and custom operator parameters exported the evaluated absolute path, so a clone drove the master and a copy drove the original. Export keeps the value as written; an absolute path inside the project is rebased to its owner on export and import. Fixes #132.
+- **A fresh clone adopts Envoy.** The committed `.embody/project.json` declares that a project uses Envoy, so a machine with no local settings turns it on at first open instead of arriving with no `.mcp.json`. The shipped rules say what a missing `.mcp.json` means.
+- **One-command release smoke.** `dev/release_testing/smoke_run.py` runs an isolated fresh-install smoke to a verdict, probes MCP and quits the TouchDesigner it launched, on Windows and macOS; the macOS leg runs in CI and blocks a release when red.
+
 ## v6.2.56
 
 A broken venv repairs itself instead of being deleted, and enabling Envoy no longer freezes TouchDesigner.
