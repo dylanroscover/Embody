@@ -18,7 +18,8 @@ is bumped once more before run() returns, so nothing this leg armed can
 fire into a later fault or into the uninstall leg (field 2026-09-19: a
 stale re-enable from fault 1 started Envoy inside fault 4); every corrupted
 file is copied to <run_dir>/faults_backup and written back the moment a
-step fails; nothing outside run_dir is touched; run() reports, never raises.
+step fails, as is the interpreter fault 1 displaces on posix; nothing
+outside run_dir is touched; run() reports, never raises.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ _REPAIRED = 'Venv interpreter repaired'
 _REVIVING = 'unreachable while enabled'
 # One file per window generation; the re-enables append to it.
 _WINDOW_CRUMB = 'faults_window_%d.json'
+_WEDGE_CRUMB = 'faults_wedge_%d.json'
 _BRANCHES = (('socket dead', 'Watchdog: enabled but socket dead'),
              ('status stuck', 'Watchdog: status stuck at'))
 
@@ -127,11 +129,12 @@ def _window(up_ms, gen, run_dir='') -> str:
           "except Exception:\n"
           "    pass" % (int(gen), crumb, int(gen)))
     frames = max(1, int(round(int(up_ms) / 1000.0 * 60)))
-    return ("o = op.Embody\n"
+    return ("from td import run as _run\n"
+            "o = op.Embody\n"
             "o.store('_smoke_gen', %d)\n"
             "o.par.Envoyenable = False\n"
-            "run(%r, fromOP=o, delayMilliSeconds=%d, wallTime=True)\n"
-            "run(%r, fromOP=o, delayFrames=%d)"
+            "_run(%r, fromOP=o, delayMilliSeconds=%d, wallTime=True)\n"
+            "_run(%r, fromOP=o, delayFrames=%d)"
             % (int(gen), on % 'clock', int(up_ms), on % 'frames', frames))
 
 
@@ -163,14 +166,52 @@ def _window_crumbs(run_dir, gen) -> list:
     return out
 
 
-def _watchdog_kill(port, gen) -> str:
+# The wedge is re-asserted on this ladder (seconds after the kill) until
+# the watchdog takes it. One assertion is not enough: it is racing the
+# server thread's exit hook, which clears envoy_running and can leave
+# Envoystatus 'Disabled' (EnvoyExt.Stop:6712) -- and the watchdog rightly
+# never revives a disabled Envoy.
+_WEDGE_AT_S = (2, 4, 6, 8, 11, 14)
+
+
+def _watchdog_kill(port, gen, run_dir='') -> str:
     """The wedge the watchdog exists for: the socket dies while Envoyenable
-    stays ON and the status still claims 'Running on port N'. One script, so
-    the wedge cannot lose the race to the ~8s revive. Re-arming the backoff
-    AFTER Stop() (which zeroes the window at its top) sends the exit hook's
-    auto-restart to the 60s cap and leaves the watchdog as the only
-    recovery (EnvoyExt._onServerSuccess:7637, _scheduleRestart)."""
+    stays ON and the status still claims 'Running on port N'. Re-arming the
+    backoff AFTER Stop() (which zeroes the window at its top) sends the exit
+    hook's auto-restart to the 60s cap and leaves the watchdog as the only
+    recovery (EnvoyExt._onServerSuccess:7637, _scheduleRestart).
+
+    Each re-assertion stops once the status says Reviving, so the leg never
+    fights the revive it is waiting for, and appends to a breadcrumb naming
+    what it found -- the only channel left once the socket is gone.
+    """
+    crumb = os.path.join(run_dir or '.', _WEDGE_CRUMB % int(gen))
+    # The wedge exists only while the socket is dead. Standing down on
+    # 'Reviving' alone let a late re-assertion write the stale port back
+    # over a status the watchdog had already corrected (live 2026-09-20).
+    hold = ("o = op.Embody\n"
+            "e = o.ext.Envoy\n"
+            "g = o.fetch('_smoke_gen', 0)\n"
+            "st = str(o.par.Envoystatus.eval())\n"
+            "back = bool(e._probeAlive())\n"
+            "took = False\n"
+            "if g == %d and not back and not st.startswith('Reviving'):\n"
+            "    o.store('envoy_running', True)\n"
+            "    o.par.Envoystatus = 'Running on port %d'\n"
+            "    took = True\n"
+            "try:\n"
+            "    import json as _j\n"
+            "    with open(%r, 'a') as _f:\n"
+            "        _j.dump({'at': %%d, 'gen': g, 'saw': st,\n"
+            "                 'wedged': took, 'back': back}, _f)\n"
+            "        _f.write('\\n')\n"
+            "except Exception:\n"
+            "    pass" % (int(gen), int(port), crumb))
+    later = ''.join(
+        "_run(%r, fromOP=o, delayMilliSeconds=%d, wallTime=True)\n"
+        % (hold % s, s * 1000) for s in _WEDGE_AT_S)
     return ("import time\n"
+            "from td import run as _run\n"
             "o = op.Embody\n"
             "o.store('_smoke_gen', %d)\n"
             "e = o.ext.Envoy\n"
@@ -178,21 +219,51 @@ def _watchdog_kill(port, gen) -> str:
             "e._restart_count = 7\n"
             "e._restart_window_start = time.time()\n"
             "e._last_start_time = time.time()\n"
+            "%s"
             "o.store('envoy_running', True)\n"
             "o.par.Envoystatus = 'Running on port %d'"
-            % (int(gen), int(port)))
+            % (int(gen), later,
+               int(port)))
+
+
+def _wedge_crumbs(run_dir, gen) -> list:
+    """What each re-assertion of the wedge saw, oldest first."""
+    out = []
+    try:
+        for line in P.read(os.path.join(run_dir,
+                                        _WEDGE_CRUMB % int(gen))).splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    except OSError:
+        pass
+    return out
+
+
+def _why_no_revive(run_dir, gen) -> str:
+    """Why the watchdog never revived: what the wedge saw while it waited."""
+    crumbs = _wedge_crumbs(run_dir, gen)
+    if not crumbs:
+        return 'the wedge never ran (no breadcrumb)'
+    held = [c for c in crumbs if c.get('wedged')]
+    saw = ', '.join('%ss saw %r' % (c.get('at'), c.get('saw')) for c in crumbs)
+    return '%d/%d re-assertions held the wedge; %s' % (len(held), len(crumbs),
+                                                       saw)
 
 
 def _restore(st) -> None:
-    """Put every file this leg corrupted back. The uninstall leg that
-    follows, and the run dir kept for triage, must both see the project as
-    this leg found it."""
+    """Put every file this leg corrupted back, and every interpreter it
+    displaced. The uninstall leg that follows, and the run dir kept for
+    triage, must both see the project as this leg found it."""
     for path, text in tuple(st.get('restore') or ()):
         try:
             P.write(path, text)
         except OSError:
             pass
-    st['restore'] = []
+    for rec in tuple(st.get('displaced') or ()):
+        P.undisplace(rec)
+    st['restore'], st['displaced'] = [], []
 
 
 def _spoil(st, run_dir, path) -> bool:
@@ -217,11 +288,7 @@ def _confirm_target(ctx, rec, quiet=False) -> bool:
     anything). Re-taken after every restart, since each one can land on a
     port another TD registered; a re-check is silent unless it fails."""
     folder = str(ctx['py']('result = project.folder'))
-    want = {os.path.normcase(os.path.abspath(ctx['run_dir'])),
-            os.path.normcase(os.path.realpath(ctx['run_dir']))}
-    got = {os.path.normcase(os.path.abspath(folder)),
-           os.path.normcase(os.path.realpath(folder))}
-    ok = bool(want & got)
+    ok = P.same_path(folder, ctx['run_dir'])
     if ok and quiet:
         return True
     return rec.check('leg.target', ok, 'project.folder=%s' % folder)
@@ -234,23 +301,6 @@ def _settled(ctx, rec, sm, st, timeout, avoid=()):
     if port and not _confirm_target(ctx, rec, quiet=True):
         return None
     return port
-
-
-def _same_path(a, b) -> bool:
-    """Same existing directory, whatever the spelling -- uv may rewrite
-    pyvenv.cfg's home with different separators, and a case-insensitive
-    volume (Windows, default APFS) accepts either case. samefile is the
-    only answer that holds on every platform: normcase folds case ONLY on
-    Windows, so a re-cased home compared unequal on macOS (CI
-    2026-09-20). normcase stays as the fallback for a home that no longer
-    exists to stat."""
-    if not a or not os.path.isdir(a):
-        return False
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return (os.path.normcase(os.path.abspath(a))
-                == os.path.normcase(os.path.abspath(b)))
 
 
 def _check_running(ctx, rec, step, port) -> bool:
@@ -274,8 +324,34 @@ def _check_running(ctx, rec, step, port) -> bool:
 
 # --- 1. broken venv interpreter ---
 
+def _break_venv(ctx, sm, st, cfg, before, broken) -> str:
+    """Stop the venv interpreter starting, and say how. Two rungs, each
+    self-validated against this machine's own venv before TD is touched:
+    the pyvenv.cfg `home` break the win32 trampoline dies on, then -- where
+    `home` is inert because the launcher is a symlink and CPython prefers
+    realpath(executable) over it (getpath.py:359, which is why the mac run
+    only recorded venv.skipped) -- displacing the interpreter file itself,
+    the layer `uv venv --allow-existing` rewrites. Empty when neither
+    takes."""
+    run_dir, plat = ctx['run_dir'], ctx['platform']
+    P.write(cfg, broken)
+    if not sm['runs'](P.venv_python(run_dir, plat)):
+        return 'pyvenv.cfg home -> missing TD'
+    # Put the cfg back before escalating: repair_venv_interpreter refuses a
+    # venv whose version_info disagrees with TD's, and an intact cfg keeps
+    # Start on the probe path instead of a full reinstall.
+    P.write(cfg, before)
+    moved = P.displace(run_dir, P.venv_interpreter(run_dir, plat), P.STUB)
+    if not moved:
+        return ''
+    st['displaced'].append(moved)
+    if sm['runs'](P.venv_python(run_dir, plat)):
+        return ''
+    return 'interpreter %s displaced by a stub that exits 103' % moved['path']
+
+
 def _fault_venv(ctx, rec, sm, st) -> bool:
-    run_dir, old = ctx['run_dir'], st['port']
+    run_dir, old, plat = ctx['run_dir'], st['port'], ctx['platform']
     cfg, site = P.venv_paths(run_dir)
     if not os.path.isfile(cfg):
         return rec.fail('venv.inject', 'no %s' % cfg)
@@ -290,6 +366,10 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
         # Without this the no-deletion proof below compares [] with [] and
         # goes green on a site-packages nobody found.
         return rec.fail('venv.inject', 'no site-packages at %s' % site)
+    if not sm['runs'](P.venv_python(run_dir, plat)):
+        # Baseline: on a venv already dead, every rung below "works".
+        return rec.fail('venv.inject', 'the venv interpreter does not start '
+                        'before anything was injected')
 
     def bail(step, detail):        # every failure puts the project back
         _restore(st)
@@ -300,17 +380,12 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
     fell, broke, fixed = (P.log_count(run_dir, _FELL_BACK),
                           P.log_count(run_dir, _BROKEN),
                           P.log_count(run_dir, _REPAIRED))
-    P.write(cfg, broken)
-    # Injectable only where the launcher reads `home`: the win32 trampoline
-    # dies (exit 103), a posix symlink into TD's framework may still start.
-    # Proven here, against this machine's own venv, before TD is touched.
-    if sm['runs'](P.venv_python(run_dir)):
+    how = _break_venv(ctx, sm, st, cfg, before, broken)
+    if not how:
         _restore(st)
-        return rec.ok('venv.skipped', 'the interpreter still starts with a '
-                      'bogus home on %s -- not injectable here'
-                      % ctx['platform'])
-    rec.ok('venv.inject',
-           'home -> missing TD; %d site-packages entries' % len(entries))
+        return rec.ok('venv.skipped', 'the interpreter still starts on %s '
+                      'after both injections -- not injectable here' % plat)
+    rec.ok('venv.inject', '%s; %d site-packages entries' % (how, len(entries)))
     ctx['py'](_CLEAR_CACHES)
     # Restarting through the master switch, not a bare Stop(): Stop() alone
     # leaves the exit hook to auto-restart ~1s later (EnvoyExt.py:7637), a
@@ -346,11 +421,19 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
     lost = sorted(set(entries) - set(now))
     for step, good, detail in (
             ('venv.repair', 'repaired' in state, 'state=%s' % state),
+            # Primary evidence, not a log line: the interpreter the BRIDGE
+            # launches starts again. The repair re-probes venv_paths'
+            # bin/python, a different file from envoy_setup's bin/python3
+            # on posix, so the log line alone can be green on a file
+            # nobody uses.
+            ('venv.runs_again', sm['runs'](P.venv_python(run_dir, plat)),
+             'the venv interpreter starts again after the repair'),
             ('venv.mcp_json', back, 'command=%s' % P.mcp_command(run_dir)),
             ('venv.no_deletion', not lost, '%d -> %d site-packages entries, '
              'missing %s, added %s' % (len(entries), len(now), lost,
                                        sorted(set(now) - set(entries)))),
-            ('venv.pyvenv_cfg', _same_path(healed, home),
+            ('venv.pyvenv_cfg',
+             os.path.isdir(healed) and P.same_path(healed, home),
              'home=%r (was %r)' % (healed, home))):
         if not rec.check(step, good, detail):
             _restore(st)
@@ -358,7 +441,9 @@ def _fault_venv(ctx, rec, sm, st) -> bool:
     if not _check_running(ctx, rec, 'venv.running', st['port']):
         _restore(st)
         return False
-    st['restore'] = []
+    # uv rewrote the interpreter that was displaced (venv.runs_again proved
+    # it): drop the undo rather than putting the old file back over it.
+    st['restore'], st['displaced'] = [], []
     return True
 
 
@@ -401,18 +486,19 @@ def _fault_watchdog(ctx, rec, sm, st) -> bool:
         return rec.fail('watchdog.kill', 'the wedge cannot be built: %s'
                         % ready.strip())
     seen = P.log_count(run_dir, _REVIVING)
-    P.defer(ctx, _watchdog_kill(old, _bump(st)))
+    P.defer(ctx, _watchdog_kill(old, _bump(st), ctx['run_dir']))
     if not _down(ctx, sm, old):
         return rec.fail('watchdog.kill', 'port %d never closed' % old)
     branch_before = {name: P.log_count(run_dir, needle)
                      for name, needle in _BRANCHES}
-    rec.ok('watchdog.kill', "socket %d closed; the same script left the "
-                            "status at 'Running on port %d'" % (old, old))
+    rec.ok('watchdog.kill',
+           "socket %d closed; the wedge holds the status at 'Running on "
+           "port %d' against the exit hook" % (old, old))
     port = _settled(ctx, rec, sm, st, _REVIVE_S)
     if not port:
         return rec.fail('watchdog.revive',
-                        'nothing answered for this run dir '
-                        'within %.0fs' % _REVIVE_S)
+                        'nothing answered for this run dir within %.0fs -- %s'
+                        % (_REVIVE_S, _why_no_revive(run_dir, st['gen'])))
     said = P.until(ctx, sm,
                    lambda: P.log_count(run_dir, _REVIVING) > seen, 30.0, 2.0)
     fired = [name for name, needle in _BRANCHES
@@ -470,7 +556,7 @@ def _fault_registry(ctx, rec, sm, st) -> bool:
 
 def run(ctx):
     rec, sm = P.Rec(ctx), P.seams(ctx)
-    st = {'port': 0, 'gen': 0, 'restore': []}
+    st = {'port': 0, 'gen': 0, 'restore': [], 'displaced': []}
     error, ok = '', False
     try:
         st['port'] = int(ctx['port'])

@@ -801,8 +801,61 @@ class TestQuitSmokeTd(_Case):
     def test_zombie_after_kill_counts_as_terminated(self):
         """We are TD's parent: a killed child is a zombie the bridge's
         kill(pid, 0) test still calls alive. A reaped exit code settles it
-        (first CI run on the Mac, 2026-09-18)."""
-        t = {'now': 0.0}
+        (first CI run on the Mac, 2026-09-18). The kill is what makes it
+        reapable here, so nothing earlier may claim it had already gone."""
+        t, killed = {'now': 0.0}, {'yes': False}
+        with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
+        orig = smoke.process_cmdline
+        smoke.process_cmdline = with_cmd
+
+        def hard_quit(pid):
+            killed['yes'] = True
+            return (False, 'TouchDesigner (PID 7) could not be terminated')
+
+        try:
+            r = smoke.quit_smoke_td(
+                7, self.root, None, alive=lambda pid: True,
+                mcp_quit=lambda p: None, hard_quit=hard_quit,
+                clock=lambda: t['now'], sleep=lambda s: None, is_td=IS_TD,
+                reap=lambda pid: -9 if killed['yes'] else None)
+        finally:
+            smoke.process_cmdline = orig
+        self.assertTrue(r['ok'])
+        self.assertEqual(r['method'], 'forced')
+        self.assertIn('reaped', r['message'])
+
+    def test_a_td_that_quit_during_the_mcp_window_is_not_forced(self):
+        """The POSIX liveness test calls an unreaped child alive, so
+        without reaping inside the window every macOS teardown burned the
+        full 30s and reported FORCED on a clean quit (artifact
+        2026-09-20). 'mcp' and 'close' were unreachable there."""
+        t, state = {'now': 0.0}, {'quit': False, 'hard': 0}
+        with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
+        orig = smoke.process_cmdline
+        smoke.process_cmdline = with_cmd
+
+        def hard_quit(pid):
+            state['hard'] += 1
+            return (True, 'exited gracefully')
+
+        try:
+            r = smoke.quit_smoke_td(
+                7, self.root, 9870,
+                alive=lambda pid: True,          # zombie: always "alive"
+                mcp_quit=lambda p, d: state.__setitem__('quit', True),
+                hard_quit=hard_quit,
+                clock=lambda: t['now'],
+                sleep=lambda s: t.__setitem__('now', t['now'] + s),
+                is_td=IS_TD,
+                reap=lambda pid: -9 if state['quit'] else None)
+        finally:
+            smoke.process_cmdline = orig
+        self.assertEqual(r['method'], 'mcp')
+        self.assertEqual(state['hard'], 0)
+        self.assertLess(t['now'], smoke.QUIT_TIMEOUT_S,
+                        'the graceful window must not be burned on a zombie')
+
+    def test_a_td_already_gone_before_teardown_is_never_killed(self):
         with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
         orig = smoke.process_cmdline
         smoke.process_cmdline = with_cmd
@@ -810,15 +863,13 @@ class TestQuitSmokeTd(_Case):
             r = smoke.quit_smoke_td(
                 7, self.root, None, alive=lambda pid: True,
                 mcp_quit=lambda p: None,
-                hard_quit=lambda pid: (False, 'TouchDesigner (PID 7) could '
-                                               'not be terminated'),
-                clock=lambda: t['now'], sleep=lambda s: None, is_td=IS_TD,
-                reap=lambda pid: -9)
+                hard_quit=lambda pid: self.fail('killed an exited process'),
+                clock=lambda: 0.0, sleep=lambda s: None, is_td=IS_TD,
+                reap=lambda pid: 0)
         finally:
             smoke.process_cmdline = orig
         self.assertTrue(r['ok'])
-        self.assertEqual(r['method'], 'forced')
-        self.assertIn('reaped', r['message'])
+        self.assertEqual(r['method'], 'exited')
 
     def test_unreaped_kill_failure_stays_failed(self):
         with_cmd = lambda pid: f'TouchDesigner {self.root}/smoke.toe'  # noqa: E731
@@ -975,6 +1026,17 @@ class TestTeardownPort(_Case):
         self.assertEqual(smoke.teardown_port(self.root, 9871), 9871)
 
 
+class TestPathFolding(_Case):
+
+    def test_fold_only_folds_case_where_the_volume_is_insensitive(self):
+        """_fold gates which pid may be signalled and which instance
+        probe_mcp may mutate, so an unconditional .lower() is a false
+        POSITIVE on a case-sensitive volume -- the one direction that is
+        dangerous rather than merely red."""
+        folded = sys.platform in ('win32', 'darwin')
+        self.assertEqual(smoke._fold('/A/B') == smoke._fold('/a/b'), folded)
+
+
 class TestQuitIdentityGate(_Case):
     """A forced quit never goes to a port that answers for another
     project -- the same gate the MCP probe and the legs take."""
@@ -1012,3 +1074,102 @@ class TestQuitIdentityGate(_Case):
     def test_an_unreadable_answer_is_refused(self):
         with self.assertRaises(smoke.SmokeSetupError):
             self._mcp_quit('')
+
+
+class TestStartupStall(_Case):
+    """A run that never produces ready.flag has to say WHICH startup stage
+    it stalled in. On macOS CI (2026-09-20) the real state was a dependency
+    install that never finished -- a blocked PyPI fetch, not a wedged TD --
+    and telling those apart took an artifact download."""
+
+    def _stall(self, tail):
+        return smoke.startup_stall('x', logs=lambda d: {'tail': tail})
+
+    def test_a_dependency_install_that_never_finished_is_named(self):
+        got = self._stall('EnvoyExt: Installing Envoy Python dependencies in '
+                          'the background (one-time setup). TouchDesigner '
+                          'stays responsive; MCP will connect when this '
+                          'finishes.')
+        self.assertIn('dependency install', got)
+        self.assertIn('PyPI', got)
+
+    def test_an_install_that_finished_is_not_blamed(self):
+        # 'Starting Envoy MCP server' is the line that proves it finished --
+        # not a phrase inside the install's own announcement.
+        got = self._stall('Installing Envoy Python dependencies ... '
+                          'MCP will connect when this finishes.\n'
+                          'Starting Envoy MCP server on port 9870')
+        self.assertEqual(got, 'TD never got to the startup verdict')
+
+    def test_an_envoy_setup_that_never_completed_is_named(self):
+        got = self._stall('EmbodyExt: Setting up Envoy...')
+        self.assertIn('Envoy setup', got)
+
+    def test_the_latest_incomplete_stage_wins(self):
+        got = self._stall('EmbodyExt: Setting up Envoy...\n'
+                          'Envoy enabled! Config generated\n'
+                          'Installing Envoy Python dependencies')
+        self.assertIn('dependency install', got)
+
+    def test_no_log_at_all_falls_back(self):
+        self.assertEqual(self._stall(''),
+                         'TD never got to the startup verdict')
+
+    def test_the_ready_ceiling_leaves_room_for_a_cold_install(self):
+        # A cold run builds the venv from PyPI before Envoy can answer.
+        self.assertGreaterEqual(smoke.READY_TIMEOUT_S, 600)
+        self.assertLess(smoke.READY_TIMEOUT_S
+                        + smoke.FEATURES_TIMEOUT_S,
+                        smoke.run_timeout(None, ('upgrade', 'faults',
+                                                 'uninstall')))
+
+
+class TestZombieChildIsNotARefusal(_Case):
+    """On POSIX smoke_run is TouchDesigner's parent, so an exited TD stays
+    a zombie until waited on: kill -0 says alive and ps shows <defunct>
+    with no command line. Asking the OS first made teardown report
+    'left running, not ours to quit' for a dead process, and fail the run
+    (macOS CI 2026-09-20)."""
+
+    def _quit(self, poll_code, alive_says=True, cmdline=''):
+        seen = {'hard': 0}
+        now = {'t': 0.0}
+
+        def hard_quit(pid):
+            seen['hard'] += 1
+            return True, 'force-killed'
+
+        orig = smoke.process_cmdline
+        smoke.process_cmdline = lambda pid: cmdline
+        try:
+            r = smoke.quit_smoke_td(
+                7, self.root, 9871,
+                alive=lambda pid: alive_says,
+                mcp_quit=lambda p, run_dir=None: None,
+                hard_quit=hard_quit,
+                clock=lambda: now['t'],
+                sleep=lambda s: now.__setitem__('t', now['t'] + s),
+                is_td=lambda c: True,
+                reap=lambda pid: poll_code)
+        finally:
+            smoke.process_cmdline = orig
+        return r, seen
+
+    def test_a_reaped_child_is_reported_gone_not_refused(self):
+        r, seen = self._quit(poll_code=0, cmdline='<defunct>')
+        self.assertTrue(r['ok'])
+        self.assertEqual(r['method'], 'exited')
+        self.assertIn('code 0', r['message'])
+        self.assertEqual(seen['hard'], 0)
+
+    def test_a_live_child_still_goes_through_the_ladder(self):
+        r, seen = self._quit(poll_code=None,
+                             cmdline=f'TouchDesigner {self.root}/x.toe')
+        self.assertTrue(r['ok'])
+        self.assertNotEqual(r['method'], 'exited')
+
+    def test_a_live_foreign_process_is_still_refused(self):
+        r, seen = self._quit(poll_code=None, cmdline='TouchDesigner /other')
+        self.assertFalse(r['ok'])
+        self.assertEqual(r['method'], 'refused')
+        self.assertEqual(seen['hard'], 0)

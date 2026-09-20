@@ -56,6 +56,8 @@ import os
 import shutil
 import time
 
+from . import _probe as P
+
 _POLL_S = 2.0
 _RELOAD_TIMEOUT_S = 180.0   # swap + boot chain + Envoy restart, generously
 _RESERVE_S = 25.0           # left before the RUN's ceiling; teardown itself
@@ -281,7 +283,10 @@ class _Upgrade:
         except Exception as e:
             self.probe_error = f'{type(e).__name__}: {e}'
             return None
-        if os.path.realpath(str(state.get('folder'))) != self.run_dir:
+        # samefile, not a string compare: realpath resolves symlinks but not
+        # case, so a re-cased folder reads as another project's and the miss
+        # surfaces as a connectivity error (the class CI hit 2026-09-20).
+        if not P.same_path(str(state.get('folder')), self.run_dir):
             self.probe_error = (f"port {self.port} answers for "
                                 f"{state.get('folder')!r}, not the run dir")
             return None

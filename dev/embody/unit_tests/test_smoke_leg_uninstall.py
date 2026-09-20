@@ -1031,6 +1031,13 @@ class TestSummaryHandoff(_Case):
 
 class TestDriversAndContract(_Case):
 
+    def test_norm_folds_case_wherever_the_volume_is_insensitive(self):
+        """An `os.name == 'nt'` fold left a re-cased plan entry reading as
+        OUTSIDE the run dir on a case-insensitive APFS volume, which reads
+        here as "the uninstall escaped its root"."""
+        folded = sys.platform in ('win32', 'darwin')
+        self.assertEqual(leg._norm('/A/B') == leg._norm('/a/b'), folded)
+
     def test_the_uninstall_is_deferred_through_tds_own_run(self):
         """`run` is not in execute_python's namespace (EnvoyExt.
         _execNamespace), and the reply would die with the server anyway."""
@@ -1038,6 +1045,9 @@ class TestDriversAndContract(_Case):
         sent = self.td.scripts[-1]
         self.assertIn('from td import run as _run', sent)
         self.assertIn('delayMilliSeconds=1500', sent)
+        # run() counts the delay in FRAMES unless told otherwise, while
+        # every deadline this leg holds is time.monotonic.
+        self.assertIn('wallTime=True', sent)
 
     def test_it_calls_the_handler_the_uninstall_button_calls(self):
         """The CALL line, not the token: 'uninstallHandler' also occurs

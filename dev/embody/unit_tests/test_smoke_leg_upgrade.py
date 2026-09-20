@@ -38,7 +38,7 @@ What this pins:
 """
 
 import hashlib
-import importlib.util
+import importlib
 import json
 import os
 import shutil
@@ -67,16 +67,12 @@ _DATS_OLD = {'/EmbodyExt': 'a1', '/EnvoyExt': 'a2', '/TDXNExt': 'a3',
 _DATS_NEW = dict(_DATS_OLD, **{'/EmbodyExt': 'b1', '/templates/rule': 'b4'})
 
 
-def _load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 if not _IN_TD:
-    upgrade = _load('smoke_leg_upgrade_under_test',
-                    os.path.join(_RT, 'smoke_legs', 'upgrade.py'))
+    # Imported as a PACKAGE module, not by file path: the leg shares
+    # smoke_legs._probe with the others and a path load has no parent.
+    if _RT not in sys.path:
+        sys.path.insert(0, _RT)
+    upgrade = importlib.import_module('smoke_legs.upgrade')
 
 
 class _Clock:
@@ -696,6 +692,19 @@ class TestFailureModes(_Case):
         self.assertFalse(res['ok'])
         self.assertIn('not the run dir', res['error'])
         self.assertEqual(len(self.td.applies), 0, 'nothing was installed')
+
+    def test_a_re_cased_folder_is_still_this_project(self):
+        """The gate was a bare string compare of two realpaths, and realpath
+        resolves symlinks but NOT case on posix -- so a folder TD reported
+        in another case read as a foreign project and surfaced as 'Envoy
+        did not answer'. Windows canonicalises case inside realpath, so
+        this can only go red on the macOS leg of bridge-tests."""
+        other = self.run_dir.upper()
+        if other == self.run_dir or not os.path.isdir(other):
+            self.skipTest('case-sensitive volume: the two really differ')
+        self.td.state['folder'] = other
+        res = self._run()
+        self.assertTrue(res['ok'], res.get('error'))
 
     def test_a_throwing_transport_never_escapes_run(self):
         def boom(code, timeout=30):

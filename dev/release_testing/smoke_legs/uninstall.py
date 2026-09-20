@@ -44,6 +44,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import time
 
 # Planted user content. The rule file sits INSIDE .claude/rules/, which
@@ -124,9 +125,12 @@ def _write_json(path, data):
 def _norm(path):
     """Comparable spelling: POSIX separators, no trailing slash, case-folded
     where the filesystem is. The manifest stores POSIX, the plan stores
-    whatever Path.resolve() produced -- they have to meet somewhere."""
+    whatever Path.resolve() produced -- they have to meet somewhere.
+    Folded on darwin too: a `os.name == 'nt'` test leaves a re-cased path
+    comparing unequal on a case-insensitive APFS volume, which reads here
+    as "the plan escaped the run dir"."""
     p = str(path or '').replace('\\', '/').rstrip('/')
-    return p.lower() if os.name == 'nt' else p
+    return p.lower() if sys.platform in ('win32', 'darwin') else p
 
 
 def _same_dir(a, b):
@@ -353,9 +357,13 @@ def defer(ctx, script, delay_ms=1500):
     """Hand `script` to the smoke TD's main thread and return at once --
     mandatory here, since the reply to this very call travels over the
     socket Uninstall is about to close. `run` is not in execute_python's
-    namespace (EnvoyExt._execNamespace), hence the import."""
+    namespace (EnvoyExt._execNamespace), hence the import. wallTime=True
+    because run() otherwise counts the delay in FRAMES, while every
+    deadline this leg holds is time.monotonic -- a runner at 20 fps would
+    stretch 1.5s into 4.5s of the supervision window."""
     return ctx['py']("from td import run as _run\n"
-                     "_run(%r, fromOP=op.Embody, delayMilliSeconds=%d)\n"
+                     "_run(%r, fromOP=op.Embody, delayMilliSeconds=%d,\n"
+                     "     wallTime=True)\n"
                      "result = 'scheduled'" % (script, int(delay_ms)))
 
 

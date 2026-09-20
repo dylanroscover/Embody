@@ -64,8 +64,9 @@ class _FakeTD:
 
     BASE = 9870
 
-    def __init__(self, run_dir, port=9871, pid=4242):
+    def __init__(self, run_dir, port=9871, pid=4242, platform='win32'):
         self.run_dir = run_dir
+        self.platform = platform
         self.now = 0.0
         self.pid = pid
         self.last_port = port
@@ -90,7 +91,8 @@ class _FakeTD:
         self.probe_verdict = 'broken'    # 'timeout' falls back without repair
         self.fallback_logs = True
         self.fix_mcp = True
-        self.venv_still_runs = False     # the injected cfg really breaks it
+        self.venv_still_runs = False     # nothing the leg does breaks it
+        self.repair_interpreter = True   # uv rewrites the bin/ launchers
         self.mutate_site = False
         self.add_site = False
         self.move_port = True
@@ -98,6 +100,8 @@ class _FakeTD:
         self.watchdog_logs = True
         self.watchdog_revive_logs = True
         self.watchdog_branch = 'socket dead'
+        self.clobber_wedge_at = None
+        self.wedge_reasserts = (3.0, 5.0, 7.0, 9.0)
         self.fix_registry = True
         self.write_registry(port)
         self.write_mcp(self.venv_python)
@@ -127,7 +131,24 @@ class _FakeTD:
         return _Sock(self, port)
 
     def runs_probe(self, python_path, timeout=10.0):
-        return self.venv_still_runs
+        return self.venv_still_runs or self._runs_now()
+
+    def _runs_now(self):
+        """What probe_venv_python would answer. On posix the launcher is a
+        symlink into TD's framework and ignores pyvenv.cfg's home (CPython
+        getpath.py:359 prefers realpath(executable)); the win32 trampoline
+        reads home and dies on a bogus one."""
+        if not self._interpreter_intact():
+            return False
+        if self.platform != 'win32':
+            return True
+        return os.path.isdir(probe.home_of(probe.read(self.cfg)))
+
+    def _interpreter_intact(self):
+        try:
+            return 'faults leg' not in probe.read(self.interpreter)
+        except OSError:
+            return False
 
     def _free_port(self):
         taken = self.listening | self.foreign | self.occupied
@@ -139,7 +160,19 @@ class _FakeTD:
     # --- files -------------------------------------------------------
     @property
     def venv_python(self):
-        return self.run_dir.replace('\\', '/') + '/.venv/Scripts/python.exe'
+        return probe.venv_python(self.run_dir,
+                                 self.platform).replace('\\', '/')
+
+    @property
+    def interpreter(self):
+        """The file behind venv_python -- what uv rewrites and what the
+        posix rung of the injection displaces."""
+        return probe.venv_interpreter(self.run_dir, self.platform)
+
+    def restore_interpreter(self):
+        """uv venv --allow-existing writes the bin/ launchers over whatever
+        is there (uv-fs replace_symlink: temp symlink, then rename)."""
+        probe.write(self.interpreter, 'a working interpreter')
 
     @property
     def cfg(self):
@@ -195,7 +228,7 @@ class _FakeTD:
             self.write_registry(port)
         if self.probe_cache == self.venv_python:
             self.write_mcp(self.venv_python)     # cached: never probed
-        elif os.path.isdir(probe.home_of(probe.read(self.cfg))):
+        elif self._runs_now():
             self.probe_cache = self.venv_python
             self.write_mcp(self.venv_python)
         else:
@@ -216,6 +249,8 @@ class _FakeTD:
         def go():
             text, _ = probe.break_home(probe.read(self.cfg), home)
             probe.write(self.cfg, text)
+            if self.repair_interpreter:
+                self.restore_interpreter()
             site = probe.venv_paths(self.run_dir)[1]
             if self.mutate_site:
                 names = probe.entries(site)
@@ -248,14 +283,44 @@ class _FakeTD:
         self.status = 'Running on port %d' % self.last_port
 
     def watchdog_kill(self):
-        """Socket dies, Envoyenable untouched; only the watchdog comes back."""
+        """Socket dies, Envoyenable untouched; only the watchdog comes back.
+
+        `clobber_wedge_at` models the exit hook landing after the kill
+        script (macOS CI 2026-09-20): envoy_running goes False and the
+        status reads 'Disabled', which the watchdog refuses to revive. The
+        leg's re-assertions have to put the wedge back before its tick."""
         self.stop(2.0)
         self.at(2.0, self._wedge)
+        if self.clobber_wedge_at is not None:
+            self.at(self.clobber_wedge_at, self._clobber_wedge)
+        for at in self.wedge_reasserts:
+            self.at(at, self._reassert_wedge)
         if not self.watchdog:
             return
+        # The watchdog only revives an enabled server whose status has not
+        # been turned off under it.
+        self.at(12.0, self._watchdog_tick)
+
+    def _clobber_wedge(self):
+        self.running_flag = False
+        self.status = 'Disabled'
+
+    def _reassert_wedge(self):
+        """What each scheduled re-assertion does. It stands down once the
+        socket answers again -- without that it overwrites the status the
+        watchdog just corrected, with the port it killed."""
+        if self.listening:
+            return
+        if not str(self.status).startswith('Reviving'):
+            self._wedge()
+
+    def _watchdog_tick(self):
+        if not self.running_flag or str(self.status) == 'Disabled':
+            return          # a disabled Envoy is never revived
         if self.watchdog_logs:
-            self.at(12.0, self._watchdog_logs)
-        self.start(14.0)
+            self._watchdog_logs()
+        self.status = 'Reviving (watchdog)...'
+        self.start(2.0)
 
     def _watchdog_logs(self):
         """Both lines the product writes: the branch that noticed, then
@@ -321,36 +386,63 @@ class _FakeTD:
 
 class _Case(EmbodyTestCase):
 
+    PLATFORM = 'win32'      # a subclass flips it; nothing here is skipped
+
     def setUp(self):
         super().setUp()
         if _IN_TD:
             self.skipTest('pure-Python suite -- runs under pytest/CI only')
         self.root = tempfile.mkdtemp(prefix='embody_smoke_faults_')
         self.home = os.path.join(self.root, 'fake-td-bin')
-        for rel in ('.embody', 'logs', 'fake-td-bin',
-                    os.path.join('.venv', 'Scripts'),
-                    os.path.join('.venv', 'Lib', 'site-packages')):
+        rels = ['.embody', 'logs', 'fake-td-bin']
+        rels += ([os.path.join('.venv', 'Scripts'),
+                  os.path.join('.venv', 'Lib', 'site-packages')]
+                 if self.PLATFORM == 'win32' else
+                 [os.path.join('.venv', 'bin'),
+                  os.path.join('.venv', 'lib', 'python3.11',
+                               'site-packages')])
+        for rel in rels:
             os.makedirs(os.path.join(self.root, rel), exist_ok=True)
-        site = os.path.join(self.root, '.venv', 'Lib', 'site-packages')
+        site = probe.venv_paths(self.root)[1]
         for name in ('mcp', 'fastmcp', 'pydantic', 'uvicorn'):
             os.makedirs(os.path.join(site, name), exist_ok=True)
-        probe.write(os.path.join(self.root, '.venv', 'Scripts', 'python.exe'),
-                    'not really an exe')
+        self._make_interpreter()
         probe.write(os.path.join(self.root, '.venv', 'pyvenv.cfg'),
                     'home = %s\nimplementation = CPython\n'
                     'version_info = 3.11.15\n' % self.home)
         probe.write(os.path.join(self.root, 'logs', 'embody.log'), '')
-        self.td = _FakeTD(self.root)
+        self.td = _FakeTD(self.root, platform=self.PLATFORM)
         self.ctx = self._ctx(self.td)
         self.rec = probe.Rec(self.ctx)
         self.sm = probe.seams(self.ctx)
-        self.st = {'port': self.ctx['port'], 'gen': 0, 'restore': []}
+        self.st = {'port': self.ctx['port'], 'gen': 0, 'restore': [],
+                   'displaced': []}
+
+    def _make_interpreter(self):
+        """The venv's launcher directory. uv writes SYMLINKS on posix
+        (bin/python3 -> python -> TD's framework binary, uv 0.9.27
+        virtualenv.rs:259-271); a box that refuses symlinks gets plain
+        files, which resolve to one file and exercise the same displace."""
+        path = probe.venv_python(self.root, self.PLATFORM)
+        probe.write(path if self.PLATFORM == 'win32'
+                    else os.path.join(os.path.dirname(path), 'python'),
+                    'a working interpreter')
+        if self.PLATFORM == 'win32':
+            return
+        try:
+            os.symlink('python', path)
+        except OSError:
+            probe.write(path, 'a working interpreter')
+
+    def _home_ok(self, healed):
+        """The venv.pyvenv_cfg gate, spelled as _fault_venv spells it."""
+        return os.path.isdir(healed) and probe.same_path(healed, self.home)
 
     def _ctx(self, td):
         return {'run_dir': self.root, 'repo': '', 'build': {},
                 'installed': {}, 'upgrade_from': None,
                 'port': td.state['port'], 'pid': td.pid,
-                'td_exe': 'td.exe', 'platform': 'win32',
+                'td_exe': 'td.exe', 'platform': self.PLATFORM,
                 'set_port': lambda p: td.state.__setitem__('port', int(p)),
                 'call': td.call, 'py': td.py, 'log': lambda m: None,
                 'budget': lambda: 100000.0 - td.now,
@@ -423,15 +515,24 @@ class TestInjectionScripts(_Case):
         self.assertIn('_last_start_time', script)
         self.assertIn('_restart_window_start', script)
 
-    def test_watchdog_kill_sets_the_wedge_in_the_same_script(self):
-        """A deferred wedge can lose the race to the ~8s revive, and it
-        outlives the leg. Everything happens in this one script."""
-        script = faults._watchdog_kill(9871, 3)
-        self.assertNotIn('delayMilliSeconds', script)
+    def test_watchdog_kill_re_asserts_the_wedge_until_it_takes(self):
+        """One assertion is not enough: it races the server thread's exit
+        hook, which clears envoy_running and can leave the status
+        'Disabled' (EnvoyExt.Stop:6712) -- and a disabled Envoy is never
+        revived. Every re-assertion is generation-guarded and stands down
+        once the revive has started."""
+        script = faults._watchdog_kill(9871, 3, 'C:/run')
+        self.assertEqual(script.count('delayMilliSeconds'),
+                         len(faults._WEDGE_AT_S))
+        self.assertEqual(
+            script.count("if g == 3 and not back and not st.startswith("
+                         "'Reviving')"), len(faults._WEDGE_AT_S))
+        self.assertIn("o.store('envoy_running', True)", script)
+        self.assertIn('faults_wedge_3.json', script)
+        # The backoff is re-armed AFTER Stop(), which zeroes the window at
+        # its top -- otherwise the auto-restart, not the watchdog, recovers.
         self.assertLess(script.index('e.Stop()'),
-                        script.index("store('envoy_running', True)"))
-        self.assertLess(script.index("store('envoy_running', True)"),
-                        script.index('Envoystatus'))
+                        script.index('e._restart_count = 7'))
 
     def test_window_arms_the_re_enable_on_two_independent_clocks(self):
         """One dispatch is a single point of failure: live 2026-09-20 the
@@ -493,8 +594,8 @@ class TestVenvFault(_Case):
         self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
                                            self.st))
         for name in ('venv.inject', 'venv.restart', 'venv.fallback',
-                     'venv.repair', 'venv.mcp_json', 'venv.no_deletion',
-                     'venv.pyvenv_cfg', 'venv.running'):
+                     'venv.repair', 'venv.runs_again', 'venv.mcp_json',
+                     'venv.no_deletion', 'venv.pyvenv_cfg', 'venv.running'):
             self.assertStepOk(name)
         self.assertTrue(probe.is_venv_command(probe.mcp_command(self.root),
                                               self.root))
@@ -586,8 +687,8 @@ class TestVenvFault(_Case):
     def test_site_packages_that_cannot_be_found_is_a_failure(self):
         """entries() of a missing directory is [], which would make the
         no-deletion proof compare [] with [] and pass on nothing."""
-        lib = os.path.join(self.root, '.venv', 'Lib')
-        os.rename(lib, lib + '.away')
+        site = probe.venv_paths(self.root)[1]
+        os.rename(site, site + '.away')
         self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
                                             self.st))
         self.assertStepFailed('venv.inject')
@@ -620,10 +721,9 @@ class TestVenvFault(_Case):
 
     def test_home_written_with_another_spelling_still_matches(self):
         """uv may rewrite pyvenv.cfg's home with different separators."""
-        self.assertTrue(faults._same_path(self.home.replace(os.sep, '/'),
-                                          self.home))
-        self.assertFalse(faults._same_path(self.home + '-gone', self.home))
-        self.assertFalse(faults._same_path('', self.home))
+        self.assertTrue(self._home_ok(self.home.replace(os.sep, '/')))
+        self.assertFalse(self._home_ok(self.home + '-gone'))
+        self.assertFalse(self._home_ok(''))
 
     def test_case_follows_the_filesystem_not_the_platform(self):
         """Windows and a default APFS volume accept either case; a
@@ -634,13 +734,127 @@ class TestVenvFault(_Case):
         if other == self.home:
             self.skipTest('temp path has no case to flip')
         insensitive = os.path.isdir(other)
-        self.assertEqual(faults._same_path(other, self.home), insensitive)
+        self.assertEqual(self._home_ok(other), insensitive)
+
+    def test_a_venv_that_was_already_dead_is_a_clean_failure(self):
+        """Nothing below proves a recovery on an interpreter that never
+        started: every rung would look like it took, and the honest skip
+        would read as a platform verdict instead of a broken project."""
+        probe.write(self.td.interpreter, probe.STUB)
+        self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                            self.st))
+        self.assertStepFailed('venv.inject')
+        self.assertIn('before anything was injected',
+                      self.step('venv.inject')['detail'])
 
     def test_a_missing_pyvenv_cfg_is_a_clean_failure(self):
         os.rename(self.td.cfg, self.td.cfg + '.away')
         self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
                                             self.st))
         self.assertStepFailed('venv.inject')
+
+
+class TestVenvFaultOnDarwin(TestVenvFault):
+    """Every proof above, re-run against the macOS model: a uv venv's
+    bin/python3 is a symlink into TD's framework, so pyvenv.cfg's home is
+    inert there and the leg escalates to displacing the interpreter. The
+    macOS run of 2026-09-20 recorded venv.skipped and proved none of this,
+    so it is MODELLED here rather than skipped on a Windows box."""
+
+    PLATFORM = 'darwin'
+
+    def test_the_posix_rung_displaces_the_interpreter_and_spares_the_cfg(self):
+        """pyvenv.cfg has to be back before the escalation: repair_venv_
+        interpreter refuses a venv whose version_info disagrees with TD's
+        (embody_pyenv.py:1005), and an intact cfg keeps Start on the probe
+        path instead of a full reinstall."""
+        before = probe.read(self.td.cfg)
+        broken, _ = probe.break_home(before, os.path.join(self.root, 'nope'))
+        how = faults._break_venv(self.ctx, self.sm, self.st, self.td.cfg,
+                                 before, broken)
+        self.assertIn('displaced', how)
+        self.assertEqual(probe.read(self.td.cfg), before)
+        self.assertEqual(probe.read(self.td.interpreter), probe.STUB)
+        self.assertFalse(self.sm['runs'](
+            probe.venv_python(self.root, 'darwin')))
+        self.assertEqual(len(self.st['displaced']), 1)
+
+    def test_the_cfg_break_alone_would_have_proved_nothing_here(self):
+        """The gap this closes: on darwin the first rung leaves an
+        interpreter that still starts, which is what venv.skipped meant."""
+        before = probe.read(self.td.cfg)
+        broken, _ = probe.break_home(before, os.path.join(self.root, 'nope'))
+        probe.write(self.td.cfg, broken)
+        self.assertTrue(self.sm['runs'](
+            probe.venv_python(self.root, 'darwin')))
+
+    def test_a_failed_step_puts_the_displaced_interpreter_back(self):
+        original = probe.read(self.td.interpreter)
+        self.td.repair = False
+        self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                            self.st))
+        self.assertStepFailed('venv.repair')
+        self.assertEqual(probe.read(self.td.interpreter), original)
+        self.assertTrue(self.sm['runs'](
+            probe.venv_python(self.root, 'darwin')),
+            'the uninstall leg must not inherit a dead interpreter')
+
+    def test_neither_rung_taking_is_a_skip_not_a_red(self):
+        self.td.venv_still_runs = True
+        original = probe.read(self.td.interpreter)
+        self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                           self.st))
+        self.assertStepOk('venv.skipped')
+        self.assertIn('after both injections',
+                      self.step('venv.skipped')['detail'])
+        self.assertEqual(probe.read(self.td.interpreter), original)
+        self.assertEqual(probe.home_of(probe.read(self.td.cfg)), self.home)
+
+    def test_a_repair_that_leaves_the_interpreter_broken_fails(self):
+        """'Venv interpreter repaired' is a log line; the proof is that the
+        interpreter the BRIDGE launches starts again (the repair re-probes
+        bin/python, envoy_setup probes bin/python3)."""
+        original = probe.read(self.td.interpreter)
+        self.td.repair_interpreter = False
+        self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                            self.st))
+        self.assertStepOk('venv.repair')
+        self.assertStepFailed('venv.runs_again')
+        self.assertEqual(probe.read(self.td.interpreter), original,
+                         'a failed step puts the interpreter back')
+
+    def test_a_home_that_no_longer_exists_is_not_a_repaired_venv(self):
+        """same_path falls back to a string compare for a home it cannot
+        stat, and `home` is inert on posix -- so venv.runs_again is green
+        and the cfg proof's isdir gate is the only thing left that catches
+        a venv delegating to a TouchDesigner that is gone."""
+        real = self.td.begin_repair
+
+        def repair(*a, **k):
+            os.rename(self.home, self.home + '.moved')   # TD moved meanwhile
+            return real(good_home=self.home)
+        self.td.begin_repair = repair
+        self.assertFalse(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                            self.st))
+        self.assertStepOk('venv.runs_again')
+        self.assertStepFailed('venv.pyvenv_cfg')
+
+    def test_a_proved_repair_drops_the_undo_it_no_longer_owns(self):
+        """uv rewrote the interpreter and venv.runs_again proved it: a
+        later _restore -- fault 4's, or run()'s error path -- must not put
+        the displaced file back over the repair."""
+        self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                           self.st))
+        self.assertEqual(self.st['displaced'], [])
+        self.assertEqual(self.st['restore'], [])
+
+    def test_the_injected_step_names_the_interpreter_it_displaced(self):
+        """What the next macOS run has to show instead of venv.skipped."""
+        self.assertTrue(faults._fault_venv(self.ctx, self.rec, self.sm,
+                                           self.st))
+        self.assertIn('displaced by a stub that exits 103',
+                      self.step('venv.inject')['detail'])
+        self.assertStepOk('venv.runs_again')
 
 
 # ===========================================================================
@@ -924,6 +1138,12 @@ class TestLeg(_Case):
             self.assertEqual(sorted(step), ['detail', 'ok', 'step'])
 
 
+class TestLegOnDarwin(TestLeg):
+    """The whole leg on the macOS model -- fault 1 now injects there."""
+
+    PLATFORM = 'darwin'
+
+
 # ===========================================================================
 # the probe kit
 # ===========================================================================
@@ -949,6 +1169,84 @@ class TestProbeKit(_Case):
             'C:/elsewhere/.venv/Scripts/python.exe', self.root))
         self.assertTrue(probe.is_venv_command(
             self.root + '\\.venv\\Scripts\\python.exe', self.root))
+
+    def test_is_venv_command_accepts_another_spelling_of_the_run_dir(self):
+        """launch_td realpaths the .toe, so TD writes the RESOLVED twin of
+        the dir the leg was handed (macOS /var -> /private/var). A raw
+        string compare reds venv.mcp_json on a healthy product."""
+        cmd = probe.venv_python(self.root).replace('\\', '/')
+        self.assertTrue(probe.is_venv_command(
+            cmd, os.path.join(self.root, 'sub', '..')))
+        self.assertFalse(probe.is_venv_command(
+            cmd, os.path.join(self.root, 'sub')))
+
+    def test_same_path_resolves_a_link_a_string_compare_would_miss(self):
+        """The fold is the FALLBACK, not the answer: two spellings of one
+        directory compare unequal by normcase and equal by samefile."""
+        alias = os.path.join(self.root, 'td-bin-alias')
+        try:
+            os.symlink(self.home, alias, target_is_directory=True)
+        except OSError:
+            self.skipTest('this box refuses symlinks')
+        self.assertNotEqual(os.path.normcase(os.path.abspath(alias)),
+                            os.path.normcase(os.path.abspath(self.home)))
+        self.assertTrue(probe.same_path(alias, self.home))
+        self.assertFalse(probe.same_path(alias + '-gone', self.home))
+
+    def test_displace_refuses_anything_outside_the_venv(self):
+        """The posix interpreter is a symlink into TouchDesigner's own
+        framework; a walk that escaped would rename that binary."""
+        outside = os.path.join(self.root, 'fake-td-bin', 'python3')
+        probe.write(outside, 'TD owns this')
+        self.assertEqual(probe.displace(self.root, outside, probe.STUB), {})
+        self.assertEqual(probe.read(outside), 'TD owns this')
+        self.assertEqual(probe.displace(
+            self.root, os.path.join(self.root, '.venv', 'nope'),
+            probe.STUB), {})
+
+    def test_displace_and_undisplace_round_trip_byte_exactly(self):
+        target = os.path.join(self.root, '.venv', 'marker')
+        probe.write(target, 'original\r\ncontent\n')
+        rec = probe.displace(self.root, target, probe.STUB)
+        self.assertTrue(rec)
+        self.assertEqual(probe.read(target), probe.STUB)
+        self.assertTrue(os.path.isfile(rec['backup']))
+        self.assertTrue(probe.undisplace(rec))
+        self.assertEqual(probe.read(target), 'original\r\ncontent\n',
+                         'the round trip keeps CRLF, or _restore is a diff')
+
+    def test_the_interpreter_walk_stops_at_the_venv_boundary(self):
+        """bin/python3 -> python -> TD's framework binary: the walk returns
+        the venv's own file and never the one outside run_dir."""
+        bin_dir = os.path.join(self.root, '.venv', 'bin')
+        os.makedirs(bin_dir, exist_ok=True)
+        outside = os.path.join(self.root, 'fake-td-bin', 'python3.11')
+        probe.write(outside, 'framework')
+        real = os.path.join(bin_dir, 'python')
+        try:
+            os.symlink(outside, real)
+            os.symlink('python', os.path.join(bin_dir, 'python3'))
+        except OSError:
+            self.skipTest('this box refuses symlinks (the posix injection '
+                          'is modelled with plain files in TestLegOnDarwin)')
+        self.assertEqual(probe.venv_interpreter(self.root, 'darwin'),
+                         os.path.abspath(real))
+
+    def test_undisplace_rebuilds_a_link_whose_backup_is_gone(self):
+        bin_dir = os.path.join(self.root, '.venv', 'bin')
+        os.makedirs(bin_dir, exist_ok=True)
+        probe.write(os.path.join(bin_dir, 'python'), 'base')
+        link = os.path.join(bin_dir, 'python3')
+        try:
+            os.symlink('python', link)
+        except OSError:
+            self.skipTest('this box refuses symlinks')
+        rec = probe.displace(self.root, link, probe.STUB)
+        self.assertEqual(rec['link'], 'python')
+        os.rename(rec['backup'], rec['backup'] + '.lost')
+        self.assertTrue(probe.undisplace(rec))
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(os.readlink(link), 'python')
 
     def test_reads_never_raise_on_a_missing_or_broken_file(self):
         empty = tempfile.mkdtemp(prefix='embody_smoke_faults_empty_')
@@ -983,10 +1281,13 @@ class TestProbeKit(_Case):
                           'a plain timeout still returns None')
 
     def test_venv_python_matches_what_envoy_setup_probes(self):
-        got = probe.venv_python(self.root).replace('\\', '/')
-        self.assertTrue(got.startswith(self.root.replace('\\', '/')))
-        self.assertIn('Scripts/python.exe' if sys.platform == 'win32'
-                      else 'bin/python3', got)
+        for plat, tail in (('win32', 'Scripts/python.exe'),
+                           ('darwin', 'bin/python3')):
+            got = probe.venv_python(self.root, plat).replace('\\', '/')
+            self.assertTrue(got.startswith(self.root.replace('\\', '/')))
+            self.assertIn(tail, got)
+        self.assertEqual(probe.venv_python(self.root),
+                         probe.venv_python(self.root, sys.platform))
 
     def test_runs_reports_false_for_an_interpreter_that_is_not_one(self):
         self.assertFalse(probe.runs(os.path.join(
@@ -1049,3 +1350,93 @@ class TestWatchdogProof(_Case):
         self.assertFalse(faults._fault_watchdog(self.ctx, self.rec, self.sm,
                                                 self.st))
         self.assertStepFailed('watchdog.revive')
+
+
+class TestWedgeSurvivesTheExitHook(_Case):
+    """The macOS outage: Stop()'s own exit hook landed after the kill
+    script, cleared envoy_running and left Envoystatus 'Disabled', so the
+    watchdog correctly refused to revive and the leg waited 180s for
+    nothing (CI 2026-09-20)."""
+
+    def test_a_clobbered_wedge_is_won_back_before_the_tick(self):
+        self.td.clobber_wedge_at = 4.0
+        self.assertTrue(faults._fault_watchdog(self.ctx, self.rec, self.sm,
+                                               self.st))
+        self.assertStepOk('watchdog.revive')
+
+    def test_a_wedge_that_can_never_be_won_back_fails_loudly(self):
+        self.td.clobber_wedge_at = 4.0
+        self.td.wedge_reasserts = ()          # nothing puts it back
+        self.assertFalse(faults._fault_watchdog(self.ctx, self.rec, self.sm,
+                                                self.st))
+        self.assertStepFailed('watchdog.revive')
+
+    def test_the_failure_says_what_the_wedge_saw(self):
+        crumb = os.path.join(self.root, faults._WEDGE_CRUMB % 5)
+        probe.write(crumb, '{"at": 2, "gen": 5, "saw": "Disabled", '
+                           '"wedged": false}' + chr(10))
+        why = faults._why_no_revive(self.root, 5)
+        self.assertIn('0/1', why)
+        self.assertIn('Disabled', why)
+
+    def test_no_breadcrumb_at_all_is_named(self):
+        self.assertIn('never ran', faults._why_no_revive(self.root, 77))
+
+
+class TestDisplaceIsAtomicEnough(_Case):
+    """displace() renames the interpreter aside before writing the stub. A
+    failure between the two used to return {} -- telling the caller there
+    was nothing to undo -- and left the venv with no interpreter at all."""
+
+    def _victim(self):
+        path = os.path.join(self.root, '.venv', 'Scripts', 'python.exe')
+        probe.write(path, 'the real interpreter')
+        return path
+
+    def test_a_failed_stub_write_puts_the_interpreter_back(self):
+        path = self._victim()
+        real = probe.read(path)
+        orig = probe.write
+
+        def boom(p, text):
+            if p == path:
+                raise OSError('no room')
+            return orig(p, text)
+        probe.write = boom
+        try:
+            self.assertEqual(probe.displace(self.root, path, 'stub'), {})
+        finally:
+            probe.write = orig
+        self.assertTrue(os.path.isfile(path), 'interpreter was left missing')
+        self.assertEqual(probe.read(path), real)
+
+    def test_a_rename_that_cannot_happen_reports_no_injection(self):
+        missing = os.path.join(self.root, '.venv', 'Scripts', 'absent.exe')
+        self.assertEqual(probe.displace(self.root, missing, 'stub'), {})
+
+    def test_it_refuses_anything_outside_the_venv(self):
+        outside = os.path.join(self.root, 'not_the_venv.txt')
+        probe.write(outside, 'mine')
+        self.assertEqual(probe.displace(self.root, outside, 'stub'), {})
+        self.assertEqual(probe.read(outside), 'mine')
+
+
+class TestWedgeStandsDownAfterTheRevive(_Case):
+    """Live 2026-09-20: the watchdog revived on 9871 and a later
+    re-assertion wrote 'Running on port 9872' -- the port it had killed --
+    back over it, so watchdog.running failed on a healthy Envoy."""
+
+    def test_a_revive_onto_another_port_is_not_overwritten(self):
+        self.td.move_port = True              # the revive lands elsewhere
+        self.td.wedge_reasserts = (3.0, 5.0, 20.0, 30.0)   # well past it
+        self.assertTrue(faults._fault_watchdog(self.ctx, self.rec, self.sm,
+                                               self.st))
+        self.assertStepOk('watchdog.running')
+        detail = self.step('watchdog.running')['detail']
+        self.assertIn(str(self.st['port']), detail)
+
+    def test_the_status_names_the_port_the_tool_call_reached(self):
+        self.td.move_port = True
+        faults._fault_watchdog(self.ctx, self.rec, self.sm, self.st)
+        step = self.step('watchdog.running')
+        self.assertTrue(step['ok'], step['detail'])

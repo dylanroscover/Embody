@@ -58,7 +58,11 @@ import smoke_legs  # noqa: E402  (the extra legs: upgrade, faults, uninstall)
 # The bootstrap self-polls Envoy for up to 240 x 1 s before it writes
 # ready.flag, on top of TD's own boot; the Convoy leg then polls for up to
 # ~3 min. These are ceilings for a wedged run, not expected durations.
-READY_TIMEOUT_S = 420
+# A cold run builds the Envoy venv from PyPI before Envoy can answer, and
+# a laptop runner on a slow link needs more than the 420s this was
+# (macOS CI 2026-09-20: still installing at the deadline). The overall
+# ceiling still bounds it -- ready_budget is min(this, budget()).
+READY_TIMEOUT_S = 600
 FEATURES_TIMEOUT_S = 360
 MCP_TIMEOUT_S = 90
 QUIT_TIMEOUT_S = 30
@@ -360,7 +364,12 @@ def process_cmdline(pid, platform=None, run=None):
 
 
 def _fold(p):
-    return os.path.normcase(p).replace('\\', '/').lower().rstrip('/')
+    """Comparable spelling, case-folded only where the default volume is
+    case-insensitive. An unconditional .lower() is a false POSITIVE on a
+    case-sensitive volume -- and this one gates which pid may be signalled
+    and which instance probe_mcp may mutate."""
+    p = os.path.normcase(p).replace('\\', '/').rstrip('/')
+    return p.lower() if sys.platform in ('win32', 'darwin') else p
 
 
 def owns_process(pid, run_dir, cmdline=None, realpath=None, is_td=None):
@@ -449,13 +458,16 @@ def _mcp_quit(port, run_dir=None):
 
 def _same_dir(a, b):
     """Same directory, whatever the spelling -- TD reports project.folder
-    with forward slashes, and macOS temp paths have a /private twin."""
+    with forward slashes, and macOS temp paths have a /private twin.
+    samefile first: normcase folds case ONLY on Windows, so a re-cased
+    folder compared unequal on macOS (CI 2026-09-20)."""
     if not a or not b:
         return False
-    return bool({os.path.normcase(os.path.abspath(a)),
-                 os.path.normcase(os.path.realpath(a))}
-                & {os.path.normcase(os.path.abspath(b)),
-                   os.path.normcase(os.path.realpath(b))})
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return bool({_fold(os.path.abspath(a)), _fold(os.path.realpath(a))}
+                    & {_fold(os.path.abspath(b)), _fold(os.path.realpath(b))})
 
 
 def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
@@ -474,7 +486,8 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
     killed TD is a zombie until it is waited on, and the bridge's
     kill(pid, 0) liveness test reports a zombie as alive ("could not be
     terminated" on the first CI run, 2026-09-18). A reaped exit code means
-    it is gone.
+    it is gone, so every liveness question asks it first -- consulting it
+    only after the kill made 'mcp' and 'close' unreachable on POSIX.
     """
     alive = alive or envoy_bridge.is_td_process_alive
     reap = reap or (lambda p: None)
@@ -485,6 +498,18 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
     sleep = sleep or time.sleep
     if pid is None:
         return {'ok': False, 'method': 'none', 'message': 'no pid recorded'}
+    # Life before ownership, and our own child before the OS. On POSIX this
+    # process is TD's parent, so an exited TD is a zombie until it is waited
+    # on: alive() (kill -0) still says yes and ps shows <defunct> with no
+    # command line, so the ownership test below would call it "not ours".
+    code = reap(pid)
+    if code is not None:
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) had already exited '
+                           f'(code {code})'}
+    if not alive(pid):
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) is no longer running'}
     if not owns_process(pid, run_dir, is_td=is_td):
         return {'ok': False, 'method': 'refused',
                 'message': f'pid {pid} does not name {run_dir} in its '
@@ -494,13 +519,21 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
             mcp_quit(port, run_dir)
             deadline = clock() + QUIT_TIMEOUT_S
             while clock() < deadline:
-                if not alive(pid):
+                # Reap BEFORE asking alive(): a child that has exited is a
+                # zombie until it is waited on, and the POSIX liveness test
+                # (kill 0) calls a zombie alive. Without this every macOS
+                # teardown burned the full window and reported 'forced' on
+                # a TD that had quit cleanly (artifact 2026-09-20).
+                if reap(pid) is not None or not alive(pid):
                     return {'ok': True, 'method': 'mcp',
                             'message': f'TouchDesigner (PID {pid}) quit via '
                                        f'Envoy'}
                 sleep(1)
         except Exception as e:  # server already gone, or refused: fall back
             pass
+    if reap(pid) is not None:
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) had already exited'}
     ok, message = hard_quit(pid)
     if not ok and reap(pid) is not None:
         ok, message = True, f'{message} -- reaped: it had exited (zombie)'
@@ -781,6 +814,29 @@ def probe_mcp(port, timeout=MCP_TIMEOUT_S, clock=None, sleep=None,
 # ---------------------------------------------------------------------------
 # 6. result
 # ---------------------------------------------------------------------------
+
+# Startup stages, newest first: the line Embody logs on entering each,
+# and what a run that never got past it actually means.
+_STALLS = (
+    ('Installing Envoy Python dependencies',
+     'Starting Envoy MCP server',
+     'the Envoy dependency install started and never finished -- usually a '
+     'slow or blocked PyPI fetch on the runner, not a wedged TD'),
+    ('Setting up Envoy', 'Envoy enabled!',
+     'Envoy setup started and never completed'),
+)
+
+
+def startup_stall(run_dir, logs=None):
+    """Which startup stage a run that never produced ready.flag stalled in.
+    A stage counts as stalled when its entry line is present and the line
+    that ends it is not."""
+    text = (logs or collect_logs)(run_dir).get('tail', '')
+    for entered, finished, meaning in _STALLS:
+        if entered in text and finished not in text:
+            return meaning
+    return 'TD never got to the startup verdict'
+
 
 def collect_logs(run_dir, lines=40):
     """{'tail', 'warnings'}: the bootstrap's own mirror log (bootstrap.log
@@ -1085,8 +1141,8 @@ def main(argv=None):
                             lambda t: 'verdict=' in t and 'tox=' in t)
         if not ok:
             raise SmokeSetupError(
-                f'no complete ready.flag within {ready_budget:.0f}s -- TD '
-                f'never got to the startup verdict (see log_tail)')
+                f'no complete ready.flag within {ready_budget:.0f}s -- '
+                f'{startup_stall(run["dir"])} (see log_tail)')
         result['ready'] = ready = parse_ready(text)
         check_run_stamp(ready, run['run_id'])
         result['default_port'] = (ready['envoy_port'] == envoy_bridge.DEFAULT_PORT

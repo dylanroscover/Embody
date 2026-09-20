@@ -22,6 +22,13 @@ import time
 BACKUP = 'faults_backup'
 RESERVE_S = 45.0    # never spend the run's last seconds; teardown needs them
 
+# What displace() leaves where an interpreter was. /bin/sh so the exit code
+# is deterministic (a headerless file would depend on execv vs execvp);
+# 103 is the code CPython's own venv launcher uses for a bad `home`.
+STUB = ('#!/bin/sh\n'
+        'echo "embody smoke faults leg: venv interpreter disabled" >&2\n'
+        'exit 103\n')
+
 
 class BudgetExhausted(Exception):
     """The run ran out of clock while a leg was waiting. Raised instead of
@@ -68,7 +75,9 @@ def seams(ctx) -> dict:
 # --- run_dir reads ---
 
 def read(path) -> str:
-    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+    """newline='' on the READ too: universal newlines would hand _restore a
+    LF copy of a CRLF file and the round trip would not be byte-exact."""
+    with open(path, 'r', encoding='utf-8', errors='replace', newline='') as f:
         return f.read()
 
 
@@ -151,11 +160,39 @@ def mcp_command(run_dir) -> str:
         return ''
 
 
+def fold(path) -> str:
+    """Comparable spelling: POSIX separators, no trailing slash, case-folded
+    only where the default volume is case-insensitive. An unconditional
+    .lower() calls two distinct paths equal on a case-sensitive volume -- a
+    false POSITIVE in every gate that uses it. Never absolutises: a bare
+    `python3` command must not pick up the caller's cwd."""
+    p = os.path.normcase(str(path)).replace('\\', '/').rstrip('/')
+    return p.lower() if sys.platform in ('win32', 'darwin') else p
+
+
+def same_path(a, b) -> bool:
+    """Whether two paths name the same place, on every platform. samefile
+    first: normcase folds case ONLY on Windows, so a re-cased path compared
+    unequal on macOS (CI 2026-09-20). fold() is the fallback for a path
+    that no longer exists to stat."""
+    if not a or not b:
+        return False
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return fold(os.path.abspath(a)) == fold(os.path.abspath(b))
+
+
 def is_venv_command(cmd, run_dir) -> bool:
-    """Whether .mcp.json points back at THIS run's own venv interpreter."""
-    c = str(cmd).replace('\\', '/').lower()
-    root = str(run_dir).replace('\\', '/').rstrip('/').lower()
-    return c.startswith(root + '/') and '/.venv/' in c
+    """Whether .mcp.json points back at THIS run's own venv interpreter.
+    Every spelling of the run dir counts: launch_td realpaths the .toe, so
+    TD reports the resolved twin of a symlinked temp dir (macOS /var ->
+    /private/var) while the leg still holds the one it was handed."""
+    c = fold(cmd)
+    if '/.venv/' not in c:
+        return False
+    return any(c.startswith(fold(r) + '/') for r in
+               (run_dir, os.path.abspath(run_dir), os.path.realpath(run_dir)))
 
 
 def venv_paths(run_dir) -> tuple:
@@ -169,12 +206,87 @@ def venv_paths(run_dir) -> tuple:
     return os.path.join(venv, 'pyvenv.cfg'), site
 
 
-def venv_python(run_dir) -> str:
+def venv_python(run_dir, platform=None) -> str:
     """The venv interpreter envoy_setup probes (envoy_setup.py:136-140)."""
     venv = os.path.join(run_dir, '.venv')
     return (os.path.join(venv, 'Scripts', 'python.exe')
-            if sys.platform == 'win32'
+            if (platform or sys.platform) == 'win32'
             else os.path.join(venv, 'bin', 'python3'))
+
+
+def _venv_root(run_dir) -> str:
+    return os.path.abspath(os.path.join(run_dir, '.venv')) + os.sep
+
+
+def venv_interpreter(run_dir, platform=None) -> str:
+    """The real file behind venv_python, resolved but never past the venv.
+    uv links bin/python3 -> bin/python -> TD's framework python on posix
+    (uv 0.9.27 virtualenv.rs:259-271); the walk stops at the .venv boundary
+    so the framework binary outside run_dir is never named."""
+    root, path = _venv_root(run_dir), venv_python(run_dir, platform)
+    for _ in range(8):
+        if not os.path.islink(path):
+            break
+        target = os.readlink(path)
+        if not os.path.isabs(target):
+            target = os.path.join(os.path.dirname(path), target)
+        target = os.path.abspath(target)
+        if not target.startswith(root):
+            break
+        path = target
+    return path
+
+
+def displace(run_dir, path, text) -> dict:
+    """Rename `path` aside under BACKUP and leave `text` in its place,
+    executable. os.replace renames the LINK itself -- backup()/write() would
+    dereference a symlinked interpreter, copy TD's framework binary and then
+    corrupt it through a text writer. Refuses anything outside the venv."""
+    if (not os.path.abspath(path).startswith(_venv_root(run_dir))
+            or not os.path.lexists(path)):
+        return {}
+    rec = {'path': path,
+           'link': os.readlink(path) if os.path.islink(path) else '',
+           'backup': os.path.join(run_dir, BACKUP,
+                                  'venv_' + os.path.basename(path))}
+    try:
+        os.makedirs(os.path.dirname(rec['backup']), exist_ok=True)
+        os.replace(path, rec['backup'])
+    except OSError:
+        # A Scripts/python.exe a live bridge still holds open refuses the
+        # rename; report "could not inject" rather than flaking the leg.
+        return {}
+    try:
+        write(path, text)
+        os.chmod(path, 0o755)
+    except OSError:
+        # The rename already landed. Returning {} here would tell the caller
+        # there is nothing to undo and leave the venv with NO interpreter --
+        # worse than the fault this was injecting.
+        try:
+            os.replace(rec['backup'], path)
+        except OSError:
+            pass
+        return {}
+    return rec
+
+
+def undisplace(rec) -> bool:
+    """Put a displaced file back over whatever is there now -- the stub, or
+    the symlink uv rewrote. The recorded readlink string rebuilds it when
+    the backup itself is gone; nothing is ever deleted."""
+    path, back = rec.get('path', ''), rec.get('backup', '')
+    try:
+        if back and os.path.lexists(back):
+            os.replace(back, path)
+        elif rec.get('link'):
+            os.symlink(rec['link'], path + '.smoke_tmp')
+            os.replace(path + '.smoke_tmp', path)
+        else:
+            return False
+    except OSError:
+        return False
+    return True
 
 
 def runs(python_path, timeout=10.0) -> bool:
