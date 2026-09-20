@@ -1111,9 +1111,10 @@ class TestStartupStall(_Case):
                           'Installing Envoy Python dependencies')
         self.assertIn('dependency install', got)
 
-    def test_no_log_at_all_falls_back(self):
-        self.assertEqual(self._stall(''),
-                         'TD never got to the startup verdict')
+    def test_no_log_at_all_blames_the_machine(self):
+        # Superseded the generic fallback: an empty log is TD never having
+        # started, which no code change fixes.
+        self.assertIn('never started', self._stall(''))
 
     def test_the_ready_ceiling_leaves_room_for_a_cold_install(self):
         # A cold run builds the venv from PyPI before Envoy can answer.
@@ -1173,3 +1174,28 @@ class TestZombieChildIsNotARefusal(_Case):
         self.assertFalse(r['ok'])
         self.assertEqual(r['method'], 'refused')
         self.assertEqual(seen['hard'], 0)
+
+
+class TestSilentTouchDesigner(_Case):
+    """A run whose TouchDesigner wrote NOTHING is a different failure from
+    one that stalled partway: no bootstrap.log, no TD log, a zero-byte
+    console. Seen twice on the macOS runner (2026-09-20) across two
+    different commits -- a wedged instance, a modal at launch, or a lost
+    GUI session, none of which a code change can fix."""
+
+    def _stall(self, tail):
+        return smoke.startup_stall('x', logs=lambda d: {'tail': tail})
+
+    def test_no_output_at_all_blames_the_machine(self):
+        got = self._stall('')
+        self.assertIn('never started', got)
+        self.assertIn('machine, not the build', got)
+
+    def test_whitespace_only_counts_as_nothing(self):
+        self.assertIn('never started', self._stall('   \n\n  '))
+
+    def test_a_real_stall_is_still_diagnosed_by_stage(self):
+        got = self._stall('EnvoyExt: Installing Envoy Python dependencies '
+                          'in the background')
+        self.assertIn('dependency install', got)
+        self.assertNotIn('never started', got)

@@ -832,6 +832,15 @@ def startup_stall(run_dir, logs=None):
     A stage counts as stalled when its entry line is present and the line
     that ends it is not."""
     text = (logs or collect_logs)(run_dir).get('tail', '')
+    if not text.strip():
+        # Nothing at all: the bootstrap never ran and Embody never logged,
+        # so TouchDesigner itself never got going. Seen twice on the macOS
+        # runner (2026-09-20) with a zero-byte console log.
+        return ('TouchDesigner wrote no log at all -- it never started. '
+                'Check the runner for a wedged TouchDesigner from an '
+                'earlier run, a modal at launch (a crash-recovery prompt '
+                'blocks before any logging), or a lost GUI session; this '
+                'is the machine, not the build')
     for entered, finished, meaning in _STALLS:
         if entered in text and finished not in text:
             return meaning
