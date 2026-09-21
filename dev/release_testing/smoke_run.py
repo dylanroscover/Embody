@@ -51,12 +51,18 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(DEFAULT_REPO, 'dev', 'embody'))
+sys.path.insert(0, HERE)
 import envoy_bridge  # noqa: E402  (stdlib-only; TD discovery, pids, quit)
+import smoke_legs  # noqa: E402  (the extra legs: upgrade, faults, uninstall)
 
 # The bootstrap self-polls Envoy for up to 240 x 1 s before it writes
 # ready.flag, on top of TD's own boot; the Convoy leg then polls for up to
 # ~3 min. These are ceilings for a wedged run, not expected durations.
-READY_TIMEOUT_S = 420
+# A cold run builds the Envoy venv from PyPI before Envoy can answer, and
+# a laptop runner on a slow link needs more than the 420s this was
+# (macOS CI 2026-09-20: still installing at the deadline). The overall
+# ceiling still bounds it -- ready_budget is min(this, budget()).
+READY_TIMEOUT_S = 600
 FEATURES_TIMEOUT_S = 360
 MCP_TIMEOUT_S = 90
 QUIT_TIMEOUT_S = 30
@@ -159,21 +165,57 @@ def select_build(repo, tox=None):
             'td_build': manifest.get('td_build')}
 
 
+def previous_release(repo, current_version, dest_dir, tag=None, run=None):
+    """The previous release's .tox, extracted from git history into
+    `dest_dir`, sha256-verified against the manifest committed at that tag.
+
+    The upgrade leg installs THIS build first and then updates to the
+    current one, so the old side of the test needs no network: every
+    shipped .tox and its manifest are in the repo's history. `tag`
+    overrides the choice (default: the newest v* tag that is not the
+    current version).
+    """
+    run = run or subprocess.run
+
+    def git(*args, **kw):
+        return run(['git', '-C', repo] + list(args), check=True,
+                   capture_output=True, **kw)
+
+    if not tag:
+        tags = git('tag', '--sort=-creatordate', '--list', 'v*',
+                   text=True).stdout.split()
+        tags = [t for t in tags if t.lstrip('v') != str(current_version)]
+        if not tags:
+            raise SmokeSetupError('no previous release tag in this checkout')
+        tag = tags[0]
+    try:
+        manifest = json.loads(
+            git('show', f'{tag}:release/embody-release.json', text=True).stdout)
+    except (subprocess.CalledProcessError, ValueError) as e:
+        raise SmokeSetupError(f'{tag} has no readable release manifest: {e}')
+    asset = manifest.get('asset')
+    if not asset or not manifest.get('sha256'):
+        raise SmokeSetupError(f'{tag}: manifest names no verifiable asset')
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, asset)
+    with open(dest, 'wb') as f:
+        run(['git', '-C', repo, 'show', f'{tag}:release/{asset}'],
+            check=True, stdout=f)
+    digest = _sha256(dest)
+    if digest != manifest['sha256']:
+        raise SmokeSetupError(
+            f'{asset} from {tag} hashes {digest[:12]}..., manifest says '
+            f'{manifest["sha256"][:12]}...')
+    return {'tox': dest, 'version': str(manifest.get('version') or ''),
+            'tag': tag, 'sha256': digest}
+
+
 # ---------------------------------------------------------------------------
 # 2. staging
 # ---------------------------------------------------------------------------
 
-def stage_run(repo, build, out, platform=None, now=None):
-    """A fresh run directory under `out`: harness files + sidecar.
-
-    Refuses an `out` inside the repo: a smoke rooted in the repo makes the
-    repo its git root, deploys its AI config there and, on 2026-07-27,
-    stripped 16 committed files. Never reuses a directory (a leftover
-    smoke_template.N.toe from a saved run gets opened instead of the
-    template) and never removes one.
-    """
-    platform = platform or sys.platform
-    now = now or time.time
+def check_out_dir(out, repo):
+    """Raise unless `out` is a safe home for run directories."""
     if _inside(out, repo):
         raise SmokeSetupError(
             f'refusing to stage inside the repo ({out}); pass --out outside '
@@ -184,6 +226,41 @@ def stage_run(repo, build, out, platform=None, now=None):
         raise SmokeSetupError(
             f'refusing to stage inside a git checkout ({checkout}); the smoke '
             f'would deploy its AI config there')
+
+
+BASE_TIMEOUT_S = 900.0
+LEG_TIMEOUT_S = 500.0
+
+
+def run_timeout(explicit, legs):
+    """The run's overall ceiling. Startup alone can spend READY + FEATURES
+    (780s) before a leg starts, so each requested leg buys its own headroom:
+    a --legs run on the bare 900s ceiling reached its legs with almost
+    nothing left, and a leg out of clock reports inconclusive, which is not
+    a gate (field 2026-09-20). Keep it under the CI job's timeout-minutes so
+    the run writes result.json rather than being killed mid-leg.
+    """
+    if explicit is not None:
+        return float(explicit)
+    return BASE_TIMEOUT_S + LEG_TIMEOUT_S * len(legs or ())
+
+
+def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
+    """A fresh run directory under `out`: harness files + sidecar.
+
+    `install_tox` overrides the .tox the smoke TD boots (the upgrade leg
+    starts on the previous release); the sidecar's tox_path is what the
+    bootstrap loads, `build` stays the release under test.
+
+    Refuses an `out` inside the repo: a smoke rooted in the repo makes the
+    repo its git root, deploys its AI config there and, on 2026-07-27,
+    stripped 16 committed files. Never reuses a directory (a leftover
+    smoke_template.N.toe from a saved run gets opened instead of the
+    template) and never removes one.
+    """
+    platform = platform or sys.platform
+    now = now or time.time
+    check_out_dir(out, repo)
     stamp = time.strftime('%Y%m%d-%H%M%S', time.localtime(now()))
     base = os.path.join(os.path.abspath(out), 'embody-smoke')
     run_id = f'{platform}-{stamp}'
@@ -201,7 +278,7 @@ def stage_run(repo, build, out, platform=None, now=None):
             raise SmokeSetupError(f'harness file missing: {src}')
         shutil.copyfile(src, os.path.join(run_dir, name))
     sidecar = {'run_id': run_id, 'platform': platform,
-               'repo_root': repo, 'tox_path': build['tox'],
+               'repo_root': repo, 'tox_path': install_tox or build['tox'],
                'flags_dir': run_dir, 'started_at': time.strftime(
                    '%Y-%m-%dT%H:%M:%S', time.localtime(now()))}
     with open(os.path.join(run_dir, 'smoke_run.json'), 'w',
@@ -287,7 +364,12 @@ def process_cmdline(pid, platform=None, run=None):
 
 
 def _fold(p):
-    return os.path.normcase(p).replace('\\', '/').lower().rstrip('/')
+    """Comparable spelling, case-folded only where the default volume is
+    case-insensitive. An unconditional .lower() is a false POSITIVE on a
+    case-sensitive volume -- and this one gates which pid may be signalled
+    and which instance probe_mcp may mutate."""
+    p = os.path.normcase(p).replace('\\', '/').rstrip('/')
+    return p.lower() if sys.platform in ('win32', 'darwin') else p
 
 
 def owns_process(pid, run_dir, cmdline=None, realpath=None, is_td=None):
@@ -314,22 +396,78 @@ def owns_process(pid, run_dir, cmdline=None, realpath=None, is_td=None):
     return any(w and w in have for w in wants)
 
 
-def _mcp_quit(port):
+def teardown_port(run_dir, ready_port, registry=None):
+    """The port to ask for a quit. A leg may move Envoy (the faults leg
+    does), so the boot-time port can answer for something else by
+    teardown; the run's own registry is what tracks the move."""
+    registry = registry or registry_ports
+    for port in registry(run_dir):
+        return port
+    return ready_port
+
+
+def registry_ports(run_dir):
+    """Ports registered in this run's .embody/envoy.json, active first."""
+    try:
+        with open(os.path.join(run_dir, '.embody', 'envoy.json'),
+                  encoding='utf-8') as f:
+            data = json.load(f)
+        rows = data.get('instances') or {}
+        names = ([data.get('active')] if data.get('active') in rows else [])
+        names += [n for n in rows if n != data.get('active')]
+        return [int(rows[n]['port']) for n in names
+                if isinstance(rows.get(n), dict) and rows[n].get('port')]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _mcp_quit(port, run_dir=None):
     """Ask the smoke instance's own Envoy to quit TD, deferred out of the
     request stack (the pattern EnvoyExt's Convoy quit uses) so the reply
     returns before the process goes away. project.quit(force=True) skips
-    the save prompt a modified project would otherwise block on."""
+    the save prompt a modified project would otherwise block on.
+
+    Refuses unless the instance answers for `run_dir`: the message is a
+    forced quit, and a port that drifted (or was taken over after a leg
+    moved Envoy) would otherwise take down a developer's session.
+    """
     _rpc(f'http://127.0.0.1:{int(port)}/mcp',
          {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
           'params': {'protocolVersion': '2025-06-18', 'capabilities': {},
                      'clientInfo': {'name': 'smoke_run', 'version': '1'}}},
          10)
+    if run_dir:
+        got = _tool_result(_rpc(
+            f'http://127.0.0.1:{int(port)}/mcp',
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+             'params': {'name': 'execute_python',
+                        'arguments': {'code': 'result = project.folder'}}},
+            10))
+        folder = str(got.get('result') or '')
+        if not _same_dir(folder, run_dir):
+            raise SmokeSetupError(
+                f'port {port} answers for {folder!r}, not {run_dir} -- '
+                f'refusing to send it a forced quit')
     _rpc(f'http://127.0.0.1:{int(port)}/mcp',
          {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
           'params': {'name': 'execute_python', 'arguments': {
               'code': 'run("project.quit(force=True)", delayFrames=3)\n'
                       'result = "quit scheduled"'}}},
          15)
+
+
+def _same_dir(a, b):
+    """Same directory, whatever the spelling -- TD reports project.folder
+    with forward slashes, and macOS temp paths have a /private twin.
+    samefile first: normcase folds case ONLY on Windows, so a re-cased
+    folder compared unequal on macOS (CI 2026-09-20)."""
+    if not a or not b:
+        return False
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return bool({_fold(os.path.abspath(a)), _fold(os.path.realpath(a))}
+                    & {_fold(os.path.abspath(b)), _fold(os.path.realpath(b))})
 
 
 def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
@@ -348,7 +486,8 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
     killed TD is a zombie until it is waited on, and the bridge's
     kill(pid, 0) liveness test reports a zombie as alive ("could not be
     terminated" on the first CI run, 2026-09-18). A reaped exit code means
-    it is gone.
+    it is gone, so every liveness question asks it first -- consulting it
+    only after the kill made 'mcp' and 'close' unreachable on POSIX.
     """
     alive = alive or envoy_bridge.is_td_process_alive
     reap = reap or (lambda p: None)
@@ -359,22 +498,42 @@ def quit_smoke_td(pid, run_dir, port=None, alive=None, mcp_quit=None,
     sleep = sleep or time.sleep
     if pid is None:
         return {'ok': False, 'method': 'none', 'message': 'no pid recorded'}
+    # Life before ownership, and our own child before the OS. On POSIX this
+    # process is TD's parent, so an exited TD is a zombie until it is waited
+    # on: alive() (kill -0) still says yes and ps shows <defunct> with no
+    # command line, so the ownership test below would call it "not ours".
+    code = reap(pid)
+    if code is not None:
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) had already exited '
+                           f'(code {code})'}
+    if not alive(pid):
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) is no longer running'}
     if not owns_process(pid, run_dir, is_td=is_td):
         return {'ok': False, 'method': 'refused',
                 'message': f'pid {pid} does not name {run_dir} in its '
                            f'command line -- left running, not ours to quit'}
     if port:
         try:
-            mcp_quit(port)
+            mcp_quit(port, run_dir)
             deadline = clock() + QUIT_TIMEOUT_S
             while clock() < deadline:
-                if not alive(pid):
+                # Reap BEFORE asking alive(): a child that has exited is a
+                # zombie until it is waited on, and the POSIX liveness test
+                # (kill 0) calls a zombie alive. Without this every macOS
+                # teardown burned the full window and reported 'forced' on
+                # a TD that had quit cleanly (artifact 2026-09-20).
+                if reap(pid) is not None or not alive(pid):
                     return {'ok': True, 'method': 'mcp',
                             'message': f'TouchDesigner (PID {pid}) quit via '
                                        f'Envoy'}
                 sleep(1)
         except Exception as e:  # server already gone, or refused: fall back
             pass
+    if reap(pid) is not None:
+        return {'ok': True, 'method': 'exited',
+                'message': f'TouchDesigner (PID {pid}) had already exited'}
     ok, message = hard_quit(pid)
     if not ok and reap(pid) is not None:
         ok, message = True, f'{message} -- reaped: it had exited (zombie)'
@@ -391,7 +550,7 @@ def parse_ready(text):
     """ready.flag -> dict. `split('=', 1)`: the problems line itself may
     hold '=' and ';'."""
     out = {}
-    for line in text.lstrip('﻿').splitlines():
+    for line in text.lstrip('\ufeff').splitlines():
         if '=' in line:
             k, v = line.split('=', 1)
             out[k.strip()] = v.strip()
@@ -656,6 +815,38 @@ def probe_mcp(port, timeout=MCP_TIMEOUT_S, clock=None, sleep=None,
 # 6. result
 # ---------------------------------------------------------------------------
 
+# Startup stages, newest first: the line Embody logs on entering each,
+# and what a run that never got past it actually means.
+_STALLS = (
+    ('Installing Envoy Python dependencies',
+     'Starting Envoy MCP server',
+     'the Envoy dependency install started and never finished -- usually a '
+     'slow or blocked PyPI fetch on the runner, not a wedged TD'),
+    ('Setting up Envoy', 'Envoy enabled!',
+     'Envoy setup started and never completed'),
+)
+
+
+def startup_stall(run_dir, logs=None):
+    """Which startup stage a run that never produced ready.flag stalled in.
+    A stage counts as stalled when its entry line is present and the line
+    that ends it is not."""
+    text = (logs or collect_logs)(run_dir).get('tail', '')
+    if not text.strip():
+        # Nothing at all: the bootstrap never ran and Embody never logged,
+        # so TouchDesigner itself never got going. Seen twice on the macOS
+        # runner (2026-09-20) with a zero-byte console log.
+        return ('TouchDesigner wrote no log at all -- it never started. '
+                'Check the runner for a wedged TouchDesigner from an '
+                'earlier run, a modal at launch (a crash-recovery prompt '
+                'blocks before any logging), or a lost GUI session; this '
+                'is the machine, not the build')
+    for entered, finished, meaning in _STALLS:
+        if entered in text and finished not in text:
+            return meaning
+    return 'TD never got to the startup verdict'
+
+
 def collect_logs(run_dir, lines=40):
     """{'tail', 'warnings'}: the bootstrap's own mirror log (bootstrap.log
     in the run dir -- Embody's file log only starts after the feature
@@ -718,19 +909,67 @@ def convoy_install_state(before, after):
     return 'reused'
 
 
-def compute_outcome(ready, features, mcp, teardown, no_mcp=False):
+def compute_outcome(ready, features, mcp, teardown, no_mcp=False, legs=None):
     """PASS only when every gate held: startup verdict, all feature legs,
-    the MCP probe (unless skipped) AND the teardown -- a run that leaves
-    its TouchDesigner behind is not green."""
+    the MCP probe (unless skipped), every extra leg that was asked for, AND
+    the teardown -- a run that leaves its TouchDesigner behind is not
+    green."""
     if not ready or ready.get('verdict') != 'PASS':
         return 'FAIL'
     if not features or not features.get('passed'):
         return 'FAIL'
     if not no_mcp and not (mcp or {}).get('ok'):
         return 'FAIL'
+    if legs is not None and not legs.get('_ok'):
+        return 'FAIL'
     if teardown is not None and not teardown.get('ok'):
         return 'FAIL'
     return 'PASS'
+
+
+def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
+                     budget, rpc=None, log=None):
+    """The `ctx` every smoke_legs module receives (contract in
+    smoke_legs/__init__.py)."""
+    rpc = rpc or _rpc
+    log = log or (lambda m: print(f'[smoke_run] {m}', file=sys.stderr))
+    state = {'port': int(port), 'seq': 100}
+
+    def call(name, arguments, timeout=30):
+        state['seq'] += 1
+        url = f"http://127.0.0.1:{state['port']}/mcp"
+        reply = rpc(url, {'jsonrpc': '2.0', 'id': state['seq'],
+                          'method': 'tools/call',
+                          'params': {'name': name, 'arguments': arguments}},
+                    min(float(timeout), max(1.0, budget())))
+        res = _tool_result(reply)
+        if 'error' in res:
+            raise RuntimeError(f'{name}: {res["error"]}')
+        return res
+
+    def py(code, timeout=30):
+        return call('execute_python', {'code': code}, timeout).get('result')
+
+    ctx = {}
+
+    def set_port(p):
+        # Both, always: py()/call() read the closure, but a leg that reads
+        # ctx['port'] used to get the frozen boot value. The faults leg then
+        # aimed at a port nothing was listening on and passed vacuously
+        # (macOS CI 2026-09-20, where every restart moves the port).
+        state['port'] = int(p)
+        ctx['port'] = int(p)
+
+    ctx.update({
+        'run_dir': run['dir'], 'repo': build.get('repo'), 'build': build,
+        'installed': installed, 'upgrade_from': upgrade_from,
+        'port': state['port'], 'set_port': set_port, 'pid': pid,
+        'td_exe': td_exe, 'platform': sys.platform,
+        'call': call, 'py': py, 'log': log, 'budget': budget,
+        'wait_for_flag': lambda name, timeout, done: wait_for(
+            os.path.join(run['dir'], name), timeout, done),
+    })
+    return ctx
 
 
 def exit_code(result):
@@ -765,6 +1004,18 @@ def summarize(result):
         lines.append(f"mcp       {okc}/{len(mcp.get('steps', []))}  "
                      f"{mcp.get('tools', 0)} tools listed"
                      + (f"  {mcp['error']}" if mcp.get('error') else ''))
+    legs = r.get('legs') or {}
+    for name, leg in legs.items():
+        if name.startswith('_'):
+            continue
+        okc = sum(1 for s in leg.get('steps', []) if s.get('ok'))
+        lines.append(f"{name:<9} {'PASS' if leg.get('ok') else 'FAIL'}  "
+                     f"{okc}/{len(leg.get('steps', []))} steps  "
+                     f"{leg.get('elapsed_s', 0)}s"
+                     + (f"  {leg['error']}" if leg.get('error') else ''))
+        for s in leg.get('steps', []):
+            if not s.get('ok'):
+                lines.append(f"          {s.get('step')}: {s.get('detail', '')}")
     if r.get('convoy_host'):
         lines.append(f"convoy    host app {r['convoy_host']}"
                      + ('' if r['convoy_host'] == 'fresh_install' else
@@ -808,21 +1059,40 @@ def main(argv=None):
     ap.add_argument('--out', default=(os.environ.get('RUNNER_TEMP')
                                       or tempfile.gettempdir()),
                     help='where run directories go (never inside the repo)')
-    ap.add_argument('--timeout', type=float, default=900,
-                    help='overall ceiling in seconds')
+    ap.add_argument('--timeout', type=float, default=None,
+                    help='overall ceiling in seconds (default: 900, '
+                         'plus 500 per --legs leg)')
     ap.add_argument('--no-mcp', action='store_true',
                     help='skip the MCP probe')
     ap.add_argument('--keep-td', action='store_true',
                     help='leave the smoke TouchDesigner running')
+    ap.add_argument('--legs', default='',
+                    help='extra legs after the fresh-install verdict, comma '
+                         'separated: upgrade, faults, uninstall (run in '
+                         'that order; see smoke_legs/__init__.py)')
+    ap.add_argument('--upgrade-from', default=None,
+                    help='for the upgrade leg: a release tag (vX.Y.Z) or a '
+                         '.tox path to install FIRST; default: the previous '
+                         'release tag, extracted from git history')
     args = ap.parse_args(argv)
 
     t0 = time.monotonic()
     result = {'outcome': 'ERROR', 'platform': sys.platform, 'run_id': None,
               'version': None, 'tox': None, 'td': None, 'ready': None,
-              'features': None, 'mcp': None, 'teardown': None,
+              'features': None, 'mcp': None, 'legs': None, 'teardown': None,
+              'installed': None, 'upgrade_from': None,
               'default_port': None, 'convoy_host': None,
               'log_tail': '', 'log_warnings': [], 'error': '',
               'elapsed_s': 0.0, 'result_path': ''}
+    try:
+        legs = smoke_legs.parse_legs(args.legs)
+    except ValueError as e:
+        print(f'[smoke_run] {e}', file=sys.stderr)
+        return 2
+    timeout = run_timeout(args.timeout, legs)
+    if legs:
+        print(f'[smoke_run] legs {",".join(legs)}; ceiling {timeout:.0f}s',
+              file=sys.stderr)
     pid = None
     proc = None
     console = None
@@ -838,7 +1108,33 @@ def main(argv=None):
         result['td'] = td_exe
         if warning:
             print(f'[smoke_run] {warning}', file=sys.stderr)
-        run = stage_run(repo, build, args.out)
+        build['repo'] = repo
+        # Staging refuses an --out inside the repo or any checkout; take
+        # that verdict BEFORE previous_release extracts a tox into it.
+        check_out_dir(args.out, repo)
+        upgrade_from = None
+        install_tox = None
+        if 'upgrade' in legs:
+            builds_dir = os.path.join(os.path.abspath(args.out), 'embody-smoke',
+                                      '_builds')
+            if args.upgrade_from and os.path.isfile(args.upgrade_from):
+                p = os.path.abspath(args.upgrade_from)
+                upgrade_from = {'tox': p, 'version': '', 'tag': '',
+                                'sha256': _sha256(p)}
+            else:
+                upgrade_from = previous_release(repo, build['version'],
+                                                builds_dir,
+                                                tag=args.upgrade_from)
+            install_tox = upgrade_from['tox']
+            print(f"[smoke_run] upgrade leg: installing "
+                  f"{os.path.basename(install_tox)} first "
+                  f"({upgrade_from.get('tag') or 'file'}), then updating to "
+                  f"v{build['version']}", file=sys.stderr)
+        result['upgrade_from'] = upgrade_from
+        result['installed'] = {'tox': install_tox or build['tox'],
+                               'version': (upgrade_from or {}).get('version')
+                               if install_tox else build['version']}
+        run = stage_run(repo, build, args.out, install_tox=install_tox)
         result['run_id'] = run['run_id']
         result['result_path'] = os.path.join(run['dir'], 'result.json')
         print(f"[smoke_run] staged {run['dir']}", file=sys.stderr)
@@ -851,7 +1147,7 @@ def main(argv=None):
         print(f'[smoke_run] launched TouchDesigner pid {pid}', file=sys.stderr)
 
         def budget():
-            return max(0.0, args.timeout - (time.monotonic() - t0))
+            return max(0.0, timeout - (time.monotonic() - t0))
 
         # The bootstrap writes the flag atomically; `tox=` is its last line,
         # so requiring it guards against an older bootstrap that still
@@ -862,8 +1158,8 @@ def main(argv=None):
                             lambda t: 'verdict=' in t and 'tox=' in t)
         if not ok:
             raise SmokeSetupError(
-                f'no complete ready.flag within {ready_budget:.0f}s -- TD '
-                f'never got to the startup verdict (see log_tail)')
+                f'no complete ready.flag within {ready_budget:.0f}s -- '
+                f'{startup_stall(run["dir"])} (see log_tail)')
         result['ready'] = ready = parse_ready(text)
         check_run_stamp(ready, run['run_id'])
         result['default_port'] = (ready['envoy_port'] == envoy_bridge.DEFAULT_PORT
@@ -888,6 +1184,17 @@ def main(argv=None):
                                               timeout=min(MCP_TIMEOUT_S,
                                                           budget()),
                                               expect_dir=run['dir'])
+            mcp_ok = args.no_mcp or bool((result['mcp'] or {}).get('ok'))
+            if legs and mcp_ok and ready['envoy_port']:
+                ctx = make_leg_context(run, build, result['installed'],
+                                       upgrade_from, ready['envoy_port'], pid,
+                                       td_exe, budget)
+                result['legs'] = smoke_legs.run_legs(legs, ctx)
+            elif legs:
+                result['legs'] = {'_ok': False, 'skipped': {
+                    'ok': False, 'steps': [],
+                    'error': 'legs not run: the fresh-install verdict or '
+                             'the MCP probe already failed'}}
         result['outcome'] = 'PENDING_TEARDOWN'
     except SmokeSetupError as e:
         result['outcome'] = 'ERROR'
@@ -901,7 +1208,8 @@ def main(argv=None):
     # verdict failed) for what is really "could not run".
     try:
         if pid is not None and not args.keep_td:
-            port = (result['ready'] or {}).get('envoy_port')
+            port = teardown_port(run['dir'],
+                                 (result['ready'] or {}).get('envoy_port'))
             result['teardown'] = quit_smoke_td(
                 pid, run['dir'], port,
                 reap=(lambda p: proc.poll()) if proc is not None else None)
@@ -910,7 +1218,7 @@ def main(argv=None):
         if result['outcome'] != 'ERROR':
             result['outcome'] = compute_outcome(
                 result['ready'], result['features'], result['mcp'],
-                result['teardown'], no_mcp=args.no_mcp)
+                result['teardown'], no_mcp=args.no_mcp, legs=result['legs'])
         if run:
             logs = collect_logs(run['dir'])
             result['log_tail'] = logs['tail']

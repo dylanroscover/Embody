@@ -20,7 +20,12 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 def _updater_cls():
     """The UpdaterExt CLASS via its module (works without the live child)."""
-    dat = op.Embody.op('updater/UpdaterExt')
+    try:
+        dat = op.Embody.op('updater/UpdaterExt')
+    except Exception:
+        # off-TD the op shim raises SkipTest; the source import below is
+        # the whole point of the fallback, so do not let it skip first.
+        dat = None
     if dat is None:
         # Pre-landing fallback: import straight from the externalized source.
         import importlib.util
@@ -592,6 +597,148 @@ class TestUpdateParReconciliation(EmbodyTestCase):
                       'writeReleaseManifest must declare custom_pars, or the '
                       'updater silently stops pruning retired settings')
         self.assertIn('Version', data['custom_pars'])
+
+
+class TestRollbackRestoresTheAboutPars(EmbodyTestCase):
+    """A rolled-back install must stop claiming the version it discarded.
+
+    The in-place swap keeps top-level custom par VALUES (reloadcustom is
+    off), so the four About pars stamped on the way IN survive the reload
+    back out. Nothing put them back, so par.Version read the new version on
+    the old contents -- and _finishCheck compares `remote <= local` against
+    exactly that par, so the user was told 'Up to date' on a build they had
+    just rolled away from, with no path forward but the next release.
+
+    The stamp has to happen before the pulse: VerifyRollback runs the
+    RESTORED build's source, so a fix placed there would not work on the
+    release that ships it.
+    """
+
+    @staticmethod
+    def _harness(**about):
+        U = _updater_cls()
+
+        class FakePar:
+            def __init__(self, val):
+                self.val = val
+                self.readOnly = True
+
+            def eval(self):
+                return self.val
+
+        class FakePars:
+            pass
+
+        pars = FakePars()
+        for name, value in about.items():
+            setattr(pars, name, FakePar(value))
+
+        class FakeEmbody:
+            par = pars
+
+        class Harness(U):
+            _embody = FakeEmbody()
+
+            def __init__(self):
+                self.logged = []
+
+            def _log(self, msg, level='INFO'):
+                self.logged.append((level, msg))
+
+        return Harness(), pars
+
+    def test_the_four_about_pars_are_restored(self):
+        inst, pars = self._harness(Version='6.2.58', Touchbuild='2025.40000',
+                                   Build=9, Date='2026-09-20')
+        inst._restoreAboutPars({'Version': '6.2.57', 'Touchbuild':
+                                '2025.33230', 'Build': 8,
+                                'Date': '2026-09-14'})
+        self.assertEqual(pars.Version.val, '6.2.57')
+        self.assertEqual(pars.Touchbuild.val, '2025.33230')
+        self.assertEqual(pars.Build.val, 8)
+        self.assertEqual(pars.Date.val, '2026-09-14')
+
+    def test_the_readonly_dance_leaves_them_locked(self):
+        inst, pars = self._harness(Version='6.2.58')
+        inst._restoreAboutPars({'Version': '6.2.57'})
+        self.assertTrue(pars.Version.readOnly,
+                        'About pars are locked; a restore must re-lock them')
+
+    def test_a_malformed_version_is_refused_not_written(self):
+        """The sentinel is local writable JSON and Version drives the semver
+        compare -- a junk value there must not become the par."""
+        inst, pars = self._harness(Version='6.2.58')
+        inst._restoreAboutPars({'Version': 'not-a-version'})
+        self.assertEqual(pars.Version.val, '6.2.58')
+        self.assertTrue(any('malformed' in m for _, m in inst.logged),
+                        'it must say why it refused')
+
+    def test_a_missing_par_is_skipped_rather_than_raising(self):
+        """Nothing added for truthfulness may abort a rollback."""
+        inst, pars = self._harness(Version='6.2.58')   # no Build/Date/Touchbuild
+        inst._restoreAboutPars({'Version': '6.2.57', 'Build': 8,
+                                'Date': '2026-09-14'})
+        self.assertEqual(pars.Version.val, '6.2.57')
+
+    def test_a_non_dict_snapshot_is_ignored(self):
+        inst, pars = self._harness(Version='6.2.58')
+        inst._restoreAboutPars(None)
+        inst._restoreAboutPars('6.2.57')
+        self.assertEqual(pars.Version.val, '6.2.58')
+
+    def test_read_about_pars_captures_only_what_exists(self):
+        inst, pars = self._harness(Version='6.2.58', Build=9)
+        self.assertEqual(inst._readAboutPars(),
+                         {'Version': '6.2.58', 'Build': 9})
+
+    def test_the_rollback_stamps_BEFORE_the_pulse(self):
+        """Placement is the whole fix: after the pulse the component is
+        running the restored build, whose source predates this code."""
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+               / 'UpdaterExt.py').read_text(encoding='utf-8')
+        body = src.split('def _rollback', 1)[1].split('\n    def ', 1)[0]
+        # rfind, not find: a SECOND stamp added after the pulse is just
+        # as dead as moving the first one there.
+        restore = body.rfind('_restoreAboutPars(')
+        pulse = body.find('enableexternaltoxpulse')
+        self.assertGreater(restore, 0,
+                           '_rollback must restore the About pars')
+        self.assertGreater(pulse, 0)
+        self.assertLess(restore, pulse,
+                        'a stamp after the pulse lands on the restored '
+                        'build and never ships with the build that fixes it')
+
+    def test_the_sentinel_carries_the_whole_about_page(self):
+        """from_version alone cannot restore Build/Date/Touchbuild, and
+        _applyPhase2 is the only moment the old values are still live."""
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+               / 'UpdaterExt.py').read_text(encoding='utf-8')
+        body = src.split('def _applyPhase2', 1)[1].split('\n    def ', 1)[0]
+        self.assertIn("'from_about': self._readAboutPars()", body)
+
+    def test_a_pre_fix_sentinel_still_restores_the_version(self):
+        """Sentinels written by an older build -- and the smoke's forged
+        one -- carry from_version and nothing else."""
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+               / 'UpdaterExt.py').read_text(encoding='utf-8')
+        body = src.split('def _rollback', 1)[1].split('\n    def ', 1)[0]
+        self.assertIn("or {'Version': sentinel.get('from_version')}", body)
+
+    def test_none_of_the_about_pars_has_a_parexec_branch(self):
+        """The stamp happens before the swap, so its deferred onValueChange
+        is delivered into the RESTORED build's parexec. That is only safe
+        while none of these names is handled there, and none is persisted.
+        """
+        from pathlib import Path
+        dev = Path(project.folder) / 'embody' / 'Embody'
+        parexec = (dev / 'parexec.py').read_text(encoding='utf-8')
+        for name in ('Version', 'Touchbuild', 'Build', 'Date'):
+            self.assertNotIn("par.name == '%s'" % name, parexec,
+                             'an About par with a parexec branch would make '
+                             'the pre-swap stamp fire a handler')
 
 
 class TestSequenceParsAreNeverRetired(EmbodyTestCase):

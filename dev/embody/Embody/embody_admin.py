@@ -2981,6 +2981,26 @@ def adopt_committed_envoy(ext, kick_envoy: bool) -> bool:
     return True
 
 
+def envoy_consent_decision(ext) -> str:
+    """What verify()'s fresh-install branch should do about Envoy.
+
+    'honour' -- Envoy is already on, so someone turned it on deliberately
+    since load: init() scrubbed the baked value to False at frame 0
+    (execute.py), so a True at verify time cannot be the .tox's opinion.
+    The enable's own onValueChange was swallowed by parexec's _init_complete
+    guard, so nothing has started the server; verify() must.
+    'prompt'  -- genuinely fresh, and we may ask.
+    'quiet'   -- fresh, but a dialog is suppressed or already queued.
+
+    Pure so it can be tested off-TD; verify() itself needs a live session.
+    """
+    if ext.my.par.Envoyenable.eval():
+        return 'honour'
+    if ext._suppressDialogs() or getattr(ext, '_pending_envoy_prompt', False):
+        return 'quiet'
+    return 'prompt'
+
+
 def save_settings(ext) -> None:
     """Persist whitelisted parameter values to .embody/config.json."""
     ext._settings_save_pending = False

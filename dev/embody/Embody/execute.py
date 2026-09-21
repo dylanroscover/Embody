@@ -22,6 +22,10 @@ def init():
 	# fire, parexec processes init()'s Envoyenable=False and calls Stop(),
 	# disabling Envoy on every startup.  _restoreSettings stores
 	# _init_complete when it finishes (or immediately if it returns early).
+	# LOAD-BEARING for EmbodyExt.verify(): because this runs at frame 0 and
+	# verify() at frame 30, a True there can only be a deliberate enable made
+	# since load, which verify() honours instead of scrubbing. Replacing this
+	# write with a storage boot guard would silently invert that meaning.
 	parent.Embody.par.Envoyenable = False
 	parent.Embody.par.Envoystatus = 'Disabled'
 	parent.Embody.par.Performmode = False

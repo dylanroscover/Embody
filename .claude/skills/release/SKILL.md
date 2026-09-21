@@ -242,6 +242,24 @@ run (no TD, bad manifest, no flag by the deadline) -- a 2 is never a green.
 Evidence: `result.json` in the run dir (its path ends the summary), beside
 `ready.flag` and `features.flag`.
 
+**The release gate is the full command, not the bare smoke:**
+
+```
+dev/.venv-tests/Scripts/python.exe dev/release_testing/smoke_run.py --legs upgrade,faults,uninstall
+```
+
+`--legs` runs three more legs against the same smoke TD after the MCP probe
+(always in that order; `dev/release_testing/smoke_legs/`): `upgrade` installs
+the PREVIOUS release first (from git history by tag, or `--upgrade-from`) and
+drives its self-updater to the build under test, rolls back to the updater's
+backup and updates again; `faults` breaks the venv interpreter, the port, the
+server socket and the instance registry and proves each self-heal from the
+logs; `uninstall` removes Embody the way a user does and checks what is left.
+PASS then also reads `upgrade PASS`, `faults PASS`, `uninstall PASS` in the
+summary; a failed leg is exit 1 with the failed step named. Nothing has been
+release-smoked until all three legs pass on BOTH machines (v6.2.57 shipped
+with only the bare smoke -- the legs were still being built).
+
 The Convoy leg installs and starts the REAL per-user Convoy host app on the
 machine that runs it (on a machine that already has it, the summary says
 `host app reused` -- the install path was not exercised). Run the same

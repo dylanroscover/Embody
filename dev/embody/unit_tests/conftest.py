@@ -100,7 +100,18 @@ def _sandbox_dev_dir() -> str:
     """
     root = tempfile.mkdtemp(prefix='embody_pytest_sandbox_')
     for rel in ('embody/envoy_bridge.py',
-                'embody/Embody/templates/text_envoy_bridge.py'):
+                'embody/Embody/templates/text_envoy_bridge.py',
+                # test_updater.py's source-scan guards read this out of
+                # project.folder; without it they raise FileNotFoundError
+                # and read as five broken tests rather than an empty sandbox.
+                'embody/Embody/updater/UpdaterExt.py',
+                # same reason -- the sequence-par predicate guard
+                # reads the save hook's source out of project.folder.
+                'embody/execute_src_ctrl.py',
+                # the About-par stamp fires a deferred onValueChange
+                # into whichever parexec is live after the swap; a test
+                # pins that none of those names is handled there.
+                'embody/Embody/parexec.py'):
         src = os.path.join(_DEV_DIR, rel)
         dst = os.path.join(root, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)

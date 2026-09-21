@@ -110,6 +110,13 @@ def _verified_tls_context():
     return context
 
 
+# The About-page pars the updater owns: written forward from the manifest by
+# _stampAboutPars, restored backward from the sentinel by _restoreAboutPars.
+# Module level, not a class attr -- a capitalized class attr is promoted onto
+# the host COMP (rules/td-python.md) and counts against the promoted ceiling.
+_ABOUT_PARS = ('Version', 'Touchbuild', 'Build', 'Date')
+
+
 class UpdaterExt:
     """Self-updater for the Embody component (check / download / apply)."""
 
@@ -1022,6 +1029,10 @@ class UpdaterExt:
             # its own update in flight from one a crash interrupted.
             self._writeSentinel({
                 'from_version': old_version,
+                # The whole About page as it reads RIGHT NOW. _rollback runs
+                # after the swap, when these already describe the new build,
+                # so this is the only point they can be captured.
+                'from_about': self._readAboutPars(),
                 'to_version': pending['version'],
                 'tag': pending['tag'],
                 'tox_path': pending['tox_path'],
@@ -1153,6 +1164,55 @@ class UpdaterExt:
             par = getattr(embody.par, name, None)
             if par is not None:
                 self._setPar(par, value)
+
+    def _readAboutPars(self):
+        """The live About values, as plain JSON-safe strings."""
+        out = {}
+        for name in _ABOUT_PARS:
+            par = getattr(self._embody.par, name, None)
+            if par is not None:
+                try:
+                    out[name] = par.eval()
+                except Exception:
+                    pass
+        return out
+
+    def _restoreAboutPars(self, about):
+        """Stamp About pars BACK from a sentinel snapshot (rollback mirror).
+
+        Validates on the way out of JSON: the sentinel is local, writable
+        file content, and Version drives the semver compare in _finishCheck.
+        Never raises -- the rollback is the safety net, and nothing added
+        for truthfulness may be able to abort it.
+        """
+        if not isinstance(about, dict):
+            return
+        stamped = {}
+        for name in _ABOUT_PARS:
+            value = about.get(name)
+            if value is None:
+                continue
+            par = getattr(self._embody.par, name, None)
+            if par is None:
+                continue
+            try:
+                if name == 'Version':
+                    if self.parseVersion(value) is None:
+                        self._log(f'sentinel Version {value!r} is malformed '
+                                  f'-- not restoring it', 'WARNING')
+                        continue
+                    value = str(value)
+                elif name == 'Build':
+                    value = int(value)   # Int par; _setPar raises on a string
+                else:
+                    value = str(value)[:64]
+                self._setPar(par, value)
+                stamped[name] = value
+            except Exception as e:
+                self._log(f'could not restore About par {name}: {e}',
+                          'WARNING')
+        if stamped:
+            self._log(f'About pars restored from backup: {stamped}')
 
     def _applyBuildOwnedPars(self, manifest):
         """Re-assert every built-in par the NEW build declares.
@@ -1431,7 +1491,20 @@ class UpdaterExt:
         except Exception:
             reload_token = None
         sentinel['rollback_token'] = reload_token
-        self._writeSentinel(sentinel)
+        # Record what the pars say NOW, so a rollback that never boots can be
+        # put back (VerifyRollback's failure arm), then stamp the old build's
+        # values. Wrapped: the rollback must survive anything that goes wrong
+        # in here. The fallback covers sentinels written before this landed --
+        # and the smoke's forged one, which carries from_version alone.
+        try:
+            sentinel['pre_rollback_about'] = self._readAboutPars()
+            self._writeSentinel(sentinel)
+            self._restoreAboutPars(
+                sentinel.get('from_about')
+                or {'Version': sentinel.get('from_version')})
+        except Exception as e:
+            self._log(f'could not restore About pars before rollback: {e}',
+                      'WARNING')
         run(f"op('{ep}').op('updater').ext.UpdaterExt.VerifyRollback(0) "
             f"if op('{ep}') and op('{ep}').op('updater') else None",
             delayFrames=300)
@@ -1473,6 +1546,17 @@ class UpdaterExt:
             # Rollback itself failed -- KEEP the sentinel so the next open
             # can re-offer recovery. This is exactly when it matters most.
             if sentinel is not None:
+                # Still running the NEW build's contents, so it must stop
+                # claiming the old version. Restore what was RECORDED rather
+                # than re-stamping from the manifest: on the crash-recovery
+                # path (StartupCheck) the live component may already BE the
+                # old build, and a blind forward stamp would invent a lie.
+                try:
+                    self._restoreAboutPars(
+                        sentinel.get('pre_rollback_about') or {})
+                except Exception as e:
+                    self._log(f'could not re-stamp About pars after a failed '
+                              f'rollback: {e}', 'WARNING')
                 sentinel['phase'] = 'rollback_failed'
                 self._writeSentinel(sentinel)
             self._status('Update AND rollback failed -- reopen saved .toe')

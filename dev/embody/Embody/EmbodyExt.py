@@ -3527,14 +3527,21 @@ class EmbodyExt:
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
             # Genuinely fresh install (empty table, no config.json found
-            # anywhere): prompt for opt-in. A found config.json takes the
-            # elif above and honors its persisted decision -- no re-prompt
-            # nagging on untitled projects (issue #60). Never queue while
-            # dialogs are suppressed (one of three display-time gates with
-            # _promptEnvoy/_messageBox; queuing here also reset
-            # Envoyenable=False). Idempotent.
-            if (not self._suppressDialogs()
-                    and not getattr(self, '_pending_envoy_prompt', False)):
+            # anywhere). A found config.json takes the elif above and honors
+            # its persisted decision -- no re-prompt nagging on untitled
+            # projects (issue #60). Suppression and idempotency live in the
+            # decision, which is in embody_admin so it is testable off-TD.
+            decision = mod.embody_admin.envoy_consent_decision(self)
+            if decision == 'honour':
+                # An enable made while parexec was suppressed -- in practice
+                # adopt_committed_envoy's, inside _restoreSettings above.
+                # Scrubbing it wrote False after _init_complete, so parexec
+                # DID run Stop() and the persist tail baked it into
+                # config.json (dead clone-adopt, 6.2.57 -> 6.2.58). Its own
+                # callback was dropped, so nothing else will start it. No
+                # wizard: the committed declaration is the consent.
+                run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
+            elif decision == 'prompt':
                 self.my.par.Envoyenable = False
                 self._pending_envoy_prompt = True
 
