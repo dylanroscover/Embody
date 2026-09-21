@@ -216,7 +216,7 @@ If you need a config while TD is already running, see [Manual Configuration](set
 2. **Check `.mcp.json`:** Look for `.mcp.json` at your AI Project Root — the git repo root by default, or the `.toe`'s folder / a custom path if you've changed the **AI Project Root** parameter. It should contain a server entry for `envoy` with the correct port. If it's missing:
     - Confirm the **AI Project Root** parameter points where you expect (a non-git project still gets `.mcp.json` written to the project folder)
     - Re-enable Envoy (toggle off, then on) to regenerate it
-    - Just cloned this project? See [A Cloned Project Has No `.mcp.json`](#a-cloned-project-has-no-mcpjson) above — Envoy starts disabled on a clone
+    - Just cloned this project? See [A Cloned Project Has No `.mcp.json`](#a-cloned-project-has-no-mcpjson) above — the config is written on your machine at first open, not carried by git
     - Or create it manually — see [Manual Configuration](setup.md#manual-configuration)
 3. **Restart Claude Code:** After Envoy generates `.mcp.json`, you need to start a **new** Claude Code session for it to pick up the config. Run `claude` again in your project directory.
 4. **Port mismatch:** Ensure the port in `.mcp.json` matches the Envoy Port parameter in TD. If you changed the port, `.mcp.json` should update automatically — but check it.

@@ -218,6 +218,8 @@ When you clone a repo someone else built with Embody, the `.embody/envoy.json` f
 
 Once TD has run on your machine, Embody pins the build you used into the machine-local `.embody/local.json`, and later launches prefer the exact (or closest same-year) match for that pin — so your machine keeps launching the build **you** run, regardless of what your collaborators run. (Older repos may still carry a legacy `td_build` key in the committed `project.json`; it is tolerated as a fallback and removed automatically by newer Embody builds — a committed pin churned whenever collaborators ran different TD builds.) See [Architecture](architecture.md#embodylocaljson-build-pin-machine-local-and-embodyprojectjson-committed) for the full match policy.
 
+Envoy's *enablement* does travel: the committed `.embody/project.json` declares that the project uses Envoy, so a machine with no settings of its own turns it on at first open. What does not travel is `.mcp.json` itself — it hard-codes absolute venv and bridge paths, so it is written fresh when Envoy starts on your machine. If your AI client reports no Envoy server after cloning, see [A Cloned Project Has No `.mcp.json`](troubleshooting.md#a-cloned-project-has-no-mcpjson).
+
 ## Verifying the Connection
 
 After starting Envoy and your MCP client:
