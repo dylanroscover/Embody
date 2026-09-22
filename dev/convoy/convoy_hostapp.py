@@ -2386,7 +2386,23 @@ class HostApp:
             pass
         summary = dict(summary)
         summary["admitted_peers"] = peers[:32]
+        # A peer with a LIVE pair session completed a mutual-TLS handshake
+        # against this host's current certificate, so its refusals come
+        # from a second record it holds for this address (a previous
+        # identity), not from a rejection of this one.
+        summary["connected_peers"] = [
+            host_id for host_id in peers[:32]
+            if self._peer_session_connected(host_id)]
         return summary
+
+    def _peer_session_connected(self, peer_host_id):
+        manager = self.session_manager
+        if manager is None or manager.is_stopped:
+            return False
+        try:
+            return manager.peer_info(peer_host_id).state == "connected"
+        except Exception:
+            return False
 
     def _pin_conflict_map(self):
         conflicts = getattr(self, "_pin_conflicts", None)
@@ -2535,7 +2551,20 @@ class HostApp:
         refusals = self._inbound_refusals_locked()
         if refusals:
             peers = refusals.get("admitted_peers") or []
-            if peers:
+            connected = refusals.get("connected_peers") or []
+            rejecting = [p for p in peers if p not in connected]
+            if peers and not rejecting:
+                text = ("%d admitted peer(s) still dial a previous identity "
+                        "of this host (%d refusals/10 min): they stop on "
+                        "their own, or forget it there"
+                        % (len(connected), refusals["count"]))
+            elif peers and connected:
+                text = ("%d admitted peer(s) reject this host's certificate "
+                        "and %d dial a previous identity of it (%d "
+                        "refusals/10 min): re-pin it there"
+                        % (len(rejecting), len(connected),
+                           refusals["count"]))
+            elif peers:
                 text = ("%d admitted peer(s) reject this host's "
                         "certificate (%d refusals/10 min): they must "
                         "re-pin it" % (len(peers), refusals["count"]))
@@ -2545,6 +2574,14 @@ class HostApp:
                                        len(refusals.get("sources") or {})))
             out.append(dict(refusals, kind="handshake_refusals",
                             text=text))
+        dormant = [p["host_id"] for p in self.peers.peers()
+                   if p.get("dormant")]
+        if dormant:
+            out.append({"kind": "dormant_peers", "host_ids": dormant[:32],
+                        "text": "%d dormant peer(s): their address now "
+                                "serves another pinned identity; forget "
+                                "them if they are gone for good"
+                                % len(dormant)})
         conflicts = list(self._pin_conflict_map().values())
         if conflicts:
             out.append({"kind": "peer_identity_changed",
@@ -3241,6 +3278,7 @@ class HostApp:
                 1 for p in peer_records
                 if p["state"] == peers_mod.PEER_ADMITTED),
             "peers_total": len(peer_records),
+            "peers_dormant": sum(1 for p in peer_records if p.get("dormant")),
             # 2026-09-21: the five things an operator could only learn
             # from audit.jsonl (see _advisories_locked).
             "peers_mismatched": len(self._pin_conflict_map()),
@@ -5931,6 +5969,15 @@ class HostApp:
             for peer in peer_records:
                 peer_host_id = peer.get("host_id")
                 for namespace in sorted(namespaces):
+                    if peer.get("dormant"):
+                        if namespace in (peer.get("convoy_ids") or ()):
+                            refused.append({
+                                "host_id": peer_host_id,
+                                "convoy_id": namespace,
+                                "status": "offline",
+                                "reason": "dormant",
+                            })
+                        continue
                     decision = self.peers.authorize_peer(
                         peer_host_id, peer.get("fingerprint"),
                         convoy_id=namespace)
@@ -10307,7 +10354,7 @@ class HostApp:
             configs = []
             for record in records:
                 host_id = record.get("host_id")
-                if not host_id or not any(
+                if not host_id or record.get("dormant") or not any(
                         self.peers.authorize_peer(
                             host_id, record.get("fingerprint"),
                             convoy_id=namespace).allowed
@@ -10362,8 +10409,80 @@ class HostApp:
         if target is None or keys is None:
             raise peerclient.PeerSocketUnavailable(
                 error or "peer endpoint is no longer configured")
-        return peerclient.open_authenticated_socket(
-            target, keys, timeout=timeout_s)
+        try:
+            return peerclient.open_authenticated_socket(
+                target, keys, timeout=timeout_s)
+        except peerclient.PeerSocketPinMismatch:
+            # The address provably no longer serves the pinned identity:
+            # the one fact that parks a re-minted host's ghost record.
+            # Never let bookkeeping replace the mismatch on the way out.
+            try:
+                self._park_superseded_peer(peer_host_id, endpoint)
+            except Exception as exc:
+                self._audit_best_effort(
+                    "peer_dormant_error",
+                    {"host_id": peer_host_id,
+                     "error": f"{type(exc).__name__}: {exc}"[:300]})
+            raise
+
+    def _park_superseded_peer(self, ghost_host_id, endpoint):
+        """Mark a pinned peer dormant when the address just dialed serves
+        another pinned identity. Returns the successor's host_id, or None.
+
+        A host that loses host.json re-mints BOTH its host_id and its key
+        and is TOFU-admitted beside its old record at the same address;
+        nothing parked the old one, so every peer dialed the ghost forever
+        and the reborn host counted each refusal as "peers reject this
+        certificate" (field 2026-09-22: 3 peers, ~18 refusals/min).
+        Dormant, never forgotten: PeerStore.set_dormant keeps the pin,
+        state, lineage and work, so this can neither evict a live peer
+        nor free its host_id for a TOFU takeover (review 2026-09-22), and
+        any contact from the identity wakes it. Guards: the ghost is
+        admitted/observe-only, the dialed address is on its record, an
+        admitted/observe-only OTHER record (not itself dormant) holds that
+        address, and the ghost has not connected since that record's pin
+        was first seen. Called WITHOUT self.lock from the dial worker.
+        """
+        address = "%s:%s" % (endpoint.address, endpoint.port)
+        kept = (peers_mod.PEER_ADMITTED, peers_mod.PEER_OBSERVE_ONLY)
+        with self.lock:
+            ghost = self.peers.get(ghost_host_id)
+            if (ghost is None or ghost.get("state") not in kept
+                    or ghost.get("dormant")):
+                return None
+            if address not in (ghost.get("endpoints") or ()):
+                return None
+            successor = None
+            for record in self.peers.peers():
+                if (record.get("host_id") == ghost_host_id
+                        or record.get("state") not in kept
+                        or record.get("dormant")
+                        or address not in (record.get("endpoints") or ())):
+                    continue
+                # The newest pin at that address is the one the address
+                # belongs to now.
+                if successor is None or (
+                        (record.get("pin_first_seen") or 0)
+                        > (successor.get("pin_first_seen") or 0)):
+                    successor = record
+            if successor is None:
+                return None
+            since = successor.get("pin_first_seen")
+            last_seen = ghost.get("last_seen")
+            if since is None or (last_seen is not None
+                                 and last_seen > since):
+                return None
+            self.peers.set_dormant(ghost_host_id, successor["host_id"],
+                                   address)
+            self._prune_peer_manifest_cache_locked(ghost_host_id)
+            self._invalidate_network_nodes_cache_locked()
+        manager = self.session_manager
+        if manager is not None:
+            try:
+                manager.remove_peer(ghost_host_id)
+            except sessions_mod.PairSessionError:
+                pass
+        return successor["host_id"]
 
     def _start_peer_session_manager(self):
         if self.hostkeys is None or not self.active_convoy_ids():
@@ -11603,6 +11722,9 @@ class HostApp:
         """
         if not isinstance(record, dict):
             return (), "peer record is missing"
+        if record.get("dormant"):
+            return (), ("peer is dormant: its address now serves another "
+                        "pinned identity")
         cert_pem = record.get("cert_pem")
         fingerprint = record.get("fingerprint")
         host_id = record.get("host_id")

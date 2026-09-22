@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.2.62
+
+A re-minted host no longer haunts its peers.
+
+- **Ghost peers go dormant.** A host that lost its `host.json` comes back as a new identity at the same address, and its peers used to dial the old record forever. They now park it on the first failed dial. Dormant keeps the pin, the state and any queued work, so nobody can claim the old host_id by trust-on-first-use and an operator narrowing survives; any contact from the identity itself wakes it (`peer_dormant` / `peer_woken` in the audit).
+- **Status names the ghost on both sides.** The reborn host reads `N admitted peer(s) still dial a previous identity of this host` instead of demanding a re-pin that cannot apply; the parking side reads `N dormant peer(s)`, and node lists mark them `offline: dormant`. `POST /peers/forget` remains the manual path for a machine that is gone for good. +12 tests.
+
 ## v6.2.61
 
 Convoy says what is wrong, on every surface the field report found silent.
