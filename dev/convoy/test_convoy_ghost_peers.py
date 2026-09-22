@@ -50,9 +50,15 @@ def _events(server, event):
 
 
 def _pin_mismatch_dial(monkeypatch):
+    """Only the GHOST's pin fails at the address; every other dial is
+    plainly unreachable. The patch is process-global and the server's
+    own dial workers use it too: refusing EVERY target let a background
+    dial of the reborn record park IT first (macOS CI, 2026-09-22)."""
     def refuse(target, keys, timeout):
-        raise peerclient.PeerSocketPinMismatch(
-            peerclient._pin_mismatch(target, offered=None, cause=None))
+        if target.host_id == GHOST:
+            raise peerclient.PeerSocketPinMismatch(
+                peerclient._pin_mismatch(target, offered=None, cause=None))
+        raise peerclient.PeerSocketUnavailable("connection refused")
     monkeypatch.setattr(ha.peerclient, "open_authenticated_socket", refuse)
 
 
@@ -66,6 +72,8 @@ def _haunt(server, ghost_endpoints=(ADDRESS,), reborn_endpoints=(ADDRESS,),
     when = reborn["pin_first_seen"] + (60 if heard_after else -60)
     with server.app.lock:
         assert server.app.peers.touch_seen(GHOST, when=when)
+        # The reborn host talks to us (that is how the field case looks).
+        assert server.app.peers.touch_seen(REBORN)
     return ghost, reborn
 
 
@@ -181,6 +189,17 @@ def test_an_unreachable_dial_parks_nothing(server, monkeypatch):
     with pytest.raises(peerclient.PeerSocketUnavailable):
         server.app._dial_peer_session(GHOST, ENDPOINT, 1.0)
     assert server.app.peers.get(GHOST)["dormant"] is None
+
+
+def test_an_older_pin_never_supersedes_a_newer_one(server, monkeypatch):
+    # Reversed roles: the record pinned LAST is the address's owner, so a
+    # mismatch dialing it must not park it in favour of the older pin.
+    admit(server, REBORN, REBORN_FP, endpoints=[ADDRESS])
+    admit(server, GHOST, GHOST_FP, endpoints=[ADDRESS])   # newer pin
+    _pin_mismatch_dial(monkeypatch)
+    _dial_ghost(server)
+    assert server.app.peers.get(GHOST)["dormant"] is None
+    assert not _events(server, "peer_dormant")
 
 
 def test_a_pending_successor_parks_nothing(server, monkeypatch):

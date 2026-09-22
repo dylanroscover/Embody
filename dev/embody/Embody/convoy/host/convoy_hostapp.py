@@ -10439,7 +10439,7 @@ class HostApp:
         nor free its host_id for a TOFU takeover (review 2026-09-22), and
         any contact from the identity wakes it. Guards: the ghost is
         admitted/observe-only, the dialed address is on its record, an
-        admitted/observe-only OTHER record (not itself dormant) holds that
+        admitted/observe-only OTHER record (not itself dormant, pinned later) holds that
         address, and the ghost has not connected since that record's pin
         was first seen. Called WITHOUT self.lock from the dial worker.
         """
@@ -10453,11 +10453,15 @@ class HostApp:
             if address not in (ghost.get("endpoints") or ()):
                 return None
             successor = None
+            ghost_pinned = ghost.get("pin_first_seen") or 0
             for record in self.peers.peers():
                 if (record.get("host_id") == ghost_host_id
                         or record.get("state") not in kept
                         or record.get("dormant")
-                        or address not in (record.get("endpoints") or ())):
+                        or address not in (record.get("endpoints") or ())
+                        # An OLDER pin never supersedes a newer one: the
+                        # reborn identity is the one pinned last.
+                        or (record.get("pin_first_seen") or 0) <= ghost_pinned):
                     continue
                 # The newest pin at that address is the one the address
                 # belongs to now.
