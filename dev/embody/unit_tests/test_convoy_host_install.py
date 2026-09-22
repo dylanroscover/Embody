@@ -535,6 +535,14 @@ class ConvoyHostBase(EmbodyTestCase):
         self._patch(self.convoy, '_host_busy', False)
         self._patch(self.convoy, '_host_result', None)
         self._patch(self.convoy, '_host_gen', 0)
+        self._patch(self.convoy, '_runtime_wait_pending', False)
+        # Envoy ON and Convoy enabled unless a test says otherwise: the
+        # no-interpreter path forks on the first and the runtime wait on
+        # the second, and the LIVE pars would tie this suite to the
+        # developer's toggles.
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: True)
+        self._patch(self.convoy, '_enabled', lambda: True)
         # The REGISTRATION slot is patched too -- not because anything
         # here uses it, but so the separation test can write to it and
         # tearDown puts the live reconciler's bookkeeping back.
@@ -827,11 +835,73 @@ class TestInstallOrchestration(ConvoyHostBase):
 
     def test_no_interpreter_refuses_before_the_dialog(self):
         self.installer.interpreters = []
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: False)
         result = self.convoy.installHost()
         self.assertEqual(result['state'], 'error')
         self.assertEqual(self.dialogs, [],
                          'a machine with no managed Convoy runtime must refuse '
                          'BEFORE asking the user to grant anything')
+        self.assertEqual(self.installer.count('install'), 0)
+        # Not 'Install failed': the next registration disproved that line
+        # and the failure vanished from the readout (TEC-C3A, 2026-09-21).
+        # The node line names Envoy; this path names it in the log.
+        self.assertNotIn('Install failed -- see log', self.host_texts)
+        self.assertTrue(any('Enable Envoy' in m for m in self._warnings()),
+                        self._logs)
+
+    def _runtime_waits(self):
+        return [kw for _a, kw in self._runs
+                if kw.get('group') == 'convoy_host_runtime_wait']
+
+    def test_no_interpreter_with_envoy_building_waits_when_automatic(self):
+        """The in-place update (confirm=False) used to spend its one
+        attempt here and latch 'Install failed'; now it waits for the venv
+        and installs when it lands."""
+        self.installer.interpreters = []
+        result = self.convoy.installHost(confirm=False)
+        self.assertEqual(result['state'], 'waiting_runtime')
+        self.assertEqual(self.host_texts[-1], 'Installing...')
+        self.assertTrue(self.convoy._runtime_wait_pending)
+        self.assertLen(self._runtime_waits(), 1, 'one wait chain armed')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertEqual(self._warnings(), [], 'building is not a failure')
+
+    def test_no_interpreter_with_envoy_building_just_says_so_when_pressed(
+            self):
+        self.installer.interpreters = []
+        result = self.convoy.installHost()
+        self.assertEqual(result['state'], 'waiting_runtime')
+        self.assertEqual(self._runtime_waits(), [],
+                         'a button press arms no chain of its own')
+        self.assertNotIn('Installing...', self.host_texts)
+        self.assertEqual(self.dialogs, [])
+
+    def test_the_runtime_wait_is_one_chain_at_a_time(self):
+        self.installer.interpreters = []
+        self.convoy.installHost(confirm=False)
+        self.convoy.installHost(confirm=False)
+        self.assertLen(self._runtime_waits(), 1,
+                       'the second ask joins the pending chain')
+
+    def test_the_wait_installs_once_the_venv_lands(self):
+        ready = self.installer.interpreters
+        self.installer.interpreters = []
+        self.convoy.installHost(confirm=False)
+        self.installer.interpreters = ready
+        self.convoy._awaitHostRuntime(attempt=1)
+        self.assertEqual(self.installer.count('install'), 1)
+        self.assertFalse(self.convoy._runtime_wait_pending)
+
+    def test_the_wait_gives_up_quietly_when_envoy_is_switched_off(self):
+        self.installer.interpreters = []
+        self.convoy.installHost(confirm=False)
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: False)
+        self.convoy._awaitHostRuntime(attempt=5)
+        self.assertFalse(self.convoy._runtime_wait_pending)
+        self.assertNotIn('Install failed -- see log', self.host_texts)
+        self.assertTrue(any('Enable Envoy' in m for m in self._warnings()))
         self.assertEqual(self.installer.count('install'), 0)
 
     def test_perform_mode_does_nothing(self):
@@ -2308,6 +2378,25 @@ class TestHostAutoUpdate(ConvoyHostBase):
         self.convoy._maybeUpdateHostApp('6.0.150')
         self.assertEqual(self.installer.count('install'), 1)
 
+    def test_a_missing_runtime_waits_instead_of_spending_the_attempt(self):
+        """TEC-C3A (2026-09-21): the update fired before Envoy had built
+        the venv, hit 'no interpreter', latched 'Install failed' AND spent
+        the session's one attempt -- so the daemon stayed at 6.0.280 after
+        Envoy came up, and every controller read it as 'limited'."""
+        self.client.probe_status = self.client.STATUS_RUNNING
+        ready = self.installer.interpreters
+        self.installer.interpreters = []
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertEqual(self.host_texts[-1], 'Installing...')
+        self.assertTrue(self.convoy._runtime_wait_pending,
+                        'the wait chain owns the retry')
+        self.assertNotIn('Install failed -- see log', self.host_texts)
+        # The venv lands: the chain's next poll installs.
+        self.installer.interpreters = ready
+        self.convoy._awaitHostRuntime(attempt=1)
+        self.assertEqual(self.installer.count('install'), 1)
+
     def test_perform_mode_is_silent_and_spends_nothing(self):
         """Mid-show, the check returns before ANY logging or context
         work -- a heartbeat-cadence 'update waits' line during a
@@ -2430,3 +2519,104 @@ class TestHostAutoUpdate(ConvoyHostBase):
                             opener=lambda req, timeout=None: _Resp())
         self.assertEqual(out['state'], real.STATE_REGISTERED)
         self.assertIsNone(out['host_app_version'])
+
+
+class TestRepinChangedPeers(ConvoyHostBase):
+    """Re-pin Changed Peers... (2026-09-21): list the pinned peers that
+    now announce another identity, confirm with both fingerprints, apply.
+    The host calls are stubbed on the client; the dialog is recorded."""
+
+    PEER = {'host_id': 'c' * 32, 'display_name': 'TEC-A4D',
+            'address': '192.168.88.10:47600',
+            'pinned_fingerprint': 'cvfp1-ap4d-old',
+            'fingerprint': 'cvfp1-fk90-new',
+            'first_seen_unix': 1.0, 'last_seen_unix': 2.0}
+
+    def setUp(self):
+        super().setUp()
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.listed = [dict(self.PEER)]
+        self.repinned = []
+
+        def _listing(handle, **kwargs):
+            return {'state': 'peers_mismatched',
+                    'peers': [dict(p) for p in self.listed]}
+
+        def _repin(handle, host_id, **kwargs):
+            self.repinned.append(host_id)
+            return {'state': 'repinned', 'host_id': host_id,
+                    'previous_fingerprint': 'cvfp1-ap4d-old'}
+
+        self.client.peers_mismatched = _listing
+        self.client.repin_peer = _repin
+        self._patch(self.convoy, '_kickTick', lambda: None)
+        self._patch(self.convoy_mod, '_reverse_dns_names', lambda ips: {})
+
+    def test_the_dialog_names_both_fingerprints_and_re_pins_on_confirm(self):
+        self.choice = 1
+        self.convoy.repinChangedPeers()
+        self.assertLen(self.dialogs, 1)
+        title, message, buttons = self.dialogs[0]
+        self.assertEqual(title, 'Embody - Re-pin Changed Peers')
+        self.assertIn('cvfp1-ap4d-old', message)
+        self.assertIn('cvfp1-fk90-new', message)
+        self.assertIn('TEC-A4D', message)
+        self.assertIn('impersonator', message)
+        self.assertEqual(buttons, ['Cancel', 'Re-pin All'])
+        self.assertEqual(self.repinned, ['c' * 32])
+        self.assertTrue(any('1 of 1 re-pinned' in m for m, _l in self._logs),
+                        self._logs)
+
+    def test_cancel_re_pins_nothing(self):
+        self.choice = 0
+        self.convoy.repinChangedPeers()
+        self.assertLen(self.dialogs, 1)
+        self.assertEqual(self.repinned, [])
+
+    def test_nothing_to_re_pin_says_so_in_a_dialog_and_the_log(self):
+        self.listed = []
+        self.convoy.repinChangedPeers()
+        self.assertLen(self.dialogs, 1)
+        self.assertEqual(self.dialogs[0][2], ['OK'])
+        self.assertTrue(any('nothing to re-pin' in m for m, _l in self._logs))
+        self.assertEqual(self.repinned, [])
+
+    def test_a_refused_re_pin_is_reported_not_swallowed(self):
+        def _refuse(handle, host_id, **kwargs):
+            return {'state': 'refused', 'reason': 'peer_not_mismatched',
+                    'detail': 'no changed identity has been heard'}
+
+        self.client.repin_peer = _refuse
+        self.choice = 1
+        self.convoy.repinChangedPeers()
+        self.assertTrue(any('0 of 1 re-pinned' in m and lvl == 'WARNING'
+                            for m, lvl in self._logs), self._logs)
+
+    def test_parexec_wires_the_pulse(self):
+        src = op.Embody.op('parexec').text
+        self.assertIn("'Convoyrepinpeers': 'repinChangedPeers'", src)
+        self.assertIn("'Convoyrepinpeers'", src.split(
+            "elif par.name in ('Convoyinstallhost'", 1)[1].split(')', 1)[0])
+
+
+class TestAnIsolatedDataDirNeverGetsAHostApp(ConvoyHostBase):
+    """EMBODY_CONVOY_DATA_DIR (2026-09-21): tests and diagnostics point
+    Convoy at a throwaway directory; a login host app must never be
+    registered for it (the supervisor is per user)."""
+
+    def test_install_refuses_and_says_why(self):
+        import os as _os
+        previous = _os.environ.get('EMBODY_CONVOY_DATA_DIR')
+        _os.environ['EMBODY_CONVOY_DATA_DIR'] = 'C:/fake/isolated'
+        try:
+            result = self.convoy.installHost()
+        finally:
+            if previous is None:
+                _os.environ.pop('EMBODY_CONVOY_DATA_DIR', None)
+            else:
+                _os.environ['EMBODY_CONVOY_DATA_DIR'] = previous
+        self.assertEqual(result['state'], 'isolated')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertEqual(self.dialogs, [])
+        self.assertTrue(any('EMBODY_CONVOY_DATA_DIR' in m
+                            for m in self._warnings()))

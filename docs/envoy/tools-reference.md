@@ -219,8 +219,8 @@ The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 
 | Tool | Description |
 |------|-------------|
-| `get_convoy_status` | Is the local Convoy host app available, and what does it know |
-| `convoy_list_nodes` | Local and reachable remote nodes, with `embody_version` per node and a `capabilities` field (`td_python`, `full_shell`) on local nodes -- remote nodes carry none by design (grants are never advertised across the LAN; absent = unknown) |
+| `get_convoy_status` | Is the local Convoy host app available, and what does it know. `host_status` carries the host's `advisories` (each `{kind, text}`: `realm_conflict`, `identity_reminted`, `handshake_refusals`, `peer_identity_changed`, `lan_bind`), its `lan` posture (bound address, adapter, network category, warning or refusal reason), `inbound_refusals` (refused LAN handshakes in the last 10 minutes and which admitted peers sent them), `identity_reminted` and `peers_mismatched` |
+| `convoy_list_nodes` | Local and reachable remote nodes, with `embody_version` and `host_app_version` per node, `offline_reason` on an offline row (`no_relay_port`: the node heartbeats but its Envoy serves no relay port; `heartbeat_stale`; `no_runtime`: its TouchDesigner unregistered on exit), `compatibility` with `compatibility_reason` (protocol, shared-operation counts, the peer's host-app version), and a `capabilities` field (`td_python`, `full_shell`) on local nodes -- remote nodes carry none by design (grants are never advertised across the LAN; absent = unknown) |
 | `convoy_list_controllers` | Live client sessions, selected targets, leases, and active work |
 | `convoy_ping` | One node's liveness through its host app, without waking TouchDesigner |
 | `convoy_select_node` | Pin this session to one exact node so ordinary Envoy tools run there (`clear=true` to unpin) |

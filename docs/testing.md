@@ -165,7 +165,18 @@ Two things to know before starting one:
 - **The Convoy leg installs and starts the real per-user Convoy host app** on
   the machine that runs the smoke. That is the point (a virgin install's
   host-app install is exactly what can break behind a green boot), but it is a
-  real installation, not a sandbox.
+  real installation, not a sandbox. On a developer machine that already runs a
+  host app, pass `--isolate-convoy`: the smoke TD gets
+  `EMBODY_CONVOY_DATA_DIR=<run dir>/convoy-data`, every Convoy data-dir
+  resolver (TD side, bridge, installer, daemon) honours it, Embody refuses to
+  install a login host app for an isolated directory, and the leg passes on
+  `No Convoy host app` with the summary line `convoy isolated`. The enable
+  path runs; the install path does not, and the summary says so.
+- **The pytest tier is isolated the same way automatically**: its conftest
+  points `EMBODY_CONVOY_DATA_DIR` at an empty directory for the whole run, so
+  a bridge test that forgets to patch the transport refuses locally instead of
+  heartbeating the developer's live host app (30 `relay_refused` audit lines
+  in a real log, 2026-09-21).
 - **The macOS leg is verified on real hardware** (first run 2026-09-18: PASS on
   the default port, teardown via Envoy). It launches the bundle's inner
   executable directly rather than `open -a`, so the `.toe` is in argv for the

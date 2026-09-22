@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.2.61
+
+Convoy says what is wrong, on every surface the field report found silent.
+
+- **Convoy runs on Envoy, and says so.** Enable Convoy turns Enable Envoy on; a clone arriving with Envoy off reads `Needs Envoy`; the host-app update waits for the venv instead of latching `Install failed`.
+- **Status carries the host's advisories:** peers rejecting this host's certificate, a re-minted identity, peers whose identity changed, a latched realm split, a listener on a VPN or public network. **Re-pin Changed Peers...** trusts a peer's new identity deliberately.
+- **Auto-bind avoids VPNs and public networks**, refuses a tunnel-only or Public network by name, and `host.log` lines carry timestamps.
+- **Genesis consults the peers on record.** A host that lost its realm record rejoins its admitted peers' realm; an admitted peer of a shared realm latches a conflict; a lonely tracked binding is warned about first.
+- **Diagnostics and isolation.** Node rows carry `offline_reason`, `compatibility_reason` and `host_app_version`; the bridge names the project it reached; `set_parameter` pulses a Pulse; `EMBODY_CONVOY_DATA_DIR` keeps tests off the live host app. +93 tests.
+
 ## v6.2.59
 
 Two first-run bugs the new release gate found: a clone that lost Envoy, and a rollback that lied about its version.

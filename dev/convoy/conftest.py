@@ -48,3 +48,19 @@ def approve_td_python(app, node_id):
     return app.policy.confirm_enable(
         challenge["challenge_id"], challenge["confirmation"],
         expected_generation=generation)
+
+
+@pytest.fixture(autouse=True)
+def isolate_adapter_inventory(monkeypatch):
+    """Never let a HostApp test ask the OS about its adapters.
+
+    desired_lan_endpoint classifies the bind address against
+    convoy_lan.adapter_inventory (a PowerShell / ifconfig / ip spawn,
+    2026-09-21); a test that binds a LAN listener would otherwise spend
+    seconds in that spawn and read the developer's own VPN state. None
+    means "classify nothing", the pre-inventory behaviour. Tests of the
+    inventory itself pass fake inventories or runners explicitly.
+    """
+    import convoy_lan
+    monkeypatch.setattr(convoy_lan, "adapter_inventory",
+                        lambda *args, **kwargs: None)

@@ -361,7 +361,8 @@ class TestConvoyRegistrations(EmbodyTestCase):
         meaning lives only in the changelog.
         """
         for name in ('Convoyinstallhost', 'Convoystarthost',
-                     'Convoystophost', 'Convoyuninstallhost'):
+                     'Convoystophost', 'Convoyuninstallhost',
+                     'Convoyrepinpeers'):
             par = getattr(self.embody.par, name, None)
             self.assertIsNotNone(par, '%s must exist on the Embody COMP'
                                  % name)
@@ -401,10 +402,29 @@ class TestConvoyRegistrations(EmbodyTestCase):
             'not mod.embody_git.selected_clients(parent.Embody.ext.Embody)',
             src)
         self.assertNotIn("par.Aiclient.eval() == 'none'", src)
-        self.assertIn('parent.Embody.par.Envoyenable = True', src,
-                      'Convoy-only mode must keep Envoy\'s internal relay on')
+        # Enabling brings Envoy in EVERY posture now -- Convoy runs on it
+        # -- from register() itself. parexec no longer flips the par, and
+        # no longer only in Convoy-only mode (2026-09-21: a project with a
+        # client configured and Envoy off enabled Convoy straight into
+        # 'Registered -- Envoy port pending', for good).
+        self.assertNotIn('parent.Embody.par.Envoyenable = True', src)
+        ext_src = self.embody.op('convoy').op('ConvoyExt').text
+        body = ext_src.split('def register(self):', 1)[1]
+        body = body[:body.index('\n    def ', 10)]
+        self.assertLess(body.index('_ensureConsent'),
+                        body.index('_ensureEnvoy'),
+                        'consent first: a declined enable must not turn '
+                        'Envoy on')
+        self.assertLess(body.index('_ensureEnvoy'),
+                        body.index('_ensureHostApp'),
+                        'Envoy before the host app, or the install waits '
+                        'on a venv nobody is building')
         self.assertIn('parent.Embody.par.Envoyenable = False', src,
                       'disabling Convoy must stop an unneeded internal relay')
+        # ...and the Envoy toggle wakes a node parked at 'Needs Envoy'.
+        envoy_branch = src.split("par.name == 'Envoyenable'", 1)[1]
+        envoy_branch = envoy_branch.split('elif par.name', 1)[0]
+        self.assertIn('ConvoyExt.envoyEnabledChanged()', envoy_branch)
 
     def test_execute_scrubs_and_unregisters(self):
         src = self.embody.op('execute').text
@@ -548,6 +568,15 @@ class ConvoyExtBase(EmbodyTestCase):
         self._patch(self.convoy, '_readBindingState', lambda: 'established')
         self._patch(self.convoy, '_readConsentScope', lambda: CONSENT_SCOPE)
         self._patch(self.convoy, '_envoyPort', lambda: 9870)
+        # Envoy is ON for every test unless it says otherwise: the tick
+        # gates on it ('Needs Envoy'), and the LIVE par would tie this
+        # suite to the developer's own Enable Envoy toggle.
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: True)
+        self._patch(self.convoy, '_needs_envoy_noted', False)
+        # The once-per-session advisory log memory lives on the LIVE
+        # instance: give every test its own.
+        self._patch(self.convoy, '_advisories_logged', set())
         self._patch(self.convoy, '_ensureWakeListener', lambda: True)
         self._patch(self.convoy, '_stopWakeListener', lambda: None)
         self._patch(self.convoy, '_remoteWakeEnabled', lambda: True)
@@ -691,6 +720,32 @@ class TestNetworkStatusProjection(ConvoyExtBase):
         self.assertEqual(rows[1]['Nodename'], 'render-b')
         self.assertEqual(rows[1]['Nodestatus'], 'Offline')
         self.assertEqual(rows[1]['Lastseen'], '2m ago')
+
+    def test_limited_compatibility_names_the_reason_and_version(self):
+        """'limited' alone sent an operator to read the other machine's
+        log for the version (2026-09-21)."""
+        rows = self.convoy._nodeStatusRows({
+            'state': 'nodes', 'host_id': HOST_ID, 'nodes': [{
+                'node_id': 'b' * 32, 'host_id': OTHER_HOST_ID,
+                'node_name': 'TEC-C3A / moonshine', 'hostname': 'TEC-C3A',
+                'ip': '192.168.88.36', 'status': 'online', 'online': True,
+                'compatibility': 'limited',
+                'compatibility_reason': '12 of 19 operations shared with '
+                                        'host app 6.0.280',
+                'host_app_version': '6.0.280'}]}, self.client)
+        self.assertEqual(rows[0]['Nodestatus'],
+                         'Online -- limited: 12 of 19 operations shared '
+                         'with host app 6.0.280')
+
+    def test_offline_without_a_relay_port_says_so(self):
+        rows = self.convoy._nodeStatusRows({
+            'state': 'nodes', 'host_id': HOST_ID, 'nodes': [{
+                'node_id': 'b' * 32, 'host_id': OTHER_HOST_ID,
+                'node_name': 'TEC-C3A / moonshine', 'hostname': 'TEC-C3A',
+                'ip': '192.168.88.36', 'status': 'offline', 'online': False,
+                'offline_reason': 'no_relay_port'}]}, self.client)
+        self.assertEqual(rows[0]['Nodestatus'],
+                         'Offline -- no Envoy relay port')
 
     def test_a_remote_process_seen_under_two_ids_is_one_row(self):
         """TEC-C3A / transmon.1 sat as rows 7 and 8 for a week (2026-09-05):
@@ -951,6 +1006,28 @@ class TestAutomaticRealmAdoption(ConvoyExtBase):
             return new_id
 
         self._patch(self.embody.ext.Embody, '_adoptConvoyId', _adopt)
+
+    def test_a_tracked_binding_to_a_lonely_realm_warns(self):
+        """2026-09-20: moonshine's tracked binding was committed for a
+        realm of one while three admitted peers sat in the real realm."""
+        other = 'cv_' + '3' * 16
+        self.client.register_result.update({
+            'convoy_id': self.authoritative_id, 'realm_state': 'established',
+            'realm_peer_count': 0, 'peer_realms': [other]})
+        self.convoy._reconcile()
+        warnings = [m for m in self._warnings() if 'NO admitted peer' in m]
+        self.assertLen(warnings, 1)
+        self.assertIn(other, warnings[0])
+        self.assertTrue(any('TRACKED' in m for m, _l in self._logs),
+                        'the id actually written must be named')
+
+    def test_a_realm_with_peers_or_no_other_realm_does_not_warn(self):
+        self.client.register_result.update({
+            'convoy_id': self.authoritative_id, 'realm_state': 'established',
+            'realm_peer_count': 0, 'peer_realms': []})
+        self.convoy._reconcile()
+        self.assertEqual(
+            [m for m in self._warnings() if 'NO admitted peer' in m], [])
 
     def test_registration_adopts_host_authority_and_retries_immediately(self):
         self.client.register_result.update({
@@ -1807,3 +1884,160 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.assertNotEqual(result.get('state'), 'deferred')
         self.assertEqual(self.client.count('register'), 1)
         self.assertTrue(self.client.last('register')['perform_mode'])
+
+
+class TestConvoyNeedsEnvoy(ConvoyExtBase):
+    """Convoy runs on Envoy. With Enable Envoy off the node still registers
+    (the host's row is how a controller learns it exists) but the readout
+    names the cause, the log says it once, and Envoy coming back
+    re-registers at once and re-arms the host-app update.
+
+    THE FIELD FAILURE (TEC-C3A, 2026-09-21): a clone opened with Convoy
+    restored On and Envoy off read 'Registered -- Envoy port pending' --
+    a line the code calls temporary -- for as long as anyone watched, and
+    the only sentence naming Envoy was a WARNING in the log file.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: False)
+        self._patch(self.convoy, '_envoyPort', lambda: None)
+        self.client.register_result = {'state': 'registered',
+                                       'node_id': NODE_ID,
+                                       'host_id': HOST_ID, 'envoy_port': None}
+
+    def _envoy_warnings(self):
+        return [m for m in self._warnings() if 'Enable Envoy' in m]
+
+    def test_the_readout_names_envoy_not_a_pending_port(self):
+        self.convoy._reconcile()
+        self.assertEqual(self.client.count('register'), 1,
+                         'the node still registers: the row is how a '
+                         'controller learns it exists')
+        self.assertEqual(
+            self.status_writes[-1],
+            'Needs Envoy -- turn Enable Envoy on (Convoy runs on it)')
+        self.assertNotIn('Registered -- Envoy port pending',
+                         self.status_writes)
+
+    def test_the_readout_is_actionable_so_it_outranks_the_host_line(self):
+        self.assertTrue(any(self.convoy._NEEDS_ENVOY_TEXT.startswith(t)
+                            for t in self.convoy._ACTIONABLE_NODE_TEXTS))
+
+    def test_no_host_app_reads_as_needs_envoy_too(self):
+        """Nothing can be installed without Envoy's venv: same cause."""
+        self.client.probe_result = self.client.absent()
+        self.convoy._reconcile()
+        self.assertEqual(self.status_writes[-1],
+                         self.convoy._NEEDS_ENVOY_TEXT)
+
+    def test_a_refusal_keeps_its_own_words(self):
+        self.client.register_result = {'state': 'refused',
+                                       'reason': 'local_realm_conflict'}
+        self.convoy._reconcile()
+        self.assertEqual(self.status_writes[-1],
+                         'Refused: local_realm_conflict')
+
+    def test_the_log_says_it_once_per_outage(self):
+        for _ in range(3):
+            self.convoy._reconcile()
+        self.assertLen(self._envoy_warnings(), 1)
+        self.assertIn('Convoy runs on Envoy', self._envoy_warnings()[0])
+
+    def test_perform_mode_never_writes_the_readout(self):
+        self._patch(self.convoy, '_performing', lambda: True)
+        self.convoy._reconcile()
+        self.assertEqual(self.status_writes, [])
+
+    def test_envoy_coming_back_re_registers_now_and_re_arms_the_update(self):
+        self.convoy._reconcile()
+        self.session['host_auto_update_done'] = True
+        self.session['host_update_checked'] = '6.0.280'
+        settled = self.client.count('register')
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: True)
+        self.convoy._reconcile()
+        self.assertEqual(self.client.count('register'), settled + 1,
+                         'Envoy back = a fresh register, not a heartbeat '
+                         'wait')
+        self.assertEqual(self.status_writes[-1],
+                         'Registered -- Envoy port pending')
+        self.assertNotIn('host_auto_update_done', self.session,
+                         'the in-place update gets its one attempt back')
+        self.assertNotIn('host_update_checked', self.session)
+        # A later outage is a new outage: it warns again, once.
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: False)
+        self.convoy._reconcile()
+        self.convoy._reconcile()
+        self.assertLen(self._envoy_warnings(), 2)
+
+    def test_status_snapshot_carries_envoy_enabled(self):
+        self.convoy._reconcile()
+        self.assertIs(self.convoy.convoyStatus()['envoy_enabled'], False)
+
+
+class TestHostAdvisoriesOnTheReadout(ConvoyExtBase):
+    """The host's advisories (2026-09-21) -- refused certificates, a
+    re-minted identity, changed peers, a latched realm split, a LAN
+    listener on a tunnel -- fold into the node line and log once."""
+
+    # lowercase on purpose: the promoted-surface census reads a
+    # capitalized class attribute in this file as a public API.
+    refusals = {'kind': 'handshake_refusals',
+                'text': "3 admitted peer(s) reject this host's certificate "
+                        "(146 refusals/10 min): they must re-pin it"}
+    lan_bind = {'kind': 'lan_bind',
+                'text': 'LAN listener on 10.8.0.2 (TAP-Windows Adapter V9, '
+                        'tunnel adapter): set bind in lan.json to move it'}
+
+    def _registered(self, advisories, **over):
+        result = {'state': 'registered', 'node_id': NODE_ID,
+                  'host_id': HOST_ID, 'envoy_port': 9870,
+                  'advisories': advisories}
+        result.update(over)
+        self.client.register_result = result
+        return result
+
+    def test_advisory_texts_ride_the_connected_line(self):
+        self._registered([self.refusals, self.lan_bind])
+        self.convoy._reconcile()
+        line = self.status_writes[-1]
+        self.assertTrue(line.startswith(
+            "Connected -- 3 admitted peer(s) reject"), line)
+        self.assertIn('; LAN listener on 10.8.0.2', line)
+        snapshot = self.convoy.convoyStatus()
+        self.assertEqual([a['kind'] for a in snapshot['advisories']],
+                         ['handshake_refusals', 'lan_bind'])
+
+    def test_each_advisory_kind_is_logged_once_per_session(self):
+        """Once per KIND, not per text: the text carries live counts, and
+        keying on it re-logged every heartbeat (smoke 2026-09-21)."""
+        result = self._registered([self.refusals, self.lan_bind])
+        self.convoy._reconcile()
+        climbed = dict(self.refusals, text=self.refusals['text'].replace(
+            '146 refusals', '160 refusals'))
+        self.convoy._apply(dict(result, advisories=[climbed, self.lan_bind]),
+                           self.client)
+        self.convoy._apply(dict(result), self.client)
+        advisory_logs = [m for m in self._warnings()
+                         if m.startswith('Convoy advisory')]
+        self.assertLen(advisory_logs, 2)
+        self.assertIn('160 refusals', self.status_writes[-2],
+                      'the readout still carries the live text')
+
+    def test_needs_envoy_outranks_advisories(self):
+        self._patch(self.convoy, '_envoyIsBringingTheEnvironment',
+                    lambda: False)
+        self._patch(self.convoy, '_envoyPort', lambda: None)
+        self._registered([self.refusals], envoy_port=None)
+        self.convoy._reconcile()
+        self.assertEqual(self.status_writes[-1],
+                         self.convoy._NEEDS_ENVOY_TEXT)
+
+    def test_no_advisories_leave_connected_alone(self):
+        self._registered([])
+        self.convoy._reconcile()
+        self.assertEqual(self.status_writes[-1], 'Connected')
+        self.assertEqual(self.convoy.convoyStatus()['advisories'], [])

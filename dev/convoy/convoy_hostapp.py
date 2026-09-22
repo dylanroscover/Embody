@@ -118,6 +118,19 @@ def _running_app_version(module_file=None):
 APP_VERSION = _running_app_version()
 
 
+def _stamp(message):
+    """One line to the daemon's stderr (host.log under the launcher)
+    WITH a timestamp, in the launcher's own format. Daemon lines had
+    none, so a listener that moved to a VPN adapter could only be dated
+    to a two-day window (field 2026-09-21)."""
+    try:
+        sys.stderr.write("[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"),
+                                        message))
+        sys.stderr.flush()
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
 class _PeerProjectionTarget:
     """Trust-owned display identity when a live WSS peer has no dial URI."""
 
@@ -1087,6 +1100,9 @@ NETWORK_QUERY_WORKERS = 32
 # enough for ordinary frame stalls, finite enough that a hard-killed process
 # does not remain "online" forever because its old Envoy port was retained.
 NODE_HEARTBEAT_GRACE_S = 60.0
+# Why a public node row is offline (_node_offline_reason). A closed
+# vocabulary: peers may only relay one of these tokens, never free text.
+NODE_OFFLINE_REASONS = ("no_relay_port", "heartbeat_stale", "no_runtime")
 
 # Cap on the in-memory (peer -> controller) map, matching the drain and
 # poll maps: nothing prunes it on a host whose peers churn, and an
@@ -2240,6 +2256,28 @@ class HostApp:
                       {"fingerprint": current,
                        "certificate": self.hostkeys.certificate_pem is not None,
                        "certificate_reason": self.hostkeys.cert_reason})
+        if self.hostkeys.origin == "minted":
+            # A first run has no peers; a re-mint leaves peers.json behind
+            # (2026-09-18: host.json and identity.* vanished, peers.json
+            # survived, three pinned peers refused the new certificate
+            # for days with no line on any panel). Every peer that pinned
+            # the old key refuses this one; say so where a node can show
+            # it, until the advisory ages out.
+            try:
+                pinned = [p for p in self.peers.peers()
+                          if p.get("state") in (peers_mod.PEER_ADMITTED,
+                                                peers_mod.PEER_OBSERVE_ONLY)]
+            except Exception:
+                pinned = []
+            if pinned:
+                self.db.record_identity_remint(self._now(), len(pinned))
+                self.db.audit("hostkeys", "identity_reminted",
+                              {"fingerprint": current,
+                               "pinned_peers": len(pinned),
+                               "detail": "a NEW identity was minted on a "
+                                         "host that already had pinned "
+                                         "peers; each must re-pin this "
+                                         "host before it can connect"})
 
     # -- automatic LAN realm (ADR-003) ---------------------------------
 
@@ -2258,6 +2296,276 @@ class HostApp:
 
     def _realm_projection_locked(self):
         return self._realm_public(self.realm.snapshot())
+
+    # -- advisories: what a node's Status line must say (2026-09-21) ------
+    #
+    # Five facts an operator could only learn from audit.jsonl before:
+    # a latched realm conflict, a re-minted identity, peers refusing this
+    # host's certificate, admitted peers whose identity changed, and a
+    # LAN listener on a tunnel or public network. Each rides the /status
+    # answer and the register answer as {kind, text, ...}; the node folds
+    # the texts into its Status readout.
+
+    _REFUSAL_WINDOW_S = 600.0
+    _MAX_PIN_CONFLICTS = 64
+
+    def _realms_held_by_admitted_peers_locked(self):
+        """Realm ids this host's ADMITTED peers are recorded in. A TOFU
+        admission records the established realms this host shared with
+        the peer at the time, so a realm named here is one this host was
+        a member of. Lock held."""
+        held = set()
+        try:
+            for record in self.peers.peers():
+                if record.get("state") != peers_mod.PEER_ADMITTED:
+                    continue
+                held.update(record.get("convoy_ids") or ())
+        except Exception:
+            return ()
+        return tuple(sorted(held))
+
+    def _admitted_peer_count_locked(self, convoy_id):
+        try:
+            return sum(1 for record in self.peers.peers()
+                       if record.get("state") == peers_mod.PEER_ADMITTED
+                       and convoy_id in (record.get("convoy_ids") or ()))
+        except Exception:
+            return 0
+
+    def _shared_realms_with_admitted_sender_locked(self, sender, realm_ids):
+        """Of realm_ids, those this host recorded the sender in -- and
+        only for an ADMITTED sender whose pin still matches. Lock held."""
+        try:
+            block = self.peers.authorize_peer(sender["host_id"],
+                                              sender["fingerprint"])
+            if not (block.allowed and block.may_mutate):
+                return ()
+            record = self.peers.get(sender["host_id"]) or {}
+            held = set(record.get("convoy_ids") or ())
+            return tuple(sorted(held.intersection(realm_ids)))
+        except Exception:
+            return ()
+
+    def _sender_standing_locked(self, sender):
+        """Why a sender may not move or split the realm, for the advisory
+        -- 'un-admitted' was printed for admitted peers of another realm
+        (field 2026-09-21)."""
+        try:
+            block = self.peers.authorize_peer(sender["host_id"],
+                                              sender["fingerprint"])
+        except Exception:
+            return "unknown standing"
+        if block.allowed:
+            return "admitted, but not in that realm on record"
+        return str(block.reason or "un-admitted").replace("_", " ")
+
+    def _inbound_refusals_locked(self):
+        """Handshake refusals the LAN listener saw lately, and which of
+        their sources are admitted peers -- a peer that pinned an old
+        identity refuses OUR certificate on every connect."""
+        server = self.lan_server
+        if server is None or not hasattr(server, "refusal_summary"):
+            return None
+        try:
+            summary = server.refusal_summary(self._REFUSAL_WINDOW_S)
+        except Exception:
+            return None
+        if not summary or not summary.get("count"):
+            return None
+        sources = set(summary.get("sources") or {})
+        peers = []
+        try:
+            for record in self.peers.peers():
+                if record.get("state") != peers_mod.PEER_ADMITTED:
+                    continue
+                for endpoint in record.get("endpoints") or ():
+                    if str(endpoint).rsplit(":", 1)[0] in sources:
+                        peers.append(record.get("host_id"))
+                        break
+        except Exception:
+            pass
+        summary = dict(summary)
+        summary["admitted_peers"] = peers[:32]
+        return summary
+
+    def _pin_conflict_map(self):
+        conflicts = getattr(self, "_pin_conflicts", None)
+        if conflicts is None:
+            conflicts = self._pin_conflicts = collections.OrderedDict()
+        return conflicts
+
+    def _note_pin_conflict(self, announcement):
+        """Discovery heard a PINNED host announce a different identity
+        (TOFU never re-pins, by design). Remember what it offered --
+        fingerprint, certificate, address -- so an operator can re-pin
+        it deliberately (repin_peer). Discovery thread; self-locking."""
+        try:
+            host_id = str(announcement.get("host_id") or "")
+            fingerprint = str(announcement.get("fingerprint") or "")
+            cert_pem = str(announcement.get("certificate_pem") or "")
+            endpoint = announcement.get("endpoint") or {}
+            address = "%s:%s" % (endpoint.get("address"),
+                                 endpoint.get("port"))
+        except Exception:
+            return
+        if not host_id or not fingerprint or not cert_pem:
+            return
+        now = self._now()
+        fresh = False
+        with self.lock:
+            record = self.peers.get(host_id) or {}
+            if record.get("state") not in (peers_mod.PEER_ADMITTED,
+                                           peers_mod.PEER_OBSERVE_ONLY):
+                return
+            conflicts = self._pin_conflict_map()
+            if record.get("fingerprint") == fingerprint:
+                conflicts.pop(host_id, None)
+                return
+            entry = conflicts.get(host_id)
+            if entry is None:
+                fresh = True
+                entry = {"host_id": host_id, "first_seen_unix": now,
+                         "pinned_fingerprint": record.get("fingerprint")}
+            entry.update({"fingerprint": fingerprint, "cert_pem": cert_pem,
+                          "address": address[:255], "last_seen_unix": now,
+                          "display_name": str(record.get("display_name")
+                                              or "")[:128]})
+            conflicts[host_id] = entry
+            conflicts.move_to_end(host_id)
+            while len(conflicts) > self._MAX_PIN_CONFLICTS:
+                conflicts.popitem(last=False)
+        if fresh:
+            self._audit_best_effort("peer_identity_changed", {
+                "host_id": host_id,
+                "pinned_fingerprint": record.get("fingerprint"),
+                "offered_fingerprint": fingerprint,
+                "address": address[:255],
+                "detail": "a pinned peer announces a NEW identity; the pin "
+                          "was not updated (Re-pin Changed Peers... does "
+                          "that deliberately)"})
+
+    def peers_mismatched(self):
+        """GET /peers/mismatched: pinned peers heard announcing another
+        identity. No certificate in the listing; it stays server-side
+        for repin_peer. CALLED WITH self.lock held (the GET route table
+        holds it, like /peers; threading.Lock is not reentrant)."""
+        rows = []
+        for entry in self._pin_conflict_map().values():
+            rows.append({key: entry.get(key) for key in (
+                "host_id", "display_name", "address",
+                "pinned_fingerprint", "fingerprint",
+                "first_seen_unix", "last_seen_unix")})
+        return 200, {"ok": True, "peers": rows}
+
+    def repin_peer(self, body):
+        """POST /peers/repin {host_id}: pin the identity that host has
+        been announcing (peers_mismatched), keeping its record's realms
+        and routes. Goes through admit_peer, so the old key's queued work
+        is revoked and the re-pin is audited like any other."""
+        try:
+            host_id = text_field(body, "host_id")
+        except Malformed as e:
+            return self._refuse("peers", "malformed", e.detail, 400)
+        with self.lock:
+            entry = dict(self._pin_conflict_map().get(host_id) or {})
+            record = self.peers.get(host_id) or {}
+        if not entry:
+            return self._refuse(
+                "peers", "peer_not_mismatched",
+                "no changed identity has been heard from that host; "
+                "GET /peers/mismatched lists the ones that can be "
+                "re-pinned", 404)
+        endpoints = [entry["address"]] + [
+            item for item in (record.get("endpoints") or ())
+            if item != entry["address"]]
+        code, payload = self.admit_peer({
+            "host_id": host_id,
+            "fingerprint": entry["fingerprint"],
+            "cert_pem": entry["cert_pem"],
+            "endpoints": endpoints[:16],
+            "convoy_ids": list(record.get("convoy_ids") or ()),
+            "display_name": record.get("display_name") or "",
+            "admitted_via": "operator_repin",
+        })
+        if code == 200:
+            with self.lock:
+                self._pin_conflict_map().pop(host_id, None)
+            payload = dict(payload, repinned=True,
+                           previous_fingerprint=entry.get(
+                               "pinned_fingerprint"))
+        return code, payload
+
+    def _lan_public(self):
+        posture = dict(getattr(self, "lan_posture", None) or {})
+        bound = self.lan_server is not None
+        return {"bound": bound,
+                "address": self.lan_address if bound else None,
+                "port": self.lan_port if bound else None,
+                "reason": None if bound else self.lan_reason,
+                "adapter": posture.get("adapter"),
+                "warning": posture.get("warning") if bound else None,
+                "explicit": bool(posture.get("explicit")),
+                "skipped": posture.get("skipped")}
+
+    def _advisories_locked(self):
+        """Degradations a node folds into its Status line. Each entry is
+        {kind, text, ...}: the text is one ASCII sentence short enough
+        to survive a 160-char parameter; the rest is for tools."""
+        out = []
+        try:
+            snapshot = self.realm.snapshot()
+        except Exception:
+            snapshot = None
+        if snapshot and snapshot.get("state") == realm_mod.CONFLICT:
+            ids = list(snapshot.get("conflict_ids") or ())[:8]
+            out.append({"kind": "realm_conflict", "conflict_ids": ids,
+                        "text": "realm conflict (%d realms): use Resolve "
+                                "Realm Conflict..." % len(ids)})
+        try:
+            remint = self.db.identity_remint(now=self._now())
+        except Exception:
+            remint = None
+        if remint:
+            out.append({"kind": "identity_reminted",
+                        "at": remint.get("at"),
+                        "pinned_peers": remint.get("pinned_peers"),
+                        "text": "new host identity: %d pinned peer(s) "
+                                "refuse this host until they re-pin it"
+                                % int(remint.get("pinned_peers") or 0)})
+        refusals = self._inbound_refusals_locked()
+        if refusals:
+            peers = refusals.get("admitted_peers") or []
+            if peers:
+                text = ("%d admitted peer(s) reject this host's "
+                        "certificate (%d refusals/10 min): they must "
+                        "re-pin it" % (len(peers), refusals["count"]))
+            else:
+                text = ("%d refused LAN handshakes/10 min from %d "
+                        "source(s)" % (refusals["count"],
+                                       len(refusals.get("sources") or {})))
+            out.append(dict(refusals, kind="handshake_refusals",
+                            text=text))
+        conflicts = list(self._pin_conflict_map().values())
+        if conflicts:
+            out.append({"kind": "peer_identity_changed",
+                        "host_ids": [c["host_id"] for c in conflicts][:32],
+                        "text": "%d pinned peer(s) changed identity: use "
+                                "Re-pin Changed Peers..." % len(conflicts)})
+        lan = self._lan_public()
+        if lan.get("warning"):
+            adapter = lan.get("adapter") or {}
+            out.append({"kind": "lan_bind", "lan": lan,
+                        "text": "LAN listener on %s (%s, %s): set bind in "
+                                "lan.json to move it"
+                                % (lan.get("address"),
+                                   adapter.get("description") or "?",
+                                   str(lan["warning"]).replace("_", " "))})
+        elif lan.get("reason") in ("lan_tunnel_only", "lan_public_network"):
+            out.append({"kind": "lan_bind", "lan": lan,
+                        "text": "LAN listener refused: %s (host.log has "
+                                "the adapter; bind in lan.json overrides)"
+                                % str(lan["reason"]).replace("_", " ")})
+        return out
 
     def _invalidate_network_nodes_cache_locked(self):
         """Invalidate directory projections while ``self.lock`` is held.
@@ -2286,6 +2594,18 @@ class HostApp:
         candidate_ids = tuple(candidate_ids or ())
         established_ids = tuple(established_ids or ())
         before = self.realm.snapshot()
+        peer_realms = ()
+        if before is None:
+            # UNBOUND with admitted peers on record: this host was a
+            # member of the realm(s) it admitted them to. Founding a
+            # fresh realm of one instead (2026-09-18: realm.json gone,
+            # three admitted peers of the real realm ignored, a private
+            # realm for three days) is exactly wrong -- rejoin theirs, or
+            # latch a conflict when they disagree.
+            peer_realms = self._realms_held_by_admitted_peers_locked()
+            if peer_realms:
+                established_ids = tuple(sorted(
+                    set(established_ids) | set(peer_realms)))
         if before is None and not established_ids and candidate_ids:
             self.realm.begin_candidate(min(candidate_ids))
         after = self.realm.reconcile(
@@ -2314,6 +2634,8 @@ class HostApp:
             }
             if source:
                 payload["source"] = source
+            if peer_realms:
+                payload["rejoined_from_peers"] = list(peer_realms)[:16]
             self._audit_best_effort(event, payload)
         return after, changed
 
@@ -2649,10 +2971,26 @@ class HostApp:
                     sender, snapshot):
                 foreign = [realm_id for realm_id in established
                            if realm_id != snapshot.get("convoy_id")]
-                if foreign:
-                    advisory = self._note_foreign_realm_locked(
-                        sender, states)
+                shared = (self._shared_realms_with_admitted_sender_locked(
+                    sender, foreign) if foreign else ())
                 changed = False
+                if shared:
+                    # An ADMITTED peer, pin intact, advertising a realm
+                    # this host recorded it in: both were in that realm
+                    # and now sit in different ones. That is a split,
+                    # latched as a CONFLICT for the operator to resolve
+                    # -- not an "un-admitted host" advisory (2026-09-21:
+                    # three admitted peers of the real realm were logged
+                    # as strangers and ignored for a day).
+                    _snapshot, changed = \
+                        self._apply_realm_observations_locked(
+                            established_ids=shared,
+                            source=dict(sender, via="announcement",
+                                        admitted=True))
+                elif foreign:
+                    advisory = self._note_foreign_realm_locked(
+                        sender, states,
+                        why=self._sender_standing_locked(sender))
             else:
                 _snapshot, changed = self._apply_realm_observations_locked(
                     candidate_ids=candidates, established_ids=established,
@@ -2701,10 +3039,13 @@ class HostApp:
     _FOREIGN_ADVISORY_BUDGET = 6           # audits per budget window
     _FOREIGN_ADVISORY_WINDOW_S = 3600.0
 
-    def _note_foreign_realm_locked(self, sender, states):
+    def _note_foreign_realm_locked(self, sender, states, why=None):
         """Return the advisory payload to audit, or None. Lock held.
 
         Decides only -- the caller writes the audit OUTSIDE the lock.
+        `why` names the sender's standing (peer unknown, pin mismatch,
+        admitted elsewhere ...) so the line never calls an admitted peer
+        "un-admitted" again.
         """
         try:
             now = self._now()
@@ -2737,10 +3078,12 @@ class HostApp:
                 "sender": dict(sender),
                 "realm_states": {str(k): str(v)
                                  for k, v in list(states.items())[:16]},
-                "detail": "un-admitted LAN host advertises a foreign "
+                "sender_standing": why or "un-admitted",
+                "detail": "LAN host (%s) advertises a foreign "
                           "established Convoy; ignored (realm is "
                           "committed). Use Resolve Realm Conflict / the "
-                          "denylist if it should be silenced.",
+                          "denylist if it should be silenced."
+                          % (why or "un-admitted",),
             }
             if suppressed:
                 payload["suppressed_since_last"] = suppressed
@@ -2898,6 +3241,13 @@ class HostApp:
                 1 for p in peer_records
                 if p["state"] == peers_mod.PEER_ADMITTED),
             "peers_total": len(peer_records),
+            # 2026-09-21: the five things an operator could only learn
+            # from audit.jsonl (see _advisories_locked).
+            "peers_mismatched": len(self._pin_conflict_map()),
+            "identity_reminted": self.db.identity_remint(now=self._now()),
+            "inbound_refusals": self._inbound_refusals_locked(),
+            "lan": self._lan_public(),
+            "advisories": self._advisories_locked(),
             "lan_killswitch": bool(self.peers.killswitch().get("engaged")),
             "peers_reason": self.peers.unreadable,
             "denylist_fail_closed": bool(
@@ -3554,6 +3904,18 @@ class HostApp:
                 "td_python_approved": self.policy.allow_td_python(
                     record["node_id"]),
                 "policy": self._policy_projection(record["node_id"]),
+                # What the node's Status must say (2026-09-21): the realm
+                # as the host sees it, how many admitted peers share it,
+                # which other realms admitted peers are recorded in, and
+                # the advisories (see _advisories_locked).
+                "realm": self._realm_public(self.realm.snapshot()),
+                "realm_peer_count": self._admitted_peer_count_locked(
+                    authoritative_id),
+                "peer_realms": [
+                    realm_id for realm_id in
+                    self._realms_held_by_admitted_peers_locked()
+                    if realm_id != authoritative_id][:16],
+                "advisories": self._advisories_locked(),
             }
 
     def _retire_superseded_nodes_locked(self, live):
@@ -5104,18 +5466,36 @@ class HostApp:
             return ""
         return value[:limit]
 
-    def _node_is_online(self, record):
+    def _node_offline_reason(self, record):
+        """Why _node_is_online says no, or None when it says yes.
+
+        A node that is HEARTBEATING but has no route (its Envoy is off or
+        still starting: 'no_relay_port') is a different fact from one
+        nobody has heard from ('heartbeat_stale') or one whose process
+        unregistered on exit ('no_runtime' -- a shutdown clears the
+        runtime id); a controller that saw only 'offline' beside a 2 s
+        last-seen age could not tell which (field 2026-09-21). Staleness
+        wins: an unheard node's port state is not current either way.
+        """
+        try:
+            age = float(self._now()) - float(record["last_heartbeat_unix"])
+            fresh = (math.isfinite(age) and 0.0 <= age
+                     and age <= NODE_HEARTBEAT_GRACE_S)
+        except (KeyError, TypeError, ValueError):
+            fresh = False
+        if not fresh:
+            return "heartbeat_stale"
+        if not record.get("runtime_id"):
+            return "no_runtime"
         routable = bool(record.get("envoy_port")) or bool(
             record.get("remote_wake") and record.get("wake_port")
             and record.get("wake_token"))
-        if not routable or not record.get("runtime_id"):
-            return False
-        try:
-            age = float(self._now()) - float(record["last_heartbeat_unix"])
-        except (KeyError, TypeError, ValueError):
-            return False
-        return (math.isfinite(age) and 0.0 <= age
-                and age <= NODE_HEARTBEAT_GRACE_S)
+        if not routable:
+            return "no_relay_port"
+        return None
+
+    def _node_is_online(self, record):
+        return self._node_offline_reason(record) is None
 
     def _public_node_row(self, record, address=None, status=None,
                          controller_count=0):
@@ -5128,7 +5508,8 @@ class HostApp:
         metadata = record.get("metadata")
         if not isinstance(metadata, dict):
             metadata = {}
-        online = self._node_is_online(record)
+        offline_reason = self._node_offline_reason(record)
+        online = offline_reason is None
         status = status or ("online" if online else "offline")
         try:
             last_seen_age_s = max(
@@ -5189,6 +5570,12 @@ class HostApp:
             "last_seen_age_s": last_seen_age_s,
             "controller_count": min(
                 controller_count, MAX_PUBLIC_CONTROLLERS_PER_HOST),
+            # The host app serving this row (2026-09-21: 'limited' had
+            # no version anywhere a controller could read).
+            "host_app_version": APP_VERSION,
+            # None while online; otherwise one of NODE_OFFLINE_REASONS.
+            "offline_reason": (offline_reason if status == "offline"
+                               else None),
         }
 
     def _controller_counts_locked(self, convoy_id=None):
@@ -5264,6 +5651,7 @@ class HostApp:
             "toe_name": clean("toe_name", 256),
             "embody_version": clean("embody_version", 64),
             "touchdesigner_version": clean("touchdesigner_version", 64),
+            "host_app_version": clean("host_app_version", 64),
             "ip": str(target.address)[:255],
             "status": status,
             "online": bool(row.get("online")) and status == "online",
@@ -5276,6 +5664,13 @@ class HostApp:
             "enabled": True,
             "controller_count": controller_count,
             "last_seen_age_s": last_seen_age_s,
+            # The peer's own reason for an offline row: a token from the
+            # closed vocabulary, or None -- never free text.
+            "offline_reason": (
+                row.get("offline_reason")
+                if (status == "offline"
+                    and row.get("offline_reason") in NODE_OFFLINE_REASONS)
+                else None),
         }
 
     def peer_nodes_view(self, origin_host_id, convoy_id,
@@ -5515,6 +5910,7 @@ class HostApp:
                     controller_count=controller_counts.get(
                         record.get("node_id"), 0))
                 row["compatibility"] = "compatible"
+                row["host_app_version"] = APP_VERSION
                 # Loopback-only capability projection, LOCAL rows only --
                 # _public_node_row deliberately never crosses the LAN with
                 # capability approvals (target-marking), so peer rows carry
@@ -5564,7 +5960,8 @@ class HostApp:
         peer_status = [{"host_id": self.host_id,
                         "convoy_id": convoy_id,
                         "status": "online", "ip": local_address,
-                        "local": True, "compatibility": "compatible"}]
+                        "local": True, "compatibility": "compatible",
+                        "host_app_version": APP_VERSION}]
         peer_status.extend(refused)
         remote_rows = []
         cache_updates = {}
@@ -5601,8 +5998,9 @@ class HostApp:
 
         for (target, namespace), result in outcomes:
             cache_key = (target.host_id, namespace)
-            compatibility = self._peer_compatibility_projection(
+            projection = self._peer_compatibility_projection(
                 target.host_id)
+            compatibility = projection["label"] if projection else None
             if result is peerclient.UNREACHABLE:
                 status, reason = "offline", "peer_unreachable"
             elif isinstance(result, peerclient._PinMismatch):
@@ -5624,6 +6022,9 @@ class HostApp:
                 entry["reason"] = reason
             if compatibility is not None:
                 entry["compatibility"] = compatibility
+                entry["compatibility_reason"] = projection.get("reason")
+            if projection and projection.get("peer_app_version"):
+                entry["host_app_version"] = projection["peer_app_version"]
             peer_status.append(entry)
 
             if status == "online":
@@ -5636,6 +6037,12 @@ class HostApp:
                         if clean is not None:
                             if compatibility is not None:
                                 clean["compatibility"] = compatibility
+                                clean["compatibility_reason"] = \
+                                    projection.get("reason")
+                            if (not clean.get("host_app_version")
+                                    and projection):
+                                clean["host_app_version"] = \
+                                    projection.get("peer_app_version")
                             clean_rows.append(clean)
                 cached_rows = []
                 cached_at = self._now()
@@ -5659,6 +6066,9 @@ class HostApp:
                     stale["status"] = status
                     stale["online"] = False
                     stale.pop("compatibility", None)
+                    # The cached reason described the node while its host
+                    # answered; now the HOST is the reason (peers[]).
+                    stale["offline_reason"] = None
                     remote_rows.append(stale)
 
         if cache_updates:
@@ -6015,8 +6425,9 @@ class HostApp:
 
         remote_rows = []
         for target, result in outcomes:
-            compatibility = self._peer_compatibility_projection(
+            projection = self._peer_compatibility_projection(
                 target.host_id)
+            compatibility = projection["label"] if projection else None
             if result is peerclient.UNREACHABLE:
                 status, reason = "offline", "peer_unreachable"
             elif isinstance(result, peerclient._PinMismatch):
@@ -6038,6 +6449,9 @@ class HostApp:
                 entry["reason"] = reason
             if compatibility is not None:
                 entry["compatibility"] = compatibility
+                entry["compatibility_reason"] = projection.get("reason")
+            if projection and projection.get("peer_app_version"):
+                entry["host_app_version"] = projection["peer_app_version"]
             peer_status.append(entry)
 
         rows = sorted((local_rows + remote_rows)[
@@ -9914,6 +10328,9 @@ class HostApp:
             "max_frame_bytes": ws_mod.MAX_FRAME_BYTES,
             "artifact_transport": "https",
             "control_transport": "wss",
+            # So a peer can NAME the version behind 'limited' (an
+            # operator had to read the other machine's log, 2026-09-21).
+            "host_app_version": APP_VERSION,
         })
 
     def _session_hello_sig(self):
@@ -10483,7 +10900,11 @@ class HostApp:
             peer_host_id, operation, expected_digest, manifest)
 
     def _peer_compatibility_projection(self, peer_host_id):
-        """Host-wide compatibility label requiring no per-node request."""
+        """Host-wide compatibility of one peer, no per-node request:
+        {label, reason, peer_app_version} or None when nothing is known
+        (no live session). 'limited' alone sent an operator to read the
+        other machine's log for the version (2026-09-21); the reason
+        and both versions now ride with it."""
         manager = self.session_manager
         if manager is None or manager.is_stopped:
             return None
@@ -10496,14 +10917,24 @@ class HostApp:
         summary = info.remote_capability_summary
         if not isinstance(summary, dict):
             return None
+        version = summary.get("host_app_version")
+        version = str(version)[:64] if version else None
+
+        def verdict(label, reason):
+            return {"label": label, "reason": reason,
+                    "peer_app_version": version,
+                    "local_app_version": APP_VERSION}
+
         remote_protocol = summary.get("envelope_protocol")
         advertised_digest = summary.get("manifest_digest")
         if (remote_protocol is not None
                 and remote_protocol != protocol.PROTOCOL):
-            return "incompatible"
+            return verdict("incompatible",
+                           "envelope protocol %s, this host speaks %s"
+                           % (remote_protocol, protocol.PROTOCOL))
         local = self.build_remote_manifest()
         if advertised_digest == local.manifest_digest():
-            return "compatible"
+            return verdict("compatible", "same operation manifest")
         with self.lock:
             record = self.peers.get(peer_host_id)
         cached = self._cached_peer_manifest(record, advertised_digest)
@@ -10512,8 +10943,15 @@ class HostApp:
         matches = set(local.operations.items()).intersection(
             cached.operations.items())
         if cached.operations == local.operations:
-            return "compatible"
-        return "limited" if matches else "incompatible"
+            return verdict("compatible", "same operations")
+        if matches:
+            return verdict("limited",
+                           "%d of %d operations shared with host app %s"
+                           % (len(matches), len(local.operations),
+                              version or "unknown"))
+        return verdict("incompatible",
+                       "no operation shared with host app %s"
+                       % (version or "unknown"))
 
     def _active_convoy_ids_locked(self):
         if not any(bool(record.get("enabled", True))
@@ -10603,9 +11041,12 @@ class HostApp:
         if address != self.lan_address or int(port) != int(self.lan_port):
             previous = f"{self.lan_address}:{self.lan_port}"
             self.stop_lan_server()
+            posture = getattr(self, "lan_posture", None) or {}
             self._audit_best_effort(
                 "lan_endpoint_changed",
-                {"previous": previous, "current": f"{address}:{port}"})
+                {"previous": previous, "current": f"{address}:{port}",
+                 "adapter": posture.get("adapter"),
+                 "warning": posture.get("warning")})
             start_lan_if_configured(self, log=log)
             return
         if self.discovery_service is None:
@@ -10706,7 +11147,8 @@ class HostApp:
                 self.host_id, self.peers, self.active_convoy_ids,
                 admission_lock=self.lock, now=self._now,
                 active_realm_states=self.active_realm_states,
-                realm_observer=self._observe_realm_announcement)
+                realm_observer=self._observe_realm_announcement,
+                pin_conflict_observer=self._note_pin_conflict)
             service = discovery_mod.DiscoveryService(
                 coordinator, self.hostkeys,
                 listener_endpoint=lambda: (
@@ -12701,6 +13143,10 @@ def make_handler(app):
                             route[len("/manifest/"):])
                     elif route == "/identity":
                         code, payload = app.get_identity()
+                    elif route == "/peers/mismatched":
+                        # LOOPBACK ONLY, like /peers: pinned peers heard
+                        # announcing another identity (re-pin candidates).
+                        code, payload = app.peers_mismatched()
                     elif route == "/lan/status":
                         # LOOPBACK ONLY: an operator asks their OWN host
                         # whether the LAN listener is up. The peer leg has
@@ -12847,6 +13293,9 @@ def make_handler(app):
                     # SELF-LOCKING like the revocation routes: a RE-PIN
                     # runs the job sweep, which cannot hold the app lock.
                     code, payload = app.admit_peer(body)
+                elif self.path == "/peers/repin":
+                    # SELF-LOCKING: goes through admit_peer.
+                    code, payload = app.repin_peer(body)
                 else:
                     code, payload = self._post_locked(body)
             except Exception as e:      # same last-resort contract
@@ -12951,7 +13400,32 @@ def desired_lan_endpoint(app):
     if not config.present:
         config = lan_mod.LanConfig(
             enabled=True, port=config.port, bind=config.bind, present=True)
-    return lan_mod.resolve_bind(config), int(config.port)
+    # The adapter behind the address (tunnel? Public network?), from a
+    # cached OS inventory -- see convoy_lan.choose_bind. An address the
+    # cached inventory cannot place (a VPN that just came up) refreshes
+    # it once before the verdict.
+    app.lan_posture = None
+    cache = getattr(app, "adapter_inventory", None)
+    if cache is None:
+        cache = app.adapter_inventory = lan_mod.InventoryCache()
+    inventory = cache.get()
+    explicit = config.bind.lower() != "auto"
+
+    def resolve(inv):
+        # Through resolve_bind, the one name a test may stub for a
+        # loopback bind; a stub fills no posture, so describe the address.
+        found = {}
+        address = lan_mod.resolve_bind(config, inventory=inv, posture=found)
+        return address, (found or lan_mod.describe_bind(
+            address, inv, explicit=explicit))
+
+    address, posture = resolve(inventory)
+    if (inventory is not None and posture.get("adapter") is None
+            and not explicit):
+        inventory = cache.get(refresh=True)
+        address, posture = resolve(inventory)
+    app.lan_posture = posture
+    return address, int(config.port)
 
 
 def start_lan_if_configured(app, log=None):
@@ -12966,7 +13440,7 @@ def start_lan_if_configured(app, log=None):
     Every refusal leaves loopback service alive and records a named reason.
     No branch binds a wildcard address.
     """
-    say = log or (lambda msg: sys.stderr.write(msg + "\n"))
+    say = log or _stamp
     if app.lan_server is not None:
         return True
     if not app.active_convoy_ids():
@@ -13001,7 +13475,21 @@ def start_lan_if_configured(app, log=None):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     app.set_lan_server(server, thread, address, port)
-    say(f"convoy LAN: peer listener on {address}:{port} "
+    posture = getattr(app, "lan_posture", None) or {}
+    adapter = posture.get("adapter") or {}
+    where = ""
+    if adapter:
+        where = " via %s%s" % (
+            adapter.get("description") or adapter.get("name") or "?",
+            " [%s]" % adapter["category"] if adapter.get("category") else "")
+    if posture.get("skipped"):
+        where += " (route probe chose %s on %s: skipped)" % (
+            posture.get("probe_address"),
+            posture["skipped"].get("description") or "?")
+    if posture.get("warning"):
+        where += " -- %s, bound by lan.json" % str(
+            posture["warning"]).replace("_", " ")
+    say(f"convoy LAN: peer listener on {address}:{port}{where} "
         f"(pinned mutual TLS; identity {app.hostkeys.fingerprint})")
     return True
 
@@ -13054,11 +13542,9 @@ def main(argv=None):
             # the expected outcome, not a fault. A nonzero exit would
             # paint Task Scheduler's LastTaskResult as a failure once a
             # minute forever and bury a real one.
-            sys.stderr.write(
-                f"embody-convoy host app already running for {directory} "
-                f"(another process holds host.lock); this launch is a "
-                f"no-op\n")
-            sys.stderr.flush()
+            _stamp(f"embody-convoy host app already running for "
+                   f"{directory} (another process holds host.lock); this "
+                   f"launch is a no-op")
             return 0
 
     try:
@@ -13085,10 +13571,8 @@ def main(argv=None):
     # lifecycle thread owns no socket; first registration binds/advertises,
     # and disabling the final node withdraws both discovery and peer TLS.
     app.start_lan_lifecycle()
-    sys.stderr.write(
-        f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
-        f"(data: {directory})\n")
-    sys.stderr.flush()
+    _stamp(f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
+           f"(data: {directory})")
 
     # A supervisor stops us with SIGTERM (Scheduled Task / LaunchAgent,
     # A-36). Without a handler, Python does not unwind -- the `finally`

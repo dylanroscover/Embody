@@ -1912,7 +1912,12 @@ def probe_convoy_host():
     call: a probe fault must degrade to 'behave as if Convoy is absent'
     (direct Envoy), never crash the bridge or the tool call."""
     try:
-        data_dir = convoy_data_dir()
+        # EMBODY_CONVOY_DATA_DIR: an isolated data directory for tests
+        # and diagnostics (2026-09-21) -- honoured here, at the one
+        # probe, so the path-shape helper stays a pure function of the
+        # platform.
+        data_dir = (os.environ.get("EMBODY_CONVOY_DATA_DIR")
+                    or convoy_data_dir())
         result = {"data_dir": data_dir}
         raw = _read_convoy_portfile(data_dir) if data_dir else None
         if raw is None:
@@ -6605,6 +6610,22 @@ def start_reconciler(state, on_tools_change):
 # Main
 # ---------------------------------------------------------------------------
 
+def _describe_target(state, url):
+    """'instance moonshine.3, url http://127.0.0.1:9872, project
+    C:/.../moonshine.3.toe' -- the connected line named only a port, and
+    a session attached to the wrong project (field 2026-09-21)."""
+    try:
+        name = state.active_name
+        cfg = load_config(state.config_path)
+        toe = (cfg.get("instances", {}).get(name) or {}).get("toe_path", "")
+    except Exception:
+        name, toe = None, ""
+    parts = ["instance %s" % (name or "(unpinned)"), "url %s" % (url,)]
+    if toe:
+        parts.append("project %s" % (toe,))
+    return ", ".join(parts)
+
+
 def _resolve_from_registry(config, fallback_port, pin=None):
     """Resolve port and PID from the instance registry.
     Returns (port, td_pid, resolved_name).
@@ -6979,7 +7000,8 @@ def main():
                             _p, _rpid, _a = _resolve_from_registry(_cfg, None)
                             state.td_pid = _rpid
                     is_connected = True
-                    log("Connected to Envoy (during tools/list)")
+                    log("Connected to Envoy (during tools/list): "
+                        + _describe_target(state, current_url))
                     # Fall through to the forwarding path below
                 else:
                     log("Envoy not reachable within quick probe -- "

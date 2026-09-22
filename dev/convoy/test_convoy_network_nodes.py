@@ -6,6 +6,7 @@ and approval state; none of those fields may cross the LAN directory surface.
 """
 
 import threading
+import types
 
 import pytest
 
@@ -24,7 +25,8 @@ PUBLIC_NODE_KEYS = {
     "hostname", "toe_name", "embody_version", "touchdesigner_version",
     "ip", "status", "online", "enabled", "perform_mode",
     "wake_active", "sleeping", "remotely_launchable",
-    "last_seen_age_s", "controller_count",
+    "last_seen_age_s", "controller_count", "offline_reason",
+    "host_app_version",
 }
 PRIVATE_NODE_KEYS = {
     "toe_path", "project_root", "comp_path", "envoy_port",
@@ -411,6 +413,11 @@ def test_shutdown_keeps_membership_enabled_and_lists_node_offline(
     assert peer_row["enabled"] is True
     assert peer_row["online"] is False
     assert peer_row["status"] == "offline"
+    # A shutdown clears the runtime id: the process said goodbye, which
+    # is a different fact from a live TD whose Envoy is off. The reason
+    # crosses the LAN with the row.
+    assert row["offline_reason"] == "no_runtime"
+    assert peer_row["offline_reason"] == "no_runtime"
 
 
 def test_registration_routes_by_saved_toe_discriminator_and_stores_metadata(app):
@@ -595,6 +602,7 @@ def test_missed_heartbeat_ages_a_hard_killed_node_offline(tmp_path):
                    if r["node_id"] == node["node_id"])
         assert row["status"] == "offline"
         assert row["online"] is False
+        assert row["offline_reason"] == "heartbeat_stale"
     finally:
         instance.db.close()
 
@@ -653,3 +661,50 @@ def test_a_stable_flight_is_not_marked_superseded_or_recomputed(
     assert code == 200
     assert "stale" not in payload
     assert len(fetches) == 1
+
+
+def test_a_node_without_a_relay_port_is_offline_with_a_reason(app):
+    """TEC-C3A (2026-09-21): a node whose Envoy was off heartbeated every
+    few seconds and read 'offline, last seen 2 s ago' to every controller,
+    which could not tell that from a dead node."""
+    node = _register(app, envoy_port=None)
+    code, directory = app.network_nodes(CONVOY_A)
+    assert code == 200
+    row = next(r for r in directory["nodes"]
+               if r["node_id"] == node["node_id"])
+    assert row["status"] == "offline"
+    assert row["online"] is False
+    assert row["offline_reason"] == "no_relay_port"
+    assert row["last_seen_age_s"] is not None
+    assert row["last_seen_age_s"] < 5
+
+
+def test_an_online_row_carries_no_offline_reason(app):
+    node = _register(app)
+    code, directory = app.network_nodes(CONVOY_A)
+    assert code == 200
+    row = next(r for r in directory["nodes"]
+               if r["node_id"] == node["node_id"])
+    assert row["status"] == "online"
+    assert row["offline_reason"] is None
+
+
+def test_peer_rows_relay_only_the_closed_reason_vocabulary():
+    target = types.SimpleNamespace(host_id="a" * 32,
+                                   address="10.0.0.5:47600")
+    base = {"node_id": "b" * 32, "status": "offline", "online": False}
+    clean = ha.HostApp._sanitize_peer_node(
+        dict(base, offline_reason="no_relay_port"), target, CONVOY_A)
+    assert clean["offline_reason"] == "no_relay_port"
+    clean = ha.HostApp._sanitize_peer_node(
+        dict(base, offline_reason="C:/secret/path or prose"), target,
+        CONVOY_A)
+    assert clean["offline_reason"] is None, "free text never crosses"
+    clean = ha.HostApp._sanitize_peer_node(
+        dict(base, status="online", online=True,
+             offline_reason="no_relay_port"), target, CONVOY_A)
+    assert clean["offline_reason"] is None, "an online row has no reason"
+    for reason in ha.NODE_OFFLINE_REASONS:
+        clean = ha.HostApp._sanitize_peer_node(
+            dict(base, offline_reason=reason), target, CONVOY_A)
+        assert clean["offline_reason"] == reason

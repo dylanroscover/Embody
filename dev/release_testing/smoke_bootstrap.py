@@ -252,6 +252,17 @@ def _write_abort_flag(reason):
         _log(f'ERROR writing abort flag: {e}')
 
 
+def _convoy_isolated():
+    """Was Convoy pointed at a throwaway data directory for this run?
+    The sidecar says so for an orchestrated run (smoke_run
+    --isolate-convoy); EMBODY_CONVOY_DATA_DIR in TD's own environment
+    covers a hand-run."""
+    import os
+    cfg = _read_run_config(project.folder) or {}
+    return (cfg.get('convoy_isolated') == 'yes'
+            or bool(os.environ.get('EMBODY_CONVOY_DATA_DIR')))
+
+
 def _read_run_config(folder):
     """The orchestrator's `smoke_run.json` beside the template, or None
     (a hand-run has none; a broken file is treated as absent)."""
@@ -1028,6 +1039,14 @@ def _await_convoy(attempt):
         results['convoy'] = ('PASS', status)
         _write_features_flag(results, final=True)
         _log('FEATURE convoy: PASS (%s)' % status)
+        return
+    if _convoy_isolated() and low.startswith('no convoy host app'):
+        # smoke_run --isolate-convoy: the enable path ran against an
+        # ISOLATED data directory, where no login host app is installed
+        # by design (ConvoyExt refuses). That is the terminal answer.
+        results['convoy'] = ('PASS', 'isolated: %s' % status)
+        _write_features_flag(results, final=True)
+        _log('FEATURE convoy: PASS (isolated -- %s)' % status)
         return
     if low.startswith(('error', 'refused', 'install failed')):
         results['convoy'] = ('FAIL', status)

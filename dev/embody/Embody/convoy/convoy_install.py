@@ -399,6 +399,13 @@ def default_data_dir(platform=None, env=None, home=None):
     platform = platform or sys.platform
     env = os.environ if env is None else env
     home = home or env.get("HOME") or os.path.expanduser("~")
+    # EMBODY_CONVOY_DATA_DIR: an ISOLATED data directory for tests and
+    # diagnostics (2026-09-21: the bridge suite was heartbeating the
+    # developer's live host app). Every resolver honours it; ConvoyExt
+    # refuses to install a login host app for it.
+    override = env.get("EMBODY_CONVOY_DATA_DIR")
+    if override:
+        return override
     join = _join(platform)
     if platform == "win32":
         base = env.get("LOCALAPPDATA") or join(home, "AppData", "Local")

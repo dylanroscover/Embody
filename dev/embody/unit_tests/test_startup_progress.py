@@ -173,6 +173,10 @@ class TestConvoyStep(EmbodyTestCase):
                      # defect with a remedy -- never a green 'Running'.
                      'Needs repair -- still running 6.0.241, not 6.0.246 '
                      '(use Repair Convoy App)',
+                     # Enable Envoy is off: Convoy runs on it, so this is
+                     # a defect with a remedy, never a spinner (TEC-C3A,
+                     # 2026-09-21).
+                     'Needs Envoy -- turn Enable Envoy on (Convoy runs on it)',
                      'Install failed -- see log'):
             self.assertEqual(sp.convoy_step(text)['state'], sp.FAILED, text)
 
@@ -1224,6 +1228,7 @@ class TestAStoppedConvoyIsNotProgress(EmbodyTestCase):
                'Installed -- starting...')
     # Broken with a remedy the user has to apply.
     BROKEN = ('Not installed', 'Needs repair -- Python not found (reinstall)',
+              'Needs Envoy -- turn Enable Envoy on (Convoy runs on it)',
               'Install failed -- see log',
               'Installed -- no supervisor (use Repair Convoy App)')
 

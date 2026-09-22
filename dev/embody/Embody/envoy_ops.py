@@ -107,6 +107,14 @@ def set_parameter(ext, op_path: str, par_name: str, value=None,
             par.mode = ParMode.BIND
         # Set constant value (with type coercion for numeric/toggle pars)
         elif value is not None:
+            if par.style == 'Pulse' or getattr(par, 'isPulse', False):
+                # A Pulse has no value: writing one 'succeeded' and did
+                # nothing (an update check never ran, field 2026-09-21).
+                # Fire it and say so.
+                par.pulse()
+                return {'success': True, 'path': op_path,
+                        'parameter': par_name, 'pulsed': True,
+                        'value': '', 'mode': str(par.mode)}
             # TD silently coerces invalid Menu values to index 0 and reports
             # success; a lying success is worse than an error (guard adapted
             # from TDMCP).

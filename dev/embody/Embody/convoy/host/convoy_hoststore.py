@@ -58,6 +58,10 @@ _MAX_QUARANTINE_PER_PASS = 5
 # next rotation, so the on-disk audit is bounded at ~2x this.
 AUDIT_MAX_BYTES = 8 * 1024 * 1024
 AUDIT_ROTATED = AUDIT_FILE + ".1"
+# How long a re-minted identity stays an advisory on /status and in the
+# register answer (2026-09-21: the peers that pinned the old key re-pin
+# within days, or never).
+IDENTITY_REMINT_ADVISORY_S = 14 * 86400.0
 
 JOB_STATES = ("queued", "dispatching", "running", "succeeded", "failed",
               "indeterminate", "refused")
@@ -569,6 +573,34 @@ class HostStore:
         self._state["identity_fingerprint"] = value
         self._write_host()
         return True
+
+    def record_identity_remint(self, at, pinned_peers):
+        """A NEW identity was minted on a host that already had pinned
+        peers (2026-09-18: host.json and identity.* vanished, peers.json
+        survived, every peer refused the new certificate for days with
+        no line on any panel). Additive key, like identity_fingerprint;
+        it feeds the advisory until it ages out (identity_remint)."""
+        self._state["identity_remint"] = {"at": float(at),
+                                          "pinned_peers": int(pinned_peers)}
+        self._write_host()
+
+    def identity_remint(self, now=None, max_age_s=None):
+        """The last re-mint, or None once it is older than max_age_s
+        (IDENTITY_REMINT_ADVISORY_S): peers re-pin within days or never."""
+        value = self._state.get("identity_remint")
+        if not isinstance(value, dict):
+            return None
+        try:
+            at = float(value.get("at"))
+            pinned = int(value.get("pinned_peers") or 0)
+        except (TypeError, ValueError):
+            return None
+        now = self._now() if now is None else float(now)
+        limit = (IDENTITY_REMINT_ADVISORY_S if max_age_s is None
+                 else float(max_age_s))
+        if now - at > limit:
+            return None
+        return {"at": at, "pinned_peers": pinned}
 
     # -- jobs (one file each, like .embody/jobs/) -----------------------
     #

@@ -9,7 +9,7 @@ Convoy uses a small background **host app** on each participating computer. One 
 
 1. Connect the computer to the same trusted LAN as the other Convoy machines.
 2. Save and open each `.toe` that should appear as a node.
-3. Choose an AI assistant if desired, then turn on **Enable Convoy** on each participating Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client.
+3. Choose an AI assistant if desired, then turn on **Enable Convoy** on each participating Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client. Convoy runs on Envoy either way: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through that command service. Enabling Convoy turns **Enable Envoy** on if it is off. A project that arrives with Convoy already enabled but Envoy off (a clone whose local settings kept Envoy off) shows `Needs Envoy` in **Status** until you turn Envoy on.
 4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the Setup Wizard's Convoy step) is the consent for the app and its login persistence.
 5. Allow the host app on the operating system's private/trusted network profile. Do not open Envoy's local-only port to the LAN.
 6. Confirm **Status** and the **Convoy Nodes** sequence on the Embody COMP.
@@ -102,6 +102,13 @@ Exact wording can vary by release, but these are the useful categories:
 |---|---|
 | **Disabled** | **Enable Convoy** is off for this node |
 | **Waiting for project save** | Save the `.toe`, then wait for automatic registration |
+| **Connected -- N admitted peer(s) reject this host's certificate ...** | This host's Convoy identity changed (its data directory was lost or reinstalled) and those peers still pin the old one, so every connection they open to this host fails the TLS handshake. On EACH of those machines press **Re-pin Changed Peers...** -- see [Identity changes and re-pinning](#identity-changes-and-re-pinning) |
+| **Connected -- new host identity: N pinned peer(s) refuse this host ...** | The same fact seen from the host that re-minted: it found pinned peers on record when it minted a new identity. Re-pin it on each of those machines; the line clears after 14 days |
+| **Connected -- N pinned peer(s) changed identity: use Re-pin Changed Peers...** | A peer of this machine announces a new identity. Confirm the change with its operator, then press **Re-pin Changed Peers...** here |
+| **Connected -- realm conflict (N realms): use Resolve Realm Conflict...** | An admitted peer of a realm this machine once shared now advertises that realm while this machine sits in another: the split is latched. Follow [Recovering from a realm conflict](#recovering-from-a-realm-conflict); this node keeps working in the preserved realm meanwhile |
+| **Connected -- LAN listener on <address> (<adapter>, tunnel adapter): set bind in lan.json to move it** | `lan.json` names a VPN, virtual or Public-network adapter explicitly. Peers on the real LAN cannot reach it; change or remove `bind` |
+| **Connected -- LAN listener refused: lan tunnel only / lan public network** | Auto-bind found only a tunnel adapter, or the routed adapter sits on a Windows network classed Public, and refused to expose the listener there. Connect the LAN, set the network profile to Private, or name the interface in `lan.json` deliberately -- see [The LAN listener and VPNs](#the-lan-listener-and-vpns) |
+| **Needs Envoy** | **Enable Envoy** is off. Convoy runs on Envoy: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through Envoy's local command service. Turn **Enable Envoy** on; the host app then installs or updates itself and the node registers. Until then the node is registered but offline to every controller, and its row on other machines reads `Offline -- no Envoy relay port` |
 | **Host app not installed / unavailable** | Install, repair, or start the local host app |
 | **Online / Registered** | The node and host app are ready |
 | **Offline** | The node is known but its TD process, host app, or network path is unavailable; automatic reconnect continues |
@@ -118,18 +125,21 @@ Several rows with the same IP address are normal when one computer has multiple 
 Work through this list on both computers:
 
 1. Confirm **Enable Convoy** is on and the project has been saved. Disabling the last enabled node on a computer withdraws that whole computer from the LAN: the host app keeps running for local use but closes its LAN listener and stops announcing, so none of its rows can be seen, pinged, or remotely started until a node there is enabled again.
-2. Confirm **Host App** says it is running for the same logged-in user that runs TouchDesigner.
-3. Confirm both machines use the same Embody version.
-4. Confirm both are on the same trusted LAN and are not isolated guest clients.
-5. Check the private-network firewall permission on both sides. A successful connection in one direction does not prove the reverse direction is allowed.
-6. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
-7. If several established Convoys are reported, stop and follow [Recovering from a realm conflict](#recovering-from-a-realm-conflict) instead of deleting random state.
+2. Confirm **Enable Envoy** is on. **Status** reads `Needs Envoy` while it is off, and the node's row on other machines reads `Offline -- no Envoy relay port`.
+3. Confirm **Host App** says it is running for the same logged-in user that runs TouchDesigner.
+4. Confirm both machines use the same Embody version.
+5. Confirm both are on the same trusted LAN and are not isolated guest clients.
+6. Check the private-network firewall permission on both sides. A successful connection in one direction does not prove the reverse direction is allowed.
+7. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
+8. If several established Convoys are reported, stop and follow [Recovering from a realm conflict](#recovering-from-a-realm-conflict) instead of deleting random state.
 
 If the host app was just updated, run **Repair Convoy App** once more as the repair path, then **Start Convoy App**. Repair works while the host app is running: it asks the old daemon to exit gracefully, waits, and replaces it -- no manual stop needed. Do not manually copy host identities or settings between computers.
 
 ## Recovering from a realm conflict
 
 A machine that established its own Convoy in isolation -- powered up alone, or on a disconnected switch -- and later meets the mesh it should have joined ends up refusing registration with `Refused: local_realm_conflict`. Convoy will not merge two established realms by guessing, so the way out is an explicit, operator-confirmed sequence run **on the machine that is on the wrong realm**. Keep the other machines running and announcing throughout, and work through all four steps in order.
+
+Two things keep this rare. A host whose realm record is missing (a lost `realm.json`) consults the peers it has admitted before founding anything: when they are recorded in one established realm it rejoins that realm, and when they disagree it latches a conflict instead of founding a realm of one. And an admitted peer, pin intact, that advertises a realm this host recorded it in is treated as evidence of a split: the conflict latches and the node's **Status** reads `Connected -- realm conflict (N realms): use Resolve Realm Conflict...` (a project already bound to the preserved realm keeps working). Only a stranger -- unknown, pin mismatch, or admitted to some other realm -- is still logged as an advisory (`realm_foreign_advisory`, now naming the sender's standing) and ignored.
 
 1. **Pulse Resolve Realm Conflict... on the Convoy page and choose Keep This Realm.** This silences the live senders of the foreign realm (they are added to the denylist) and then resets this machine's conflict record. Do this first even though you intend to join the other realm: while the conflict is latched and senders keep re-latching it, nothing else settles.
 2. **Turn Enable Convoy back on.** The refusal left this node disabled, and a refused registration never re-enables a node by itself -- the refusal is returned before the row is re-enabled. Nothing in the following steps can work while the node is down.
@@ -156,6 +166,31 @@ It is a small, deliberately hand-editable file -- Convoy's own dialogs and log l
 - **An unreadable or malformed file fails closed and refuses every peer** until it is fixed by hand. If a machine suddenly sees nothing after a manual edit, check that file's syntax before anything else.
 - Convoy validates entries as it writes them, and refuses to append to a file that is already failing closed.
 - After joining a realm you previously kept against, remove that realm's machines from the file. A stale entry silences exactly the mesh you just joined.
+
+## Identity changes and re-pinning
+
+A host app's Convoy identity is the key pair in `identity.key` / `identity.cert.pem` beside `host.json` in its data directory (`%LOCALAPPDATA%\EmbodyConvoy` on Windows, `~/Library/Application Support/EmbodyConvoy` on macOS). Peers pin that identity on first contact and never update the pin on their own -- a changed key is exactly what an impersonator would present. So when the identity files are lost (nothing in Embody deletes them; a re-mint has been seen in the field after the directory was emptied by hand or by a cleanup tool) the host mints a new identity at the next start, and from then on:
+
+- every peer that pinned the old key refuses this host's certificate on every connection it opens to it (`peer_handshake_refused` in this host's `audit.jsonl`, `TLSV1_ALERT_UNKNOWN_CA`), and this host's own connections to them fail with `pin_mismatch`;
+- this host audits `identity_reminted` with the count of pinned peers, and its nodes read `Connected -- new host identity: N pinned peer(s) refuse this host until they re-pin it` for 14 days;
+- once the handshakes start failing, its nodes also read `Connected -- N admitted peer(s) reject this host's certificate (M refusals/10 min)`, and `get_convoy_status` reports `inbound_refusals` with the sources mapped to admitted peers;
+- each peer hears the new identity in this host's discovery beacon, records it (`peer_identity_changed`), and reads `Connected -- N pinned peer(s) changed identity: use Re-pin Changed Peers...`.
+
+To repair it, on **each machine that pinned the old identity**, confirm with the re-minted host's operator that the change is real, then press **Re-pin Changed Peers...** on the Convoy page. The confirmation names every changed peer (hostname where reverse DNS answers, address, the pinned and the offered fingerprint); **Re-pin All** trusts the new identities, revokes any work the old keys had queued, and reconnects. The host app exposes the same as `GET /peers/mismatched` and `POST /peers/repin {host_id}` on its loopback API. Never copy identity files between machines to "fix" this, and never re-pin a peer whose change nobody can explain.
+
+## The LAN listener and VPNs
+
+With no `lan.json`, the host app binds its LAN listener automatically as soon as one local node has **Enable Convoy** on. The address comes from the interface the OS would route outbound traffic through -- which is the LAN on a plain machine and a VPN's tunnel adapter the moment a VPN pushes routes (TEC-A4D sat on an OpenVPN TAP adapter, unreachable from the LAN, for eight days in September 2026 while every panel read Connected). Since 6.2.61 the host app also asks the OS what owns that address (PowerShell's NetAdapter cmdlets on Windows, `ifconfig`/`route` on macOS, `ip` and sysfs on Linux, refreshed every ten minutes):
+
+- a physical adapter on a Private or domain network keeps the probe's answer;
+- a tunnel or virtual adapter (TAP-Windows, Wintun, WireGuard, OpenVPN, Tailscale, Hyper-V, VMware, ...) or a Windows network classed Public is skipped for a physical adapter that is up, holds a usable IPv4 and is not Public -- the one holding the default route first;
+- when nothing else qualifies, the listener is **refused by name** (`lan_tunnel_only`, `lan_public_network`) and loopback service continues. Connect the LAN, set the Windows network profile to Private, or name the interface in `lan.json` to bind it deliberately.
+
+An explicit `bind` in `lan.json` is always honoured as written and merely described: the node's **Status** and `get_convoy_status` (`host_status.lan`) say which adapter it sits on and warn when it is a tunnel or a Public network. `host.log` names the adapter and network category on every bind (`convoy LAN: peer listener on 192.168.88.10:47600 via Intel(R) I211 Gigabit Network Connection [Private] ...`), every line of it now carries a timestamp, and the audit event `lan_endpoint_changed` records the adapter on every move.
+
+## Isolating Convoy for tests and diagnostics
+
+Set `EMBODY_CONVOY_DATA_DIR` to a throwaway directory and every Convoy data-dir resolver honours it: TouchDesigner's client, the Envoy bridge, the installer and a host app started with no `--data-dir`. Embody then sees no host app there and **refuses to install a login host app for it** (the login supervisor is per user; a second one would replace the real one). The release smoke's `--isolate-convoy` uses this, and the pytest tier sets it automatically. A daemon can still be run there by hand: `python convoy_hostapp.py --data-dir <dir>`.
 
 ## When a node keeps going offline
 

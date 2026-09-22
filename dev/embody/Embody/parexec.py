@@ -71,6 +71,12 @@ def onValueChange(par, prev):
 			# The 30-frame delay matches Verify() timing in onCreate().
 			run("parent.Embody.ext.Envoy.Start() if parent.Embody.par.Envoyenable.eval() else None",
 				delayFrames=30)
+			# Convoy runs on Envoy: a node parked at 'Needs Envoy' by a
+			# restored toggle re-registers (and installs or updates its
+			# host app) now rather than on its next tick.
+			convoy = parent.Embody.op('convoy')
+			if convoy:
+				convoy.ext.ConvoyExt.envoyEnabledChanged()
 		else:
 			parent.Embody.ext.Envoy.Stop()
 
@@ -107,17 +113,9 @@ def onValueChange(par, prev):
 				# The explicit toggle is the one gesture that may raise
 				# the realm-rejoin dialog; arm its bounded window here.
 				convoy.ext.ConvoyExt.armRejoinOffer()
+				# register() also turns Enable Envoy on when it is off:
+				# Convoy runs on Envoy (ConvoyExt._ensureEnvoy).
 				convoy.ext.ConvoyExt.register()
-				# Convoy can run without an attached AI coding client, but its TD
-				# relay still terminates at Envoy's loopback command server. Keep
-				# only that internal substrate on. 'No client' means nothing is
-				# ticked under Configure For -- NOT that the Launch Client menu
-				# says None, which is a normal state for someone who opens their
-				# editor themselves and would wrongly read as Convoy-only.
-				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)
-						and parent.Embody.par.Convoyenable.eval()
-						and not parent.Embody.par.Envoyenable.eval()):
-					parent.Embody.par.Envoyenable = True
 			else:
 				convoy.ext.ConvoyExt.unregister()
 				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)
@@ -297,7 +295,8 @@ def onPulse(par):
 
 	elif par.name in ('Convoyinstallhost', 'Convoystarthost',
 					  'Convoystophost', 'Convoyuninstallhost',
-					  'Convoyforgetoffline', 'Convoyresolverealm'):
+					  'Convoyforgetoffline', 'Convoyresolverealm',
+					  'Convoyrepinpeers'):
 		# Convoy host-app lifecycle. Deliberately NOT folded into
 		# Convoyenable and deliberately NOT reachable from the setup
 		# wizard: A-13's consent covers minting a convoy id and
@@ -323,6 +322,9 @@ def onPulse(par):
 				'Convoyuninstallhost': 'uninstallHost',
 				'Convoyforgetoffline': 'forgetOfflineNodes',
 				'Convoyresolverealm': 'resolveRealmConflict',
+				# Trust a pinned peer's NEW identity (2026-09-21); its
+				# own enumerating confirm, like the two above.
+				'Convoyrepinpeers': 'repinChangedPeers',
 			}[par.name])()
 		else:
 			parent.Embody.Log(
