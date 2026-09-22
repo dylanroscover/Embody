@@ -2559,7 +2559,9 @@ class EnvoyMCPServer:
             Invalid Menu values are rejected with the valid menuNames because
             TD would otherwise silently coerce them to index 0. Sequence-block
             parameters auto-grow their sequence, e.g. const5name grows
-            numBlocks to 6. A reload or clone pulse (enableexternaltoxpulse,
+            numBlocks to 6. A Pulse parameter is pulsed instead of assigned
+            (any value; the result carries pulsed: true). A reload or clone
+            pulse (enableexternaltoxpulse,
             reinitnet, enablecloningpulse) on the Embody COMP, an ancestor,
             '/' or Envoy's extension DAT is refused
             (envoy.embody.host_destroy_refused).

@@ -399,6 +399,17 @@ class TestEnvoyToolGuards(EmbodyTestCase):
         self.assertTrue(hasattr(chop.par, 'const5name'))
         self.assertEqual(chop.par.const5name.eval(), 'mychan')
 
+    def test_set_parameter_pulses_a_pulse_parameter(self):
+        """A Pulse has no value: `par.val = value` reported success and
+        did nothing (an update check never ran, field 2026-09-21)."""
+        comp = self.sandbox.create(baseCOMP, 'pulse_host')
+        page = comp.appendCustomPage('Test')
+        page.appendPulse('Fire')
+        result = op.Embody.ext.Envoy._set_parameter(comp.path, 'Fire',
+                                                    value='1')
+        self.assertTrue(result.get('success'), repr(result))
+        self.assertIs(result.get('pulsed'), True, repr(result))
+
     def test_sequence_growth_rejects_absurd_index(self):
         chop = self.sandbox.create(constantCHOP, 'seq_absurd')
         result = op.Embody.ext.Envoy._set_parameter(

@@ -107,8 +107,8 @@ def convoy_step(status, started=None):
     The node line comes from convoy_client.status_text (Connected /
     Registering... / Waiting for project save / Refused: <reason> /
     Error: <detail> / No Convoy host app / Host app stale) plus
-    ConvoyExt's own literals (Consent required, Error: convoy_client
-    module missing); the host-app line from convoy_client.
+    ConvoyExt's own literals (Consent required, Needs Envoy, Error:
+    convoy_client module missing); the host-app line from convoy_client.
     host_status_text (the five 'Installed -- ...' variants, Checking...,
     Installing..., Repairing runtime..., Needs repair, Install failed,
     Managed by another supervisor, installed-by-a-newer-Embody).
@@ -136,8 +136,8 @@ def convoy_step(status, started=None):
         # A host-side crash, an unreadable result, a policy refusal: all
         # actionable, none of them progress.
         return _entry(FAILED, detail=text)
-    if low.startswith(("not installed", "needs repair", "install failed",
-                       "installed -- no supervisor")):
+    if low.startswith(("not installed", "needs repair", "needs envoy",
+                       "install failed", "installed -- no supervisor")):
         # 'Installed -- no supervisor (use Repair Convoy App)' names a
         # button the user has to press. A defect with a remedy.
         return _entry(FAILED, detail=text)

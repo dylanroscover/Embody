@@ -218,6 +218,13 @@ def data_dir(platform=None, env=None, home=None):
     platform = platform or sys.platform
     env = env if env is not None else os.environ
     home = home or os.path.expanduser("~")
+    # EMBODY_CONVOY_DATA_DIR: an ISOLATED data directory for tests and
+    # diagnostics (2026-09-21: the bridge suite was heartbeating the
+    # developer's live host app). Every resolver honours it; ConvoyExt
+    # refuses to install a login host app for it.
+    override = env.get("EMBODY_CONVOY_DATA_DIR")
+    if override:
+        return override
     join = ntpath.join if platform == "win32" else posixpath.join
     if platform == "win32":
         base = env.get("LOCALAPPDATA") or join(home, "AppData", "Local")
@@ -677,6 +684,16 @@ def _clean_status_node(row):
         # them here costs no extra request and avoids per-node mesh fan-out.
         "controller_count": controller_count,
         "last_seen_age_s": last_seen_age_s,
+        # 2026-09-21: WHY offline, how compatible, and WHICH host app --
+        # a controller could read 'limited' and nothing else.
+        "offline_reason": _status_text_field(
+            row.get("offline_reason"), 32) or None,
+        "compatibility": _status_text_field(
+            row.get("compatibility"), 32) or None,
+        "compatibility_reason": _status_text_field(
+            row.get("compatibility_reason"), 160) or None,
+        "host_app_version": _status_text_field(
+            row.get("host_app_version"), 64) or None,
     }
     # Identity is required for deterministic sequence rows and routing.
     if not clean["node_id"] or not clean["host_id"]:
@@ -1050,6 +1067,59 @@ def wait_sibling_job(handle, target_host_id, convoy_id, delivery_id,
     out.update({"wait_timed_out": True,
                 "target_host_id": target_host_id,
                 "convoy_id": convoy_id, "delivery_id": delivery_id})
+    return out
+
+
+def _clean_count(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _clean_id_list(value, limit=16):
+    if not isinstance(value, list):
+        return []
+    return [str(item)[:128] for item in value[:limit]
+            if isinstance(item, str) and item]
+
+
+def _clean_realm(value):
+    """The host's public realm snapshot, bounded."""
+    if not isinstance(value, dict):
+        return None
+    state = value.get("state")
+    convoy_id = value.get("convoy_id")
+    return {"state": state[:32] if isinstance(state, str) else None,
+            "convoy_id": (convoy_id[:128] if isinstance(convoy_id, str)
+                          else None),
+            "conflict_ids": _clean_id_list(value.get("conflict_ids"), 32)}
+
+
+def _clean_advisories(value):
+    """Bounded {kind, text, ...} entries from the host; nested objects
+    are dropped, scalars and short string lists ride along for tools."""
+    out = []
+    if not isinstance(value, list):
+        return out
+    for entry in value[:8]:
+        if not isinstance(entry, dict):
+            continue
+        kind = entry.get("kind")
+        text = entry.get("text")
+        if not isinstance(kind, str) or not kind or not isinstance(text, str):
+            continue
+        clean = {"kind": kind[:32], "text": text[:200]}
+        for key, item in entry.items():
+            if key in ("kind", "text") or not isinstance(key, str):
+                continue
+            if isinstance(item, bool) or isinstance(item, (int, float)):
+                clean[key[:32]] = item
+            elif isinstance(item, str):
+                clean[key[:32]] = item[:256]
+            elif isinstance(item, list):
+                clean[key[:32]] = [str(x)[:128] for x in item[:32]
+                                   if isinstance(x, (str, int))]
+        out.append(clean)
     return out
 
 
@@ -1462,7 +1532,57 @@ def register(handle, payload, opener=None, timeout=REGISTER_TIMEOUT_S):
             "wake_active": answer.get("wake_active") is True,
             "wake_ready": answer.get("wake_ready") is True,
             "td_python_approved": bool(answer.get("td_python_approved")),
-            "policy": _clean_policy(answer.get("policy"))}
+            "policy": _clean_policy(answer.get("policy")),
+            # 2026-09-21: what the readout must say (ConvoyExt._apply) and
+            # what a tracked binding must be checked against.
+            "realm": _clean_realm(answer.get("realm")),
+            "realm_peer_count": _clean_count(answer.get("realm_peer_count")),
+            "peer_realms": _clean_id_list(answer.get("peer_realms")),
+            "advisories": _clean_advisories(answer.get("advisories"))}
+
+
+def peers_mismatched(handle, opener=None, timeout=NETWORK_TIMEOUT_S):
+    """GET /peers/mismatched: pinned peers heard announcing ANOTHER
+    identity (re-pin candidates). Returns {state, peers}; never raises."""
+    status, answer = host_get(handle, "/peers/mismatched", timeout=timeout,
+                              opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    peers = []
+    rows = answer.get("peers") if isinstance(answer, dict) else None
+    for row in (rows or [])[:32]:
+        if not isinstance(row, dict):
+            continue
+        clean = {key: _status_text_field(row.get(key), 255)
+                 for key in ("host_id", "display_name", "address",
+                             "pinned_fingerprint", "fingerprint")}
+        if not clean["host_id"]:
+            continue
+        for key in ("first_seen_unix", "last_seen_unix"):
+            value = row.get(key)
+            clean[key] = (float(value)
+                          if isinstance(value, (int, float))
+                          and not isinstance(value, bool) else None)
+        peers.append(clean)
+    return {"state": "peers_mismatched", "http_status": status,
+            "peers": peers}
+
+
+def repin_peer(handle, host_id, opener=None, timeout=REGISTER_TIMEOUT_S):
+    """POST /peers/repin: trust the identity a pinned peer now
+    announces. The host revokes the old key's queued work and audits
+    the re-pin. Never raises."""
+    status, answer = host_post(handle, "/peers/repin",
+                               {"host_id": str(host_id)},
+                               timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    return {"state": "repinned", "http_status": status,
+            "host_id": str(host_id),
+            "previous_fingerprint": _status_text_field(
+                answer.get("previous_fingerprint"), 128)}
 
 
 def unregister(handle, node_id, runtime_id=None, reason="disabled",

@@ -575,7 +575,8 @@ class DiscoveryCoordinator:
     def __init__(self, host_id, peer_store, active_convoy_ids,
                  admission_lock=None, now=None, replay_cache=None,
                  candidate_ttl_s=CANDIDATE_TTL_S,
-                 active_realm_states=None, realm_observer=None):
+                 active_realm_states=None, realm_observer=None,
+                 pin_conflict_observer=None):
         if not identity.is_valid_id(host_id):
             raise DiscoveryError("malformed_host_id", repr(host_id))
         if not callable(active_convoy_ids):
@@ -591,8 +592,13 @@ class DiscoveryCoordinator:
         if realm_observer is not None and not callable(realm_observer):
             raise DiscoveryError("malformed_callback",
                                  "realm_observer must be callable")
+        if pin_conflict_observer is not None and not callable(
+                pin_conflict_observer):
+            raise DiscoveryError("malformed_callback",
+                                 "pin_conflict_observer must be callable")
         self._active_realm_states = active_realm_states
         self._realm_observer = realm_observer
+        self._pin_conflict_observer = pin_conflict_observer
         self._admission_lock = admission_lock
         self._now = now or time.time
         self.replay_cache = replay_cache or ReplayCache()
@@ -686,6 +692,26 @@ class DiscoveryCoordinator:
                     "detail": observer_error or
                     "no enabled local Convoy namespace"}
 
+        # A PINNED host announcing a DIFFERENT identity: TOFU never re-pins
+        # (apply_tofu answers pin_mismatch), so hand the host what was
+        # offered -- fingerprint, certificate, address -- for a deliberate
+        # operator re-pin (2026-09-21). Before the namespace gates: the
+        # changed host is usually in a split realm at that moment.
+        if self._pin_conflict_observer is not None:
+            lock = (self._admission_lock if self._admission_lock is not None
+                    else nullcontext())
+            try:
+                with lock:
+                    existing = self.peer_store.get(announcement["host_id"])
+                changed = (existing is not None and existing.get("fingerprint")
+                           != announcement["fingerprint"])
+            except Exception:
+                changed = False
+            if changed:
+                try:
+                    self._pin_conflict_observer(announcement)
+                except Exception:
+                    pass
         intersection = tuple(sorted(
             set(active).intersection(announcement["convoy_ids"])))
         established_intersection = tuple(

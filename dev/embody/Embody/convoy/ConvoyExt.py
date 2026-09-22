@@ -19,6 +19,9 @@ The ~30s heartbeat is load-bearing: envoy_port/runtime_id are per-launch
 and not persisted host-side -- a host restart drops the port and the
 heartbeat heals it. ABSENCE IS NOT AN ERROR: no host app is the normal
 state ('No Convoy host app', one DEBUG line, slow tick -- never a dialog).
+ENVOY IS THE SUBSTRATE: the host app runs in Envoy's venv and the relay
+ends at Envoy's loopback server, so Enable Envoy off reads 'Needs Envoy'
+(one WARNING; an explicit enable turns Envoy on, a restored toggle never).
 
 THREADING: resolve on main thread -> daemon worker (pure urllib, zero TD
 access) -> generation-tagged plain dict -> bounded run(delayFrames=15)
@@ -220,6 +223,11 @@ class ConvoyExt:
         self._host_result = None
         self._host_gen = 0
         self._host_busy = False
+        # One host-runtime wait chain at a time (_awaitHostRuntime): the
+        # enable path and an automatic in-place update can both ask.
+        self._runtime_wait_pending = False
+        # 'Needs Envoy' is logged once per outage (_noteNeedsEnvoy).
+        self._needs_envoy_noted = False
         self._policy_result = None
         self._policy_gen = 0
         self._policy_busy = False
@@ -595,7 +603,17 @@ class ConvoyExt:
     _ACTIONABLE_NODE_TEXTS = (
         'Waiting for project save',
         'Consent required',
+        'Needs Envoy',
     )
+
+    # Convoy runs ON Envoy: the host app runs in the Python environment
+    # Envoy builds, and remote work reaches TouchDesigner through Envoy's
+    # loopback command server. With Enable Envoy off a node registers but
+    # is never reachable and its host app can neither install nor update
+    # -- and 'Registered -- Envoy port pending' read as transient for
+    # eight days (field 2026-09-21, TEC-C3A). The node line for that
+    # state; actionable, so it outranks every host line.
+    _NEEDS_ENVOY_TEXT = 'Needs Envoy -- turn Enable Envoy on (Convoy runs on it)'
 
     _BLOCKING_HOST_TEXTS = (
         'Not installed', 'Checking...', 'Installing...',
@@ -741,6 +759,22 @@ class ConvoyExt:
             version = str(node.get('embody_version') or '').strip()
             if version and 'incompat' in raw_status.lower():
                 status = '%s (v%s)' % (status, version[:32])
+            if not online and node.get('offline_reason') == 'no_relay_port':
+                # Newer hosts say why: the node heartbeats, but its Envoy
+                # serves no relay port -- off, or still starting.
+                status += ' -- no Envoy relay port'
+            compat = str(node.get('compatibility') or '').strip().lower()
+            if (compat in ('limited', 'incompatible')
+                    and 'incompat' not in raw_status.lower()):
+                # 'limited' alone sent an operator to read the other
+                # machine's log for the version (2026-09-21).
+                reason = str(node.get('compatibility_reason') or '').strip()
+                host_ver = str(node.get('host_app_version') or '').strip()
+                status += ' -- %s' % compat
+                if reason:
+                    status += ': %s' % reason[:96]
+                elif host_ver:
+                    status += ' (host app %s)' % host_ver[:32]
             name = str(node.get('node_name') or node.get('hostname') or
                        node.get('toe_name') or 'Unnamed node')[:512]
             host = str(node.get('hostname') or '').strip()
@@ -1722,6 +1756,21 @@ class ConvoyExt:
                          'detail': 'no convoy id -- turn Convoy Enable off '
                                    'and on again to mint one'}, client)
             return
+
+        # Convoy runs on Envoy (_NEEDS_ENVOY_TEXT). The node still
+        # registers -- the host's row is how a controller learns it
+        # exists, and the host names WHY it is offline -- but the readout
+        # names Envoy (_apply), the log says it once, and the moment
+        # Envoy is back a fresh register moves the readout and the row
+        # on, and the once-per-session host-app update gets its attempt
+        # back (it was spent on an install that had no interpreter).
+        if not self._envoyIsBringingTheEnvironment():
+            self._noteNeedsEnvoy()
+        elif self._needs_envoy_noted:
+            self._needs_envoy_noted = False
+            session['sent'] = None
+            session.pop('host_auto_update_done', None)
+            session.pop('host_update_checked', None)
 
         # This is the only Convoy work intentionally kept alive in Perform
         # Mode. It starts only after membership, project persistence and LAN
@@ -3254,8 +3303,16 @@ class ConvoyExt:
                 if adopted:
                     realm_changed = True
                     self._publishId(adopted)
-                    self._log('automatic Convoy realm is now %s (%s)'
-                              % (adopted, authoritative_state), 'INFO')
+                    # Name what was WRITTEN: the enable line named the
+                    # minted id and the host's realm replaced it eighteen
+                    # seconds later with nothing logged (2026-09-20).
+                    self._log('automatic Convoy realm is now %s (%s)%s -- '
+                              'recorded in .embody/project.json, a TRACKED '
+                              'file every clone of this repo shares'
+                              % (adopted, authoritative_state,
+                                 (' replacing %s' % (current_id,))
+                                 if current_id else ''), 'INFO')
+                    self._warnLonelyBinding(result, adopted)
                 else:
                     result = {
                         'state': getattr(client, 'STATE_HOST_ERROR',
@@ -3361,6 +3418,9 @@ class ConvoyExt:
                 text = client.status_text(result)
             except Exception:
                 text = 'Error: unreadable result'
+            if self._needsEnvoyOverride(result, client):
+                text = self._NEEDS_ENVOY_TEXT
+            text = self._withAdvisories(text, result)
         else:
             text = 'Error: convoy_client module missing'
         if self._performing():
@@ -3405,6 +3465,96 @@ class ConvoyExt:
             return
         self._logged = key
         self._log(msg, level)
+
+    def _warnLonelyBinding(self, result, realm_id):
+        """A tracked binding to a realm with NO admitted peer while
+        admitted peers are recorded in another established realm is the
+        2026-09-20 commit that sent every clone to a realm of one. Say
+        so before it is committed."""
+        try:
+            peers = result.get('realm_peer_count')
+            others = [str(x) for x in (result.get('peer_realms') or [])]
+        except Exception:
+            return
+        if peers == 0 and others:
+            self._log('realm %s has NO admitted peer on this host app, '
+                      'while admitted peers are recorded in %s -- check '
+                      '.embody/project.json before committing it (a stale '
+                      'binding travels to every clone; Resolve Realm '
+                      'Conflict... can join the other realm)'
+                      % (realm_id, ', '.join(others)), 'WARNING')
+
+    def _needsEnvoyOverride(self, result, client):
+        """Does this drain's node line read 'Needs Envoy' instead?
+
+        Only while Enable Envoy is off, and never over a refusal or an
+        error (they say something more specific). Registered without a
+        port, registering, no host app, stale: all downstream of the
+        same cause, so the line names the cause.
+        """
+        try:
+            if self._envoyIsBringingTheEnvironment():
+                return False
+            state = str(result.get('state') or '')
+            keep = (client.STATE_REFUSED, client.STATE_HOST_ERROR,
+                    client.STATE_ERROR, client.STATE_DISABLED,
+                    client.STATE_UNSAVED, client.STATE_UNREGISTERED)
+            return state not in keep
+        except Exception:
+            return False
+
+    # Node lines that keep their own words whatever the host advises.
+    _ADVISORY_QUIET_PREFIXES = ('Needs Envoy', 'Refused', 'Error')
+
+    def _withAdvisories(self, text, result):
+        """Fold the host's advisories into the node line (2026-09-21):
+        'Connected -- 3 admitted peer(s) reject this host's certificate
+        ...'. Each advisory is also logged once per session. Refusals,
+        errors and Needs Envoy keep their own words; the advisories
+        still ride convoyStatus() for tools."""
+        if not isinstance(result, dict) or result.get('state') != \
+                'registered':
+            return text
+        advisories = result.get('advisories')
+        advisories = advisories if isinstance(advisories, list) else []
+        self._session()['advisories'] = advisories
+        logged = getattr(self, '_advisories_logged', None)
+        if logged is None:
+            logged = self._advisories_logged = set()
+        notes = []
+        for entry in advisories:
+            if not isinstance(entry, dict):
+                continue
+            note = str(entry.get('text') or '').strip()
+            if not note:
+                continue
+            notes.append(note)
+            # Once per KIND: the text carries live counts ('31 refusals/10
+            # min'), so keying on it re-logged every heartbeat (smoke
+            # 2026-09-21). The readout carries the live text.
+            key = str(entry.get('kind') or '')
+            if key not in logged:
+                logged.add(key)
+                self._log('Convoy advisory (%s): %s' % (key, note),
+                          'WARNING')
+        if not notes or str(text).startswith(self._ADVISORY_QUIET_PREFIXES):
+            return text
+        return '%s -- %s' % (text, '; '.join(notes))
+
+    def _noteNeedsEnvoy(self):
+        """WARN once per outage. Not _logOnce: its memory is shared with
+        _logTransition, and the two would re-log each other every tick."""
+        if self._needs_envoy_noted:
+            return
+        self._needs_envoy_noted = True
+        self._log("Convoy needs Envoy and Enable Envoy is off. Convoy runs "
+                  "on Envoy: its host app runs in the Python environment "
+                  "Envoy builds, and remote work reaches this TouchDesigner "
+                  "through Envoy's local command service. Turn Enable "
+                  "Envoy on -- the host app then installs or updates "
+                  "itself and this node becomes reachable. Until then it "
+                  "registers but is offline to every controller.",
+                  'WARNING')
 
     # ==================================================================
     # Host app: context, worker chain, readout
@@ -3824,6 +3974,32 @@ class ConvoyExt:
                 self._log('Resolve Realm Conflict: %s'
                           % (result.get('detail') or 'listing failed'),
                           'WARNING')
+            return
+
+        if action == 'peers_mismatched_plan':
+            if ok:
+                self._confirmRepinPeers(result)
+            else:
+                self._log('Re-pin Changed Peers: %s'
+                          % (result.get('detail') or 'listing failed'),
+                          'WARNING')
+            return
+
+        if action == 'repin_peers':
+            for row in result.get('results') or []:
+                if not isinstance(row, dict):
+                    continue
+                self._log('Re-pin Changed Peers: %s -- %s'
+                          % (str(row.get('host_id'))[:12],
+                             're-pinned' if row.get('ok')
+                             else row.get('detail') or 'failed'),
+                          'INFO' if row.get('ok') else 'WARNING')
+            self._log('Re-pin Changed Peers: %s'
+                      % (result.get('detail') or 'done'),
+                      'SUCCESS' if ok else 'WARNING')
+            if ok:
+                # The new pin changes what the mesh looks like from here.
+                self._kickTick()
             return
 
         if action == 'rejoin_plan':
@@ -4494,6 +4670,16 @@ class ConvoyExt:
         ctx = self._safeHostContext()
         if ctx is None:
             return {'state': 'error', 'detail': 'installer module missing'}
+        if os.environ.get('EMBODY_CONVOY_DATA_DIR'):
+            # An ISOLATED data directory (tests, diagnostics): a login
+            # host app must never be registered for it -- the supervisor
+            # is per user, so it would replace the real one.
+            self._log('EMBODY_CONVOY_DATA_DIR is set (%s): not installing '
+                      'a login host app for an isolated data directory. '
+                      'Unset it, or run convoy_hostapp --data-dir there '
+                      'by hand.' % (ctx.get('data_dir'),), 'WARNING')
+            self._restoreHostStatus()
+            return {'state': 'isolated'}
 
         installer = ctx['installer']
         installed = installer.read_installed(ctx['data_dir'], ctx['platform'])
@@ -4551,19 +4737,31 @@ class ConvoyExt:
             # diagnosis hunting blind, 2026-08-03) -- and never tell a
             # user who just enabled Envoy to "enable Envoy first": the
             # venv build simply has not finished yet (2026-08-09).
+            # Neither case is 'Install failed': the next registration
+            # disproved that line and the failure vanished from the
+            # readout while the daemon stayed old (TEC-C3A 2026-09-21).
+            # An automatic install WAITS for the venv -- the in-place
+            # update included; its one attempt used to die here -- a
+            # button press just says so, and Envoy off keeps the last
+            # known host line (the node line names Envoy).
             if self._envoyIsBringingTheEnvironment():
                 self._log('the Python environment Convoy shares is '
-                          'still being built by Envoy -- the host app cannot '
-                          'install until it exists. This resolves itself; the '
-                          'install retries automatically.', 'INFO')
-            else:
-                self._log('no Convoy runtime is available -- no signed managed '
-                          'runtime, and no usable interpreter at %r. Enable '
-                          'Envoy (it builds the Python environment Convoy '
-                          'shares) and the host app installs itself.'
-                          % (ctx.get('venv_python') or '<no venv path>',),
-                          'WARNING')
-            self._hostStatus(self.HOST_INSTALL_FAILED)
+                          'still being built by Envoy -- the host app '
+                          'installs itself as soon as it exists', 'INFO')
+                if confirm:
+                    self._restoreHostStatus()
+                else:
+                    self._hostStatus(self.HOST_INSTALLING)
+                    self._awaitHostRuntime()
+                return {'state': 'waiting_runtime'}
+            self._log('no Convoy runtime is available -- no signed managed '
+                      'runtime, and no usable interpreter at %r. Convoy '
+                      'runs on Envoy: turn Enable Envoy on (it builds the '
+                      'Python environment Convoy shares) and the host app '
+                      'installs itself.'
+                      % (ctx.get('venv_python') or '<no venv path>',),
+                      'WARNING')
+            self._restoreHostStatus()
             return {'state': 'error', 'detail': 'no interpreter'}
 
         if confirm:
@@ -4680,6 +4878,73 @@ class ConvoyExt:
                             lambda: _host_realm_conflict_plan(ctx))
         return {'state': 'listing'}
 
+    def repinChangedPeers(self):
+        """Re-pin Changed Peers... (2026-09-21): list the pinned peers
+        that now announce a different identity and, on confirmation,
+        trust the new one. Two phases on the host slot like Resolve Realm
+        Conflict: plan (alters nothing), a confirmation that NAMES each
+        peer with both fingerprints, then apply."""
+        if not self._hostActionAllowed('Re-pin Changed Peers'):
+            return {'state': 'busy'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'unavailable'}
+        self._beginHostCall('peers_mismatched_plan',
+                            lambda: _host_peers_mismatched(ctx))
+        return {'state': 'listing'}
+
+    def _confirmRepinPeers(self, result):
+        """Stage two of Re-pin Changed Peers. MAIN THREAD."""
+        if self._performing():
+            self._log('Re-pin Changed Peers: suppressed during Perform '
+                      'Mode', 'INFO')
+            return
+        peers = [p for p in ((result or {}).get('peers') or [])
+                 if isinstance(p, dict) and p.get('host_id')]
+        if not peers:
+            self._dialog(
+                'Embody - Re-pin Changed Peers',
+                'No pinned peer has announced a changed identity.\n\n'
+                'A peer that re-minted its Convoy identity appears here '
+                'once its discovery beacon reaches this machine; until '
+                'then its rows read pin mismatch.', ['OK'])
+            self._log('Re-pin Changed Peers: nothing to re-pin', 'INFO')
+            return
+        lines = ['%d pinned peer(s) now announce a DIFFERENT identity:'
+                 % len(peers), '']
+        for peer in peers[:_ANNOUNCER_DISPLAY_CAP]:
+            who = (peer.get('hostname') or peer.get('display_name')
+                   or str(peer.get('host_id'))[:12])
+            lines.append('  %s  %s' % (who, peer.get('address') or ''))
+            lines.append('    pinned  %s' % (peer.get('pinned_fingerprint')
+                                             or '?'))
+            lines.append('    offered %s' % (peer.get('fingerprint')
+                                             or '?'))
+        if len(peers) > _ANNOUNCER_DISPLAY_CAP:
+            lines.append('  ... and %d more'
+                         % (len(peers) - _ANNOUNCER_DISPLAY_CAP))
+        lines.extend([
+            '',
+            'Re-pinning trusts the NEW identity: work the old key queued '
+            'is revoked and this machine connects to the new one. Only '
+            're-pin a peer whose operator confirms the change (a '
+            'reinstall, a lost data directory) -- an unexplained change '
+            'is what an impersonator looks like.'])
+        choice = self._dialog('Embody - Re-pin Changed Peers',
+                              '\n'.join(lines), ['Cancel', 'Re-pin All'])
+        if choice != 1:
+            self._log('Re-pin Changed Peers: cancelled', 'INFO')
+            return
+        ctx = self._safeHostContext()
+        if ctx is None or not self._hostActionAllowed(
+                'Re-pin Changed Peers'):
+            self._log('Re-pin Changed Peers: host slot unavailable; pulse '
+                      'it again', 'WARNING')
+            return
+        host_ids = [str(p['host_id']) for p in peers]
+        self._beginHostCall('repin_peers',
+                            lambda: _host_repin_peers(ctx, host_ids))
+
     def _confirmResolveRealm(self, result):
         """Stage two: show the spec's dialog, dispatch by LABEL. MAIN
         THREAD. All decision logic lives in _resolve_dialog_spec (pure,
@@ -4701,7 +4966,14 @@ class ConvoyExt:
                   if isinstance(choice, int)
                   and 0 <= choice < len(spec['buttons']) else '')
         if picked in ('', 'OK', 'Cancel', 'Close'):
-            if spec['mode'] != 'clean':
+            if spec['mode'] == 'clean':
+                # In the log too: a pulse with nothing to resolve left no
+                # trace at all (field 2026-09-21).
+                self._log('Resolve Realm Conflict: no realm conflict on '
+                          'this machine (%s)'
+                          % (spec['lines'][-1] if spec.get('lines')
+                             else 'realm unknown'), 'INFO')
+            else:
                 self._log('Resolve Realm Conflict: cancelled', 'INFO')
             return
         ctx = self._safeHostContext()
@@ -5231,6 +5503,10 @@ class ConvoyExt:
              'administrator rights, and anything running as your user on '
              'this machine can talk to it. Uninstall it any time from the '
              'Convoy parameters.\n\n'
+             'Convoy runs on Envoy: the app runs in the Python environment '
+             'Envoy builds (.venv), and remote work reaches this '
+             'TouchDesigner through Envoy\'s local command service. '
+             'Enabling Convoy turns Enable Envoy on if it is off.\n\n'
              'Allow Execute TD Python and Allow Full Shell remain separate, '
              'local, default-Off approvals. Turn Enable Convoy off at any '
              'time to withdraw this node.\n\n'
@@ -5287,10 +5563,56 @@ class ConvoyExt:
             return {'state': 'disabled'}
         if not self._ensureConsent():
             return {'state': 'declined'}
+        self._ensureEnvoy()
         self._ensureHostApp()
         self._ensureWakeListener()
         self._reconcile(force=True)
         return self.convoyStatus()
+
+    def envoyEnabledChanged(self):
+        """Enable Envoy was just switched on by hand (parexec).
+
+        A node this tick parked at 'Needs Envoy' re-registers now and
+        installs or updates its host app, instead of waiting a
+        heartbeat. Only for a project whose trusted-LAN consent is on
+        record: register() may raise the first-enable dialog otherwise,
+        and a modal from the ENVOY toggle would be a surprise.
+        """
+        try:
+            if not self._enabled() or not self._readConvoyId():
+                return
+            if self._readConsentScope() != self._CONSENT_SCOPE:
+                return
+            self.register()
+        except Exception as e:
+            self._log('could not re-register after Enable Envoy: %s'
+                      % (e,), 'DEBUG')
+
+    def _ensureEnvoy(self):
+        """Turn Enable Envoy on for an EXPLICIT enable that finds it off.
+
+        Convoy runs on Envoy (_NEEDS_ENVOY_TEXT), so the toggle brings
+        it the way it brings the host app -- through EmbodyExt's
+        Convoy-only enable: git root resolved silently, no AI-client
+        config written here (Start() configures a selected client
+        itself). Never from the tick: a restored toggle at project open
+        is not a user request, and there the readout says 'Needs Envoy'
+        instead. Returns True when it flipped the switch.
+        """
+        if self._envoyIsBringingTheEnvironment():
+            return False
+        try:
+            self._embody.ext.Embody._enableEnvoyResolved(
+                configure_client=False)
+        except Exception as e:
+            self._log('could not turn Enable Envoy on for Convoy (%s) -- '
+                      'turn it on by hand; Convoy runs on it' % (e,),
+                      'WARNING')
+            return False
+        self._log('Convoy runs on Envoy -- turned Enable Envoy on (its '
+                  'Python environment hosts the Convoy App; its local '
+                  'command service relays remote work)', 'INFO')
+        return True
 
     # Wait for Envoy to finish building the shared venv (fresh install =
     # minutes; the wizard enables Convoy seconds after Envoy). Budget is
@@ -5327,7 +5649,8 @@ class ConvoyExt:
         _bootstrapping flag always missed the 30-frame Start() deferral
         window and told the user to "Enable Envoy" right after they had
         (2026-08-09). Envoyenable is the honest signal: ON = on its way,
-        OFF = the one case that needs the user.
+        OFF = the one case that needs the user -- and the tick's gate
+        (_NEEDS_ENVOY_TEXT): Convoy runs on Envoy, not just on its venv.
         """
         try:
             return bool(self._embody.par.Envoyenable.eval())
@@ -5341,61 +5664,79 @@ class ConvoyExt:
         things from the user: Envoy building its venv resolves itself and
         wants patience, while Envoy switched off genuinely does need the user
         to turn it on. The old path could not tell them apart and printed the
-        second message during the first.
+        second message during the first. ONE chain at a time: the enable
+        path and an automatic in-place update can both ask for it.
         """
+        if attempt == 0:
+            if self._runtime_wait_pending:
+                return
+            self._runtime_wait_pending = True
+        keep = False
         try:
-            if not self._enabled() or self._performing():
-                self._clearHostLineIf('Installing...')
-                return
-            ctx = self._safeHostContext()
-            if ctx is None:
-                self._clearHostLineIf('Installing...')
-                return
-            if self._hostRuntimeResolvable(ctx):
-                self._log('the shared Python environment is ready -- '
-                          'installing the host app now', 'INFO')
-                self.installHost(confirm=False)
-                return
-            building = self._envoyIsBringingTheEnvironment()
-            if attempt == 0:
-                if building:
-                    self._log(
-                        'waiting for Envoy to finish building the '
-                        'Python environment Convoy shares -- the host app '
-                        'installs on its own as soon as it is ready. Nothing '
-                        'to do.', 'INFO')
-                else:
-                    self._log(
-                        'no Python runtime is available for the host '
-                        'app yet. Enable Envoy (it builds the environment '
-                        'Convoy shares) and the host app installs itself.',
-                        'WARNING')
-            if not building and attempt >= 5:
-                # Envoy is switched OFF: stop waiting for something nobody
-                # is going to build, and leave a status the user can act
-                # on. ~10 s at 60 fps -- see _HOST_RUNTIME_WAIT_FRAMES for
-                # why that is a frame count and not a duration.
-                self._log(
-                    'giving up on the host app install: Envoy is off, so '
-                    'the shared Python environment is never going to be '
-                    'built. Enable Envoy and Convoy installs itself.',
-                    'WARNING')
-                self._hostStatus(self.HOST_INSTALL_FAILED)
-                return
-            if attempt >= self._HOST_RUNTIME_WAIT_TRIES:
-                self._log(
-                    'gave up waiting for the shared Python '
-                    'environment after %d attempts -- the host app is not '
-                    'installed. Use Install Host App once Envoy has finished.'
-                    % (attempt,), 'WARNING')
-                self._hostStatus(self.HOST_INSTALL_FAILED)
-                return
-            run('args[0](args[1])', self._awaitHostRuntime, attempt + 1,
-                delayFrames=self._HOST_RUNTIME_WAIT_FRAMES,
-                group='convoy_host_runtime_wait')
+            keep = self._awaitHostRuntimeStep(attempt)
         except Exception as e:
             self._log('could not wait for the Convoy host runtime: %s' % (e,),
                       'WARNING')
+        finally:
+            if not keep:
+                self._runtime_wait_pending = False
+
+    def _awaitHostRuntimeStep(self, attempt):
+        """One poll of _awaitHostRuntime. True = the chain lives on
+        (re-armed, or handed to installHost, which may arm its own)."""
+        if not self._enabled() or self._performing():
+            self._clearHostLineIf('Installing...')
+            return False
+        ctx = self._safeHostContext()
+        if ctx is None:
+            self._clearHostLineIf('Installing...')
+            return False
+        if self._hostRuntimeResolvable(ctx):
+            self._log('the shared Python environment is ready -- '
+                      'installing the host app now', 'INFO')
+            self._runtime_wait_pending = False
+            self.installHost(confirm=False)
+            return True
+        building = self._envoyIsBringingTheEnvironment()
+        if attempt == 0:
+            if building:
+                self._log(
+                    'waiting for Envoy to finish building the '
+                    'Python environment Convoy shares -- the host app '
+                    'installs on its own as soon as it is ready. Nothing '
+                    'to do.', 'INFO')
+            else:
+                self._log(
+                    'no Python runtime is available for the host app '
+                    'yet. Convoy runs on Envoy: turn Enable Envoy on (it '
+                    'builds the environment Convoy shares) and the host '
+                    'app installs itself.', 'WARNING')
+        if not building and attempt >= 5:
+            # Envoy is switched OFF: stop waiting for something nobody
+            # is going to build. ~10 s at 60 fps -- see
+            # _HOST_RUNTIME_WAIT_FRAMES for why that is a frame count and
+            # not a duration. Not 'Install failed': nothing about the
+            # host app changed, and the node line already names Envoy.
+            self._log(
+                'giving up on the host app install: Envoy is off, so '
+                'the shared Python environment is never going to be '
+                'built. Turn Enable Envoy on and Convoy installs itself.',
+                'WARNING')
+            self._clearHostLineIf('Installing...')
+            self._restoreHostStatus()
+            return False
+        if attempt >= self._HOST_RUNTIME_WAIT_TRIES:
+            self._log(
+                'gave up waiting for the shared Python '
+                'environment after %d attempts -- the host app is not '
+                'installed. Use Repair Convoy App once Envoy has finished.'
+                % (attempt,), 'WARNING')
+            self._hostStatus(self.HOST_INSTALL_FAILED)
+            return False
+        run('args[0](args[1])', self._awaitHostRuntime, attempt + 1,
+            delayFrames=self._HOST_RUNTIME_WAIT_FRAMES,
+            group='convoy_host_runtime_wait')
+        return True
 
     def _ensureHostApp(self):
         """Install and/or start the host app so ENABLING is the only step.
@@ -5528,6 +5869,7 @@ class ConvoyExt:
                'saved_project': False,
                'convoy_id': '', 'node_id': '', 'host_id': '', 'runtime_id': '',
                'registered': False, 'envoy_port': None, 'busy': False,
+               'envoy_enabled': False, 'advisories': [],
                'api_pending': 0, 'api_results': 0,
                'status': ''}
         try:
@@ -5546,6 +5888,8 @@ class ConvoyExt:
                 'runtime_id': str(session.get('runtime_id') or ''),
                 'registered': bool(session.get('registered')),
                 'envoy_port': self._envoyPort(),
+                'envoy_enabled': self._envoyIsBringingTheEnvironment(),
+                'advisories': list(session.get('advisories') or []),
                 'busy': bool(self._busy),
                 'api_pending': sum(
                     1 for record in self._api_requests.values()
@@ -6599,6 +6943,61 @@ def _host_realm_conflict_plan(ctx, resolve_names=True):
             'detail': ('realm %s; %d foreign announcer(s) live'
                        % (realm.get('state') or 'unknown',
                           len(announcers)))}
+
+
+def _host_peers_mismatched(ctx):
+    """Snapshot the pinned peers heard announcing another identity.
+    Alters nothing; pure loopback HTTP (see _host_realm_conflict_plan)."""
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'action': 'peers_mismatched_plan',
+                'reason': 'no_host',
+                'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False, 'action': 'peers_mismatched_plan',
+                'reason': 'no_host',
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    listing = client.peers_mismatched(probe.handle)
+    if listing.get('state') != 'peers_mismatched':
+        return {'ok': False, 'action': 'peers_mismatched_plan',
+                'reason': listing.get('reason') or 'listing_failed',
+                'detail': listing.get('detail') or 'host listing failed'}
+    peers = list(listing.get('peers') or [])
+    names = _reverse_dns_names(
+        [_announcer_ip(str(p.get('address') or ''))
+         for p in peers[:_ANNOUNCER_DISPLAY_CAP]])
+    for peer in peers:
+        peer['hostname'] = names.get(
+            _announcer_ip(str(peer.get('address') or '')), '')
+    return {'ok': True, 'action': 'peers_mismatched_plan', 'peers': peers,
+            'detail': '%d changed peer(s)' % len(peers)}
+
+
+def _host_repin_peers(ctx, host_ids):
+    """Trust the announced identity of each host id, one POST each."""
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'action': 'repin_peers', 'reason': 'no_host',
+                'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False, 'action': 'repin_peers', 'reason': 'no_host',
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    results = []
+    for host_id in list(host_ids)[:32]:
+        answer = client.repin_peer(probe.handle, host_id)
+        good = answer.get('state') == 'repinned'
+        results.append({'host_id': str(host_id), 'ok': good,
+                        'detail': ('' if good else str(
+                            answer.get('detail') or answer.get('reason')
+                            or 'refused'))})
+    done = sum(1 for row in results if row['ok'])
+    return {'ok': bool(results) and done == len(results),
+            'action': 'repin_peers', 'results': results,
+            'detail': '%d of %d re-pinned' % (done, len(results))}
 
 
 def _host_realm_conflict_apply(ctx, offenders, reset=True):

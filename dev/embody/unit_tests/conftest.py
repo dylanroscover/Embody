@@ -308,3 +308,22 @@ def pytest_sessionfinish(session, exitstatus):
             'sandbox. Do not trust this run, and do not run it against a live\n'
             'TouchDesigner until the leak is closed. First leaked line:\n  %s'
             % (os.getpid(), len(mine), _LIVE_BRIDGE_LOG, mine[0][:200]))
+
+
+@pytest.fixture(autouse=True, scope='session')
+def _isolate_convoy_data_dir():
+    """The bridge suite must never reach the developer's live Convoy host
+    app (its controller heartbeats put 30 relay_refused lines in a real
+    audit log, 2026-09-21). Point every Convoy data-dir resolver at an
+    empty directory for the whole run: a probe there finds no host app,
+    so a test that forgot to patch the transport refuses locally."""
+    previous = os.environ.get('EMBODY_CONVOY_DATA_DIR')
+    isolated = tempfile.mkdtemp(prefix='embody_pytest_convoy_')
+    os.environ['EMBODY_CONVOY_DATA_DIR'] = isolated
+    try:
+        yield isolated
+    finally:
+        if previous is None:
+            os.environ.pop('EMBODY_CONVOY_DATA_DIR', None)
+        else:
+            os.environ['EMBODY_CONVOY_DATA_DIR'] = previous

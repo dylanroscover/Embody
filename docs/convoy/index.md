@@ -56,7 +56,7 @@ Convoy is intentionally convenient on a trusted production network. That also me
 Repeat these steps on every participating computer:
 
 1. Save the TouchDesigner project. A saved `.toe` gives the node a stable project identity and a useful automatic name.
-2. Choose an AI assistant if you want one. Convoy also works with **None**: Embody keeps only its internal local command service enabled and does not configure or launch an AI client.
+2. Choose an AI assistant if you want one. Convoy also works with **None**: Embody keeps only its internal local command service enabled and does not configure or launch an AI client. Either way, Convoy runs on Envoy: the host app runs in the Python environment Envoy builds (`.venv`), and remote work reaches TouchDesigner through Envoy's local command service. **Enable Convoy** therefore turns **Enable Envoy** on if it is off, and **Status** reads `Needs Envoy` whenever Envoy is off.
 3. In the [Setup Wizard](../embody/setup-wizard.md), choose **Enable Convoy**. You can also turn on **Enable Convoy** later from the Embody COMP's **Convoy** page.
 4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the wizard's Convoy step) is the consent for the app and its login persistence. Use **Repair Convoy App** on the Convoy page only to repair a broken install or apply an update, and **Start Convoy App** after a deliberate stop.
 5. Allow the Convoy host app through the operating-system firewall on the **private/trusted network profile only**.
@@ -86,7 +86,7 @@ Columns:
 |---|---|
 | **Node Name** | Automatic or user-supplied display name |
 | **IP Address** | Current address; several nodes can correctly show the same IP |
-| **Status** | Online, offline, or an error. Version and capability mismatches are not shown here: they are reported when an operation is attempted, as **Limited**/**Incompatible** refusals and in the `compatibility` field of `convoy_list_nodes`. A realm conflict likewise shows on the affected machine's own **Status** readout as `Refused: local_realm_conflict`, not in this list |
+| **Status** | Online, offline, or an error. An offline node whose host still hears its heartbeat but has no Envoy relay port reads `Offline -- no Envoy relay port`: that node's Envoy is off or still starting, and `convoy_list_nodes` reports the same fact as `offline_reason`. A reachable node whose host app cannot prove every operation reads `Online -- limited: 12 of 19 operations shared with host app 6.0.280` (or `incompatible`, with the protocol named); `convoy_list_nodes` carries the same as `compatibility`, `compatibility_reason` and `host_app_version`. Other version and capability mismatches are not shown here: they are reported when an operation is attempted, as **Limited**/**Incompatible** refusals and in the `compatibility` field of `convoy_list_nodes`. A realm conflict likewise shows on the affected machine's own **Status** readout as `Refused: local_realm_conflict`, not in this list |
 | **Last Seen** | Age of the most recent presence update when the host reports it. `Never` means no presence update has ever been recorded (or the row is served by an older host app that does not report ages) |
 
 Per-node controller counts and richer detail are deliberately not standing columns; use `convoy_list_controllers` and `convoy_list_nodes` for live sessions and full node records.

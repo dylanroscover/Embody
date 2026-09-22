@@ -245,7 +245,8 @@ def run_timeout(explicit, legs):
     return BASE_TIMEOUT_S + LEG_TIMEOUT_S * len(legs or ())
 
 
-def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
+def stage_run(repo, build, out, platform=None, now=None, install_tox=None,
+              convoy_isolated=False):
     """A fresh run directory under `out`: harness files + sidecar.
 
     `install_tox` overrides the .tox the smoke TD boots (the upgrade leg
@@ -281,6 +282,10 @@ def stage_run(repo, build, out, platform=None, now=None, install_tox=None):
                'repo_root': repo, 'tox_path': install_tox or build['tox'],
                'flags_dir': run_dir, 'started_at': time.strftime(
                    '%Y-%m-%dT%H:%M:%S', time.localtime(now()))}
+    if convoy_isolated:
+        # A string: the bootstrap's sidecar reader keeps non-empty
+        # strings only, so the flag must not be a bool.
+        sidecar['convoy_isolated'] = 'yes'
     with open(os.path.join(run_dir, 'smoke_run.json'), 'w',
               encoding='utf-8') as f:
         json.dump(sidecar, f, indent=2)
@@ -306,7 +311,8 @@ def find_td(build, override=None, platform=None):
     return exe, warning
 
 
-def launch_td(td_exe, toe_path, platform=None, popen=None, console=None):
+def launch_td(td_exe, toe_path, platform=None, popen=None, console=None,
+              env=None):
     """Start TD on `toe_path` by explicit absolute path; returns (pid, proc).
 
     `console` is a file object for TD's stdout/stderr (the run dir's
@@ -335,7 +341,8 @@ def launch_td(td_exe, toe_path, platform=None, popen=None, console=None):
                 f'{td_exe} has no executable under Contents/MacOS')
     out = console if console is not None else subprocess.DEVNULL
     proc = popen([exe, toe_path], stdout=out, stderr=subprocess.STDOUT
-                 if console is not None else subprocess.DEVNULL)
+                 if console is not None else subprocess.DEVNULL,
+                 env=env)
     return proc.pid, proc
 
 
@@ -880,6 +887,9 @@ def convoy_data_dir(platform=None, env=None, home=None):
     platform = platform or sys.platform
     env = env if env is not None else os.environ
     home = home or os.path.expanduser('~')
+    override = env.get('EMBODY_CONVOY_DATA_DIR')
+    if override:
+        return override
     if platform == 'win32':
         base = env.get('LOCALAPPDATA') or os.path.join(home, 'AppData', 'Local')
         return os.path.join(base, 'EmbodyConvoy')
@@ -1016,7 +1026,10 @@ def summarize(result):
         for s in leg.get('steps', []):
             if not s.get('ok'):
                 lines.append(f"          {s.get('step')}: {s.get('detail', '')}")
-    if r.get('convoy_host'):
+    if r.get('convoy_host') == 'isolated':
+        lines.append("convoy    isolated (EMBODY_CONVOY_DATA_DIR): enable "
+                     "path only, no host app installed or touched")
+    elif r.get('convoy_host'):
         lines.append(f"convoy    host app {r['convoy_host']}"
                      + ('' if r['convoy_host'] == 'fresh_install' else
                         '  (install path NOT exercised on this machine)'))
@@ -1070,6 +1083,12 @@ def main(argv=None):
                     help='extra legs after the fresh-install verdict, comma '
                          'separated: upgrade, faults, uninstall (run in '
                          'that order; see smoke_legs/__init__.py)')
+    ap.add_argument('--isolate-convoy', action='store_true',
+                    help='point the smoke TD at a throwaway Convoy data '
+                         'directory (EMBODY_CONVOY_DATA_DIR under the run '
+                         'dir): the enable path runs, no login host app is '
+                         'installed or touched. Default: the real per-user '
+                         'host app, which is what a release must exercise.')
     ap.add_argument('--upgrade-from', default=None,
                     help='for the upgrade leg: a release tag (vX.Y.Z) or a '
                          '.tox path to install FIRST; default: the previous '
@@ -1134,15 +1153,24 @@ def main(argv=None):
         result['installed'] = {'tox': install_tox or build['tox'],
                                'version': (upgrade_from or {}).get('version')
                                if install_tox else build['version']}
-        run = stage_run(repo, build, args.out, install_tox=install_tox)
+        run = stage_run(repo, build, args.out, install_tox=install_tox,
+                        convoy_isolated=bool(args.isolate_convoy))
         result['run_id'] = run['run_id']
         result['result_path'] = os.path.join(run['dir'], 'result.json')
         print(f"[smoke_run] staged {run['dir']}", file=sys.stderr)
 
         console = open(os.path.join(run['dir'], 'td-console.log'), 'ab')
+        td_env = None
+        if args.isolate_convoy:
+            td_env = dict(os.environ)
+            td_env['EMBODY_CONVOY_DATA_DIR'] = os.path.join(
+                run['dir'], 'convoy-data')
+            os.makedirs(td_env['EMBODY_CONVOY_DATA_DIR'], exist_ok=True)
+            print('[smoke_run] Convoy isolated in '
+                  f"{td_env['EMBODY_CONVOY_DATA_DIR']}", file=sys.stderr)
         pid, proc = launch_td(td_exe,
                               os.path.join(run['dir'], 'smoke_template.toe'),
-                              console=console)
+                              console=console, env=td_env)
         result['pid'] = pid
         print(f'[smoke_run] launched TouchDesigner pid {pid}', file=sys.stderr)
 
@@ -1223,8 +1251,10 @@ def main(argv=None):
             logs = collect_logs(run['dir'])
             result['log_tail'] = logs['tail']
             result['log_warnings'] = logs['warnings']
-            result['convoy_host'] = convoy_install_state(
-                convoy_before, convoy_install_mtime())
+            result['convoy_host'] = ('isolated' if args.isolate_convoy
+                                     else convoy_install_state(
+                                         convoy_before,
+                                         convoy_install_mtime()))
     except Exception as e:
         result['outcome'] = 'ERROR'
         result['error'] = (result['error'] + '; ' if result['error'] else '') \

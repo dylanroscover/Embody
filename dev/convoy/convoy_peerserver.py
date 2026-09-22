@@ -30,10 +30,12 @@ config.should_bind.
 """
 
 import base64
+import collections
 import json
 import socket
 import ssl
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import convoy_hostkeys as hostkeys
@@ -272,11 +274,18 @@ class PeerHTTPSServer(ThreadingHTTPServer):
                  max_connections=DEFAULT_MAX_CONNECTIONS,
                  max_connections_per_ip=DEFAULT_MAX_CONNECTIONS_PER_IP,
                  handshake_timeout=DEFAULT_HANDSHAKE_TIMEOUT_S,
-                 io_timeout=DEFAULT_IO_TIMEOUT_S):
+                 io_timeout=DEFAULT_IO_TIMEOUT_S, now=None):
         self.app = app
         self._context_provider = context_provider
         self._audit_bucket = audit_bucket
         self._audit_sink = audit_sink
+        # Refused handshakes, remembered for refusal_summary: a peer that
+        # pinned this host's OLD identity refuses OUR certificate on every
+        # connect, and the only trace was 1,570 rate-limited audit lines
+        # nobody read (field 2026-09-21). Bounded; wall-clock timestamps.
+        self._now = now or time.time
+        self._refusals = collections.deque(maxlen=1024)
+        self._refusals_lock = threading.Lock()
         self._configured_max_connections = max(1, int(max_connections))
         self._sem = threading.BoundedSemaphore(
             self._configured_max_connections)
@@ -373,6 +382,7 @@ class PeerHTTPSServer(ThreadingHTTPServer):
                 "peer_handshake_refused",
                 {"source": _source_ip(client_address),
                  "detail": _handshake_detail(e)})
+            self.note_refusal(_source_ip(client_address))
             _quiet_close(request)
             return
         try:
@@ -402,6 +412,29 @@ class PeerHTTPSServer(ThreadingHTTPServer):
         self._audit_throttled(
             "peer_handler_error",
             {"source": _source_ip(client_address)})
+
+    def note_refusal(self, source):
+        try:
+            with self._refusals_lock:
+                self._refusals.append((float(self._now()), str(source)))
+        except Exception:
+            pass
+
+    def refusal_summary(self, window_s=600.0):
+        """{count, sources: {ip: n}, window_s} over the last window_s."""
+        try:
+            now = float(self._now())
+        except Exception:
+            return {"count": 0, "sources": {}, "window_s": window_s}
+        sources = {}
+        count = 0
+        with self._refusals_lock:
+            while self._refusals and now - self._refusals[0][0] > window_s:
+                self._refusals.popleft()
+            for _ts, source in self._refusals:
+                count += 1
+                sources[source] = sources.get(source, 0) + 1
+        return {"count": count, "sources": sources, "window_s": window_s}
 
     def _audit_throttled(self, event, detail):
         allowed, suppressed = self._audit_bucket.take()
@@ -1165,7 +1198,8 @@ def serve_lan(app, address, port, audit_sink=None, now=None,
             (address, int(port)), PeerRequestHandler, app, provider,
             bucket, sink, max_connections=max_connections,
             max_connections_per_ip=max_connections_per_ip,
-            handshake_timeout=handshake_timeout, io_timeout=io_timeout)
+            handshake_timeout=handshake_timeout, io_timeout=io_timeout,
+            now=now)
     except OSError as e:
         # EADDRINUSE / EADDRNOTAVAIL / an unbindable named interface.
         raise LanBindError(

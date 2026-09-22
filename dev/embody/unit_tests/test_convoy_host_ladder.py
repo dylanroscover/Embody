@@ -1722,3 +1722,133 @@ class TestInstallVersionVerification(_LadderBase):
         self.assertFalse(has_work(None))
         self.assertFalse(has_work({'jobs_running': 'lots'}),
                          'an unreadable counter must not block the repair')
+
+
+client_mod = _load('convoy_client_for_ladder', 'convoy_client.py')
+
+
+class TestConvoyRunsOnEnvoy(EmbodyTestCase):
+    """Enable Envoy off is a NAMED state, and an explicit enable ends it.
+
+    THE FIELD FAILURE (TEC-C3A, 2026-09-21): moonshine arrived with Convoy
+    restored On and Envoy off. Status read 'Registered -- Envoy port
+    pending' -- the code's word for a temporary state -- for 35 minutes,
+    the host app could neither install nor update, and the one sentence
+    naming Envoy was a WARNING in a log file nobody had open. Driven on
+    fakes so every leg of the matrix runs it.
+    """
+
+    def _fake(self, envoy_on, enable_raises=None):
+        cls = convoy_mod.ConvoyExt
+        calls = []
+
+        class _EmbodyExt:
+            def _enableEnvoyResolved(self, configure_client=True):
+                calls.append(configure_client)
+                if enable_raises is not None:
+                    raise enable_raises
+
+        class _Ext:
+            Embody = _EmbodyExt()
+
+        class _Embody:
+            ext = _Ext()
+
+        class _Self:
+            _NEEDS_ENVOY_TEXT = cls._NEEDS_ENVOY_TEXT
+            _embody = _Embody()
+            _needs_envoy_noted = False
+
+            def __init__(me):
+                me.logged = []
+                me.envoy_on = envoy_on
+
+            def _envoyIsBringingTheEnvironment(me):
+                return me.envoy_on
+
+            def _log(me, msg, level='INFO'):
+                me.logged.append((level, msg))
+
+        me = _Self()
+        me.calls = calls
+        return me
+
+    def test_an_explicit_enable_turns_envoy_on_through_the_convoy_only_path(
+            self):
+        me = self._fake(envoy_on=False)
+        self.assertTrue(convoy_mod.ConvoyExt._ensureEnvoy(me))
+        self.assertEqual(me.calls, [False],
+                         'configure_client=False: no AI-client config is '
+                         'written from a Convoy enable; Start() configures '
+                         'a selected client itself')
+        self.assertTrue(any('Enable Envoy' in m for _l, m in me.logged))
+
+    def test_envoy_already_on_is_left_alone(self):
+        me = self._fake(envoy_on=True)
+        self.assertFalse(convoy_mod.ConvoyExt._ensureEnvoy(me))
+        self.assertEqual(me.calls, [])
+
+    def test_a_failed_flip_warns_and_names_the_by_hand_remedy(self):
+        me = self._fake(envoy_on=False, enable_raises=RuntimeError('boom'))
+        self.assertFalse(convoy_mod.ConvoyExt._ensureEnvoy(me))
+        self.assertEqual(me.logged[-1][0], 'WARNING')
+        self.assertIn('by hand', me.logged[-1][1])
+
+    def test_the_readout_override_names_envoy_only_downstream_of_it(self):
+        override = convoy_mod.ConvoyExt._needsEnvoyOverride
+        me = self._fake(envoy_on=False)
+        for state in ('registered', 'registering', 'absent', 'stale',
+                      'unreachable', 'running'):
+            self.assertTrue(override(me, {'state': state}, client_mod),
+                            state)
+        for state in ('refused', 'host_error', 'error', 'disabled',
+                      'unsaved', 'unregistered'):
+            self.assertFalse(override(me, {'state': state}, client_mod),
+                             state)
+        me.envoy_on = True
+        self.assertFalse(override(me, {'state': 'registered'}, client_mod))
+        me.envoy_on = False
+        self.assertFalse(override(me, None, client_mod),
+                         'garbage never reads as a verdict')
+
+    def test_the_outage_warning_fires_once(self):
+        me = self._fake(envoy_on=False)
+        convoy_mod.ConvoyExt._noteNeedsEnvoy(me)
+        convoy_mod.ConvoyExt._noteNeedsEnvoy(me)
+        self.assertEqual(len([m for l, m in me.logged if l == 'WARNING']), 1)
+        self.assertIn('Convoy runs on Envoy', me.logged[0][1])
+
+    def test_the_needs_envoy_line_is_actionable_and_ascii(self):
+        cls = convoy_mod.ConvoyExt
+        self.assertTrue(cls._NEEDS_ENVOY_TEXT.startswith('Needs Envoy'))
+        self.assertTrue(any(cls._NEEDS_ENVOY_TEXT.startswith(t)
+                            for t in cls._ACTIONABLE_NODE_TEXTS))
+        cls._NEEDS_ENVOY_TEXT.encode('ascii')
+        self.assertLessEqual(len(cls._NEEDS_ENVOY_TEXT), 160)
+
+    def test_register_brings_envoy_after_consent_and_before_the_host_app(
+            self):
+        """Pinned at the source: consent first (a declined enable must not
+        flip Envoy), Envoy before the host app (or the install waits on a
+        venv nobody is building)."""
+        path = os.path.join(_CONVOY_DIR, 'ConvoyExt.py')
+        with open(path, encoding='utf-8') as f:
+            src = f.read()
+        body = src[src.index('def register(self):'):]
+        body = body[:body.index('\n    def ', 10)]
+        self.assertLess(body.index('_ensureConsent'),
+                        body.index('_ensureEnvoy'))
+        self.assertLess(body.index('_ensureEnvoy'),
+                        body.index('_ensureHostApp'))
+
+    def test_the_envoy_toggle_wakes_a_parked_node(self):
+        path = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',
+                            'parexec.py')
+        with open(path, encoding='utf-8') as f:
+            src = f.read()
+        envoy_branch = src.split("par.name == 'Envoyenable'", 1)[1]
+        envoy_branch = envoy_branch.split('elif par.name', 1)[0]
+        self.assertIn('envoyEnabledChanged()', envoy_branch)
+        self.assertNotIn('parent.Embody.par.Envoyenable = True', src,
+                         'the enable path lives in register() now, for '
+                         'every posture -- not only Convoy-only mode')

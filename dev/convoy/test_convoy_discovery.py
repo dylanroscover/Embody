@@ -722,3 +722,35 @@ def test_start_stop_wrapper_is_idempotent_and_leaves_no_socket(
     assert svc.start() is False
     assert svc.stop() is True
     assert svc.active is False
+
+
+# -- a pinned host announcing a new identity reaches the host (2026-09-21)
+
+def test_a_changed_pin_is_handed_to_the_observer_and_never_repinned(
+        store, remote_keys, other_keys):
+    """TOFU refuses the new key (pin_mismatch) as before; the observer
+    gets the announcement so an operator can re-pin it deliberately."""
+    seen = []
+    clock = Clock()
+    coord = cd.DiscoveryCoordinator(
+        LOCAL_HOST, store, lambda: ("studio",), now=clock.time,
+        pin_conflict_observer=seen.append)
+    first = coord.handle_datagram(packet(remote_keys), (REMOTE_IP, 1))
+    assert first["status"] == "admitted"
+    assert seen == []
+    raw = packet(other_keys, host_id=REMOTE_HOST, nonce=NONCE_B, now=NOW + 1)
+    result = coord.handle_datagram(raw, (REMOTE_IP, 1))
+    assert result["status"] == "pin_mismatch"
+    assert store.get(REMOTE_HOST)["fingerprint"] == remote_keys.fingerprint
+    assert len(seen) == 1
+    assert seen[0]["host_id"] == REMOTE_HOST
+    assert seen[0]["fingerprint"] == other_keys.fingerprint
+    assert seen[0]["certificate_pem"].strip() == \
+        other_keys.certificate_pem.strip()
+    assert seen[0]["endpoint"]["address"] == REMOTE_IP
+
+
+def test_the_pin_conflict_observer_must_be_callable(store):
+    with pytest.raises(cd.DiscoveryError):
+        cd.DiscoveryCoordinator(LOCAL_HOST, store, lambda: ("studio",),
+                                pin_conflict_observer=42)

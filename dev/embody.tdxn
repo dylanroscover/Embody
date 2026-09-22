@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1269
-generator: Embody/6.2.59
+generator: Embody/6.2.61
 td_build: 099.2025.33230
 network_path: /embody
 options:
@@ -504,13 +504,13 @@ operators:
     - name: Convoyenable
       style: Toggle
       label: Enable Convoy
-      help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this installs and starts Convoy's small background app, opens an authenticated LAN listener, and begins automatic discovery and reconnect. Disable this on guest, public, or otherwise untrusted networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. Convoy does not configure or launch an AI client. The first enable creates this project's convoy identity and asks for confirmation.
+      help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this installs and starts Convoy's small background app, opens an authenticated LAN listener, and begins automatic discovery and reconnect. Disable this on guest, public, or otherwise untrusted networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. Convoy does not configure or launch an AI client, but it runs on Envoy (its Python environment and local command service), so enabling this turns Enable Envoy on if it is off. The first enable creates this project's convoy identity and asks for confirmation.
     - name: Convoystatus
       style: Str
       label: Status
       default: Disabled
       readOnly: true
-      help: Convoy's current state -- whether this node is connected, and anything blocking it (no host app, install failed, consent required).
+      help: Convoy's current state -- whether this node is connected, and anything blocking or degrading it (needs Envoy, no host app, install failed, consent required, a realm conflict, a LAN listener on a tunnel or public network, a changed host identity, or peers rejecting this host's certificate).
       value: Disabled
     - name: Convoynodename
       style: Str
@@ -586,6 +586,10 @@ operators:
       label: Resolve Realm Conflict...
       startSection: true
       help: 'Recover from a split-realm conflict (status "Refused: local_realm_conflict"). Lists the conflicting Convoy realms and their live senders (hostname where reverse DNS answers), then offers both directions: Keep This Realm denylists those senders, resets this machine''s realm to the preserved one, and re-registers this node -- Join Other Realm abandons this machine''s realm, adopts the other one, and rebinds this project to it (other projects on this machine offer their rejoin on their next Convoy enable). Also usable without a conflict, to denylist -- or join -- foreign realms being advertised on the LAN.'
+    - name: Convoyrepinpeers
+      style: Pulse
+      label: Re-pin Changed Peers...
+      help: Trust the NEW identity of pinned peers that now announce a different one -- a peer whose host app lost its data directory or was reinstalled. Lists each changed peer (hostname where reverse DNS answers, address, old and new fingerprint) in a confirmation first. Re-pinning revokes any work the old key queued and lets this machine connect to the new identity; until then that peer's rows read pin mismatch and its own Status counts this machine among the peers rejecting it. Only re-pin a peer whose operator confirms the change -- an unexplained change is what an impersonator looks like.
     - name: Convoyinstallhost
       style: Pulse
       label: Repair Convoy App
@@ -891,7 +895,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.59
+      value: 6.2.61
     - name: Touchbuild
       style: Str
       label: Touch Build
