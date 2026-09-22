@@ -505,3 +505,69 @@ def test_daemon_log_lines_are_timestamped(monkeypatch):
     assert re.match(r"^\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\] convoy LAN: "
                     r"peer listener on 192.168.88.10:47600\n$",
                     buf.getvalue())
+
+
+# -- refusals from a peer that is CONNECTED come from a ghost record ----
+
+class _ConnectedManager:
+    """A session manager holding one live pair session with `host_id`."""
+    is_stopped = False
+
+    def __init__(self, host_id):
+        self._host_id = host_id
+
+    def peer_info(self, host_id):
+        state = "connected" if host_id == self._host_id else "backoff"
+        return type("Info", (), {"state": state})()
+
+
+class TestGhostDialRefusals:
+
+    def test_refusals_from_a_connected_peer_name_a_previous_identity(
+            self, app, tmp_path):
+        peer_host_id, _identity = _admit_peer(app, tmp_path, 6,
+                                              convoy_ids=(CONVOY_A,))
+
+        class _Server:
+            def refusal_summary(self, window_s):
+                return {"count": 179, "window_s": window_s,
+                        "sources": {"10.20.30.6": 179}}
+
+        app.lan_server = _Server()
+        app.session_manager = _ConnectedManager(peer_host_id)
+        try:
+            status = app.status()
+            assert status["inbound_refusals"]["connected_peers"] == [
+                peer_host_id]
+            text = _advisory(app, "handshake_refusals")["text"]
+            assert text.startswith("1 admitted peer(s) still dial a previous "
+                                   "identity of this host (179 refusals")
+            assert "re-pin" not in text
+        finally:
+            app.lan_server = None
+            app.session_manager = None
+
+    def test_a_mix_names_both_counts(self, app, tmp_path):
+        connected, _ = _admit_peer(app, tmp_path, 6, convoy_ids=(CONVOY_A,))
+        rejecting, _ = _admit_peer(app, tmp_path, 7, convoy_ids=(CONVOY_A,))
+
+        class _Server:
+            def refusal_summary(self, window_s):
+                return {"count": 20, "window_s": window_s,
+                        "sources": {"10.20.30.6": 10, "10.20.30.7": 10}}
+
+        app.lan_server = _Server()
+        app.session_manager = _ConnectedManager(connected)
+        try:
+            status = app.status()
+            assert status["inbound_refusals"]["connected_peers"] == [
+                connected]
+            assert set(status["inbound_refusals"]["admitted_peers"]) == {
+                connected, rejecting}
+            text = _advisory(app, "handshake_refusals")["text"]
+            assert text.startswith("1 admitted peer(s) reject this host's "
+                                   "certificate and 1 dial a previous "
+                                   "identity of it (20 refusals")
+        finally:
+            app.lan_server = None
+            app.session_manager = None

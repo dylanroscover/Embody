@@ -555,6 +555,10 @@ def apply_tofu(peer_store, announcement, intersection, now=None):
         # audit event every three seconds per peer would turn discovery into
         # disk churn; durable state changes only when the pin's routing facts
         # actually move.  Candidate last_seen remains the live heartbeat.
+        if existing.get("dormant"):
+            # The pinned identity itself is announcing: it is not a ghost
+            # (PeerStore.set_dormant). One write, then heartbeats again.
+            peer_store.wake(host_id, cause="announcement")
         return "admitted", "existing trusted-LAN pin is current"
     record = peer_store.admit(
         host_id, fingerprint, admitted_via="lan_tofu",

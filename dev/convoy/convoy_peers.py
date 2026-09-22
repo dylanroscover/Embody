@@ -684,7 +684,7 @@ class Denylist:
 _RECORD_FIELDS = ("host_id", "fingerprint", "cert_pem", "display_name",
                   "state", "admitted_at", "admitted_via", "pin_first_seen",
                   "last_seen", "endpoints", "convoy_ids", "clock_offset_s",
-                  "admission_id")
+                  "admission_id", "dormant")
 
 
 class PeerStore:
@@ -1218,13 +1218,83 @@ class PeerStore:
         key = normalize_host_id(host_id)
         if key is None or key not in self._peers or self.unreadable:
             return False
-        self._peers[key]["last_seen"] = when if when is not None \
-            else self._now()
+        record = self._peers[key]
+        record["last_seen"] = when if when is not None else self._now()
+        # Contact from the identity itself ends its dormancy (set_dormant).
+        dormant = record.get("dormant")
+        record["dormant"] = None
         try:
             self._write()
         except Exception:
             return False
+        if dormant:
+            self._audit("peer_woken", self._woken_detail(key, dormant,
+                                                         "inbound"))
         return True
+
+    def set_dormant(self, host_id, successor_host_id, address, when=None):
+        """Stop dialing a pinned peer whose address now serves ANOTHER
+        pinned identity. Returns the record.
+
+        NOT a membership change, on purpose: state, pin, lineage and
+        queued work are untouched, so an impersonator of the dormant
+        identity still trips pin_mismatch, an operator's narrowing
+        survives, and nothing here can be used to evict a peer and then
+        claim its host_id by TOFU (review 2026-09-22). Only the dials
+        stop; any contact from the identity itself -- an inbound
+        connection, a discovery announcement, a re-admit -- wakes it.
+        """
+        self._ensure_current()
+        if self.unreadable:
+            raise PeerStoreUnreadable(self.unreadable)
+        key = normalize_host_id(host_id)
+        if key is None or key not in self._peers:
+            raise PeerError("unknown_peer",
+                            f"no peer record for {str(host_id)[:64]!r}")
+        successor = normalize_host_id(successor_host_id)
+        if successor is None or successor == key:
+            raise PeerError("malformed_host_id",
+                            "successor must be a different host_id")
+        record = self._peers[key]
+        record["dormant"] = {
+            "since": self._now() if when is None else float(when),
+            "address": _bounded_text(address, "address"),
+            "successor_host_id": successor}
+        self._write()
+        self._audit("peer_dormant",
+                    {"host_id": key,
+                     "peer_digest": peer_digest(key, record["fingerprint"]),
+                     "state": record["state"],
+                     "successor_host_id": successor,
+                     "address": record["dormant"]["address"],
+                     "last_seen": record.get("last_seen")})
+        return dict(record)
+
+    def wake(self, host_id, cause="contact"):
+        """Clear dormancy. Returns True when the record was dormant."""
+        self._ensure_current()
+        if self.unreadable:
+            raise PeerStoreUnreadable(self.unreadable)
+        key = normalize_host_id(host_id)
+        if key is None or key not in self._peers:
+            raise PeerError("unknown_peer",
+                            f"no peer record for {str(host_id)[:64]!r}")
+        record = self._peers[key]
+        dormant = record.get("dormant")
+        if not dormant:
+            return False
+        record["dormant"] = None
+        self._write()
+        self._audit("peer_woken", self._woken_detail(key, dormant, cause))
+        return True
+
+    def _woken_detail(self, key, dormant, cause):
+        return {"host_id": key,
+                "peer_digest": peer_digest(key,
+                                           self._peers[key]["fingerprint"]),
+                "cause": cause,
+                "dormant_since": dormant.get("since"),
+                "successor_host_id": dormant.get("successor_host_id")}
 
     def set_killswitch(self, engaged, reason=""):
         """A-32: the same predicate applied to ALL peers at once.
@@ -1387,8 +1457,15 @@ class PeerStore:
             record["admitted_at"] = now
             record["admitted_via"] = str(admitted_via or "manual"
                                          )[:MAX_TEXT_CHARS]
+        # An upsert is contact with the identity (its announcement, or an
+        # operator acting on it): dormancy ends (see set_dormant).
+        woken = record.get("dormant")
+        record["dormant"] = None
         self._peers[key] = record
         self._write()
+        if woken:
+            self._audit("peer_woken", self._woken_detail(key, woken,
+                                                         "upsert"))
         self._audit("peer_recorded",
                     {"host_id": key, "state": state,
                      "peer_digest": peer_digest(key, pin),
@@ -1413,7 +1490,25 @@ def _blank_record(host_id, fingerprint, now):
             "clock_offset_s": None,
             # The unbroken-authorization lineage nonce (see _upsert).
             # None until the peer is first admitted.
-            "admission_id": None}
+            "admission_id": None,
+            # {since, address, successor_host_id} while this peer's address
+            # serves another pinned identity (see set_dormant); None
+            # otherwise. Never a membership fact.
+            "dormant": None}
+
+
+def _clean_dormant(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise PeerError("malformed_dormant", "dormant must be an object")
+    successor = normalize_host_id(value.get("successor_host_id"))
+    if successor is None:
+        raise PeerError("malformed_dormant",
+                        "dormant.successor_host_id must be a host_id")
+    return {"since": _optional_number(value.get("since"), "dormant.since"),
+            "address": _bounded_text(value.get("address"), "dormant.address"),
+            "successor_host_id": successor}
 
 
 def _clean_cert(value):
@@ -1551,6 +1646,7 @@ def _coerce_record(host_id, record):
         # null stays None (an empty string is not a lineage).
         "admission_id": lambda v: (_bounded_text(v, "admission_id")
                                    or None),
+        "dormant": _clean_dormant,
     }
     for field, validate in _READ_VALIDATORS.items():
         if field in record:
