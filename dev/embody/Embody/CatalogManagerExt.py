@@ -161,6 +161,7 @@ class CatalogManagerExt:
 					self._log(f'Loaded catalog for build {self._build_str}')
 					# Still check for cross-build patches
 					self._patchCrossBuildDefaults(catalog)
+					self._clearStaleScanStatus()
 					return
 				# Op-type half cached, palette phase missing/interrupted:
 				# resume it (issue #60). Push the OP-TYPE half only -- a
@@ -230,6 +231,24 @@ class CatalogManagerExt:
 
 		self._setScanStatus(f'Scanning defaults (0/{self._scan_total})')
 		run('args[0]._processChunk()', self, delayFrames=1)
+
+	def _clearStaleScanStatus(self):
+		"""A scan readout the .toe carried in from an earlier session.
+
+		par.Status is saved with the project: a save taken mid-scan keeps
+		`Scanning palette (35/249)` even after that scan finished and the
+		next open loads the finished catalog without scanning, so nothing
+		ever rewrote it (TEC-B4A, 2026-09-22 -- Embody was working, the
+		readout said otherwise). Only a scan's own words are cleared;
+		Disabled stays Disabled (_setScanStatus).
+		"""
+		try:
+			current = str(self.ownerComp.par.Status)
+		except Exception:
+			return
+		if current.startswith('Scanning ') or current.endswith(
+				'failed -- see log'):
+			self._setScanStatus('Enabled')
 
 	def _setScanStatus(self, text):
 		"""Write a scan Status value UNLESS Embody is Disabled.

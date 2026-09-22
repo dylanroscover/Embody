@@ -485,6 +485,26 @@ class TestCatalogScanResume(EmbodyTestCase):
 			'normal scan status writes must still go through')
 
 
+	def test_stale_scan_readout_is_cleared_on_a_loaded_catalog(self):
+		"""par.Status is saved with the .toe: a save taken mid-scan carried
+		`Scanning palette (35/249)` into a session that loaded the finished
+		catalog and never scanned, and nothing rewrote it (TEC-B4A,
+		2026-09-22). Only a scan's own words are cleared; Disabled and any
+		other text are left alone."""
+		self.embody.par.Status = 'Scanning palette (35/249)'
+		self.cat._clearStaleScanStatus()
+		self.assertEqual(str(self.embody.par.Status), 'Enabled')
+		self.embody.par.Status = 'Scanning defaults failed -- see log'
+		self.cat._clearStaleScanStatus()
+		self.assertEqual(str(self.embody.par.Status), 'Enabled')
+		self.embody.par.Status = 'Disabled'
+		self.cat._clearStaleScanStatus()
+		self.assertEqual(str(self.embody.par.Status), 'Disabled',
+			'a disabled Embody must never be re-enabled by a readout sweep')
+		self.embody.par.Status = 'Enabled'
+		self.cat._clearStaleScanStatus()
+		self.assertEqual(str(self.embody.par.Status), 'Enabled')
+
 class TestCatalogPaletteSentinel(EmbodyTestCase):
 	"""In-flight sentinel: palette freeze forensics + poisoned-component skip.
 
