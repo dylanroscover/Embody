@@ -8356,6 +8356,30 @@ class TestConvoyUpdateEmbody(EmbodyTestCase):
         self.assertTrue(call['idempotency_key'].startswith('update-embody-'))
         self.assertEqual(out['dispatched'][0]['delivery_id'], 'd-1')
 
+    def test_a_dispatch_carries_the_nodes_runtime_id(self):
+        """A-22: update_embody may act on stale state, so the target host
+        refuses it without expected_runtime_id (runtime_id_required --
+        the whole fleet update was undispatchable, field 2026-09-22)."""
+        calls = []
+
+        def fake_call(call):
+            calls.append(dict(call))
+            return {'ok': True, 'delivery_id': 'd-%d' % len(calls)}
+
+        rows = [dict(self.ROWS[0], runtime_id='rt-1'),
+                dict(self.ROWS[0], node_id='n-4', node_name='TEC-D / Old',
+                     hostname='TEC-D', runtime_id='')]
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value={'ok': True, 'nodes': rows}),              patch.object(bridge, 'handle_convoy_call',
+                          side_effect=fake_call):
+            out = bridge.handle_convoy_update_embody({'all': True})
+        self.assertTrue(out['ok'])
+        by_node = {c['target_node_id']: c for c in calls}
+        self.assertEqual(by_node['n-1']['expected_runtime_id'], 'rt-1')
+        # A row without a runtime names none: the host says why, we never
+        # invent one.
+        self.assertNotIn('expected_runtime_id', by_node['n-4'])
+
     def test_node_matches_by_name_id_or_hostname_and_refuses_ambiguity(self):
         with patch.object(bridge, 'handle_convoy_list_nodes',
                           return_value=self._listing()), \

@@ -3327,6 +3327,12 @@ def handle_convoy_update_embody(params):
             "timeout_s": params.get("timeout_s", 30),
             "idempotency_key": "update-embody-" + uuid.uuid4().hex,
         }
+        # A-22: update_embody may act on stale state, so the target host
+        # refuses it without the runtime it was aimed at (runtime_id_required,
+        # field 2026-09-22). The row names the runtime; carry it.
+        runtime_id = row.get("runtime_id")
+        if isinstance(runtime_id, str) and runtime_id.strip():
+            call["expected_runtime_id"] = runtime_id
         outcome = handle_convoy_call(call)
         outcome = (dict(outcome) if isinstance(outcome, dict)
                    else {"ok": False, "reason": "convoy_host_bad_response"})
