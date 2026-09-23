@@ -232,6 +232,54 @@ def test_real_mtls_simultaneous_dials_converge_and_relay_both_directions(
         "origin_host_id"] == mesh.b.host_id
 
 
+def test_a_peer_forgets_its_own_offline_row_on_request(mesh):
+    """Fleet-wide Forget Offline Nodes (2026-09-22): a row host B owns is
+    forgotten BY B when A asks over the pair session; B's own rules still
+    hold (an online row is refused), and an unknown owner is a 404."""
+    code, stale = mesh.b.register_node({
+        "project_root": "/show/b-old", "comp_path": "/Embody",
+        "convoy_id": CONVOY, "runtime_id": "runtime-b-old",
+    })
+    assert code == 200
+    with mesh.b.lock:
+        # Unregistered on exit: the row stays, offline, as a launch address.
+        record = mesh.b.directory.lookup(stale["node_id"])
+        assert record is not None
+        record["runtime_id"] = ""
+        record["last_heartbeat_unix"] = 0.0
+        assert mesh.b._node_offline_reason(record) is not None
+    code, payload = mesh.a.forget_node_route(
+        {"node_id": stale["node_id"], "host_id": mesh.b.host_id})
+    assert code == 200, payload
+    assert payload["forgotten"] is True
+    assert payload["host_id"] == mesh.b.host_id
+    with mesh.b.lock:
+        assert mesh.b.directory.lookup(stale["node_id"]) is None
+    audited = [e["event"] for e in mesh.b.db.audit_tail(limit=50)]
+    assert "node_forgotten_by_peer" in audited
+    # B's ONLINE node is never forgotten on a peer's say-so. (The mesh's
+    # own node_b has no Envoy port, so it counts as offline; register a
+    # routable one.)
+    code, live = mesh.b.register_node({
+        "project_root": "/show/b-live", "comp_path": "/Embody",
+        "convoy_id": CONVOY, "runtime_id": "runtime-b-live",
+        "envoy_port": 9800,
+    })
+    assert code == 200
+    with mesh.b.lock:
+        assert mesh.b._node_offline_reason(
+            mesh.b.directory.lookup(live["node_id"])) is None
+    code, payload = mesh.a.forget_node_route(
+        {"node_id": live["node_id"], "host_id": mesh.b.host_id})
+    assert code == 409 and payload["reason"] == "node_online"
+    with mesh.b.lock:
+        assert mesh.b.directory.lookup(live["node_id"]) is not None
+    # Nobody owns this host id.
+    code, payload = mesh.a.forget_node_route(
+        {"node_id": stale["node_id"], "host_id": "f" * 32})
+    assert code == 404 and payload["reason"] == "peer_unknown"
+
+
 def test_real_mtls_socket_pin_is_recomputed_before_upgrade_bytes(mesh):
     sock = peerclient.open_authenticated_socket(
         mesh.target_b(), mesh.a.hostkeys, timeout=2.0)

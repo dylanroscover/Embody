@@ -390,6 +390,29 @@ class TestUpdateEmbodyJob(EmbodyTestCase):
         self.assertEqual(record['version_after'],
                          str(op.Embody.par.Version.eval()))
 
+    def test_poll_keeps_running_on_the_auto_checks_resting_text(self):
+        """'Disabled' is the auto-check's resting text, not a verdict:
+        its timer rewrote the shared par mid-download and the job closed
+        as failed seven seconds before the swap it never saw (TEC-B4A,
+        2026-09-22). The job must stay running until the version moves."""
+        job = _envoy_mod._new_job('update_embody', {})
+        job['version_before'] = str(op.Embody.par.Version.eval())
+        _envoy_mod._write_job(job)
+        prior = op.Embody.par.Updatestatus.eval()
+        updater = op.Embody.op('updater').ext.UpdaterExt
+        try:
+            updater._status('Disabled')
+            self.envoy._pollUpdateJob(job['id'])
+            record = _envoy_mod._read_job(job['id'])
+            self.assertEqual(record['status'], 'running')
+            self.assertNotIn('error', record)
+        finally:
+            updater._status(prior)
+            record = _envoy_mod._read_job(job['id'])
+            record['status'] = 'error'
+            record['finished'] = __import__('time').time()
+            _envoy_mod._write_job(record)
+
     def test_poll_finalizes_error_on_a_resting_refusal_text(self):
         job = _envoy_mod._new_job('update_embody', {})
         job['version_before'] = str(op.Embody.par.Version.eval())

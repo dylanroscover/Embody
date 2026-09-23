@@ -738,23 +738,29 @@ BRIDGE_TOOLS = [
     {
         "name": "convoy_forget_node",
         "description": (
-            "Advanced local recovery: delete a stale node row from THIS "
-            "machine's Convoy host app (the row a renamed, moved, or "
-            "deleted project left behind). Refuses while the node still "
-            "has a delivery that has not FINISHED, and names the "
-            "blocking delivery ids so they can be cancelled; a "
-            "finished result never holds a row, because results are "
-            "fetched by delivery id and outlive it. Local-only -- it "
-            "cannot forget a node on another machine's host. Dead and "
-            "long-unseen rows are also evicted automatically on the "
-            "host's retention sweep; this is the immediate manual path. "
+            "Delete a stale node row (the row a renamed, moved, or "
+            "deleted project left behind). Without host_id it acts on "
+            "THIS machine's Convoy host app; with host_id (the owning "
+            "host from convoy_list_nodes) the request is relayed to that "
+            "host over its live session and its rules decide. Refuses "
+            "while the node still has a delivery that has not FINISHED, "
+            "and names the blocking delivery ids so they can be "
+            "cancelled; a finished result never holds a row, because "
+            "results are fetched by delivery id and outlive it; an "
+            "online row is never forgotten. Rows unseen for a week are "
+            "evicted automatically; this is the immediate manual path. "
             "The Convoy page's Forget Offline Nodes... button is the "
-            "in-TD bulk equivalent, with an enumerating confirmation."
+            "in-TD bulk equivalent, fleet-wide, with an enumerating "
+            "confirmation."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "node_id": {"type": "string", "minLength": 1},
+                "host_id": {"type": "string", "minLength": 1,
+                            "description": "The host that owns the row "
+                                           "(from convoy_list_nodes). "
+                                           "Omit for a local row."},
             },
             "required": ["node_id"],
         },
@@ -3117,7 +3123,8 @@ def handle_convoy_cancel_job(params):
 
 
 def handle_convoy_forget_node(params):
-    """Delete a stale node row on the LOCAL host app (plan 7.5 forget)."""
+    """Delete a stale node row: on the local host app, or -- with host_id
+    -- relayed to the host that owns the row (plan 7.5 forget)."""
     invalid = _convoy_required_text(params, ("node_id",))
     if invalid:
         return _convoy_invalid_arguments(invalid)
@@ -3126,7 +3133,17 @@ def handle_convoy_forget_node(params):
             or any(ord(char) < 32 or ord(char) == 127 for char in node_id)):
         return _convoy_invalid_arguments(
             "node_id must be bounded printable text")
-    result = convoy_host_call("POST", "/nodes/forget", {"node_id": node_id})
+    body = {"node_id": node_id}
+    host_id = params.get("host_id")
+    if host_id is not None:
+        if (not isinstance(host_id, str) or not host_id.strip()
+                or len(host_id) > 256
+                or any(ord(char) < 32 or ord(char) == 127
+                       for char in host_id)):
+            return _convoy_invalid_arguments(
+                "host_id must be bounded printable text when supplied")
+        body["host_id"] = host_id
+    result = convoy_host_call("POST", "/nodes/forget", body)
     result = dict(result) if isinstance(result, dict) else {
         "ok": False, "reason": "convoy_host_bad_response"}
     result["wakes_touchdesigner"] = False

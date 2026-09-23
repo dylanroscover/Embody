@@ -1978,7 +1978,12 @@ class HostApp:
         # been silent for node_dead_grace_s; any node silent for
         # node_retention_s is evicted regardless. Offline alone is NEVER
         # stale -- a closed TD stays listed and remotely launchable.
-        self.node_retention_s = 30 * 24 * 3600.0
+        # A WEEK. Thirty days was a cautious guess against rows vanishing
+        # while a machine sat unplugged; in a real fleet it filled every
+        # node list with debris 10-28 days old that nobody could clear
+        # from where they stood (field 2026-09-22). A machine off for
+        # longer than a week rejoins as a new row.
+        self.node_retention_s = 7 * 24 * 3600.0
         self.node_dead_grace_s = 1800.0
         # TRANSIENT rows are the exception to "offline is never stale": a
         # row that never LIVED past node_transient_lived_s (a smoke run,
@@ -4444,6 +4449,66 @@ class HostApp:
             "unreadable": False,
             "unreadable_ids": [],
         }
+
+    def forget_node_route(self, body):
+        """POST /nodes/forget, SELF-LOCKING (called WITHOUT self.lock).
+
+        A row this host owns is forgotten under the lock (forget_node).
+        A row ANOTHER host owns (`host_id` given, not ours) is relayed to
+        that host over its live pair session, which must not run under
+        the lock: the row is gossiped from its owner and a local delete
+        would come straight back. Without the relay there was no
+        fleet-wide forget at all -- rows 10-28 days old sat on every
+        machine while the button in front of the operator answered
+        'not yours' (field 2026-09-22). The OWNER's rules still decide
+        (online: never; unfinished delivery: kept); an owner with no live
+        session is a 503 that names the machine to act on.
+        """
+        owner = body.get("host_id") if isinstance(body, dict) else None
+        if not isinstance(owner, str) or not owner.strip():
+            with self.lock:
+                return self.forget_node(body)
+        owner = peers_mod.normalize_host_id(owner)
+        if owner is None:
+            return self._refuse("forget_node", "malformed",
+                                "host_id is not a host_id", 400)
+        if owner == self.host_id:
+            with self.lock:
+                return self.forget_node(body)
+        try:
+            node_id = text_field(body, "node_id")
+        except Malformed as e:
+            return self._refuse("forget_node", "malformed", e.detail, 400)
+        with self.lock:
+            record = self.peers.get(owner)
+            namespaces = [
+                ns for ns in self._active_convoy_ids_locked()
+                if record is not None and self.peers.authorize_peer(
+                    owner, record.get("fingerprint"), convoy_id=ns).allowed]
+        if record is None or not namespaces:
+            return self._refuse("forget_node", "peer_unknown",
+                                "no admitted peer owns host %s" % owner[:12],
+                                404)
+        used, result = self._session_call_if_connected(
+            owner, namespaces[0], peerserver.SESSION_RPC_FORGET_NODE,
+            {"node_id": node_id}, peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if not used or not isinstance(result, dict):
+            return self._refuse(
+                "forget_node", "peer_unreachable",
+                "the owning host has no live session with this one; run "
+                "Forget Offline Nodes there, or wait for it to reconnect",
+                503)
+        code = int(result.get("http_status") or 200)
+        payload = dict(result)
+        payload.pop("http_status", None)
+        payload.setdefault("host_id", owner)
+        if code == 200:
+            with self.lock:
+                self._invalidate_network_nodes_cache_locked()
+            self._audit_best_effort(
+                "node_forgotten_remote",
+                {"node_id": node_id, "owner_host_id": owner})
+        return code, payload
 
     def forget_node(self, body):
         """ADVANCED RECOVERY: delete a stale node record entirely.
@@ -10720,6 +10785,38 @@ class HostApp:
                         "http_status": 400}
             return self._session_payload(*self.peer_acknowledge_job(
                 origin_host_id, convoy_id, delivery_id, fingerprint))
+        if method == peerserver.SESSION_RPC_FORGET_NODE:
+            # Fleet-wide Forget Offline Nodes: a peer asks THIS host, the
+            # owner, to forget one of its own offline rows. A mutation,
+            # so an observe-only peer is refused; then the owner's own
+            # rules decide -- an online row is never forgotten, a row
+            # with an unfinished delivery is kept and says so.
+            if not decision.may_mutate:
+                return {"ok": False, "reason": "peer_observe_only",
+                        "detail": "an observe-only peer may not forget "
+                                  "this host's nodes",
+                        "http_status": 403}
+            node_id = body.get("node_id")
+            if (not isinstance(node_id, str) or not node_id
+                    or len(node_id) > 128
+                    or any(not (char.isalnum() or char in "_-")
+                           for char in node_id)):
+                return {"ok": False, "reason": "malformed",
+                        "http_status": 400}
+            with self.lock:
+                record = self.directory.lookup(node_id)
+                if record is not None and self._node_is_online(record):
+                    code, result = 409, {
+                        "ok": False, "reason": "node_online",
+                        "detail": "the node is online on its own host; "
+                                  "nothing to forget"}
+                else:
+                    code, result = self.forget_node({"node_id": node_id})
+            if code == 200:
+                self._audit_best_effort(
+                    "node_forgotten_by_peer",
+                    {"node_id": node_id, "origin_host_id": origin_host_id})
+            return self._session_payload(code, result)
         raise ws_mod.RemoteError(
             "method_not_found", f"unknown peer RPC method {method!r}")
 
@@ -13444,6 +13541,10 @@ def make_handler(app):
                 elif self.path == "/peers/repin":
                     # SELF-LOCKING: goes through admit_peer.
                     code, payload = app.repin_peer(body)
+                elif self.path == "/nodes/forget":
+                    # SELF-LOCKING: a row another host owns is relayed
+                    # over the pair session, which cannot hold the lock.
+                    code, payload = app.forget_node_route(body)
                 else:
                     code, payload = self._post_locked(body)
             except Exception as e:      # same last-resort contract
@@ -13456,11 +13557,6 @@ def make_handler(app):
             with app.lock:
                 if self.path == "/unregister":
                     return app.unregister_node(body)
-                if self.path == "/nodes/forget":
-                    # Advanced LOCAL recovery ("Forget Stale Node", 7.5).
-                    # Loopback-only by construction: the LAN peer server is a
-                    # separate class with its own table.
-                    return app.forget_node(body)
                 if self.path == "/remint":
                     return app.remint_node(body)
                 if self.path == "/jobs":

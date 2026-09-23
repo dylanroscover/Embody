@@ -1993,8 +1993,15 @@ class TestForgetOfflineNodes(ConvoyHostBase):
          'node_name': 'TEC-X / live', 'toe_name': 'live.1.toe',
          'last_seen_age_s': 3.0},
         {'host_id': 'p' * 32, 'node_id': 'd' * 32, 'online': False,
-         'node_name': 'PEER / other', 'toe_name': 'other.1.toe',
-         'last_seen_age_s': 9999.0},
+         'node_name': 'PEER / other', 'hostname': 'PEER',
+         'toe_name': 'other.1.toe', 'last_seen_age_s': 9999.0},
+        {'host_id': 'q' * 32, 'node_id': 'e' * 32, 'online': False,
+         'node_name': 'GONE / old', 'hostname': 'GONE',
+         'toe_name': 'old.1.toe', 'last_seen_age_s': 99999.0},
+    ], 'peers': [
+        {'host_id': 'h' * 32, 'status': 'online', 'local': True},
+        {'host_id': 'p' * 32, 'status': 'online'},      # connected peer
+        {'host_id': 'q' * 32, 'status': 'offline'},     # not reachable
     ]})
 
     def setUp(self):
@@ -2012,8 +2019,12 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('TEC-X / e3', message)
         self.assertNotIn('TEC-X / live', message,
                          'an online row must never be offered')
-        self.assertNotIn('PEER / other', message,
-                         'peer rows are not ours to forget')
+        # A connected peer's row is offered WITH its owner named: the
+        # daemon relays the forget to that host (fleet-wide, 2026-09-22).
+        self.assertIn('PEER / other', message)
+        self.assertIn('on PEER', message)
+        self.assertNotIn('GONE / old', message,
+                         'a row whose owner is not connected is not offered')
         self.assertIn('NEW identity', message)
         self.assertEqual(self.client.count('host_post'), 0,
                          'Cancel must not touch the daemon')
@@ -2024,15 +2035,19 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         forgets = [body for path, body in self.client.posted
                    if path == '/nodes/forget']
         self.assertEqual([b['node_id'] for b in forgets],
-                         ['a' * 32, 'b' * 32])
-        self.assertTrue(any('forgot 2' in m for m, _l in self._logs),
+                         ['a' * 32, 'b' * 32, 'd' * 32])
+        # Local rows carry no owner; the peer's row names its host so the
+        # daemon relays it.
+        self.assertNotIn('host_id', forgets[0])
+        self.assertEqual(forgets[2]['host_id'], 'p' * 32)
+        self.assertTrue(any('forgot 3' in m for m, _l in self._logs),
                         self._logs)
 
     def test_a_row_back_online_by_apply_time_is_skipped(self):
         rows_later = (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': [
             dict(self.ROWS[1]['nodes'][0]),                  # e2 offline
             dict(self.ROWS[1]['nodes'][1], online=True),     # e3 came back
-        ]})
+        ], 'peers': []})
         self.client.get_results = [self.ROWS, rows_later]
         self.choice = 1
         self.convoy.forgetOfflineNodes()
@@ -2040,7 +2055,8 @@ class TestForgetOfflineNodes(ConvoyHostBase):
                    if path == '/nodes/forget']
         self.assertEqual([b['node_id'] for b in forgets], ['a' * 32],
                          'a row that came back online is never forgotten')
-        self.assertTrue(any('skipped 1' in m for m, _l in self._logs))
+        # e3 came back and PEER dropped its session: both skipped.
+        self.assertTrue(any('skipped 2' in m for m, _l in self._logs))
 
     def test_unresolved_work_is_kept_and_reported(self):
         """A kept row must be SAID OUT LOUD, not just logged.
@@ -2217,7 +2233,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('also reports the computer name', message,
                       'the all-clear must explain that a DIFFERENT host '
                       'carries this machine name, not send the user here')
-        self.assertNotIn('Run Forget Offline Nodes there', message,
+        self.assertNotIn('Forget Offline Nodes there', message,
                          'never instruct the user to walk to the machine '
                          'they are already using')
         self.assertEqual(self.client.count('host_post'), 0,
@@ -2244,8 +2260,8 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('No offline nodes', message)
         self.assertIn('TEC-B4A', message,
                       'the machine that owns the offline rows is named')
-        self.assertIn('Run Forget Offline Nodes there', message)
-        self.assertIn('forgotten from the computer that owns it', message,
+        self.assertIn('Forget Offline Nodes there', message)
+        self.assertIn('forgotten by the computer that owns it', message,
                       'the all-clear states the ownership rule plainly')
         self.assertIn('clear themselves', message,
                       'the all-clear still explains self-cleanup')

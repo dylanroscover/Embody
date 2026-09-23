@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.64
+
+Offline node rows are cleared from wherever you stand, and stop lingering for a month.
+
+- **Forget Offline Nodes works fleet-wide.** The dialog lists every offline row in the fleet with the machine that owns it, and each row is forgotten by its owner over the live session; only a machine that is not connected right now is left, and named. `convoy_forget_node` takes a `host_id` for the same. The owner's rules still decide: an online row is never forgotten, a row with an unfinished delivery is kept and named.
+- **A silent node is retired after a week, not thirty days.** Deleted projects still clear in half an hour and short-lived rows in an hour; a machine off for more than a week rejoins as a new row.
+- **Fixes.** An update job no longer reports failed when the auto-check's resting text overwrites the status mid-download. +8 tests.
+
 ## v6.2.63
 
 Four things a three-machine test fleet found the day 6.2.62 shipped.

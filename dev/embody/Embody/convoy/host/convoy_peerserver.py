@@ -111,10 +111,14 @@ SESSION_RPC_CONTROLLERS = "peer.controllers"
 SESSION_RPC_CANCEL = "peer.cancel"
 SESSION_RPC_ACK = "jobs.ack"
 SESSION_RPC_CONTROLLER_HEARTBEAT = "controller.heartbeat"
+# A peer asks the OWNER of an offline node row to forget it (fleet-wide
+# Forget Offline Nodes, 2026-09-22). The owner's own rules decide.
+SESSION_RPC_FORGET_NODE = "peer.forget_node"
 SESSION_RPC_METHODS = frozenset({
     SESSION_RPC_HEALTH, SESSION_RPC_MANIFEST, SESSION_RPC_ENVELOPE,
     SESSION_RPC_JOB, SESSION_RPC_NODES, SESSION_RPC_CONTROLLERS,
     SESSION_RPC_CANCEL, SESSION_RPC_ACK, SESSION_RPC_CONTROLLER_HEARTBEAT,
+    SESSION_RPC_FORGET_NODE,
 })
 
 

@@ -5158,20 +5158,22 @@ class ConvoyExt:
                              'this Embody.')
                 else:
                     where = ', '.join(names[:5])
-                    howto = 'Run Forget Offline Nodes there.'
+                    howto = ('That machine is not connected to this one '
+                             'right now: run Forget Offline Nodes there, '
+                             'or press this again once it reconnects.')
                 # Say what self-cleanup ACTUALLY does. The old text promised
                 # "short-lived ghosts within about an hour", which is false
                 # for any row that ran longer than node_transient_lived_s --
                 # those wait out the 30-day retention, and the user was
                 # looking at 2h and 17h rows while being told to just wait.
                 message = (
-                    'No offline nodes to forget on this machine. A node is '
-                    'forgotten from the computer that owns it, and the '
+                    'No offline nodes to forget from here. A node is '
+                    'forgotten by the computer that owns it, and the '
                     'offline row(s) here belong to %s. %s\n\n'
                     'Rows also clear themselves: about half an hour after '
-                    'their project file is deleted, or about an hour if the '
-                    'node only ever ran for a few minutes. Anything else '
-                    'stays until it is forgotten.'
+                    'their project file is deleted, about an hour if the '
+                    'node only ever ran for a few minutes, and after a '
+                    'week of silence otherwise.'
                     % (where, howto))
             self._dialog('Forget Offline Nodes', message, ['OK'])
             return
@@ -5187,15 +5189,19 @@ class ConvoyExt:
             return 'offline %ds' % int(age)
 
         shown = rows[:8]
-        lines = ['- %s (%s)' % (r.get('node_name') or r.get('toe_name')
-                                or r['node_id'][:8], _age(r))
-                 for r in shown]
+        lines = []
+        for r in shown:
+            label = (r.get('node_name') or r.get('toe_name')
+                     or r['node_id'][:8])
+            owner = str(r.get('hostname') or '').strip()
+            lines.append('- %s (%s)%s' % (
+                label, _age(r), (' -- on %s' % owner) if owner else ''))
         if len(rows) > len(shown):
             lines.append('- ...and %d more' % (len(rows) - len(shown)))
         noun = ('This offline node' if len(rows) == 1
                 else 'These offline nodes')
         message = (
-            '%s on THIS machine will be forgotten:\n'
+            '%s will be forgotten, each by the machine that owns it:\n'
             '\n%s\n\n'
             'A forgotten node rejoins as a NEW identity the next time its '
             'project opens, and its TD Python approval resets. A node with '
@@ -6649,6 +6655,14 @@ def _host_offline_rows(ctx):
     if code != 200 or not isinstance(body, dict):
         return None, None, 'node listing failed (HTTP %s)' % (code,)
     host_id = body.get('host_id')
+    # A peer's row is forgettable from here when its owner has a live
+    # session with this host (the daemon relays the forget to it). An
+    # owner that is not connected is named instead, as before.
+    connected = set()
+    for peer in body.get('peers') or []:
+        if (isinstance(peer, dict) and peer.get('status') == 'online'
+                and peer.get('host_id') and not peer.get('local')):
+            connected.add(str(peer['host_id']))
     rows = []
     remote_hosts = []
     for row in body.get('nodes') or []:
@@ -6656,9 +6670,10 @@ def _host_offline_rows(ctx):
             continue
         if row.get('online'):
             continue
-        if row.get('host_id') != host_id:
-            name = str(row.get('hostname') or row.get('node_name')
-                       or '').strip()
+        owner = str(row.get('host_id') or '')
+        name = str(row.get('hostname') or row.get('node_name')
+                   or '').strip()
+        if owner != host_id and owner not in connected:
             if name and name not in remote_hosts:
                 remote_hosts.append(name)
             continue
@@ -6668,7 +6683,9 @@ def _host_offline_rows(ctx):
         rows.append({'node_id': node_id,
                      'node_name': str(row.get('node_name') or ''),
                      'toe_name': str(row.get('toe_name') or ''),
-                     'last_seen_age_s': row.get('last_seen_age_s')})
+                     'last_seen_age_s': row.get('last_seen_age_s'),
+                     'host_id': owner if owner != host_id else '',
+                     'hostname': name if owner != host_id else ''})
     return rows, sorted(remote_hosts), None
 
 
@@ -7168,17 +7185,24 @@ def _host_forget_offline_apply(ctx, node_ids):
                 'reason': 'no_host',
                 'detail': 'no host app answered (%s)' % (probe.status,)}
     names = {}
+    owners = {}
     for row in rows:
         label = str(row.get('node_name') or row.get('toe_name') or '').strip()
         if label:
             names[row['node_id']] = label
+        if row.get('host_id'):
+            owners[row['node_id']] = row['host_id']
     forgotten, kept_busy, skipped, failed = [], [], [], []
     for node_id in node_ids:
         if node_id not in still_offline:
             skipped.append(node_id)
             continue
+        request = {'node_id': node_id}
+        if owners.get(node_id):
+            # The daemon relays a row another host owns to that host.
+            request['host_id'] = owners[node_id]
         code, body = client.host_post(probe.handle, '/nodes/forget',
-                                      {'node_id': node_id})
+                                      request)
         if code == 200:
             forgotten.append(node_id)
         elif code == 409:
