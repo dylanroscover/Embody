@@ -8722,7 +8722,14 @@ class EnvoyExt:
         elapsed = time.time() - float(job.get('started', 0) or 0)
         working = (any(status.startswith(pfx)
                        for pfx in self._UPDATE_ACTIVE_PREFIXES)
-                   or status.endswith('available'))
+                   or status.endswith('available')
+                   # 'Disabled' is the auto-check's RESTING text, not a
+                   # verdict: its timer can rewrite the shared par while
+                   # a remote update is mid-download, and the job closed
+                   # as failed seven seconds before the swap it never saw
+                   # (TEC-B4A 2026-09-22). Keep polling; the version moving
+                   # is what finishes it.
+                   or status.startswith('Disabled'))
         terminal = None
         if version_now and before and version_now != before:
             terminal = ('done', '')
