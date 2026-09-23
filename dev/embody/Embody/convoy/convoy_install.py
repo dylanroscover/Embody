@@ -3687,6 +3687,16 @@ def render_task_xml(interpreter, launcher, user, author="Embody",
       LogonTrigger + Delay PT30S + Repetition Interval PT1M  <- THE
         supervisor. Task Scheduler does not watch the child; the
         repetition is what notices it died.
+      CalendarTrigger (daily from 2000-01-01, Repetition PT1M for P1D)
+        <- THE OTHER HALF OF THE SUPERVISOR. A logon trigger's repetition
+        arms only at LOGON: every install re-registers the task, and a
+        machine that stays logged in has no supervision from that moment
+        until its next logon (measured 2026-09-22: registered 09-21
+        22:04 by an install, no logon since 09-17, a clean /shutdown left
+        the daemon down for 5+ minutes, LastRunTime frozen at 22:04,
+        NextRunTime empty). A calendar trigger with a past start boundary
+        is armed the instant it is registered, so NextRunTime is always
+        set. Both stay: logon covers the first 30 s after sign-in.
       MultipleInstancesPolicy IgnoreNew  <- suppresses the per-minute
         relaunch while the daemon lives. Load-bearing, and only works
         because the launcher runs the daemon in-process.
@@ -3770,6 +3780,18 @@ _TASK_XML_TEMPLATE = """\
       <UserId>%(user)s</UserId>
       <Delay>PT30S</Delay>
     </LogonTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2000-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <Repetition>
+        <Interval>PT1M</Interval>
+        <Duration>P1D</Duration>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">

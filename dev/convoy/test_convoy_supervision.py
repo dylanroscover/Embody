@@ -325,14 +325,24 @@ def _post(port, path, token=None, body=None, timeout=10.0):
     headers = {"Content-Type": "application/json"}
     if token:
         headers[convoy_hostapp.TOKEN_HEADER] = token
-    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}",
-                                 data=payload, method="POST",
-                                 headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read().decode("utf-8"))
+    # Retry ONLY a transient transport failure (a loopback connection
+    # aborted under CI load: WinError 10053 flaked the tag run 2026-09-22),
+    # never a real HTTP response -- a refusal must never be masked. Same
+    # rule as test_convoy_hostapp.Server.call.
+    last = None
+    for attempt in range(4):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}{path}",
+                                     data=payload, method="POST",
+                                     headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode("utf-8"))
+        except (urllib.error.URLError, ConnectionError, OSError) as e:
+            last = e
+            time.sleep(0.1 * (attempt + 1))
+    raise last
 
 
 def _stop_host(directory, token):

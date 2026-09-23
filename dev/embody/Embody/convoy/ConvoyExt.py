@@ -763,6 +763,10 @@ class ConvoyExt:
                 # Newer hosts say why: the node heartbeats, but its Envoy
                 # serves no relay port -- off, or still starting.
                 status += ' -- no Envoy relay port'
+            elif not online and node.get('offline_reason') == 'stalled':
+                # The process is alive but not cooking: paused, minimized
+                # with Stop Playing when Minimized, or behind a dialog.
+                status += ' -- TD running but not cooking'
             compat = str(node.get('compatibility') or '').strip().lower()
             if (compat in ('limited', 'incompatible')
                     and 'incompat' not in raw_status.lower()):
@@ -1831,7 +1835,12 @@ class ConvoyExt:
         except Exception:
             embody_version = ''
         try:
-            td_version = str(app.version or '')
+            # The BUILD (2025.33230), what the updater's floor is written
+            # against; app.version is the family ('099') and told a fleet
+            # operator nothing about which nodes could take a release
+            # (2026-09-22: two nodes refused 6.2.62 for a build floor the
+            # node list never showed).
+            td_version = str(app.build or app.version or '')
         except Exception:
             td_version = ''
         node_name = self._nodeName(hostname, toe_name)
