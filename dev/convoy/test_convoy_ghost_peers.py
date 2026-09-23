@@ -202,6 +202,25 @@ def test_an_older_pin_never_supersedes_a_newer_one(server, monkeypatch):
     assert not _events(server, "peer_dormant")
 
 
+def test_the_on_demand_http_dial_parks_the_ghost_too(server, monkeypatch):
+    """A ghost outside every live session is only dialed by the HTTP
+    fallback of a node listing; that dial sees the same pin mismatch
+    and must park it the same way (review 2026-09-22)."""
+    _haunt(server)
+
+    def mismatch(target, keys, namespace, timeout=None, pool=None):
+        if target.host_id == GHOST:
+            return peerclient._pin_mismatch(target, offered=None, cause=None)
+        return peerclient.UNREACHABLE
+    monkeypatch.setattr(ha.peerclient, "get_peer_nodes", mismatch)
+    code, listing = server.app.network_nodes(CONVOY)
+    assert code == 200
+    ghost = server.app.peers.get(GHOST)
+    assert ghost["dormant"]["successor_host_id"] == REBORN
+    (event,) = _events(server, "peer_dormant")
+    assert event["detail"]["host_id"] == GHOST
+
+
 def test_a_pending_successor_parks_nothing(server, monkeypatch):
     # Only an ADMITTED (or observe-only) record can own the address.
     admit(server, GHOST, GHOST_FP, endpoints=[ADDRESS])

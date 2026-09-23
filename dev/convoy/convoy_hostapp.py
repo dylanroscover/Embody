@@ -1102,7 +1102,8 @@ NETWORK_QUERY_WORKERS = 32
 NODE_HEARTBEAT_GRACE_S = 60.0
 # Why a public node row is offline (_node_offline_reason). A closed
 # vocabulary: peers may only relay one of these tokens, never free text.
-NODE_OFFLINE_REASONS = ("no_relay_port", "heartbeat_stale", "no_runtime")
+NODE_OFFLINE_REASONS = ("no_relay_port", "heartbeat_stale", "no_runtime",
+                        "stalled")
 
 # Cap on the in-memory (peer -> controller) map, matching the drain and
 # poll maps: nothing prunes it on a host whose peers churn, and an
@@ -1813,6 +1814,8 @@ class HostApp:
         # submission because they provide no separate current-digest signal.
         self._peer_manifest_cache = collections.OrderedDict()
         self.lock = threading.Lock()
+        # Injectable for tests (a real pid may or may not exist there).
+        self._pid_is_alive = platform_mod.pid_is_alive
         # One host-wide, fixed-size network query pool.  A new executor per
         # request lets simultaneous status clients multiply the 32-worker
         # bound; this pool makes the bound true for the whole process.  The
@@ -5522,6 +5525,17 @@ class HostApp:
         except (KeyError, TypeError, ValueError):
             fresh = False
         if not fresh:
+            # Its process is still here, only the heartbeats stopped: the
+            # frame loop is not running (paused, minimized with Stop
+            # Playing when Minimized, or behind a modal). Read as a dead
+            # machine fleet-wide until now (TEC-A4D, 2026-09-22). Local
+            # records only -- a peer's row carries its own reason.
+            pid = (record.get("metadata") or {}).get("process_id")
+            try:
+                if pid and self._pid_is_alive(int(pid)):
+                    return "stalled"
+            except (TypeError, ValueError, OSError):
+                pass
             return "heartbeat_stale"
         if not record.get("runtime_id"):
             return "no_runtime"
@@ -6052,6 +6066,14 @@ class HostApp:
                 status, reason = "offline", "peer_unreachable"
             elif isinstance(result, peerclient._PinMismatch):
                 status, reason = "error", "pin_mismatch"
+                # The on-demand HTTP dial just saw what the session
+                # dialer parks on; a ghost outside every live session is
+                # only ever dialed here (review 2026-09-22).
+                try:
+                    if getattr(target, "port", None):
+                        self._park_superseded_peer(target.host_id, target)
+                except Exception:
+                    pass
             elif result is None:
                 status = "error"
                 reason = ("identity_unavailable" if keys is None

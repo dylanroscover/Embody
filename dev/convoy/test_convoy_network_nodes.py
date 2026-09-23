@@ -586,6 +586,8 @@ def test_network_nodes_http_route_accepts_one_namespace_and_requires_token(
 def test_missed_heartbeat_ages_a_hard_killed_node_offline(tmp_path):
     clock = [1000.0]
     instance = ha.HostApp(str(tmp_path / "heartbeat"), now=lambda: clock[0])
+    # A pid that is gone: the row is a dead node, not a stalled one.
+    instance._pid_is_alive = lambda pid: False
     try:
         node = _register(instance, metadata={
             "node_name": "render-a", "process_id": 12345})
@@ -677,6 +679,28 @@ def test_a_node_without_a_relay_port_is_offline_with_a_reason(app):
     assert row["offline_reason"] == "no_relay_port"
     assert row["last_seen_age_s"] is not None
     assert row["last_seen_age_s"] < 5
+
+
+def test_a_stale_row_whose_process_lives_reads_stalled(tmp_path):
+    """The process is here, only the heartbeats stopped: a paused or
+    minimized TouchDesigner (Stop Playing when Minimized), or one behind
+    a modal. It read as a dead machine fleet-wide (TEC-A4D 2026-09-22)."""
+    clock = [1000.0]
+    instance = ha.HostApp(str(tmp_path / "stalled"), now=lambda: clock[0])
+    instance._pid_is_alive = lambda pid: pid == 4242
+    try:
+        node = _register(instance, metadata={
+            "node_name": "render-a", "process_id": 4242})
+        clock[0] += ha.NODE_HEARTBEAT_GRACE_S + 0.001
+        code, current = instance.network_nodes(CONVOY_A)
+        assert code == 200
+        row = next(r for r in current["nodes"]
+                   if r["node_id"] == node["node_id"])
+        assert row["status"] == "offline"
+        assert row["offline_reason"] == "stalled"
+        assert "stalled" in ha.NODE_OFFLINE_REASONS   # survives the LAN sanitizer
+    finally:
+        instance.db.close()
 
 
 def test_an_online_row_carries_no_offline_reason(app):
