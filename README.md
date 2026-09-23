@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.63-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.64-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.64** — Forget Offline Nodes clears rows fleet-wide, each by its owner; silent nodes retire after a week instead of a month; update jobs no longer report a false failure
 - **6.2.63** — the Windows supervisor stays armed after an install; node rows carry the TD build and the fleet update its runtime id; a live-but-silent node reads stalled; a mid-scan readout clears on reopen
 - **6.2.62** — a re-minted host's ghost record goes dormant on its peers instead of being dialed forever; the pin stays, contact wakes it, and Status names the ghost on both sides
 - **6.2.61** — Convoy names its Envoy dependency and the host's advisories (rejected certificates, re-minted identities, realm splits, VPN binds), re-pins changed peers, avoids VPNs and public networks on auto-bind, and rejoins admitted peers' realm instead of founding one
