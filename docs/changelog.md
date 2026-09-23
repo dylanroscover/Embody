@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.63
+
+Four things a three-machine test fleet found the day 6.2.62 shipped.
+
+- **The Windows supervisor stays armed after an install.** The Scheduled Task relaunched the daemon only through a logon trigger, which arms at sign-in; every install re-registered it, so a logged-in machine had no supervision until its next logon. A calendar trigger now arms on registration (measured: back 40 s after a clean stop).
+- **Node rows say the TouchDesigner build**, not the family, so a fleet update can be judged against a release's floor; **the fleet update carries each node's runtime id**, which target hosts require.
+- **A live-but-silent node reads `stalled`** ("TD running but not cooking": paused, minimized with Stop Playing when Minimized, or behind a dialog) instead of a dead machine; the on-demand HTTP dial parks a re-minted host's ghost like the session dialer does; an older pin never parks a newer one.
+- **A scan readout saved mid-scan clears on the next open** instead of reading `Scanning palette (35/249)` forever. +20 tests.
+
 ## v6.2.62
 
 A re-minted host no longer haunts its peers.
