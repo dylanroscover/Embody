@@ -8304,6 +8304,39 @@ class TestBridgeStreamingDocumentedLimits(EmbodyTestCase):
             'so peak memory is a MULTIPLE of _MAX_BODY_BYTES -- say so')
 
 
+class TestConvoyForgetNode(EmbodyTestCase):
+    """convoy_forget_node: local by default, relayed to the owner with host_id."""
+
+    def _call(self, params):
+        calls = []
+
+        def fake_host_call(method, path, body=None, **kw):
+            calls.append((method, path, dict(body or {})))
+            return {'ok': True, 'forgotten': True, 'node_id': body['node_id']}
+
+        with patch.object(bridge, 'convoy_host_call',
+                          side_effect=fake_host_call):
+            out = bridge.handle_convoy_forget_node(params)
+        return out, calls
+
+    def test_a_local_row_carries_no_owner(self):
+        out, calls = self._call({'node_id': 'n-1'})
+        self.assertTrue(out['ok'])
+        self.assertEqual(calls, [('POST', '/nodes/forget', {'node_id': 'n-1'})])
+
+    def test_host_id_rides_to_the_daemon_for_the_relay(self):
+        """Fleet-wide forget (2026-09-22): the daemon relays a row another
+        host owns to that host; the tool must hand it the owner."""
+        out, calls = self._call({'node_id': 'n-1', 'host_id': 'h' * 32})
+        self.assertTrue(out['ok'])
+        self.assertEqual(calls[0][2], {'node_id': 'n-1', 'host_id': 'h' * 32})
+
+    def test_a_malformed_host_id_is_refused_before_the_daemon(self):
+        out, calls = self._call({'node_id': 'n-1', 'host_id': ' '})
+        self.assertEqual(out.get('reason'), 'invalid_arguments')
+        self.assertEqual(calls, [])
+
+
 class TestConvoyUpdateEmbody(EmbodyTestCase):
     """convoy_update_embody: fleet self-update without the TD Python grant."""
 
