@@ -1,29 +1,22 @@
 # Network Layout Conventions
 
-**These invariants govern EVERY operator you create or move -- through `create_op`/`copy_op`/`set_op_position` OR `execute_python` (`comp.create()`, `.copy()`, `.copyOPs()`).** The full recipe (spacing formulas, dock slot patterns, panel-widget stacking, complexity thresholds, anti-patterns) lives in the `/create-operator` skill -- **MUST load it before creating or moving any operator, whichever creation path you use.** `execute_python` is the silent trap: TD's bare `.create()` drops each new op at **(0, 0)**, stacked on the last, and nothing auto-positions it.
+These invariants govern EVERY operator you create or move, through `create_op`, `copy_op`, `set_op_position` OR `execute_python` (`comp.create()`, `.copy()`, `.copyOPs()`). The recipe (spacing formulas, dock slots, panel-widget stacking, complexity thresholds) lives in `/create-operator`: load it before creating or moving any operator. `execute_python` is the silent trap: a bare `.create()` drops each new op at (0, 0) and nothing auto-positions it.
 
-## The invariants (always, every model, every path)
+## The invariants
 
-- **200-unit grid; spacing is `size + gap`, BOTH axes, never a fixed step.** Compute every offset from the ACTUAL `nodeWidth`/`nodeHeight` returned by `get_network_layout` (operators range 100-300+ units), then snap UP to the next 200 multiple. The grid is the snap target, not the step size.
-- **Signal flows left to right; wires must flow forward (positive X).** Every source's right edge (`nodeX + nodeWidth`) sits left of its destination's `nodeX` -- a backward "S" wire means the downstream op is misplaced.
-- **Every docked op hugs its host** -- a tight row ~30 units below (never a full grid step away). `create_op`/`copy_op`/`set_op_position` do this automatically; after any `execute_python` build, place and verify docks yourself.
-- **Nothing left at (0, 0); no overlaps; related ops sit near each other** (a MAT beside its Geometry COMP, a camera/light near their Render TOP, any referenced op visible without scrolling).
-- **Every operator sits inside exactly one annotation; annotations never overlap** (>= 400 units between edges) and expand when you add ops. **MUST load `/manage-annotations` before `create_annotation` or `set_annotation`** -- `nodeX`/`nodeY` is the bottom-left corner.
-- **Annotations named `envoy_bot_*` are Embot, not layout.** They are the mascot the `Embot` parameter draws on the operator Envoy is working on -- nine small overlapping boxes that appear and vanish on their own, and that Embody strips from every saved file. The read tools hide them (a count rides back as `embot_hidden`); if a raw `findChildren` turns them up, never move, delete, enclose or count them, and never read them as an overlap to fix.
-- **Y increases upward.** New rows/parallel chains go downward, >= 400 units apart (more when tiles are tall).
+- **200-unit grid; spacing is `size + gap` on BOTH axes, never a fixed step.** Compute every offset from the actual `nodeWidth`/`nodeHeight` in `get_network_layout` (operators range 100-300+ units), then snap UP to the next 200 multiple. The grid is the snap target, not the step.
+- **Signal flows left to right; every wire flows forward (positive X).** A source's right edge (`nodeX + nodeWidth`) sits left of its destination's `nodeX`; a backward "S" wire means the downstream op is misplaced.
+- **Docked ops hug their host** in a tight row ~30 units below, never a full grid step away. `create_op`, `copy_op` and `set_op_position` do this; after an `execute_python` build, place and verify the docks yourself.
+- **Nothing at (0, 0), no overlaps, related ops near each other**: a MAT beside its Geometry COMP, camera and lights near their Render TOP, anything referenced visible without scrolling.
+- **Every operator inside exactly one annotation; annotations never overlap** (>= 400 units between edges) and grow when you add ops. Load `/manage-annotations` before `create_annotation` or `set_annotation`: `nodeX`/`nodeY` is the bottom-left corner.
+- **Annotations named `envoy_bot_*` are Embot**, the mascot Envoy draws on the operator it is working on; the read tools hide them and report `embot_hidden`. Never move, delete, enclose, count or "fix" them.
+- **Y increases upward.** New rows and parallel chains go downward, >= 400 units apart (more when tiles are tall).
 
-## Read first, verify last (mandatory gates)
+## Read first, verify last (mandatory)
 
-1. **Before placing anything**: `get_network_layout` + `get_annotations` on the parent. Batch-compute ALL positions from actual dimensions before creating. Flag a messy existing layout to the user instead of silently working around it.
-2. **After placing -- no turn that creates or moves operators may end without this check, and it runs DURING iterative building too**: `get_network_layout` again; confirm no overlaps, nothing at (0, 0), every `dockedTo` entry hugs its named host, every wire flows forward, no ops outside annotations, grid intact.
+1. Before placing anything: `get_network_layout` and `get_annotations` on the parent, and compute ALL positions from actual dimensions. Flag a messy existing layout to the user instead of working around it silently.
+2. After placing, and during iterative building: `get_network_layout` again. No overlaps, nothing at (0, 0), every `dockedTo` entry hugging its host, every wire forward, no op outside an annotation, grid intact. No turn that creates or moves operators ends without this check.
 
-## Tool-layer enforcement
+## Enforcement and anti-patterns
 
-Every `execute_python` is linted: ops left at (0, 0), overlapping a sibling, or with docked DATs scattered far from their host (>350 units) ride a `LAYOUT WARNING` back on the response (in `_logs`); badly scattered docks of ops created by that call are auto-hugged first (re-read positions if you had planned around them). **Treat any remaining warning as a hard stop** -- run `get_network_layout` and reposition before continuing. `create_op`/`copy_op` auto-position and hug docks; `set_op_position` carries a host's docks along. Panel-widget tiles are the one class the lint does NOT police -- stack them yourself (see `/create-operator`).
-
-## Anti-patterns (the short list)
-
-- Leaving `execute_python`-created ops at (0, 0) or overlapping -- the #1 layout failure.
-- Fixed offsets like `nodeX + 300` without `nodeWidth` -- the #1 overlap bug.
-- TD's `COMP.layout()` -- produces overlapping, unreadable results.
-- Creating operators without updating the enclosing annotation, or calling `set_op_position` into an unverified slot.
+Every `execute_python` is linted: ops left at (0, 0), overlapping a sibling, or with docks scattered more than 350 units from their host ride a `LAYOUT WARNING` back in `_logs` (badly scattered docks are auto-hugged first, so re-read positions). Treat any remaining warning as a hard stop. Panel-widget tiles are the one class the lint does not police: stack them yourself (`/create-operator`). Never: fixed offsets like `nodeX + 300` without `nodeWidth` (the number-one overlap bug), TD's `COMP.layout()` (overlapping, unreadable results), creating operators without growing the enclosing annotation, or `set_op_position` into an unverified slot.

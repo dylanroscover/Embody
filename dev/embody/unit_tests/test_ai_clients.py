@@ -765,3 +765,26 @@ class TestAiClients(EmbodyTestCase):
 			(self._temp_dir / 'AGENTS.md').read_bytes(),
 			('# Caf' + chr(0xE9) + '\n').encode('latin-1'),
 			'the unreadable file must be left byte-for-byte alone')
+
+
+class TestAiClientsVerification(EmbodyTestCase):
+	"""Every registry row says what evidence backs it (the hosts.py lesson:
+	client CLIs drift, and an unstamped row reads as fact when it is a
+	guess)."""
+
+	def test_V01_every_client_carries_a_verification_stamp(self):
+		reg = self.embody.op('ai_clients').module
+		for token in reg.tokens():
+			stamp = reg.spec(token).get('verified')
+			self.assertIsInstance(stamp, str, token)
+			self.assertGreater(len(stamp), 20, f'{token}: stamp too thin to mean anything')
+
+	def test_V02_unprobed_rows_say_so_up_front(self):
+		"""A row without a probe must start 'unverified' or 'partly' so a
+		reader can grep the honest ones apart from the probed ones."""
+		reg = self.embody.op('ai_clients').module
+		for token in reg.tokens():
+			stamp = reg.spec(token)['verified']
+			probed = any(ch.isdigit() for ch in stamp.split('--')[0])
+			if not probed:
+				self.assertTrue(stamp.startswith(('unverified', 'partly')), f'{token}: {stamp!r}')

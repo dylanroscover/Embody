@@ -22,7 +22,7 @@ create_extension(
 
 This creates: baseCOMP + text DAT + extension wiring, initialized and ready to use.
 
-**Wiring by hand: the Extension Object parameter is a constant-mode Str par whose VALUE is Python** (`par.extension1.val = "op('./MyFeatureExt').module.MyFeatureExt(me)"`). Never set its `.expr`: the extension comes back `None` with `extensionsReady` True and `errors()` empty; the only trace is a `SyntaxError ... Context:(Extension 1)` on `scriptErrors()` (`get_op_errors` `kind: 'script'`).
+**Wiring by hand: the Extension Object parameter is a constant-mode Str par whose VALUE is Python** (`par.ext0object.val = "op('./MyFeatureExt').module.MyFeatureExt(me)"` -- the Extensions page is the `ext` sequence on 2025 builds: `ext0object`, `ext0name`, `ext0promote`; there is no `extension1`). Never set its `.expr`: the extension comes back `None` with `extensionsReady` True and `errors()` empty; the only trace is a `SyntaxError ... Context:(Extension 1)` on `scriptErrors()` (`get_op_errors` `kind: 'script'`).
 
 ## Extension Lifecycle Methods
 

@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
-build: 31
-generator: Embody/6.2.53
+build: 50
+generator: Embody/6.2.64
 td_build: 099.2025.33230
 network_path: /embody/Embody/templates
 options:
@@ -52,6 +52,22 @@ operators:
   position: [200, -400]
   tags:
   - py
+- name: text_skill_collab
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_collab.md
+    extension: md
+  position: [3800, -600]
+  tags:
+  - md
+- name: text_skill_testing
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_testing.md
+    extension: md
+  position: [3800, -400]
+  tags:
+  - md
 - name: text_rule_td_python
   type: textDAT
   parameters:
@@ -124,6 +140,14 @@ operators:
   position: [1100, -600]
   tags:
   - md
+- name: text_skill_glsl_shaders
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_glsl_shaders.md
+    extension: md
+  position: [3800, 0]
+  tags:
+  - md
 - name: text_skill_movie_export
   type: textDAT
   parameters:
@@ -186,6 +210,14 @@ operators:
     file: embody/Embody/templates/text_skill_create_extension.md
     extension: md
   position: [2600, -200]
+  tags:
+  - md
+- name: text_skill_operator_gotchas
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_operator_gotchas.md
+    extension: md
+  position: [3800, -200]
   tags:
   - md
 - name: text_skill_parameter_design
@@ -269,6 +301,62 @@ operators:
   position: [3200, -200]
   tags:
   - md
+- name: text_skill_visual_aesthetics__craft
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_visual_aesthetics__craft.md
+    extension: md
+  position: [4400, 0]
+  tags:
+  - md
+- name: text_skill_merge_divergent_tox__procedure
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_merge_divergent_tox__procedure.md
+    extension: md
+  position: [4400, -400]
+  tags:
+  - md
+- name: text_skill_visual_aesthetics__look_recipes
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_visual_aesthetics__look_recipes.md
+    extension: md
+  position: [4400, -200]
+  tags:
+  - md
+- name: text_skill_mcp_tools_reference__coordination
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_mcp_tools_reference__coordination.md
+    extension: md
+  position: [3800, -1400]
+  tags:
+  - md
+- name: text_skill_parameter_design__state_lifetimes
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_parameter_design__state_lifetimes.md
+    extension: md
+  position: [3800, -1200]
+  tags:
+  - md
+- name: text_skill_td_api_reference__background_work
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_td_api_reference__background_work.md
+    extension: md
+  position: [3800, -800]
+  tags:
+  - md
+- name: text_skill_td_api_reference__heavy_build_safety
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_td_api_reference__heavy_build_safety.md
+    extension: md
+  position: [3800, -1000]
+  tags:
+  - md
 annotations:
 - name: annotate1
   mode: annotate
@@ -291,6 +379,6 @@ annotations:
   title: Skill Templates
   text: Auto-deployed skills for Claude Code
   position: [2530, -1470]
-  size: [870, 1730]
+  size: [2070, 1730]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5

@@ -66,17 +66,18 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_15_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 15 skill entries.
+	def test_A02_skills_map_has_19_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 19 skill entries.
 
 		The count is deliberately in the name: this is a tripwire, so
 		shipping a new skill to user projects has to be a conscious act
 		rather than a silent addition. 14 -> 15 when merge-divergent-tox
 		was wired into the template system (3d2d2c3), which landed
 		WITHOUT updating this number -- the suite has been red on dev
-		since that commit.
+		since that commit. 15 -> 19 on 2026-09-25: glsl-shaders,
+		operator-gotchas, testing and collab (the TDMCPSkills audit).
 		"""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 15)
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 19)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""

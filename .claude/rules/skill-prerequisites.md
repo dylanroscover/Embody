@@ -31,3 +31,8 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
 | Building or persisting a Specimen (gallery TDXN networks) | `/specimen-authoring` |
 | First MCP call in a new session | `/mcp-tools-reference` |
+| Writing GLSL, or creating a `glslTOP`, `glslmultiTOP`, `glslMAT` or `glslPOP` | `/glsl-shaders` |
+| Wiring a TOP, CHOP, MAT, DAT, light, camera or instancing chain you have not built before (and `describe_op_type` for exact parameter names) | `/operator-gotchas` |
+| Declaring a build, fix or show done; any soak or performance test (`run_soak_test`) | `/testing` |
+| The user runs `/collab` | `collab` (thinking-partner posture; `/brief` returns to autonomous) |
+| The user runs `/brief <request>` | `brief` (compile the ask into a task brief, then execute from it) |

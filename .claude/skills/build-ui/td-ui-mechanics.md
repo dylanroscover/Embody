@@ -81,7 +81,7 @@ window is fine.**
 
 ## Handling clicks
 
-Use a **Panel Execute DAT** (class `panelexecuteDAT`): set its `panel` to the
+Use a **Panel Execute DAT** (class `panelexecuteDAT`): set its `panels` to the
 button COMP(s) to watch, enable the `Off to On` callback (`par.offtoon`), and
 implement `onOffToOn(panelValue)` -- `panelValue.owner` is the clicked COMP.
 

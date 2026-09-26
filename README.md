@@ -6,9 +6,9 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.64-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.65-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-68-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-70-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
@@ -39,7 +39,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 68 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 70 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDXN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdxn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDXN-strategy COMPs from `.tdxn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **160 test suites** (5,498 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **163 test suites** (5,542 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.65** — four new skills (`glsl-shaders`, `operator-gotchas`, `testing`, `/collab`) and skill reference files, with thanks to Derivative's TDMCPSkills; `describe_op_type` and `run_soak_test`; a user project's always-loaded guidance cut by 40%
 - **6.2.64** — Forget Offline Nodes clears rows fleet-wide, each by its owner; silent nodes retire after a week instead of a month; update jobs no longer report a false failure
 - **6.2.63** — the Windows supervisor stays armed after an install; node rows carry the TD build and the fleet update its runtime id; a live-but-silent node reads stalled; a mid-scan readout clears on reopen
 - **6.2.62** — a re-minted host's ghost record goes dormant on its peers instead of being dialed forever; the pin stays, contact wakes it, and Status names the ghost on both sides
@@ -252,7 +253,7 @@ one, it is credited here and in the code where it landed.
 
 - **[External Tox Saver](https://github.com/franklin113/External-Tox-Saver)** by [Tim Franklin](https://github.com/franklin113) -- Embody began in 2020 as a refactor of it.
 - **TDMCP** by [Derivative](https://derivative.ca) (their experimental MCP server, a private repository at the time of writing, used with permission) -- undoable MCP mutations (one undo step per batch), the `get_docs` design (version-exact offline help first, the wiki API second), sequence-block growth on parameter writes, the transport-security hardening prompt, and treating a code-review rule as a query. Landed from v6.0.87 (2026-07-04) on.
-- **TDMCPSkills** by [Derivative](https://derivative.ca) (private at the time of writing, used with permission) -- the `pop-networks` skill is adapted from `td-pop-family`.
+- **TDMCPSkills** by [Derivative](https://derivative.ca) (private at the time of writing, used with permission) -- the `pop-networks` skill is adapted from `td-pop-family`; `glsl-shaders` and `operator-gotchas` were written against their `td-glsl-shaders` and family skills as a topic checklist, with every claim re-verified live on TD 2025.33230 (2026-09-25).
 - **[touchdesigner-mcp](https://github.com/8beeeaaat/touchdesigner-mcp)** by [8beeeaaat](https://github.com/8beeeaaat) -- the first widely used TouchDesigner MCP server (2025). Envoy's earliest tool vocabulary (`get_td_classes`, `get_td_class_details`, `get_td_info`, `get_module_help`, `exec_node_method`, `execute_python`) follows the names that project established.
 - **[td-mcp-rs](https://github.com/Verbalize-public/td-mcp-rs)** by [asyade](https://github.com/asyade) -- a Rust-daemon take on the same problem (2026). Its OS-dialog dismissal, per-call instance addressing, stable error codes with fix hints, any-family capture through an OP Viewer TOP, shader lint on DAT writes, and offline installation into a project file are ideas Embody adopted and built (see the [roadmap](docs/roadmap.md)).
 

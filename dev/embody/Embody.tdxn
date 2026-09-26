@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
-build: 1233
-generator: Embody/6.2.64
+build: 1234
+generator: Embody/6.2.65
 td_build: 099.2025.33230
 network_path: /embody/Embody
 options:
@@ -857,7 +857,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.64
+    value: 6.2.65
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1372,6 +1372,17 @@ operators:
     syncfile: true
     language: python
   position: [-1300, 1300]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: envoy_soak
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_soak.py
+    syncfile: true
+    language: python
+  position: [-1000, 800]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:

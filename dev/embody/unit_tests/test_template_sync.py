@@ -52,7 +52,16 @@ class TestTemplateSync(EmbodyTestCase):
                 'templates/{}.md'.format(dat_name),
                 False,
             ))
+        for dat_name, (slug, relpath) in self._ref_map().items():
+            pairs.append((
+                'skills/{}/{}'.format(slug, relpath),
+                'templates/{}.md'.format(dat_name),
+                False,
+            ))
         return pairs
+
+    def _ref_map(self):
+        return getattr(self.embody_ext, '_TEMPLATE_MAP_SKILL_REFS', {})
 
     def _source_path(self, source_rel):
         return self._repo_root() / '.claude' / source_rel
@@ -248,9 +257,13 @@ class TestTemplateSync(EmbodyTestCase):
                 '{} missing generated marker near top'.format(template_rel),
             )
 
-        # Mapped skill sources carry the marker by convention; rule sources do not.
-        for dat_name, slug in self.embody_ext._TEMPLATE_MAP_SKILLS.items():
-            source_rel = 'skills/{}/SKILL.md'.format(slug)
+        # Mapped skill sources (and their reference files) carry the marker
+        # by convention; rule sources do not.
+        skill_sources = ['skills/{}/SKILL.md'.format(slug)
+                         for slug in self.embody_ext._TEMPLATE_MAP_SKILLS.values()]
+        skill_sources += ['skills/{}/{}'.format(slug, relpath)
+                          for slug, relpath in self._ref_map().values()]
+        for source_rel in skill_sources:
             source_path = self._source_path(source_rel)
             if not source_path.is_file():
                 continue
@@ -277,6 +290,7 @@ class TestTemplateSync(EmbodyTestCase):
         self.assertIsNotNone(templates_comp, 'templates COMP not found')
         maps = dict(self.embody_ext._TEMPLATE_MAP_RULES)
         maps.update(self.embody_ext._TEMPLATE_MAP_SKILLS)
+        maps.update(self._ref_map())
         for dat_name in maps:
             dat = templates_comp.op(dat_name)
             self.assertIsNotNone(

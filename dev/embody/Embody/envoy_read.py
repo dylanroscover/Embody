@@ -2387,3 +2387,106 @@ def get_logs(ext, level=None, count=50, since_id=None, source=None):
         'total_in_buffer': len(buffer),
         'latest_id': buffer[-1]['id'] if buffer else 0,
     }
+
+
+# --- operator type help --------------------------------------------------------
+
+_OP_SUFFIXES = ('TOP', 'CHOP', 'SOP', 'DAT', 'MAT', 'POP', 'COMP')
+
+
+def _describe_default(value):
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def describe_op_type(ext, op_type: str, pattern: Optional[str] = None,
+                     page: Optional[str] = None,
+                     include_menus: bool = True) -> dict:
+    """Parameter names, labels, styles, defaults and menu values for an
+    operator TYPE, read off a throwaway instance in /sys/quiet (cooking
+    disabled, outside the project) and cached per type for the session.
+    The look-before-you-guess read: a wrong name guess costs a set_parameter
+    round trip and an error; this costs one call and answers every name."""
+    import td
+    import difflib
+    import fnmatch
+    name = (op_type or '').strip()
+    cls = getattr(td, name, None) if name and name[:1].islower() else None
+    if cls is None:
+        types = [n for n in dir(td)
+                 if n[:1].islower() and n.endswith(_OP_SUFFIXES)]
+        return {'error': f'Unknown operator type {op_type!r}',
+                'error_code': 'envoy.describe.unknown_type',
+                'did_you_mean': difflib.get_close_matches(name, types, n=5,
+                                                          cutoff=0.6),
+                'hint': 'Type names are the TD Python class names: noiseTOP, '
+                        'lfoCHOP, baseCOMP, gridPOP, textDAT, pbrMAT.'}
+    cache = ext.__dict__.setdefault('_optype_cache', {})
+    cached = name in cache
+    if not cached:
+        quiet = op('/sys/quiet')
+        if quiet is None:
+            return {'error': '/sys/quiet is not available in this build; '
+                             'create the operator and read get_op instead.'}
+        probe = None
+        try:
+            probe = quiet.create(cls, 'envoy_describe_tmp')
+            rows = []
+            for p in probe.pars():
+                # the creation VALUE is the authoritative default: Par.default
+                # lies for some menus (textDAT language declares 'input' but a
+                # fresh DAT reads 'text'); the declared one rides along only
+                # when it differs
+                try:
+                    creation = p.eval()
+                except Exception:
+                    creation = p.default
+                row = {'name': p.name, 'label': p.label, 'style': p.style,
+                       'page': p.page.name if p.page else None,
+                       'default': _describe_default(creation)}
+                if creation != p.default:
+                    row['declared_default'] = _describe_default(p.default)
+                if p.isMenu:
+                    row['menu'] = list(p.menuNames or [])
+                    labels = list(p.menuLabels or [])
+                    if labels and labels != row['menu']:
+                        row['menu_labels'] = labels
+                if p.sequence is not None:
+                    row['sequence'] = p.sequence.name
+                if p.readOnly:
+                    row['read_only'] = True
+                rows.append(row)
+            cache[name] = {'family': probe.family,
+                           'pages': [pg.name for pg in probe.pages],
+                           'parameters': rows}
+        except Exception as e:
+            return {'error': f'Could not instantiate {name}: {e}'}
+        finally:
+            if probe is not None:
+                try:
+                    probe.destroy()
+                except Exception:
+                    pass
+    entry = cache[name]
+    rows = entry['parameters']
+    if page:
+        want = page.lower()
+        rows = [r for r in rows if (r['page'] or '').lower() == want]
+    if pattern:
+        pat = pattern.lower()
+        if not any(ch in pat for ch in '*?['):
+            pat = f'*{pat}*'
+        rows = [r for r in rows
+                if fnmatch.fnmatchcase(r['name'].lower(), pat)
+                or fnmatch.fnmatchcase((r['label'] or '').lower(), pat)]
+    if not include_menus:
+        rows = [{k: v for k, v in r.items() if k not in ('menu', 'menu_labels')}
+                for r in rows]
+    out = {'op_type': name, 'family': entry['family'], 'pages': entry['pages'],
+           'count': len(rows), 'total': len(entry['parameters']),
+           'parameters': rows, 'cached': cached}
+    if (pattern or page) and not rows:
+        out['hint'] = ('No parameter matched -- the name guess is wrong, not '
+                       'the operator. Re-run without filters and match by label.')
+    return out

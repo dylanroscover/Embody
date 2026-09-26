@@ -128,7 +128,7 @@ For `glslPOP`:
 - Create custom output attributes first with the `attr` sequence, for example `attr0name` and `attr0type`, or create them upstream with `attributePOP`.
 - With default `outputaccess=writeonly`, attributes listed in `outputattrs` that the shader does not write may be zeroed. Use `readwrite` when the shader must read output buffers, such as reading other points during a simulation.
 - Guard indexes: `if (idx >= uint(P.length())) return;`.
-- `TDPerlinNoise()` is not available in compute shaders. Use built-in `noisePOP`, a sampler input, or custom compute-safe noise.
+- `TDPerlinNoise()` and `TDSimplexNoise()` compile in glslPOP compute shaders on 2025.33230 (verified 2026-09-25; older guidance said they did not). Prefer `noisePOP` when a built-in does the job.
 - Uniforms are auto-declared by TD. Do not redeclare them in the shader; a redeclared uniform can produce a "Redeclaration" compile error.
 - Use `vec` uniform sequence entries for runtime values. `const` sequence entries recompile the shader when they change.
 
@@ -195,7 +195,7 @@ Verification is visual and structural:
 - `maxparticles < birthrate x life` culls particles.
 - Custom attributes must exist before GLSL writes them. Create them with the `attr` sequence (`attr0name`, `attr0type`) or upstream `attributePOP`.
 - `glslPOP` writes to the docked compute DAT. Do not redeclare auto uniforms. Use `vec` for runtime values and avoid `const` for values that should animate without recompiling.
-- `TDPerlinNoise()` is not available in POP compute shaders.
+- Under the default `outputaccess=writeonly` the shader cannot READ an output buffer: `P[idx] = P[idx] + ...` fails with "can't read from writeonly object". Read the input point with `TDIn_P()`, or set `outputaccess=readwrite` when you must read other points' output.
 - `normalPOP` needs tangents set to `alwayscompute` for PBR lighting.
 - pbrMAT reads vertex `Tex`, not point `Tex`; convert with `attributeconvertPOP`.
 - `mathmixPOP` and `mathcombinePOP` sequences start empty. Set `numBlocks` before setting `comb0oper`, `vec0*`, or similar sequence parameters.

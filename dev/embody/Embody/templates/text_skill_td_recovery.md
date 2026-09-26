@@ -59,7 +59,7 @@ The most frequent cause of connectivity issues is `.embody/envoy.json` having `a
 **Fix**:
 1. Delete the broken venv: `rm -rf <project_dir>/.venv`
 2. Envoy will recreate it on next startup. Tell the user to toggle Envoy off and on in TD, or restart TD.
-3. After recreation, reopen the Claude Code session so the bridge reconnects with the new venv Python.
+3. After recreation, reopen the AI client session so the bridge reconnects with the new venv Python.
 
 **Prevention**: Envoy validates the venv Python on startup and logs a warning if broken. Check TD textport for "failed to execute" warnings after TD upgrades.
 

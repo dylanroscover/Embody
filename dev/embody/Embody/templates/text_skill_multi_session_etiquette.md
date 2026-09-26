@@ -7,7 +7,7 @@ description: "MUST READ when a _peers advisory appears or multiple AI sessions a
 # Multi-Session Etiquette
 
 
-Multiple AI sessions (Claude Code windows, other MCP clients) often work on
+Multiple AI sessions (several client windows, different MCP clients) often work on
 the same TouchDesigner project at once -- same live network, same
 externalized files, same git tree. Envoy coordinates them; this rule is how
 you cooperate.

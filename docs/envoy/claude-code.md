@@ -70,8 +70,14 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 | `/multi-session-etiquette` | The moment a `_peers` advisory or a second AI session appears |
 | `/merge-divergent-tox` | When a merge or rebase conflicts on a `.tox`/`.toe`, or when comparing a component across branches, machines, or TD builds |
 | `/brief` | User-invoked: `/brief <request>` compiles a conversational ask into a task brief in `briefs/` (skills to load, anchors, success criteria, gates) that the work then executes from |
+| `/glsl-shaders` | Before writing GLSL or creating a `glslTOP`, `glslmultiTOP`, `glslMAT` or `glslPOP`: docked DATs, uniforms and the Colors page, TD's built-in functions, feedback and multi-pass, compile-error reading |
+| `/operator-gotchas` | Before wiring TOP, CHOP, MAT, DAT, light, camera or instancing operators you have not built before: abbreviated parameter names, defaults that silently misbehave, input-order rules, all verified live |
+| `/testing` | Before declaring a build, fix or show done, and before any soak or performance test: the verification ladder, `run_soak_test` and the observer-effect rules, iterate-by-capture, end-to-end rehearsal |
+| `/collab` | User-invoked: thinking-partner mode -- one small step at a time in the visible output, the next decision handed back; `/brief` returns to the autonomous default |
 
 Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.
+
+Five skills (`td-api-reference`, `parameter-design`, `mcp-tools-reference`, `visual-aesthetics`, `merge-divergent-tox`) keep their long tables in a `references/` folder beside `SKILL.md`, seven files in all, so the skill itself stays short and loads cheaply. Envoy writes the reference files with the skill, and `get_guidance` serves one as `<skill>/<file>` (for example `visual-aesthetics/look-recipes`).
 
 ## Task Briefs (`/brief`)
 
