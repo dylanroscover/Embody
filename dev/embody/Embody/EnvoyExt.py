@@ -780,8 +780,15 @@ def _job_public(job, now):
         out['age_s'] = round(now - float(job.get('started', now)), 1)
     except (TypeError, ValueError):
         out['age_s'] = None
-    if (out.get('status') == 'running' and out['age_s'] is not None
-            and out['age_s'] > _JOB_STALE_RUNNING_S):
+    # a heartbeating job (soak_test refreshes `updated` every few seconds) is
+    # stale when the heartbeat stops, not when it has merely run long; jobs
+    # without `updated` keep the started-based rule
+    try:
+        since = round(now - float(job.get('updated') or job.get('started', now)), 1)
+    except (TypeError, ValueError):
+        since = None
+    if (out.get('status') == 'running' and since is not None
+            and since > _JOB_STALE_RUNNING_S):
         out['stale'] = True
         out['hint'] = ('running far longer than expected -- the completion '
                        'poll may have died in an extension reinit; check '
@@ -2249,6 +2256,14 @@ class EnvoyMCPServer:
                 skill_file = os.path.join(skills_dir, slug, 'SKILL.md')
                 if os.path.isfile(skill_file):
                     register(slug, 'skill', skill_file)
+                    # a skill's long tail: references/*.md, served as
+                    # '<slug>/<file>' so skills-folder-less clients get it
+                    refs_dir = os.path.join(skills_dir, slug, 'references')
+                    if os.path.isdir(refs_dir):
+                        for ref in sorted(os.listdir(refs_dir)):
+                            if ref.lower().endswith('.md'):
+                                register('%s/%s' % (slug, os.path.splitext(ref)[0]),
+                                         'reference', os.path.join(refs_dir, ref))
         except Exception:
             pass
         return index
@@ -2873,6 +2888,42 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
+        def describe_op_type(op_type: str, pattern: str = None,
+                             page: str = None,
+                             include_menus: bool = True) -> dict:
+            """
+            Parameter names, labels, styles, defaults and menu values for an
+            operator TYPE -- before the operator exists.
+
+            The look-before-you-guess read: TD abbreviates parameter names
+            unpredictably (blurTOP blur amount is `size`, lagCHOP has `lag1`/
+            `lag2`, rectanglePOP sizes are `sizeu`/`sizev`), so call this once
+            per unfamiliar type instead of guessing into set_parameter. Read
+            off a throwaway instance in /sys/quiet (cooking disabled, outside
+            the project), then cached per type for the session.
+
+            Args:
+                op_type: TD class name of the type (noiseTOP, lfoCHOP, baseCOMP, gridPOP)
+                pattern: Glob or substring matched against parameter names AND
+                    labels, case-insensitive ("resol", "*color*", "Filter Size")
+                page: Only parameters on this page ("Noise", "Common")
+                include_menus: False drops menu value lists to save tokens
+
+            Returns:
+                Dict with op_type, family, pages, count, total, parameters
+                (name, label, style, page, default = the value a fresh
+                operator actually holds, plus declared_default when
+                Par.default disagrees; menu + menu_labels for menus;
+                sequence for sequence blocks; read_only), cached.
+                Unknown type -> error with did_you_mean. A filter matching
+                nothing -> hint: the name guess was wrong, not the operator.
+            """
+            return self._execute_in_td('describe_op_type', {
+                'op_type': op_type, 'pattern': pattern, 'page': page,
+                'include_menus': include_menus,
+            })
+
+        @self.mcp.tool()
         def get_module_help(module_name: str) -> dict:
             """
             Get Python help text for a TouchDesigner module or class.
@@ -2943,7 +2994,7 @@ class EnvoyMCPServer:
                     Omit to get the topic list.
 
             Returns:
-                Without topic: dict with topics (topic, kind 'rule'|'skill',
+                Without topic: dict with topics (topic, kind 'rule'|'skill'|'reference',
                 description), count, source, usage. With topic: dict with
                 topic, kind, description, path, content, and truncated/note
                 when the document exceeded the response cap. On a miss: the
@@ -3543,6 +3594,61 @@ class EnvoyMCPServer:
             """
             return self._execute_in_td('get_project_performance', {
                 'include_hotspots': include_hotspots
+            })
+
+        @self.mcp.tool()
+        def run_soak_test(duration_s: float = 600, interval_s: float = 1.0,
+                          fps_target: float = None, label: str = None,
+                          stop: bool = False,
+                          idempotency_key: str = None) -> dict:
+            """
+            Run a low-overhead performance soak as a background job.
+
+            Testing a show means watching it run for minutes to hours, not
+            reading one frame. This samples Envoy's Perform CHOP on the frame
+            hook -- three channel reads per frame (microseconds), memory and
+            op counts once per interval, nothing cooked, captured or created
+            -- so the instrument does not move the needle it reads. Returns a
+            job_id immediately; poll get_job_status(job_id): a running record
+            carries `progress` (elapsed_s, last_sample, summary_so_far,
+            verdict_so_far), the finished record a `result` with per-metric
+            first/last/min/max/mean/slope_per_min (fps, frame_ms, gpu_mb,
+            cpu_mb, active_ops), exact dropped-frame counts, the worst frame
+            time, GPU headroom, hotspots at start and end, up to 600
+            downsampled samples, and a PASS/WARN/FAIL verdict with reasons on
+            the performance rule's thresholds (fps under 90% of target, any
+            dropped frame, GPU headroom under 20%, memory climbing).
+
+            Observer effect: Envoy calls that cook, capture, write or execute
+            while a soak runs (capture_top, cook_op, execute_python,
+            save_project, create_op, ...) are logged as perturbations, and
+            samples within 2 s of one leave the `clean` statistics the verdict
+            uses -- a capture taken mid-soak never reads as a show defect.
+            Read-only counters (get_project_performance, get_job_status) are
+            free. One soak runs at a time per instance.
+
+            Args:
+                duration_s: How long to sample, 5 s to 12 h (default 600).
+                interval_s: Seconds between samples, 0.25 to 60 (default 1.0).
+                    Drops and frame-time extremes are exact regardless.
+                fps_target: Frame-rate target for the floor; default the
+                    project cook rate (root.time.rate).
+                label: Free text kept in the record (what was running).
+                stop: True ends the running soak now and returns its
+                    finished record.
+                idempotency_key: Stable key so a retried start reconciles to
+                    the soak it already began instead of erroring.
+
+            Returns:
+                {'job_id', 'status': 'running', duration_s, interval_s,
+                fps_target, hint}; with stop=True the finished job record;
+                {'job_id', 'status': 'running', elapsed_s, hint} when a soak
+                is already running.
+            """
+            return self._execute_in_td('run_soak_test', {
+                'duration_s': duration_s, 'interval_s': interval_s,
+                'fps_target': fps_target, 'label': label, 'stop': stop,
+                'idempotency_key': idempotency_key,
             })
 
         # === Embody Integration Tools ===
@@ -4251,7 +4357,7 @@ class EnvoyMCPServer:
         def get_job_status(job_id: str = None) -> dict:
             """
             Status of background jobs (run_tests background=True,
-            save_project).
+            save_project, run_soak_test).
 
             Jobs are disk-backed (.embody/jobs/), so they survive server
             restarts and extension reinits -- the failure mode that severs
@@ -4264,6 +4370,9 @@ class EnvoyMCPServer:
             oldest first, repeats collapsed, at most 8 plus a '(+N more)'
             entry), which the save's own extension reinit can keep out of
             _logs. INFO lines are not listed; read them with get_logs.
+            A run_soak_test job carries progress (elapsed_s, last_sample,
+            summary_so_far, verdict_so_far) while running and result
+            (summary, verdict, reasons, samples) when finished.
 
             Args:
                 job_id: The id the starting tool returned (job_...). Omit
@@ -7573,6 +7682,14 @@ class EnvoyExt:
 
             self._log(f'Processing: {operation}')
 
+            # a running soak (run_soak_test) logs every main-thread call that
+            # may have disturbed what it measures
+            if getattr(sys, '_envoy_soak', None) is not None:
+                try:
+                    mod.envoy_soak.note_operation(operation)
+                except Exception:
+                    pass
+
             result = self._execute_operation(operation, params)
 
             # The call destroyed the COMP hosting Envoy (issue #110): answer
@@ -7591,6 +7708,15 @@ class EnvoyExt:
                 continue
 
             self._finishOperation(request_id, sid, operation, params, result)
+
+        # Soak sampler: a few Perform CHOP channel reads per frame while a
+        # run_soak_test job is active; state lives on sys so a reinit does not
+        # stop it. Wrapped so it can never break the refresh loop.
+        if getattr(sys, '_envoy_soak', None) is not None:
+            try:
+                mod.envoy_soak.tick(self)
+            except Exception:
+                pass
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -7791,6 +7917,7 @@ class EnvoyExt:
             'find_children': self._find_children,
             'get_op_performance': self._get_op_performance,
             'get_project_performance': self._get_project_performance,
+            'run_soak_test': self._run_soak_test,
             # Introspection & diagnostics
             'get_td_info': self._get_td_info,
             'get_focus': self._get_focus,
@@ -7798,6 +7925,7 @@ class EnvoyExt:
             'exec_op_method': self._exec_op_method,
             'get_td_classes': self._get_td_classes,
             'get_td_class_details': self._get_td_class_details,
+            'describe_op_type': self._describe_op_type,
             'get_module_help': self._get_module_help,
             # Documentation root discovery for worker-side get_docs
             'get_docs_roots': self._get_docs_roots,
@@ -9660,6 +9788,13 @@ class EnvoyExt:
         """Get detailed info about a specific TD Python class -- see envoy_read."""
         return mod.envoy_read.get_td_class_details(self, class_name)
 
+    def _describe_op_type(self, op_type: str, pattern: Optional[str] = None,
+                          page: Optional[str] = None,
+                          include_menus: bool = True) -> dict:
+        """Parameter catalog for an operator TYPE -- see envoy_read."""
+        return mod.envoy_read.describe_op_type(self, op_type, pattern, page,
+                                               include_menus)
+
     def _get_module_help(self, module_name: str) -> dict:
         """Get Python help text for a TD module or class -- see envoy_read."""
         return mod.envoy_read.get_module_help(self, module_name)
@@ -9851,6 +9986,13 @@ class EnvoyExt:
         """Get project-level performance via Perform CHOP -- see envoy_read."""
         return mod.envoy_read.get_project_performance(self, include_hotspots)
 
+    def _run_soak_test(self, duration_s=600, interval_s=1.0, fps_target=None,
+                       label=None, stop=False, idempotency_key=None) -> dict:
+        """Start or stop the low-overhead performance soak job -- see envoy_soak."""
+        return mod.envoy_soak.run_soak_test(self, duration_s, interval_s,
+                                            fps_target, label, stop,
+                                            idempotency_key)
+
     # === Embody Integration ===
 
     def _externalize_op(self, op_path: str, tag_type: Optional[str] = None) -> dict:
@@ -9948,6 +10090,7 @@ class EnvoyExt:
         'query_network', 'find_children', 'get_enclosed_ops',
         'read_tdn', 'diff_tdn', 'read_tdxn', 'diff_tdxn',
         'capture_top', 'capture_op',
+        'describe_op_type', 'run_soak_test',
     ]
 
     def _toolPermissionsPosture(self):

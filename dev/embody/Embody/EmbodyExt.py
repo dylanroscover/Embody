@@ -76,7 +76,10 @@ class EmbodyExt:
         'text_rule_tdxn_economy':            'tdxn-economy',
     }
 
-    # Skill DAT name -> slug (Claude Code only)
+    # Skill DAT name -> slug. Ships as SKILL.md folders to .claude/skills
+    # (Claude Code, OpenCode) and .agents/skills (Codex, Cursor, Gemini,
+    # Antigravity); get_guidance serves the same text to clients with no
+    # skills folder. See ai_clients.CLIENTS['skills'].
     _TEMPLATE_MAP_SKILLS = {
         'text_skill_create_operator':     'create-operator',
         'text_skill_debug_operator':      'debug-operator',
@@ -93,6 +96,32 @@ class EmbodyExt:
         'text_skill_visual_aesthetics':   'visual-aesthetics',
         'text_skill_brief':               'brief',
         'text_skill_merge_divergent_tox': 'merge-divergent-tox',
+        'text_skill_glsl_shaders':        'glsl-shaders',
+        'text_skill_operator_gotchas':    'operator-gotchas',
+        'text_skill_testing':             'testing',
+        'text_skill_collab':              'collab',
+    }
+
+    # Reference DAT name -> (skill slug, path under the skill folder). A
+    # skill that outgrows ~150 lines keeps SKILL.md as the always-loaded
+    # core and ships its long tail as references/*.md, read on demand:
+    # Claude Code follows the path, other clients fetch the topic through
+    # get_guidance as '<slug>/<file>'.
+    _TEMPLATE_MAP_SKILL_REFS = {
+        'text_skill_td_api_reference__background_work':
+            ('td-api-reference', 'references/background-work.md'),
+        'text_skill_td_api_reference__heavy_build_safety':
+            ('td-api-reference', 'references/heavy-build-safety.md'),
+        'text_skill_parameter_design__state_lifetimes':
+            ('parameter-design', 'references/state-lifetimes.md'),
+        'text_skill_mcp_tools_reference__coordination':
+            ('mcp-tools-reference', 'references/coordination.md'),
+        'text_skill_visual_aesthetics__craft':
+            ('visual-aesthetics', 'references/craft.md'),
+        'text_skill_visual_aesthetics__look_recipes':
+            ('visual-aesthetics', 'references/look-recipes.md'),
+        'text_skill_merge_divergent_tox__procedure':
+            ('merge-divergent-tox', 'references/procedure.md'),
     }
 
     # Parameters persisted to .embody/config.json across upgrades.

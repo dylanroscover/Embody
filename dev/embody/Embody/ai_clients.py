@@ -66,6 +66,11 @@ VSCODE_LAUNCH = {
 # Row schema -- every key is optional except 'label':
 #
 #   label         Human name shown in the UI and logs.
+#   verified      What evidence backs this row and when -- a CLI/IDE
+#                 version and date it was probed against, or a string
+#                 starting 'unverified' / 'partly' naming what is only
+#                 documented. Clients drift; treat an unverified row as
+#                 a hypothesis and re-probe before trusting it.
 #   launch        Launch spec (above) or None for a client with no
 #                 launcher of its own (Copilot runs inside VS Code).
 #   launch_alias  Token whose launcher this client shares, for the UI to
@@ -101,6 +106,7 @@ VSCODE_LAUNCH = {
 CLIENTS = {
     'claudecode': {
         'label': 'Claude Code',
+        'verified': 'claude-code, in daily use 2026-09-25 -- MCP config, rules and skills discovery all exercised',
         'launch': {'kind': 'terminal', 'cli': 'claude', 'install': {
             'name': 'Claude Code',
             'mac': 'curl -fsSL https://claude.ai/install.sh | bash',
@@ -127,6 +133,7 @@ CLIENTS = {
 
     'opencode': {
         'label': 'OpenCode',
+        'verified': "unverified -- opencode.json shape and the .claude/ compat discovery follow OpenCode's docs; not probed against a live install",
         'launch': {'kind': 'terminal', 'cli': 'opencode', 'install': {
             'name': 'OpenCode',
             'mac': 'curl -fsSL https://opencode.ai/install | bash',
@@ -155,6 +162,7 @@ CLIENTS = {
 
     'codex': {
         'label': 'Codex',
+        'verified': 'partly -- the MCP path is exercised by test_agent_smoke_codex (agent tier, runs on request); .agents/skills discovery is per Codex docs, unprobed',
         'launch': {'kind': 'terminal', 'cli': 'codex', 'install': {
             'name': 'Codex CLI',
             'mac': 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
@@ -188,6 +196,7 @@ CLIENTS = {
 
     'gemini': {
         'label': 'Gemini',
+        'verified': 'unverified -- .gemini/settings.json and .agents/skills per Gemini CLI docs; GEMINI.md @import unprobed',
         'launch': {'kind': 'terminal', 'cli': 'gemini', 'install': {
             'name': 'Gemini CLI',
             'mac': 'npm install -g @google/gemini-cli',
@@ -214,6 +223,7 @@ CLIENTS = {
 
     'vscode': {
         'label': 'VS Code',
+        'verified': "unverified -- .vscode/mcp.json 'servers' shape per VS Code docs",
         'launch': VSCODE_LAUNCH,
         # VS Code is the one client whose root key is 'servers', not
         # 'mcpServers' -- configs are NOT interchangeable with Cursor's.
@@ -230,6 +240,7 @@ CLIENTS = {
 
     'copilot': {
         'label': 'GitHub Copilot',
+        'verified': 'unverified -- .github/instructions dialect per Copilot docs',
         # Copilot is an extension INSIDE VS Code, not an app: it has no
         # launcher of its own and shares .vscode/mcp.json for MCP.
         'launch': None,
@@ -249,6 +260,7 @@ CLIENTS = {
 
     'cursor': {
         'label': 'Cursor',
+        'verified': 'unverified -- .cursor/rules .mdc frontmatter and .agents/skills per Cursor docs',
         'launch': {
             'kind': 'editor', 'app': 'Cursor',
             'bundle': 'com.todesktop.230313mzl4w4u92',
@@ -273,6 +285,7 @@ CLIENTS = {
 
     'windsurf': {
         'label': 'Windsurf',
+        'verified': 'unverified -- global-only ~/.codeium mcp_config per Windsurf docs (deliberately never written)',
         'launch': {
             'kind': 'editor', 'app': 'Windsurf',
             'bundle': 'com.exafunction.windsurf',
@@ -302,6 +315,7 @@ CLIENTS = {
 
     'antigravity': {
         'label': 'Antigravity',
+        'verified': 'partly -- launch paths read off a real IDE 2.5.5 install (product.json) 2026-08-27; mcp_config.json keys from its schema; .agents/rules and skills discovery from binary strings + docs, unprobed',
         # A VS Code fork, so the Electron launch path and the
         # ELECTRON_RUN_AS_NODE strip apply unchanged. Every value below is
         # read off a real 2.5.5 install (winget Google.AntigravityIDE) and

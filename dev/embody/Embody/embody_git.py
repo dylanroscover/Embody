@@ -474,6 +474,17 @@ def write_client_files(ext, target_dir, section, block):
                                    block.get('style', 'strip'))
         if write_template(ext, target_dir, rel, content):
             written += 1
+    if is_skills:
+        # long-tail reference files ride inside the skill folder; the
+        # marker stays so the sweep and edit-detection treat them as ours
+        for dat_name, (slug, relpath) in getattr(
+                ext, '_TEMPLATE_MAP_SKILL_REFS', {}).items():
+            template_dat = templates_comp.op(dat_name)
+            if not template_dat or not template_dat.text:
+                continue
+            rel = f'{block["dir"]}/{slug}/{relpath}'
+            if write_template(ext, target_dir, rel, template_dat.text):
+                written += 1
     return written
 
 

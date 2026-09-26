@@ -1,12 +1,15 @@
 format: tdxn
 version: '2.1'
-build: 1269
-generator: Embody/6.2.64
+build: 1286
+generator: Embody/6.2.65
 td_build: 099.2025.33230
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
+type_defaults:
+  tableDAT:
+    size: [130, 90]
 type: containerCOMP
 parameters:
   w: 960
@@ -895,7 +898,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.64
+      value: 6.2.65
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -960,6 +963,18 @@ operators:
   tags:
   - tdxn
   tdn_ref: embody/Embody.tdxn
+- name: ndiout1
+  type: ndioutTOP
+  parameters:
+    fps: =me.time.rate
+    grouptable: ndiout1_grouptable
+  flags:
+  - viewer
+  position: [150, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - moviefilein1
 - name: unit_tests
   type: baseCOMP
   parameters:
@@ -978,6 +993,17 @@ operators:
   tags:
   - tdxn
   tdn_ref: embody/unit_tests.tdxn
+- name: moviefilein1
+  type: moviefileinTOP
+  parameters:
+    file: =app.samplesFolder+'/Map/Banana.tif'
+    index: =me.time.frame
+    timecodeop: =tdu.Timecode()
+  flags:
+  - viewer
+  position: [-50, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
 - name: execute_src_ctrl
   type: executeDAT
   parameters:
@@ -998,15 +1024,25 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 316
+    rows: 328
     cols: 11
   flags:
   - viewer
   position: [-200, 0]
-  size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
   - tsv
+- name: ndiout1_grouptable
+  type: tableDAT
+  flags:
+  - viewer
+  - -showDocked
+  position: [150, -320]
+  color: [0.67, 0.67, 0.67]
+  dock: ndiout1
+  dat_content:
+  - - groups
+  dat_content_format: table
 annotations:
 - name: annotation_execute_src_ctrl
   mode: annotate

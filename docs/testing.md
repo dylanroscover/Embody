@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **155 test suites** and **5,067 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **163 test suites** and **5,542 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -386,7 +386,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_catalog_default_patch` | 6 | CatalogManager cross-build default repair (`_patchComp`) for parameters whose default TD changed between builds |
 | `test_pyenv_context_live` | 9 | The live gating state machine around the TD pre-cook venv context (`_ensurePyEnvContext`) |
 
-### pytest-only suites (6 suites, 155 tests)
+### pytest-only suites (8 suites, 179 tests)
 
 Plain pytest functions, which the in-TD runner does not collect: these run only under pytest, locally and on the CI matrix.
 
@@ -398,6 +398,8 @@ Plain pytest functions, which the in-TD runner does not collect: these run only 
 | `test_release_preflight` | 18 | The `/release` GitHub preflight: open alerts, Dependabot PRs, red CI and unmerged hotfixes block a release |
 | `test_pytest_kill_fence` | 20 | The repo-root `conftest.py` fence: a run may terminate only processes it spawned, and gets its own temp dir |
 | `test_specimen_bindings` | 6 | Published Specimens carry no dev-only file bindings, so a pasted Specimen never writes into the user project |
+| `test_skill_surface` | 14 | The shipped guidance surface as files: skill frontmatter, every shipped skill routed in the prerequisites table, the CLAUDE.md and AGENTS.md templates and the docs, reference files mapped both ways, client-neutral wording, dev-only rules declared, release sync table in step with the maps |
+| `test_envoy_soak` | 10 | The `run_soak_test` verdict math: perturbation exclusion, dropped-frame ratio, fps floor share, memory slope, GPU headroom, downsampling, heartbeat-aware staleness (its in-TD lifecycle class runs only in TouchDesigner) |
 
 ## Execution Modes
 

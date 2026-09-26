@@ -41,6 +41,7 @@ EXPECTED_ENVOY_TOOLS = [
     'create_extension',
     'create_op',
     'delete_op',
+    'describe_op_type',
     'diff_tdn',
     'diff_tdxn',
     'disconnect_op',
@@ -85,6 +86,7 @@ EXPECTED_ENVOY_TOOLS = [
     'release_scope',
     'remove_externalization_tag',
     'rename_op',
+    'run_soak_test',
     'run_tests',
     'save_externalization',
     'save_project',
@@ -93,14 +95,17 @@ EXPECTED_ENVOY_TOOLS = [
     'set_op_flags',
     'set_op_position',
     'set_parameter',
+    'update_embody',
     'update_task',
 ]
 
 # Served bridge-side; present in tools/list even when TD is down.
 EXPECTED_BRIDGE_TOOLS = [
+    'convoy_ack_job',
     'convoy_batch',
     'convoy_call',
     'convoy_cancel_job',
+    'convoy_forget_node',
     'convoy_get_artifact',
     'convoy_get_job',
     'convoy_list_controllers',
@@ -111,9 +116,12 @@ EXPECTED_BRIDGE_TOOLS = [
     'convoy_save_artifact',
     'convoy_select_node',
     'convoy_start_node',
+    'convoy_update_embody',
+    'dismiss_dialog',
     'get_convoy_status',
     'get_td_status',
     'launch_td',
+    'list_dialogs',
     'restart_td',
     'switch_instance',
 ]

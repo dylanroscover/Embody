@@ -1,38 +1,17 @@
 # Parameter Rules
 
-## Custom Parameter Design
+## Designing custom parameters
 
-Creating or designing custom parameters -> MUST load /parameter-design FIRST.
+Creating or designing custom parameters: load `/parameter-design` FIRST. Code owns the schema, the user owns the value: every creation path is get-or-create, because extensions reinitialize on every source save and a blind `append*()` (its `replace=True` default) destroys a same-named par the user had set; never `Par.destroy()` on a style mismatch, it takes the value, expressions and exports with it. Route parameter callbacks through ONE dispatcher (`_on<Par>ValueChange(par, prev)` / `_on<Par>Pulse(par)` found by `getattr`), not one promoted method per parameter. A custom parameter is one of three state mechanisms, chosen by lifetime: it survives everything; `storage` survives an extension reinit but not a tox reload or TDXN rebuild; a `tdu.Dependency` on `self` dies with every reinit (`/parameter-design`, Parameter, Storage, or Dependency?).
 
-**Code owns the schema; the user owns the value.** Every parameter-creation path must be get-or-create -- extensions reinitialize on every source save, so a blind `append*()` either raises or (worse, since `replace=True` is the default) destroys a same-named par the user had set. Never `Par.destroy()` on a style mismatch: that takes the value, expressions and exports with it. Recipe in `/parameter-design` (Ownership and Lifecycle).
+## Reading and writing values
 
-**Route parameter callbacks through one dispatcher, not one promoted method per parameter.** An `elif par.name == ...` chain in a parexec DAT adds a public-tier method to the COMP for every branch. Name handlers `_on<Par>ValueChange(par, prev)` / `_on<Par>Pulse(par)` on the extension and `getattr` them from the DAT -- see `/parameter-design` (Parameter Callbacks) and the three tiers in `td-python.md`.
+- `.eval()` for the current runtime value; `.val` is the constant-mode value only.
+- Setting `.val` silently switches the mode to CONSTANT and destroys an active expression; assign (`par.tx = 5`) only when you mean constant mode.
+- Toggles take `0`/`1`, not `"True"`/`"False"` (`set_parameter` with `value="1"`).
+- TD parameters stay TD objects: convert with `int()`, `float()`, `str()` before handing them to standard Python.
+- Menu values are the lowercase token (`ortho`, `deg`, `aa8`); `set_parameter` rejects a wrong one and names the valid ones, and `describe_op_type` lists them before you guess.
 
-**A custom parameter is one of three state mechanisms.** It survives an extension reinit -- but so does `storage`, which lives on the COMP and not on the extension instance (probed 2026-08-29, and TD's own docs say stored items "retain their values when your extension is reinitialized"). What loses storage is the COMP's contents being *replaced*: a tox reload, a TDXN reconstruction. A `tdu.Dependency` held on `self` dies with the instance on every source save. Picking between them: `/parameter-design` (Parameter, Storage, or Dependency?).
+## OP-reference values
 
-## Reading and Writing Values
-
-- **Always use `.eval()`** to get a parameter's current runtime value. `.val` only returns the constant-mode value.
-- **Setting `.val` silently switches mode to CONSTANT** -- destroys any active expression. Use assignment (`par.tx = 5`) only when you intend constant mode.
-- **Toggle parameters** use `0`/`1` (not `"True"`/`"False"`). With `set_parameter`, pass `value="0"` or `value="1"`.
-- **Explicit type conversion**: TD parameters remain TD objects internally. Convert with `int()`, `float()`, `str()` before passing to standard Python functions.
-
-## OP-Reference Parameter Values
-
-Parameters that reference operators (Camera, Geometry, Lights, TOP, CHOP, SOP, DAT, MAT) follow the same rules as code -- **never use absolute paths**. Use the shortest relative reference that resolves from the parameter's owner:
-
-| Target location | Value format | Example |
-|---|---|---|
-| Sibling (same network) | Name only | `cam` |
-| Child of self | `./child` | `./render1` |
-| Up one level | `../name` | `../shared/lut` |
-
-For references needing shortcuts or complex resolution, use expression mode instead of constant mode:
-
-| Need | Expression |
-|---|---|
-| Parent shortcut | `parent.Scene.op('cam')` |
-| Global shortcut | `op.Assets.op('texture1')` |
-
-With `set_parameter`: use `value="cam"` for siblings, or `expr="parent.Scene.op('cam')"` for shortcut-based references.
-
+Parameters that reference operators (Camera, Geometry, Lights, TOP, CHOP, SOP, DAT, MAT) follow the same rule as code: never an absolute path. A sibling is its name (`cam`), a child is `./render1`, one level up is `../shared/lut`. Anything that needs a shortcut goes in expression mode: `parent.Scene.op('cam')`, `op.Assets.op('texture1')` (with `set_parameter`, pass `expr=`). An OP-reference value is a path string and does not follow a rename of its target; sweep them after renames (`td-python.md`).

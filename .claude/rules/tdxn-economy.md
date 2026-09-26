@@ -1,69 +1,24 @@
 # TDXN Economy: fewer operators, fewer parameters, fewer lines
 
-Applies to every network that ends up in a `.tdxn`: specimens, reusable COMPs,
-project work. The file is the product as much as the render: people read it,
-diff it in git, and paste it into other projects. **If there is a way to do it
-with fewer parameters or lines, take that way** unless it costs visuals,
-performance or clarity. Readability is the goal, not bloat.
+Applies to every network that ends up in a `.tdxn` (specimens, reusable COMPs, project work). The file is the product as much as the render: people read it, diff it in git and paste it into other projects. If there is a way to do it with fewer parameters or lines, take it, unless it costs visuals, performance or clarity.
 
 ## Measure first
 
-`wc -l` the exported file, then bucket it (a 30-line script: `sequences`,
-`custom_pars`, `dat_content`, operator entries) before optimizing. A 9,599-line
-specimen (2026-09-16) was 50% Constant CHOP channel blocks, 33% operator entries
-and shader text, 13% custom-par definitions. Cut the biggest bucket first.
+`wc -l` the exported file and bucket it (`sequences`, `custom_pars`, `dat_content`, operator entries) before optimizing; cut the biggest bucket first. A 9,599-line specimen was half Constant CHOP channel blocks.
 
 ## The tactics, biggest win first
 
-1. **Same internals in several COMPs means a clone setup, always.** One master COMP holds the
-   network; every sibling that shares those internals sets `clone` to the master and turns
-   Enable Cloning on; custom parameters on each clone carry what differs. TouchDesigner keeps
-   the copies in sync (edit the master once), and TDXN writes an enabled clone whose master is
-   in the same file as its parameter values only, with no children. Thirty-two hand-copied
-   layer COMPs were 12 children each in the file; as clones they are their values.
-2. **Read parameters with a Parameter CHOP, never a Constant CHOP full of
-   expressions.** One `parameterCHOP` (`ops='..'`, custom on, builtin off) emits
-   every custom par of a COMP in page order, menus as indices, RGB as three
-   channels -- 3 lines of TDXN. The same 53 channels as a Constant CHOP with 53
-   `value: =parent.X.par.Y` blocks cost ~150 lines per COMP; 32 COMPs cost 4,750.
-   It also cooks only when a par changes, so the per-frame cost is zero either
-   way. Anything the Constant CHOP *computed* (a palette lookup, a flag, a seed)
-   moves into the consumer shader or a second small CHOP.
-3. **One DAT for identical GLSL.** Several GLSL POPs/TOPs/MATs that run the same
-   code point their `computedat` / `pixeldat` at ONE DAT and differ by uniforms
-   (`uIsFill 0/1/2`). Delete the unused docked default DATs. Three copies of a
-   330-line shader are 660 wasted lines and a guaranteed drift bug.
-4. **Let defaults carry the common case.** TDXN writes only non-default values.
-   When 30 copies of a COMP share a value, make it the custom par's `default`
-   (and, for a template layer, the value the copies inherit) so it is written once
-   in `par_templates`, not 30 times. Keep `help` text: it is the one place a line
-   buys readability.
-5. **Fewer operators per copy.** A duplicated sub-network pays for every child in
-   every copy. Before duplicating, ask whether one chain plus an attribute
-   (`IsFill`, `LayerId`) and a downstream split (Delete/Select POP) does the same
-   work, and whether the copies could be instances or a Copy driven by a table.
-   Prefer a shader deforming one static primitive over N primitives.
-6. **Static geometry, parameters in a buffer.** Per-element parameters belong in a
-   CHOP -> texture buffer read by ONE shader (`texelFetch(uP, layer*STRIDE + j)`),
-   not in N per-element expression uniforms: cheaper per frame AND fewer lines.
-7. **No padding, no dead channels, no probe leftovers.** `pad60..63` channels,
-   `_probe` storage, test ops and unused custom pars all export. Sweep before
-   `save_externalization` (`comp.storage`, `findChildren` for `*_test*`).
-8. **Prefer a menu or a slot number over a colour triplet** where a palette
-   exists: one int instead of three floats per element, and recolouring is global.
+1. **Same internals in several COMPs is a clone setup, always.** One master holds the network; every sibling sets `clone` to it with Enable Cloning on and carries only its custom-parameter values; TDXN then writes a clone as its values, no children.
+2. **Read parameters with a Parameter CHOP, never a Constant CHOP full of expressions.** One `parameterCHOP` (`ops='..'`, custom on, builtin off) emits every custom par in page order as 3 lines of TDXN, cooking only when a par changes; 53 `value: =parent.X.par.Y` blocks cost ~150 lines per COMP.
+3. **One DAT for identical GLSL.** Several GLSL ops running the same code point at ONE DAT and differ by uniforms; delete the unused docked defaults. Copies drift.
+4. **Let defaults carry the common case.** TDXN writes only non-default values, so a value shared by 30 copies becomes the custom par's `default`, written once in `par_templates`. Keep `help` text.
+5. **Fewer operators per copy.** Before duplicating a sub-network, ask whether one chain plus an attribute (`IsFill`, `LayerId`) and a downstream split does the same work, or whether the copies could be instances.
+6. **Static geometry, parameters in a buffer.** Per-element parameters belong in a CHOP-to-texture buffer read by ONE shader (`texelFetch`), not in N per-element uniforms.
+7. **No padding, no dead channels, no probe leftovers.** `pad*` channels, `_probe` storage, test ops and unused custom pars all export; sweep `comp.storage` and `findChildren` for `*_test*` before `save_externalization`.
+8. **A menu or slot number over a colour triplet** where a palette exists: one int instead of three floats, and recolouring is global.
 
-## What NOT to cut
-
-- `help` text on custom parameters and annotations -- readability lines.
-- Non-default values that ARE the design (a layer's Radius, Count, Order).
-- Shader comments that state an invariant or a cited field incident.
+Do NOT cut: `help` text on custom parameters and annotations, non-default values that ARE the design, shader comments that state an invariant or cite a field incident.
 
 ## Verify the cut changed nothing
 
-Render one frame at a fixed `Manualtime` before and after, `save()` both PNGs,
-and compare out of process (PIL `ImageChops.difference`, or ffmpeg `psnr`).
-First render the UNCHANGED network twice and diff those: that is the render's
-own jitter (anti-aliased line edges; ~0.05% of pixels on the mandala). A cut is
-accepted when its diff sits inside that baseline; anything beyond it must be
-explained (which layer, why). Then confirm idle cooks stayed at zero
-(`totalCooks` over 30 frames on the CHOP chain) and re-export.
+Render one frame at a fixed `Manualtime` before and after, save both PNGs, and compare out of process (PIL `ImageChops.difference`, or ffmpeg `psnr`). First diff two renders of the UNCHANGED network to learn the render's own jitter; a cut is accepted when its diff sits inside that baseline, and anything beyond it must be explained. Then confirm idle cooks stayed at zero (`totalCooks` over 30 frames on the CHOP chain) and re-export.

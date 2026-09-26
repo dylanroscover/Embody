@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 68 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 70 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **68 MCP tools** across 17 categories, plus 23 bridge meta-tools that run on the local STDIO bridge -- 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
+Envoy exposes **70 MCP tools** across 17 categories, plus 23 bridge meta-tools that run on the local STDIO bridge -- 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
 
 ### Operator Management
 
@@ -155,7 +155,7 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | `get_docs` | Look up official TouchDesigner docs from the offline help mirror or docs.derivative.ca |
 
 | `get_focus` | What the user is looking at: current network, selection, current op — resolves "this operator" without guessing |
-| `get_guidance` | The project's own rules and workflow skills served over MCP — how clients with no skills folder (VS Code, Copilot, Windsurf) see them |
+| `get_guidance` | The project's own rules, workflow skills and their reference files served over MCP — how clients with no skills folder (VS Code, Copilot, Windsurf) see them |
 
 ### Background Jobs
 

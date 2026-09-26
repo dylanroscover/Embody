@@ -179,6 +179,17 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `skills/visual-aesthetics/SKILL.md` | `templates/text_skill_visual_aesthetics.md` |
 | `skills/brief/SKILL.md` | `templates/text_skill_brief.md` |
 | `skills/merge-divergent-tox/SKILL.md` | `templates/text_skill_merge_divergent_tox.md` |
+| `skills/glsl-shaders/SKILL.md` | `templates/text_skill_glsl_shaders.md` |
+| `skills/operator-gotchas/SKILL.md` | `templates/text_skill_operator_gotchas.md` |
+| `skills/testing/SKILL.md` | `templates/text_skill_testing.md` |
+| `skills/collab/SKILL.md` | `templates/text_skill_collab.md` |
+| `skills/td-api-reference/references/background-work.md` | `templates/text_skill_td_api_reference__background_work.md` |
+| `skills/td-api-reference/references/heavy-build-safety.md` | `templates/text_skill_td_api_reference__heavy_build_safety.md` |
+| `skills/parameter-design/references/state-lifetimes.md` | `templates/text_skill_parameter_design__state_lifetimes.md` |
+| `skills/mcp-tools-reference/references/coordination.md` | `templates/text_skill_mcp_tools_reference__coordination.md` |
+| `skills/visual-aesthetics/references/craft.md` | `templates/text_skill_visual_aesthetics__craft.md` |
+| `skills/visual-aesthetics/references/look-recipes.md` | `templates/text_skill_visual_aesthetics__look_recipes.md` |
+| `skills/merge-divergent-tox/references/procedure.md` | `templates/text_skill_merge_divergent_tox__procedure.md` |
 
 This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.py`) are orphans -- do not add them here.
 

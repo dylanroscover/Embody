@@ -413,6 +413,12 @@ PHASE1_OPERATIONS = {
         {"class_name": "string"}, mutating=False,
         executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
+    "describe_op_type": _operation(
+        {"op_type": "string", "pattern": "string?", "page": "string?",
+         "include_menus": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"probe_operator": "created and destroyed in /sys/quiet"}),
     "get_module_help": _operation(
         {"module_name": "string"}, mutating=False,
         executes_arbitrary_code=False, remote_exposed=True,
@@ -527,6 +533,16 @@ PHASE1_OPERATIONS = {
         {"include_hotspots": "int?"}, mutating=False,
         executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
+    # A soak on the machine that will run the show is the point of the
+    # tool; it samples counters only and files a job record.
+    "run_soak_test": _operation(
+        {"duration_s": "number?", "interval_s": "number?",
+         "fps_target": "number?", "label": "string?", "stop": "bool?",
+         "idempotency_key": "string?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=False,
+        side_effects={"starts_background_job": True,
+                      "writes_project_files": ".embody/jobs"}),
 
     # Embody externalization and TDXN network operations.
     "externalize_op": _operation(

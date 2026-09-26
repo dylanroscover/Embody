@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.2.65
+
+Four new skills, two new tools and a leaner always-loaded context, after an audit against Derivative's TDMCPSkills.
+
+- **Four new skills, with thanks to Derivative.** `glsl-shaders` and `operator-gotchas` carry per-operator knowledge after Derivative's TDMCPSkills (used with permission), every claim re-verified live; `testing` covers soak, end-to-end and capture-based verification; `/collab` is an opt-in thinking-partner mode. Skills now ship `references/` files, which `get_guidance` serves as `<skill>/<file>`.
+- **`describe_op_type`** reports an operator type's parameters, creation defaults and menus from a live probe, with did-you-mean on a typo.
+- **`run_soak_test`** samples fps, frame time, dropped frames and memory as a background job, ignores the seconds around each MCP mutation, and returns a verdict against the performance thresholds without slowing TouchDesigner.
+- **A user project's always-loaded guidance drops from about 9,300 to 5,600 words.** Six stale facts in the skills fixed.
+- **Fixes.** Every AI-client row says how it was verified; a running job's heartbeat keeps it from reading stale. +44 tests.
+
 ## v6.2.64
 
 Offline node rows are cleared from wherever you stand, and stop lingering for a month.

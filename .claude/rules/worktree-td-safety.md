@@ -1,100 +1,26 @@
 # Worktrees and a Running TouchDesigner
 
-Embody externalizes operators to files in this repo, and TouchDesigner
-hot-syncs them: source DATs (`.py` and other text files) have
-`syncfile=True`, so TD reloads a DAT -- and reinits any extension it backs --
-the moment its file changes on disk. That makes multi-step editing in the
-live tree dangerous: one mid-edit broken state hot-reloads straight into the
-running session.
+Embody externalizes operators to files and TD hot-syncs them: a source DAT (`.py` and other text) has `syncfile=True`, so TD reloads it, and reinitializes any extension it backs, the moment the file changes on disk. A half-applied multi-file edit therefore hot-reloads straight into the live session.
 
 ## The rule
 
-Match the isolation to the risk, and check for other writers first -- do not
-overweight this into a blanket "always worktree". The real hazard is two
-concurrent writers on the same checkout, or a broken intermediate state
-hot-reloading into a live session -- not live editing itself.
+Match the isolation to the risk, and check for other writers first.
 
-- **Default (you are the sole writer, small-to-moderate change): edit the
-  live tree directly.** TD's hot-sync is built for this -- it is the normal
-  Embody dev workflow. First confirm you are the only writer (`get_sessions`
-  shows no other active, non-stale session touching the same files, and the
-  user is not mid-save). Then land each file and verify (`get_op_errors`,
-  exercise the change) before the next.
-- **Use an isolated git worktree** (`git worktree add ../<repo>-wt-<task>
-  HEAD`) when landing live is genuinely risky: another writer is active on the
-  same checkout, the change spans many extensions at once (a half-applied
-  multi-extension state would hot-reload into the session), or you must pass
-  through known-broken intermediate states while iterating. Build and iterate
-  there, then land the finished diff into the main tree (see below).
+- **Default: edit the live tree directly** when you are the sole writer (`get_sessions` shows no other active, non-stale session on the same files, and the user is not mid-save) and the change is small to moderate. Land each file, then verify (`get_op_errors`, exercise the change) before the next. This is the normal Embody workflow; one reload self-heals.
+- **Use an isolated git worktree** (`git worktree add ../<repo>-wt-<task> HEAD`) when landing live is genuinely risky: another writer is active on the checkout, the change spans several extensions at once (a half-applied state would hot-reload), or you must pass through known-broken intermediate states. Build there, then land the finished diff.
+- Keep the `<repo>-wt-<task>` name beside the repo: Envoy's generated settings pre-authorize Read/Edit in that sibling pattern, so the AI client never prompts per file, and Envoy mirrors the gitignored AI config (`.mcp.json`, `.claude/settings.local.json`) into every sibling `-wt-` worktree when it deploys config. A worktree created while Envoy was already running misses that sweep: copy those two files from the repo root, or restart Envoy, before launching a session inside it.
+- Two writers never share one checkout: two agents, or an agent plus a human saving from TD. If other AI sessions are active, coordinate worktree tasks through claims (`/multi-session-etiquette`, Worktrees).
 
-## Access is pre-authorized -- keep the naming convention
+## The windows
 
-Envoy's generated `.claude/settings.local.json` contains Read/Edit rules
-for the sibling `<repo>-wt-*` pattern, so Claude Code never prompts for
-file access inside a worktree created with the recipe above. This only
-covers worktrees named `<repo>-wt-<task>` directly beside the repo -- a
-different name or location falls outside the pre-authorized pattern and
-prompts on every file. (Older generated settings gain the rules
-automatically the next time Envoy starts.)
+1. Editing in a worktree: TD may run freely. TD reads externalized files from the main tree only and cannot see the worktree.
+2. Landing in the live main tree: safe when you are the sole writer and verify file by file; close TD for the port only when a broken intermediate would matter or a second writer cannot be excluded.
+3. After landing: let Embody's startup restores finish, then verify for real (`get_op_errors` with `recurse=true` on the affected COMPs, exercise the behavior, run the project's tests). Worktree verification is static only; nothing is truly tested until it lands, because TD always loads the main tree.
 
-Sessions rooted IN a worktree are covered too: Envoy mirrors the
-gitignored AI config (`.mcp.json` + `.claude/settings.local.json`) into
-every sibling `<repo>-wt-*` worktree when it deploys config, so a session
-launched inside a worktree has the same MCP server and tool permissions
-as the main repo. A worktree created while Envoy was already running
-misses that sweep -- copy those two files from the repo root (or restart
-Envoy) before launching a session inside it.
+## Drift check before landing
 
-If other AI sessions are active, worktree tasks are also coordinated
-through claims -- see the Worktrees section of /multi-session-etiquette.
+A running TD WRITES to the main tree on every save. Run `preflight_landing(worktree_path)` before porting any diff: it intersects the landing's files with main-tree dirt, peer `file:` claims and unsaved live TDXN state in one call; a `conflicts` verdict means reconcile first (rebase the worktree changes, or save and commit in TD), never overwrite main-tree edits blindly. Move the diff with `git cherry-pick -n <commit>`, or stage everything in the worktree and pipe `git diff --cached --binary` into `git apply` (`--binary` carries `.tox` changes, staging carries new files).
 
-## The safe/unsafe windows
+## Cleanup
 
-1. **Editing in a worktree: TD may run freely.** A worktree is a separate
-   directory; TD reads its externalized files from the main tree only and
-   cannot see worktree files. Implementation and iteration there never
-   touch the live session.
-
-2. **Landing / editing in the live main tree: safe when you are the sole
-   writer and verify as you go.** Each file save hot-reloads that DAT and can
-   reinit its extension -- fine on its own (one reload, self-heals). The
-   hazards are (a) another writer active on the same checkout, or (b) a large
-   multi-file port whose intermediate state is broken (one extension
-   reloaded, its peers not yet) reloading mid-port and possibly killing the
-   Envoy server. So the normal path is: confirm you are the sole writer
-   (`get_sessions`), land file-by-file, and check `get_op_errors` after each
-   reinit. Close TD for the port ONLY when the change is large/risky enough
-   that a broken intermediate would matter, or a second writer cannot be
-   excluded. Never land into a checkout another writer is touching, and be
-   cautious while the user has unsaved work.
-
-3. **After landing: start TD and verify.** Launch TD, let Embody's startup
-   restore phases complete, then verify for real: `get_op_errors` with
-   `recurse=true` on affected COMPs, exercise the changed behavior, and run
-   the project's tests if it has them. Worktree verification is
-   static-only -- TD always loads the main tree, so nothing is truly
-   tested until after the landing.
-
-## Drift check before landing (both directions)
-
-A running TD WRITES to the main tree: every save re-exports externalized
-files. Before porting a worktree diff, run `git status` / `git diff` in the
-MAIN tree. If the main tree has uncommitted changes to files the diff also
-touches, STOP and reconcile (rebase the worktree changes on top, or save +
-commit in TD first) -- never overwrite main-tree edits blindly. The `preflight_landing` MCP
-tool automates this check -- landing-vs-main-dirty, peer-territory, and
-unsaved-live-TDXN collisions in one call; run it before every landing.
-
-Move the diff with `git cherry-pick -n <worktree-commit>`, or stage
-everything in the worktree and pipe `git diff --cached --binary` into
-`git apply` -- `--binary` carries `.tox` changes, staging carries new files.
-
-## Exceptions and cleanup
-
-- **Single-shot small fixes** (one save = one reload) may edit the live
-  tree directly -- announced first if the user is actively working in TD.
-- **Never let two writers** (two agents, or an agent + a human saving from
-  TD) edit the same checkout concurrently.
-- `git worktree remove <path>` once the diff has landed and been verified.
-  Stale worktrees accumulate silently; remove them as part of finishing
-  the task, not "later".
+`git worktree remove <path>` once the diff has landed and been verified, as part of finishing the task; stale worktrees accumulate silently.

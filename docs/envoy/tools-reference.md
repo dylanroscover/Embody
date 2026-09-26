@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 68 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 70 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
@@ -102,6 +102,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times (milliseconds), memory usage (bytes), cook counts |
 | `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
+| `run_soak_test` | `duration_s?`, `interval_s?`, `fps_target?`, `label?`, `stop?`, `idempotency_key?` | Low-overhead performance soak as a background job. Samples Envoy's Perform CHOP on the frame hook -- three channel reads per frame, memory and op counts once per interval, nothing cooked, captured or created -- so the instrument does not move the needle it reads. Envoy calls that cook, capture, write or execute during the run are logged as perturbations and their 2 s neighborhood is excluded from the clean statistics. Finishes with per-metric first/last/min/max/mean/slope, exact dropped-frame counts, worst frame time, GPU headroom, hotspots at start and end, up to 600 samples, and a PASS/WARN/FAIL verdict on the performance rule's thresholds. Poll `get_job_status`; `stop=True` ends it early |
 
 ## Code Execution
 
@@ -118,9 +119,10 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 | `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`). `destroy`, `reload`, `changeType` and `progressiveUnload` on the Embody COMP, an ancestor, `/` or Envoy's extension DAT are refused (`envoy.embody.host_destroy_refused`) |
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
+| `describe_op_type` | `op_type`, `pattern?`, `page?`, `include_menus?` | Parameter names, labels, styles, creation defaults and menu values for an operator TYPE before it exists -- the look-before-you-guess read. Probes a throwaway instance in `/sys/quiet` (cooking disabled, outside the project) and caches per type for the session. `pattern` is a glob or substring over names AND labels, `page` narrows to one page. An unknown type returns `did_you_mean`; a filter that matches nothing returns a `hint` (the name guess was wrong, not the operator) |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
 | `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TouchDesigner docs. `source` is `auto` (offline then web), `offline`, or `web`; normal responses carry `title`, `source`, `sections_available`, `content`, and optional `url`/`truncated`; ambiguous offline lookups return `source` + `matches` only |
-| `get_guidance` | `topic?` | Serve this project's checked-in TouchDesigner doctrine (`.claude/rules/*.md` and `.claude/skills/*/SKILL.md`) over MCP, so agents on a client with no skills folder (VS Code, Copilot, Windsurf) get the same rules Claude Code loads; Codex, Cursor, Gemini and Antigravity read `.agents/skills/`, OpenCode reads `.claude/skills/`. Bare call lists topics; `topic` returns that document. Answered worker-side (no TD round-trip) |
+| `get_guidance` | `topic?` | Serve this project's checked-in TouchDesigner doctrine (`.claude/rules/*.md`, `.claude/skills/*/SKILL.md` and each skill's `references/*.md`) over MCP, so agents on a client with no skills folder (VS Code, Copilot, Windsurf) get the same rules Claude Code loads; Codex, Cursor, Gemini and Antigravity read `.agents/skills/`, OpenCode reads `.claude/skills/`. Bare call lists topics; `topic` returns that document, and `<skill>/<file>` a skill's reference file. Answered worker-side (no TD round-trip) |
 | `get_focus` | _(none)_ | What the user is looking at: current pane network, selected operator(s), current op, and rollover. When the user says "this operator" they mean the SELECTED/current op -- rollover is incidental mouse position and must not be acted on |
 
 ## Embody Integration
@@ -196,7 +198,7 @@ Long operations that outlive the 30-second operation timeout run as disk-backed 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` and `warnings` (the WARNING/ERROR lines logged during the save: errors first, then oldest first, repeats collapsed, at most 8 plus a `(+N more)` entry; INFO lines stay in `get_logs`) |
+| `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped heartbeating), or the 16 newest records without `job_id`. A `run_soak_test` job carries `progress` (elapsed, last sample, summary and verdict so far) while running and `result` (summary, verdict, reasons, samples) when done. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` and `warnings` (the WARNING/ERROR lines logged during the save: errors first, then oldest first, repeats collapsed, at most 8 plus a `(+N more)` entry; INFO lines stay in `get_logs`) |
 | `save_project` | `idempotency_key?` | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle, and the same `idempotency_key` extends that dedupe to a retry of any age, reconciling it to the original save instead of queuing a second one. The next call after a save may fail once while the bridge reconnects. The finished record lists the save's warnings (`warnings`) |
 | `update_embody` | `idempotency_key?` | Self-update Embody to the latest GitHub release as a tracked job -- bounded and non-interactive (sha256-pinned manifest, downgrade-refusing, TD-build-floor-gated), so it never needs the TD Python grant. Refused in Perform Mode and while a test run is active. A finished record carries `version_before`/`version_after`; an up-to-date node finishes `done` with them equal. The install restarts the MCP server -- expect one reconnect blip |
 
