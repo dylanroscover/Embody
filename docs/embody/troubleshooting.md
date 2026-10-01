@@ -50,6 +50,15 @@ A save never shows a dialog: TouchDesigner has the `.toe` open for writing, and 
 - **"Tdxndatsafety = 'externalize': dialogs stayed suppressed"**: the deferred filing of unexternalized DATs gave up because a save or test run kept dialogs suppressed. Nothing is lost -- the content stays in the `.tdxn` -- and the next save retries.
 - **"TDXN content check failed (export continues)"** (an **ERROR**): the save-time content report hit an internal error. The export and strip still ran; please report the log line.
 
+### A COMP Was "Left Alone" or a Save Was "REFUSED"
+
+Both mean a TOX-tracked COMP's **External .tox** now points at a different file than the one Embody tracks for it -- usually because your own project code switched it (for example, loading a per-machine variant on startup). Embody treats that as your choice:
+
+- **"Left '...' alone: its externaltox '...' differs from the table's '...'"** (a **WARNING** on project open): Embody did not reload the tracked `.tox` over the one you loaded.
+- **"REFUSED save of '...': its externaltox '...' differs from the table's '...'"** (a **WARNING** on save): Embody did not write the COMP into a file it does not track.
+
+If the COMP was never meant to be tracked (a `tox` tag that predates Embody), remove its tracking in the manager and keep the file. If the new file is the one to track, remove the tracking and externalize the COMP again.
+
 ### Cross-Platform Issues
 
 Embody normalizes all paths to forward slashes (`/`). If you're collaborating across Windows and macOS and encountering path issues, ensure you're using a recent version of Embody with cross-platform path handling.

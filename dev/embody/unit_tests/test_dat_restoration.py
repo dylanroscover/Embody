@@ -462,3 +462,66 @@ class TestTOXRestoration(EmbodyTestCase):
         self.assertIn(tox_tag, good.tags,
                       'row after a broken row was not reconciled -- the '
                       'per-row guard in ReconcileMetadata is missing')
+
+    def test_reconcile_refetches_comp_replaced_by_reload(self):
+        """A reload that changes the COMP type must not fail the row (issue #138)."""
+        rel = 'embody/unit_tests/_test_temp/tox_restore_retype.tox'
+        self._export_donor_tox('tox_restore_retype_src', rel)  # containerCOMP
+        target = self._root_sandbox.create(baseCOMP, 'tox_restore_retype')
+        path = target.path
+        self._add_tox_row(path, 'container', rel)
+
+        log_id = self._get_log_id()
+        self.embody_ext.reconcileMetadata()
+
+        reloaded = op(path)
+        self.assertIsNotNone(reloaded)
+        self.assertIn(self.embody.par.Toxtag.val, reloaded.tags,
+                      'tag not applied: the stale pre-reload reference '
+                      'was used after the pulse')
+        self.assertFalse(
+            self._has_log_message(log_id, f"Failed to reconcile '{path}'"),
+            'a reload that succeeded was logged as a failed row')
+
+    def test_reconcile_leaves_differing_externaltox_alone(self):
+        """A COMP pointed at another .tox is a choice, not lost metadata (issue #138)."""
+        rel_row = 'embody/unit_tests/_test_temp/tox_restore_row.tox'
+        rel_other = 'embody/unit_tests/_test_temp/tox_restore_other.tox'
+        self._export_donor_tox('tox_restore_row_src', rel_row)
+        comp = self._export_donor_tox('tox_restore_other', rel_other)
+        tox_tag = self.embody.par.Toxtag.val
+        comp.tags.discard(tox_tag)
+        self._add_tox_row(comp.path, 'container', rel_row)
+
+        log_id = self._get_log_id()
+        self.embody_ext.reconcileMetadata()
+
+        comp = op(comp.path)
+        self.assertEqual(
+            self.embody_ext.normalizePath(comp.par.externaltox.eval()),
+            rel_other, 'reconcile reloaded over a deliberate externaltox')
+        self.assertNotIn(tox_tag, comp.tags)
+        self.assertTrue(
+            self._has_log_message(log_id, f"Left '{comp.path}' alone"),
+            'the skipped row must log a warning naming the COMP')
+
+    def test_save_refuses_externaltox_differing_from_row(self):
+        """Save must not write a COMP into a file its row does not track (issue #138)."""
+        rel_row = 'embody/unit_tests/_test_temp/tox_restore_saverow.tox'
+        rel_other = 'embody/unit_tests/_test_temp/tox_restore_saveother.tox'
+        self._export_donor_tox('tox_restore_saverow_src', rel_row)
+        comp = self._export_donor_tox('tox_restore_saveother', rel_other)
+        self._add_tox_row(comp.path, 'container', rel_row)
+        other_file = self.embody_ext.buildAbsolutePath(rel_other)
+        before = other_file.read_bytes()
+        comp.create(textDAT, 'runtime_content')
+
+        log_id = self._get_log_id()
+        saved = self.embody_ext.Save(comp.path)
+
+        self.assertFalse(saved, 'Save wrote a COMP its row does not track')
+        self.assertEqual(other_file.read_bytes(), before,
+                         'the untracked .tox on disk was overwritten')
+        self.assertTrue(
+            self._has_log_message(log_id, f"REFUSED save of '{comp.path}'"),
+            'the refusal must log a warning naming the COMP')

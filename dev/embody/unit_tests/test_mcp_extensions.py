@@ -24,6 +24,14 @@ class TestMCPExtensions(EmbodyTestCase):
         self.assertDictHasKey(result, 'comp_path')
         self.assertDictHasKey(result, 'dat_path')
 
+    def test_create_extension_dat_is_python(self):
+        """The extension's code DAT is Python, not plain text (issue #139)."""
+        result = self.envoy._create_extension(
+            parent_path=self.sandbox.path,
+            class_name='LangExt')
+        self.assertTrue(result.get('success'))
+        self.assertEqual(op(result['dat_path']).par.language.eval(), 'python')
+
     def test_create_extension_existing_comp(self):
         comp = self.sandbox.create(baseCOMP, 'ext_target')
         result = self.envoy._create_extension(

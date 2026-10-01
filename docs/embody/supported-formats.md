@@ -27,6 +27,8 @@ The following DAT types can be externalized:
 | COMPs | `.tox`, `.tdxn` |
 | DATs | `.py`, `.json`, `.xml`, `.html`, `.glsl`, `.frag`, `.vert`, `.txt`, `.md`, `.rtf`, `.csv`, `.tsv`, `.dat` |
 
+Externalizing a Text DAT sets its **Content Language** to match the file (`.py` -> Python, `.glsl` -> GLSL, `.json` -> JSON, ...), so it gets the right colouring and error checking. Text DATs Envoy creates start as Python unless `create_op` is given another `language`.
+
 `.tdxn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` files still import). See the [TDXN Specification](../tdxn/specification.md).
 
 Networks externalized before Embody 6.1 carry the `.tdn` extension. Both are read, written, and round-tripped indefinitely -- Embody keeps writing whichever extension a COMP already uses, and only a *new* externalization mints `.tdxn`, so a project can hold a mix. In `externalizations.tsv` the `strategy` column reads `tdxn` for both; it read `tdn` before 6.2.30, and both spellings are still accepted on read.

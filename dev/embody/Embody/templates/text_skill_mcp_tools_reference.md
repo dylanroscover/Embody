@@ -12,7 +12,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one `batch_opera
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`). Auto-positions it and hugs any docked companions below it (`docks_placed`) |
+| `create_op` | `parent_path`, `op_type`, `name?`, `language?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`). Auto-positions it and hugs any docked companions below it (`docks_placed`). A `textDAT` starts as `python`; pass `language` (`glsl`, `json`, `yaml`, `xml`, `text`) for anything else |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?`, `parent_shortcut?` | Create a TD extension: baseCOMP + text DAT + extension wiring |
 | `delete_op` | `op_path`, `override?` | Delete an operator (multi-session gated; `override` bypasses, say so). Refuses the Embody COMP, its ancestors, `/` and Envoy's extension DAT |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location. Auto-positions the copy and hugs its docked companions (`docks_placed`) |

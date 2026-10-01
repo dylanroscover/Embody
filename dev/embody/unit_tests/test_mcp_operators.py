@@ -28,6 +28,38 @@ class TestMCPOperators(EmbodyTestCase):
             parent_path=self.sandbox.path, op_type='textDAT')
         self.assertDictHasKey(result, 'path')
 
+    def test_create_op_text_dat_is_python(self):
+        """An Envoy-created textDAT defaults to Python, not plain text
+        (issue #139)."""
+        result = self.envoy._create_op(
+            parent_path=self.sandbox.path, op_type='textDAT', name='lang_text')
+        self.assertEqual(op(result['path']).par.language.eval(), 'python')
+
+    def test_create_op_text_dat_takes_language(self):
+        """create_op(language=...) sets a non-Python content language."""
+        result = self.envoy._create_op(
+            parent_path=self.sandbox.path, op_type='textDAT',
+            name='lang_glsl', language='glsl')
+        self.assertEqual(op(result['path']).par.language.eval(), 'glsl')
+
+    def test_create_op_rejects_invalid_language(self):
+        """A bad language token errors with the valid ones and leaves no op."""
+        result = self.envoy._create_op(
+            parent_path=self.sandbox.path, op_type='textDAT',
+            name='lang_bad', language='glslx')
+        self.assertDictHasKey(result, 'error')
+        self.assertIn('glsl', result['error'])
+        self.assertIsNone(self.sandbox.op('lang_bad'))
+
+    def test_create_op_rejects_language_without_par(self):
+        """language on an op with no Content Language par errors, no op left."""
+        # every DAT carries Content Language; a CHOP does not
+        result = self.envoy._create_op(
+            parent_path=self.sandbox.path, op_type='constantCHOP',
+            name='lang_chop', language='json')
+        self.assertDictHasKey(result, 'error')
+        self.assertIsNone(self.sandbox.op('lang_chop'))
+
     def test_create_op_invalid_parent(self):
         result = self.envoy._create_op(
             parent_path='/nonexistent/path', op_type='baseCOMP')

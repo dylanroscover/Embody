@@ -12,7 +12,7 @@ Responses are compact by default; opt-in flags such as `include_defaults` and `d
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
+| `create_op` | `parent_path`, `op_type`, `name?`, `language?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`). A `textDAT` is created with Content Language `python`; pass `language` (`glsl`, `json`, `yaml`, `xml`, `text`) for any other content, which also gives an auto-externalized DAT the matching file type |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
 | `delete_op` | `op_path`, `override?` | Delete an operator. Also purges its externalization tracking (any strategy) and the externalized file — unless the file is clone-owned or still referenced by another operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses that gate. Refuses the Embody COMP, its ancestors, `/` and Envoy's own extension DAT (`envoy.embody.host_destroy_refused`); `override=True` does not bypass that check |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |

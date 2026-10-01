@@ -4499,6 +4499,22 @@ class EmbodyExt:
             if not oper or oper.family != 'COMP':
                 self.Log(f"Save() requires a COMP, got {oper.family if oper else 'None'}: {opPath}", "ERROR")
                 return False
+            # a tox row naming another file means the project repointed this
+            # COMP: writing would overwrite a file Embody does not track
+            # (issue #138, the save-side twin of reconcileMetadata's skip)
+            table = self.Externalizations
+            current = self.normalizePath(oper.par.externaltox.eval())
+            for i in range(1, table.numRows if table else 0):
+                if (self._cellVal(i, 'path', table=table) == opPath
+                        and self._rowStrategy(i, table) == 'tox'):
+                    tracked = self.normalizePath(
+                        self._cellVal(i, 'rel_file_path', table=table))
+                    if current and tracked and current != tracked:
+                        self.Log(f"REFUSED save of '{opPath}': its externaltox "
+                                 f"'{current}' differs from the table's "
+                                 f"'{tracked}'", 'WARNING')
+                        return False
+                    break
             if not allow_empty:
                 try:
                     if not any(c.type != 'annotate' for c in oper.children):
@@ -7187,6 +7203,11 @@ class EmbodyExt:
         else:  # DAT
             ext = str(save_file_path).rsplit('.', 1)[-1] if '.' in str(save_file_path) else ''
             strategy = ext
+            # a tag typed into TD's own tag field reaches here without passing
+            # applyTagToOperator, so fill in a missing language from the file --
+            # never override one set inside the auto-externalize window (issue #139)
+            if oper.type == 'text' and oper.par.language.eval() == 'text':
+                self._setDATLanguageForTag(oper, strategy)
             self._setupDatForExternalization(oper, rel_file_path, save_file_path)
 
         # Add to table
@@ -12717,6 +12738,14 @@ class EmbodyExt:
                     self._setDATLanguageForTag(oper, tag)
 
                 elif strategy == 'tox':
+                    # a different externaltox is a deliberate choice, not
+                    # lost metadata: reloading would undo it (issue #138)
+                    current = self.normalizePath(oper.par.externaltox.eval())
+                    if current and current != self.normalizePath(rel_file_path):
+                        self.Log(f"Left '{path}' alone: its externaltox "
+                                 f"'{current}' differs from the table's "
+                                 f"'{rel_file_path}'", "WARNING")
+                        continue
                     # TOX COMP reconciliation. enableexternaltoxpulse is
                     # the load trigger -- reloadtoxpulse does not exist on
                     # TD 2025 COMPs. A missing file must fail the row
@@ -12735,6 +12764,12 @@ class EmbodyExt:
                     oper.par.externaltox.readOnly = True
                     oper.par.enableexternaltox = True
                     oper.par.enableexternaltoxpulse.pulse()
+                    # a .tox whose root is another COMP type replaces the
+                    # operator, invalidating oper (issue #138)
+                    oper = op(path)
+                    if oper is None:
+                        raise RuntimeError(
+                            f'COMP gone after reloading {rel_file_path}')
                     oper.tags.add(tag)
                     self._restorePositionFromTable(oper, path)
 
@@ -12758,7 +12793,10 @@ class EmbodyExt:
                         oper.color = color
 
                 reconciled += 1
-                self.Log(f"Reconciled '{path}' ({self._tagLabel(strategy)})", "INFO")
+                reloaded = (f' -- reloaded from {rel_file_path}'
+                            if strategy == 'tox' else '')
+                self.Log(f"Reconciled '{path}' ({self._tagLabel(strategy)})"
+                         f"{reloaded}", "INFO")
 
             except Exception as e:
                 failed += 1
