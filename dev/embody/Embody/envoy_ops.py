@@ -18,7 +18,8 @@ from __future__ import annotations
 from typing import Optional
 
 
-def create_op(ext, parent_path: str, op_type: str, name: Optional[str] = None) -> dict:
+def create_op(ext, parent_path: str, op_type: str, name: Optional[str] = None,
+              language: Optional[str] = None) -> dict:
     """Create an operator"""
     parent = ext._resolve_op(parent_path)
     if not parent:
@@ -30,6 +31,20 @@ def create_op(ext, parent_path: str, op_type: str, name: Optional[str] = None) -
     try:
         # op_type can be a string like 'baseCOMP', 'noiseTOP', etc.
         new_op = parent.create(op_type, name) if name else parent.create(op_type)
+        # a fresh textDAT reads 'text'; an agent's text DAT is almost always
+        # code, so default python. Set before auto-externalize, which infers
+        # the file type from the language (issue #139)
+        if language is None and new_op.OPType == 'textDAT':
+            language = 'python'
+        if language is not None:
+            lang_par = getattr(new_op.par, 'language', None)
+            valid = list(lang_par.menuNames) if lang_par is not None else []
+            if language not in valid:
+                new_op.destroy()
+                return {'error': f'language {language!r} is not valid for {op_type}: '
+                                 + (f'use one of {valid}' if valid
+                                    else 'it has no Content Language parameter')}
+            new_op.par.language = language
         ext._find_non_overlapping_position(parent, new_op)
         docks_placed = ext._placeDockedOps(new_op)
         # Auto-externalize per the Envoy 'Autoexternalize' preference. create_op
@@ -1071,6 +1086,7 @@ def create_extension(ext, parent_path: str, class_name: str,
         if created_comp:
             comp.destroy()
         return {'error': f'Failed to create text DAT: {e}'}
+    text_dat.par.language = 'python'  # see create_op
 
     # Write extension code
     if code:

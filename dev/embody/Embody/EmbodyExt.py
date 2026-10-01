@@ -7187,6 +7187,11 @@ class EmbodyExt:
         else:  # DAT
             ext = str(save_file_path).rsplit('.', 1)[-1] if '.' in str(save_file_path) else ''
             strategy = ext
+            # a tag typed into TD's own tag field reaches here without passing
+            # applyTagToOperator, so fill in a missing language from the file --
+            # never override one set inside the auto-externalize window (issue #139)
+            if oper.type == 'text' and oper.par.language.eval() == 'text':
+                self._setDATLanguageForTag(oper, strategy)
             self._setupDatForExternalization(oper, rel_file_path, save_file_path)
 
         # Add to table

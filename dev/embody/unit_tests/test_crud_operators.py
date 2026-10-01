@@ -161,6 +161,28 @@ class TestCRUDOperators(EmbodyTestCase):
         self.assertTrue(len(file_path) > 0, 'file should be set')
         self.assertIn('add_dat', file_path)
 
+    def test_handleAddition_dat_sets_python_language(self):
+        """A py tag added outside applyTagToOperator (TD's own tag field)
+        must still leave the DAT as Python, not plain text (issue #139)."""
+        dat = self.workspace.create(textDAT, 'lang_dat')
+        self.assertEqual(dat.par.language.eval(), 'text')
+        dat.tags.add(self.embody.par.Pytag.val)
+
+        self.embody_ext.handleAddition(dat)
+
+        self.assertEqual(dat.par.language.eval(), 'python')
+
+    def test_handleAddition_dat_keeps_explicit_language(self):
+        """An explicit language set between auto-tagging and the deferred
+        file write is never reverted to the tag's language (issue #139)."""
+        dat = self.workspace.create(textDAT, 'keep_lang_dat')
+        dat.tags.add(self.embody.par.Pytag.val)
+        dat.par.language = 'glsl'
+
+        self.embody_ext.handleAddition(dat)
+
+        self.assertEqual(dat.par.language.eval(), 'glsl')
+
     def test_handleAddition_dat_sets_readonly(self):
         """handleAddition should set file to readOnly on a DAT."""
         dat = self.workspace.create(textDAT, 'ro_dat')

@@ -2491,7 +2491,8 @@ class EnvoyMCPServer:
         """Register all MCP tools"""
 
         @self.mcp.tool()
-        def create_op(parent_path: str, op_type: str, name: str = None) -> dict:
+        def create_op(parent_path: str, op_type: str, name: str = None,
+                      language: str = None) -> dict:
             """
             Create a new operator in TouchDesigner.
 
@@ -2503,10 +2504,18 @@ class EnvoyMCPServer:
             companions it spawns (callback/shader/info DATs) into a tight row
             hugging the host's bottom edge (docks_placed in the result).
 
+            A textDAT is created with language 'python' unless `language`
+            says otherwise. Pass it whenever the DAT will hold anything but
+            Python: it is set before auto-externalize picks the file type, so
+            a shader lands in .glsl, not .py.
+
             Args:
                 parent_path: Path to parent COMP (e.g., "/project1" or "/project1/base1")
                 op_type: Operator type (e.g., "baseCOMP", "noiseTOP", "waveCHOP", "textDAT")
                 name: Optional name for the new operator
+                language: Content Language for any DAT: python (the textDAT
+                    default), glsl, json, yaml, xml, text. An invalid token, or
+                    one on a non-DAT, errors and creates nothing.
 
             Returns:
                 Dict with path, name, and type of created operator
@@ -2514,7 +2523,8 @@ class EnvoyMCPServer:
             return self._execute_in_td('create_op', {
                 'parent_path': parent_path,
                 'op_type': op_type,
-                'name': name
+                'name': name,
+                'language': language
             })
 
         @self.mcp.tool()
@@ -9153,9 +9163,10 @@ class EnvoyExt:
 
     # --- Operator Management ---
 
-    def _create_op(self, parent_path: str, op_type: str, name: Optional[str] = None) -> dict:
+    def _create_op(self, parent_path: str, op_type: str, name: Optional[str] = None,
+                   language: Optional[str] = None) -> dict:
         """Create an operator -- see envoy_ops."""
-        return mod.envoy_ops.create_op(self, parent_path, op_type, name)
+        return mod.envoy_ops.create_op(self, parent_path, op_type, name, language)
 
     def _delete_op(self, op_path: str) -> dict:
         """Delete an operator -- see envoy_ops."""

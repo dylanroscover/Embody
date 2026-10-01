@@ -51,7 +51,7 @@ Per-operator traps, verified live on TD 2025.33230 (2026-09-25) unless marked as
 - `parameterexecuteDAT` ships with `builtin` AND `custom` ON; turn `builtin` off for a custom-parameter dispatcher (`/parameter-design`).
 - `executeDAT` ships with every hook OFF (`framestart`, `frameend`, `start`, `create`, `exit`); a frame driver that was never enabled demands nothing.
 - A CHOP Execute DAT makes its watched CHOP cook every frame whether or not anything else pulls it.
-- A Text DAT's `language` (`python`, `glsl`, `json`, `yaml`, `xml`, `text`) is what gives a code DAT colouring and error checking; a hand-created one reads `text`. Embody's `externalize_op` sets `file` and `syncfile`; never set them yourself.
+- A Text DAT's `language` (`python`, `glsl`, `json`, `yaml`, `xml`, `text`) is what gives a code DAT colouring and error checking; a hand-created one reads `text`, while `create_op` and `create_extension` make it `python`; for any other content pass `create_op(language=...)`, which also picks the matching file type when the DAT is auto-externalized. Embody's `externalize_op` sets `file` and `syncfile`; never set them yourself.
 - `webclientDAT`: `reqmethod`, `url`, `request` pulse, `timeout` in ms (60000 default), `authtype`, `output` (`text` or `table`), and a docked `_callbacks` DAT whose `onResponse` runs on the main thread (`/td-api-reference`, Background Work). `jsonDAT`: `filter` is a JSONPath (`$`), `output` is `results`, `result` or `source`.
 - Table cells are strings: `op('t')[1, 2] + 1` auto-casts, `.val + 1` raises (`/td-api-reference`).
 
