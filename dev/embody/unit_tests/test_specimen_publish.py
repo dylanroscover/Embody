@@ -144,6 +144,8 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self._tmp_root = tempfile.mkdtemp(prefix='specpub_')
 		self._dev = os.path.join(self._tmp_root, 'dev')
 		os.makedirs(self._dev, exist_ok=True)
+		# _publish strips bindings via specimen_bindings.py beside project.folder
+		shutil.copy(os.path.join(project.folder, 'specimen_bindings.py'), self._dev)
 		self._spec_dir = os.path.join(self._tmp_root, 'specimens')
 
 	def tearDown(self):
