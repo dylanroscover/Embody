@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.67
+
+Text DATs get the right language, and a COMP your project repoints keeps its `.tox`.
+
+- **Text DATs get the right Content Language** (#139). Externalizing sets it from the file, including a tag typed into TD's own tag field; Envoy's `create_op` and `create_extension` make Text DATs as Python, and `create_op` takes a `language` so a shader or JSON DAT lands in `.glsl` or `.json`, not `.py`.
+- **A COMP your project repoints is left alone** (#138). When its External .tox differs from the tracked file, the startup pass logs it instead of reloading over it and Save refuses to write it; a reload that replaces the COMP no longer reports failure.
+- **Fixes.** Uninstall removes the skills' `references/` folders, so no empty `.claude/` or `.agents/` skeleton is left. +10 tests.
+
 ## v6.2.65
 
 Four new skills, two new tools and a leaner always-loaded context, after an audit against Derivative's TDMCPSkills.
