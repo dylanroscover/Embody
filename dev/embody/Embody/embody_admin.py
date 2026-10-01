@@ -307,12 +307,15 @@ def compute_uninstall_plan(ext, target_dir=None):
         dp = root / sub
         if not dp.is_dir():
             continue
-        # A skills tree holds one directory PER SKILL; those have to go
-        # before their parent can rmdir. Nested children first.
-        for child in sorted(dp.iterdir(), key=lambda c: c.name):
-            if child.is_dir():
-                _add('delete', child, kind='emptydir',
-                     why='Embody-generated skill folder -- removed if empty')
+        # A skills tree holds one directory PER SKILL, and a skill can nest
+        # references/; all of it has to go before the parent can rmdir, so
+        # a leaf dir Embody fills is walked deepest-first. A parent like
+        # '.claude' plans only its direct children, never the user's tree.
+        kids = dp.rglob('*') if '/' in sub else dp.iterdir()
+        for child in sorted((c for c in kids if c.is_dir()),
+                            key=lambda c: (-len(c.parts), c.name)):
+            _add('delete', child, kind='emptydir',
+                 why='Embody-generated skill folder -- removed if empty')
         _add('delete', dp, kind='emptydir',
              why='created by Embody -- removed only if empty afterwards')
 
