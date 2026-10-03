@@ -1,0 +1,121 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/fx_impact
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Impact:
+  - name: Style
+    style: Menu
+    default: glitch
+    menuNames:
+    - glitch
+    - punch
+    - shake
+    - mosaic
+    - flash
+    menuLabels:
+    - Glitch
+    - Zoom punch
+    - Shake
+    - Mosaic
+    - Green flash
+    help: How the incoming picture gets hit.
+  - name: Progress
+    style: Float
+    default: 0.12
+    clampMin: true
+    clampMax: true
+    help: 0 and 1 = the input untouched. The hit peaks at 0.12 and eases out. Wire a picture into the input; with nothing wired it shows end_card.
+parameters:
+  parentshortcut: Mograph
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: in1
+  type: inTOP
+  parameters:
+    label: =me.name
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - select_default
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_impact
+- name: glsl_impact
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_impact_pixel
+    computedat: glsl_impact_compute
+    inputextenduv: mirror
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Style.menuIndex
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - in1
+- name: select_default
+  type: selectTOP
+  parameters:
+    top: ../end_card/out1
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_impact_info
+  type: infoDAT
+  parameters:
+    op: glsl_impact
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_impact
+  dat_read_only: true
+- name: glsl_impact_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_impact
+  dat_content: "// fx_impact: hits the incoming picture and lets it recover. e is the strength of the hit:\n// it peaks at Progress 0.12 and eases back to nothing by 1, so 0 and 1 pass the input through.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: style (0 glitch, 1 punch, 2 shake, 3 mosaic, 4 flash)\n\nconst float PEAK = 0.12;\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 uv = vUV.st;\n\tfloat P = uAnim.x;\n\tfloat e = P <= 0.0 ? 0.0 : P < PEAK ? P / PEAK : 1.0 - easeOutCubic((P - PEAK) / (1.0 - PEAK));\n\tfloat tick = floor(36.0 * P);       // the glitch and the shake re-roll 36 times across Progress\n\tint style = int(uAnim.y);\n\tvec4 col;\n\n\tif (style == 0) {               // glitch: bands of the picture jump sideways and the channels split\n\t\tfloat band = floor(uv.y * mix(8.0, 26.0, hash(tick)));\n\t\tfloat jump = hash(band * 1.7 + tick) > 0.55 ? (hash(band + 7.0 * tick) - 0.5) * 0.22 * e : 0.0;\n\t\tvec2 u = vec2(uv.x + jump, uv.y);\n\t\tvec2 split = vec2(0.012 * e, 0.0);\n\t\tcol = vec4(texture(sTD2DInputs[0], u + split).r, texture(sTD2DInputs[0], u).g, texture(sTD2DInputs[0], u - split).b, texture(sTD2DInputs[0], u).a);\n\t} else if (style == 1) {        // punch: a zoom in, fringed towards the edges\n\t\tvec2 u = (uv - 0.5) / (1.0 + 0.16 * e) + 0.5;\n\t\tvec2 fringe = (uv - 0.5) * 0.02 * e;\n\t\tcol = vec4(texture(sTD2DInputs[0], u + fringe).r, texture(sTD2DInputs[0], u).g, texture(sTD2DInputs[0], u - fringe).b, texture(sTD2DInputs[0], u).a);\n\t} else if (style == 2) {        // shake: thrown about, zoomed in a little so the edges never show\n\t\tvec2 off = (vec2(hash(tick), hash(tick + 9.0)) - 0.5) * 0.06 * e;\n\t\tcol = texture(sTD2DInputs[0], (uv - 0.5) / (1.0 + 0.08 * e) + 0.5 + off);\n\t} else if (style == 3) {        // mosaic: breaks into blocks that resolve\n\t\tfloat cell = mix(1.0, 96.0, e * e);\n\t\tcol = texture(sTD2DInputs[0], (floor(uv * FRAME / cell) + 0.5) * cell / FRAME);\n\t} else {                        // flash: the picture goes to a dark-to-mint duotone and comes back\n\t\tcol = texture(sTD2DInputs[0], uv);\n\t\tfloat luma = dot(col.rgb, vec3(0.299, 0.587, 0.114));\n\t\tcol.rgb = mix(col.rgb, mix(DARK, MINT, smoothstep(0.05, 0.85, luma)) * col.a, e);\n\t}\n\tfragColor = TDOutputSwizzle(col);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Impact on a picture
+  text: 'The one piece with an input: wire a picture into in1 and it gets hit (glitch, zoom punch, shake, mosaic or green flash) and recovers. With nothing wired, select_default feeds it end_card.'
+  position: [130, -190]
+  size: [1470, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

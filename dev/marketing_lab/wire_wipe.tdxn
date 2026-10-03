@@ -1,0 +1,86 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/wire_wipe
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Wipe:
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 'Transition. 0 and 1 = clear frame. A wire draws across, swells until the frame is covered (0.47 to 0.53: cut the clips underneath here), then opens again from the same wire.'
+    value: 1
+parameters:
+  parentshortcut: Mograph
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_wire
+- name: glsl_wire
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_wire_pixel
+    computedat: glsl_wire_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_wire_info
+  type: infoDAT
+  parameters:
+    op: glsl_wire
+  flags:
+  - viewer
+  position: [275, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wire
+  dat_read_only: true
+- name: glsl_wire_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [125, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wire
+  dat_content: "// wire_wipe: a network wire draws across the frame and swells into a dark band that covers it;\n// cut the clips underneath while it is covered (Progress 0.47 to 0.53); then a clear band\n// swells from the same wire and uncovers the frame.\nuniform vec4 uAnim;                 // x: Progress\n\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 DARK = vec3(0.094, 0.118, 0.118);\nconst vec2 FRAME = vec2(1920.0, 1080.0);\n// the wire: a cubic with level tangents at both ends, the way TD draws one\nconst vec2 W0 = vec2(-60.0, 756.0), W1 = vec2(1062.0, 756.0), W2 = vec2(858.0, 324.0), W3 = vec2(1980.0, 324.0);\nconst int SEGMENTS = 48;\nconst float WIRE = 8.0;             // half width of the drawn wire, px\nconst float RIM = 14.0;             // green edge on both bands, px\nconst float REACH = 840.0;          // farther than any pixel sits from the wire\nconst float DRAW_END = 0.26, SWELL_START = 0.2, COVERED = 0.47, OPEN_START = 0.53, OPEN_END = 0.97;\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat easeInOutCubic(float u) {\n\treturn u < 0.5 ? 4.0 * u * u * u : 1.0 - 4.0 * (1.0 - u) * (1.0 - u) * (1.0 - u);\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n\tvec2 pa = p - a, ba = b - a;\n\treturn length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));\n}\n\nfloat fill(float d) {\n\treturn 1.0 - smoothstep(-0.5, 0.5, d);\n}\n\nvec2 wire(float t) {\n\tfloat s = 1.0 - t;\n\treturn s * s * s * W0 + 3.0 * s * s * t * W1 + 3.0 * s * t * t * W2 + t * t * t * W3;\n}\n\n// distance to the wire from its start up to parameter head\nfloat sdWire(vec2 p, float head) {\n\tfloat d = 1e6;\n\tvec2 a = W0;\n\tfor (int i = 1; i <= SEGMENTS; i++) {\n\t\tvec2 b = wire(head * float(i) / float(SEGMENTS));\n\t\td = min(d, sdSegment(p, a, b));\n\t\ta = b;\n\t}\n\treturn d;\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\n\tif (P <= 0.0) {\n\t\t// clear frame\n\t} else if (P < OPEN_START) {\n\t\t// cover: the wire draws behind its connector dot, then swells; dark inside, green at the edge\n\t\tfloat head = max(easeInOutCubic(clamp(P / DRAW_END, 0.0, 1.0)), 1e-4);\n\t\tfloat k = clamp((P - SWELL_START) / (COVERED - SWELL_START), 0.0, 1.0);\n\t\tfloat d = min(sdWire(p, head) - WIRE - REACH * k * k * k, length(p - wire(head)) - 20.0);\n\t\to = vec4(mix(GREEN, DARK, fill(d + RIM)), 1.0) * fill(d);\n\t} else if (P < OPEN_END) {\n\t\t// uncover: a clear band from the whole wire, the same green rim on its edge\n\t\tfloat k = 1.0 - (P - OPEN_START) / (OPEN_END - OPEN_START);\n\t\tfloat d = sdWire(p, 1.0) - (REACH + RIM) * (1.0 - k * k * k);\n\t\to = vec4(mix(DARK, GREEN, fill(d - RIM)), 1.0) * (1.0 - fill(d));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Wire transition
+  text: One shader, no inputs. A wire draws across and swells into a dark band that covers the frame (cut underneath at Progress 0.47 to 0.53), then a clear band opens from the same wire.
+  position: [55, -190]
+  size: [745, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

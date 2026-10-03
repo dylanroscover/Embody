@@ -77,11 +77,13 @@ tmp/
 .wrangler/
 
 # Marketing / promo assets -- not product code. Heavy ProRes renders (multi-GB),
-# exported covers and overlays, the source promo networks (dev/marketing_lab),
-# and one-off video probes. Keep these out of the product repo history; final
-# deliverables live on disk (back them up elsewhere if you want versioning).
+# exported covers and overlays, and one-off video probes. Keep these out of the
+# product repo history; final deliverables live on disk (back them up elsewhere
+# if you want versioning). One exception since 2026-10-03: the promo networks
+# themselves (dev/marketing_lab/*.tdxn) are small text, so they are tracked.
 marketing/
-dev/marketing_lab/
+dev/marketing_lab/*
+!dev/marketing_lab/*.tdxn
 dev/_promo*
 
 # Embody / Envoy (auto-managed)

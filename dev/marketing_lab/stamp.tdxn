@@ -1,0 +1,162 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/stamp
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Stamp:
+  - name: Preset
+    style: Menu
+    default: approved
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: 'What gets stamped. tint: 0 green, 1 red, 2 banana yellow. Add a row to the presets table inside to add one.'
+    value: machine
+  - name: Text
+    style: Str
+    help: The stamp. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = stamped. It slams down at an angle, rebounds, and throws off impact ticks. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_stamp
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+    - tint
+  - - approved
+    - APPROVED
+    - APPROVED
+    - '0'
+  - - shipped
+    - SHIPPED
+    - SHIPPED
+    - '0'
+  - - cooks
+    - IT COOKS
+    - IT COOKS
+    - '0'
+  - - errors
+    - 0 ERRORS
+    - 0 ERRORS
+    - '0'
+  - - sixty
+    - 60 FPS
+    - 60 FPS
+    - '0'
+  - - nulls
+    - NEEDS MORE NULLS
+    - NEEDS MORE NULLS
+    - '1'
+  - - machine
+    - WORKS ON MY MACHINE
+    - WORKS ON MY MACHINE
+    - '1'
+  - - banana
+    - BANANA GRADE
+    - BANANA GRADE
+    - '2'
+  dat_content_format: table
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: '=(lambda n: 150 if n <= 10 else 112 if n <= 16 else 88)(len(me.par.text.eval()))'
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_stamp
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_stamp_pixel
+    computedat: glsl_stamp_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =int(op('presets')[parent.Mograph.par.Preset.eval(), 'tint'])
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+      valuey: =op('text_main').par.fontsizex
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+- name: glsl_stamp_info
+  type: infoDAT
+  parameters:
+    op: glsl_stamp
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_stamp
+  dat_read_only: true
+- name: glsl_stamp_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_stamp
+  dat_content: "// stamp: slams down at an angle, rebounds and throws off impact ticks. The ink is worn:\n// specks are knocked out of it. Input 0 is the text (text_main, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: tint (0 green, 1 red, 2 banana yellow)\nuniform vec4 uMain;                 // x: text width px, y: its font size px\n\nconst float TILT = radians(-7.0);\nconst float LAND = 0.16;            // Progress at which it hits\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec3 tint = uAnim.y < 0.5 ? GREEN : uAnim.y < 1.5 ? RED : BANANA;\n\tfloat size = uMain.y;\n\tvec2 halfSize = vec2(0.5 * uMain.x + 0.45 * size, 0.5 * 0.727 * size + 0.36 * size);\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tfloat s = mix(2.8, 1.0, easeOutExpo(ramp(P, 0.0, LAND))) * (1.0 + 0.05 * sin(PI * ramp(P, LAND, LAND + 0.14)));\n\t\tvec2 q = rot(TILT) * (p - 0.5 * FRAME) / s;\n\n\t\t// a heavy border, a hairline inside it, and the text\n\t\tfloat d = sdRoundBox(q, halfSize, 0.14 * size);\n\t\tfloat edge = 0.11 * size;\n\t\tfloat a = max(fill(d * s) - fill((d + edge) * s), fill((abs(d + 1.5 * edge + 0.02 * size) - 0.02 * size) * s));\n\t\ta = max(a, textAt(sTD2DInputs[0], q, vec2(-0.5 * uMain.x, -0.5 * 0.727 * size), 0.24 * size, 1.0));\n\t\ta *= 1.0 - 0.9 * smoothstep(0.25, 0.45, TDSimplexNoise(q * 0.045) + 0.5 * TDSimplexNoise(q * 0.21));\n\t\to = vec4(tint, 1.0) * a;\n\n\t\tfloat k = ramp(P, LAND, LAND + 0.26);\n\t\tif (k > 0.0 && k < 1.0) {\n\t\t\tfloat dTick = 1e6;\n\t\t\tfor (int i = 0; i < 12; i++) {\n\t\t\t\tfloat ang = (float(i) + 0.5) * PI / 6.0;\n\t\t\t\tvec2 dir = vec2(cos(ang), sin(ang));\n\t\t\t\tvec2 from = dir * (halfSize + 50.0 + 120.0 * easeOutCubic(k));\n\t\t\t\tdTick = min(dTick, sdSegment(q, from, from + dir * 70.0 * (1.0 - k)));\n\t\t\t}\n\t\t\to = over(o, tint, fill((dTick - 7.0 * (1.0 - k)) * s));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Rubber stamp
+  text: The text slams down at an angle inside a double border, rebounds and throws off impact ticks. Simplex noise knocks specks out of the ink. The type steps down in size for longer stamps.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

@@ -1,0 +1,165 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/toast
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      font: Cascadia Mono
+      fontsizex: 40
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Toast:
+  - name: Preset
+    style: Menu
+    default: loop
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: Which error turns into which fix. Add a row to the presets table inside to add one.
+    value: glsl
+  - name: Text
+    style: Str
+    help: The error line. Typed text wins over the preset; leave empty to use the preset.
+  - name: Fix
+    style: Str
+    help: The line it turns into. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 0.15 to 0.5 = the red error, 1 = the green fix. The toast drops in red, then flips to green as the fix replaces the error. Animate 0 to 1 to play it.
+    value: 0.4790000021
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_toast
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - error
+    - fix
+  - - loop
+    - Cook loop
+    - Cook dependency loop detected.
+    - Fixed. Added a Null.
+  - - glsl
+    - GLSL reserved word
+    - '''half'' : reserved word.'
+    - Fixed. Renamed it.
+  - - file
+    - Missing file
+    - 'File not found: final_final_v7.toe'
+    - Fixed. It lives in git now.
+  - - nan
+    - NaN
+    - NaN in channel tx.
+    - Fixed. Clamped it.
+  - - fps
+    - Dropped frames
+    - Dropped 12 frames.
+    - Fixed. 60 fps.
+  - - banana
+    - Banana warning
+    - 'Warning: banana is still the default.'
+    - Not fixed. The banana stays.
+  dat_content_format: table
+- name: text_err
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'error', 'Text')
+  position: [600, 0]
+- name: text_fix
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'fix', 'Fix')
+  position: [600, -200]
+- name: glsl_toast
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_toast_pixel
+    computedat: glsl_toast_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uText
+      valuex: =op('text_err').evalTextSize(op('text_err').par.text.eval())[0]
+      valuey: =op('text_fix').evalTextSize(op('text_fix').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_err
+  - text_fix
+- name: glsl_toast_info
+  type: infoDAT
+  parameters:
+    op: glsl_toast
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_toast
+  dat_read_only: true
+- name: glsl_toast_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_toast
+  dat_content: "// toast: drops in red with an error, then turns over to green as the fix replaces it.\n// Input 0 is the error line (text_err), input 1 the fix (text_fix), both set at the frame's\n// bottom left.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uText;                 // x: width of the error line px, y: width of the fix line px\n\nconst float SIZE = 40.0;            // twin of the Text TOPs' font size\nconst float FLIP_START = 0.5, FLIP_END = 0.62;\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tfloat flip = easeInOutCubic(ramp(P, FLIP_START, FLIP_END));\n\t\tvec3 tone = mix(RED, GREEN, flip);\n\t\tvec2 halfSize = vec2(0.5 * mix(uText.x, uText.y, flip) + 62.0, 52.0);\n\t\tvec2 c = vec2(960.0, mix(1160.0, 930.0, easeOutBack(ramp(P, 0.0, 0.14))));\n\t\tfloat d = sdRoundBox(p - c, halfSize, 18.0);\n\t\to = over(o, mix(tone, DARK, fill(d + 4.0)), fill(d));\n\n\t\t// badge: a cross that turns over into a tick\n\t\tvec2 badge = c + vec2(-halfSize.x + 52.0, 0.0);\n\t\to = over(o, tone, fill(length(p - badge) - 24.0));\n\t\tvec2 g = p - badge;\n\t\tg.x /= max(abs(1.0 - 2.0 * flip), 0.02);\n\t\tfloat glyph = flip < 0.5\n\t\t\t? min(sdSegment(g, vec2(-9.0), vec2(9.0)), sdSegment(g, vec2(-9.0, 9.0), vec2(9.0, -9.0)))\n\t\t\t: min(sdSegment(g, vec2(-11.0, 0.0), vec2(-3.0, -8.0)), sdSegment(g, vec2(-3.0, -8.0), vec2(11.0, 9.0)));\n\t\to = over(o, DARK, fill(glyph - 3.0));\n\n\t\t// the error leaves upwards as the fix rises into its place, both clipped to the toast\n\t\tvec2 origin = vec2(badge.x + 44.0, c.y - 0.5 * 0.69 * SIZE);\n\t\tfloat clip = fill(d + 6.0);\n\t\to = over(o, INK, textAt(sTD2DInputs[0], p - vec2(0.0, 80.0 * flip), origin, 0.23 * SIZE, 1.0) * clip);\n\t\to = over(o, INK, textAt(sTD2DInputs[1], p + vec2(0.0, 80.0 * (1.0 - flip)), origin, 0.23 * SIZE, 1.0) * clip);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Error to fix
+  text: A toast drops in red with the error line, then turns over to green as the fix line replaces it. Stop at Progress 0.4 for the error alone.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

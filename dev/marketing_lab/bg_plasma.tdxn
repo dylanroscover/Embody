@@ -1,0 +1,175 @@
+format: tdxn
+version: '2.1'
+build: 2
+generator: Embody/6.2.55
+td_build: 099.2025.33230
+network_path: /marketing_lab/bg_plasma
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    parameters:
+      language: glsl
+      syncfile: true
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Plasma:
+  - name: Scale
+    style: Float
+    startSection: true
+    default: 6
+    min: 1.0
+    max: 20.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 20.0
+    help: Spatial frequency of the sine fields. Low = broad lava-lamp blobs; high = dense fine plasma.
+    value: 4.2
+  - name: Speed
+    style: Float
+    default: 1
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMax: 4.0
+    help: Animation speed. 1 = gentle flow; 0 freezes a still (the TOP keeps cooking, frame is identical).
+  - name: Warp
+    style: Float
+    default: 1.2
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Domain-warp amount. 0 = flat sliding stripes; higher bends the coords into a flowing liquid swirl.
+    value: 1.5
+  - name: Complexity
+    style: Float
+    label: Interference
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Detune between the two sine fields. 0 = one clean plasma; higher beats them into shimmering moire.
+    value: 0.8
+  - name: Palette
+    style: Float
+    label: Palette Hue
+    startSection: true
+    clampMin: true
+    clampMax: true
+    help: Rotates the cyclic cosine palette through the full hue ring. Loops seamlessly 1.0 -> 0.0.
+  - name: Contrast
+    style: Float
+    default: 0.4
+    clampMin: true
+    clampMax: true
+    help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+    value: 0.45
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+    value: 1080
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+    value: 1350
+  Loop:
+  - name: Loopphase
+    style: Float
+    value: 0.995833
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_plasma
+- name: glsl_plasma
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_plasma_pixel
+    computedat: glsl_plasma_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uParams
+      valuex: =parent().par.Scale.eval()
+      valuey: =parent().par.Warp.eval()
+      valuez: =parent().par.Complexity.eval()
+      valuew: =parent().par.Loopphase.eval() * 20 * 3.141592653589793
+    - name: uPalette
+      valuex: =parent().par.Palette.eval()
+      valuey: =parent().par.Contrast.eval()
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_plasma_info
+  type: infoDAT
+  parameters:
+    op: glsl_plasma
+  flags:
+  - viewer
+  position: [550, -150]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_plasma
+  dat_read_only: true
+- name: glsl_plasma_pixel
+  type: textDAT
+  parameters:
+    file: marketing_lab/bg_plasma/glsl_plasma_pixel.glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [400, -150]
+  dock: glsl_plasma
+- name: glsl_plasma_compute
+  type: textDAT
+  parameters:
+    file: marketing_lab/bg_plasma/glsl_plasma_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
+  position: [250, -150]
+  dock: glsl_plasma
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Plasma - interfering sine fields + domain warp
+  text: 'Two sine-wave fields at slightly detuned scales BEAT against each other -> moire fringes (the shimmer). A slow rotating domain warp bends the sample coords -> liquid flow. The summed field is folded cyclically into 0..1 and mapped through an Inigo-Quilez cosine palette (smooth hue cycling, never bands); a vignette frames it as a loop. All on the GPU in one glslTOP -- no input, no feedback, stateless and cheap. Params: Scale, Speed, Warp, Complexity (detune), Palette (hue), Contrast.'
+  position: [180, -220]
+  size: [820, 480]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

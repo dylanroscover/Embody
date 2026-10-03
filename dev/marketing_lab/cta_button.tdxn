@@ -1,0 +1,169 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/cta_button
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Button:
+  - name: Preset
+    style: Menu
+    default: star
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: What the button asks for. icon 1 puts a star on it. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: The button label. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = clicked. The button pops in, a cursor arrives and clicks it, and the address types on underneath. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_button
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+    - sub
+    - icon
+  - - star
+    - Star on GitHub
+    - Star on GitHub
+    - github.com/dylanroscover/Embody
+    - '1'
+  - - get
+    - Get Embody
+    - Get Embody
+    - embody.tools
+    - '0'
+  - - tox
+    - Download the .tox
+    - Download the .tox
+    - embody.tools
+    - '0'
+  - - free
+    - Free and open source
+    - Free and open source
+    - github.com/dylanroscover/Embody
+    - '0'
+  - - copy
+    - Copy the install line
+    - Copy the install line
+    - embody.tools
+    - '0'
+  dat_content_format: table
+- name: text_sub
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'sub', '')
+    font: Cascadia Mono
+    fontsizex: 34
+  position: [600, -200]
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+    fontsizex: 64
+  position: [600, 0]
+- name: glsl_button
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_button_pixel
+    computedat: glsl_button_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =int(op('presets')[parent.Mograph.par.Preset.eval(), 'icon'])
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+    - name: uSub
+      valuex: =op('text_sub').evalTextSize(op('text_sub').par.text.eval())[0]
+      valuey: =op('text_sub').evalTextSize('M')[0]
+      valuez: =len(op('text_sub').par.text.eval())
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+  - text_sub
+- name: glsl_button_info
+  type: infoDAT
+  parameters:
+    op: glsl_button
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_button
+  dat_read_only: true
+- name: glsl_button_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_button
+  dat_content: "// cta_button: the button pops in, a cursor glides over and clicks it, and the address types\n// on underneath. Input 0 is the label (text_main), input 1 the address (text_sub), both set\n// at the frame's bottom left.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: 1 = star icon\nuniform vec4 uMain;                 // x: label width px\nuniform vec4 uSub;                  // address: x width px, y advance px, z characters\n\nconst vec2 CENTRE = vec2(960.0, 580.0);\nconst float SIZE = 64.0, SUB_SIZE = 34.0;   // twins of the Text TOPs' font sizes\nconst float CLICK = 0.6;                    // Progress at which the cursor presses\n// the pointer, tip at the origin, y up\nconst vec2 ARROW[7] = vec2[7](vec2(0.0, 0.0), vec2(0.0, -68.0), vec2(17.0, -52.0), vec2(29.0, -80.0),\n\tvec2(40.0, -75.0), vec2(28.0, -48.0), vec2(50.0, -48.0));\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat sdArrow(vec2 p) {\n\tfloat d = dot(p - ARROW[0], p - ARROW[0]);\n\tfloat s = 1.0;\n\tfor (int i = 0, j = 6; i < 7; j = i, i++) {\n\t\tvec2 e = ARROW[j] - ARROW[i];\n\t\tvec2 w = p - ARROW[i];\n\t\tvec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);\n\t\td = min(d, dot(b, b));\n\t\tbvec3 c = bvec3(p.y >= ARROW[i].y, p.y < ARROW[j].y, e.x * w.y > e.y * w.x);\n\t\tif (all(c) || all(not(c))) s = -s;\n\t}\n\treturn s * sqrt(d);\n}\n\n// five points, outer radius r\nfloat sdStar(vec2 p, float r) {\n\tconst vec2 k1 = vec2(0.809016994, -0.587785252), k2 = vec2(-0.809016994, -0.587785252);\n\tp.x = abs(p.x);\n\tp -= 2.0 * max(dot(k1, p), 0.0) * k1;\n\tp -= 2.0 * max(dot(k2, p), 0.0) * k2;\n\tp.x = abs(p.x);\n\tp.y -= r;\n\tvec2 ba = 0.45 * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);\n\tfloat h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);\n\treturn length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tfloat icon = uAnim.y > 0.5 ? 82.0 : 0.0;        // room the star takes left of the label\n\tfloat width = uMain.x + icon;\n\tfloat press = sin(PI * ramp(P, CLICK - 0.04, CLICK + 0.1));\n\tvec4 o = vec4(0.0);\n\n\tfloat s = easeOutBack(ramp(P, 0.0, 0.16)) * (1.0 - 0.05 * press);\n\tif (s > 0.0) {\n\t\tvec2 q = (p - CENTRE) / s;\n\t\to = over(o, GREEN, fill(sdRoundBox(q, vec2(0.5 * width + 52.0, 62.0), 26.0) * s));\n\t\tif (icon > 0.0) {\n\t\t\t// an outline until the click, solid after\n\t\t\tfloat dStar = sdStar(q - vec2(-0.5 * width + 30.0, -2.0), 30.0);\n\t\t\to = over(o, DARK, P < CLICK ? fill(abs(dStar + 3.0) - 3.0) : fill(dStar));\n\t\t}\n\t\to = over(o, DARK, textAt(sTD2DInputs[0], q, vec2(-0.5 * width + icon, -0.5 * 0.727 * SIZE), 0.24 * SIZE, 1.0));\n\t}\n\n\t// the click: a ring leaves the cursor's tip\n\tvec2 target = CENTRE + vec2(0.5 * width + 24.0, -34.0);     // in the button's padding, clear of the label\n\tfloat ring = ramp(P, CLICK, CLICK + 0.22);\n\tif (ring > 0.0 && ring < 1.0)\n\t\to = over(o, INK, fill(abs(length(p - target) - 24.0 - 110.0 * easeOutCubic(ring)) - 5.0 * (1.0 - ring)));\n\n\t// address\n\tfloat typed = floor(ramp(P, 0.7, 0.92) * uSub.z + 0.001);\n\tvec2 sub = vec2(CENTRE.x - 0.5 * uSub.x, CENTRE.y - 150.0);\n\to = over(o, QUIET, textAt(sTD2DInputs[1], p, sub, 0.23 * SUB_SIZE, 1.0) * step(p.x, sub.x + typed * uSub.y));\n\n\t// cursor: glides in from outside the frame, presses, stays\n\tvec2 tip = mix(target + vec2(760.0, -640.0), target, easeInOutCubic(ramp(P, 0.2, CLICK - 0.04)));\n\tfloat dArrow = sdArrow((p - tip) / (1.0 - 0.1 * press));\n\to = over(o, DARK, fill(dArrow - 5.0) * step(0.2, P));\n\to = over(o, INK, fill(dArrow) * step(0.2, P));\n\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Call to action
+  text: The button pops in, a cursor glides over and clicks it, and the address types on underneath. The star preset's icon fills in on the click.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

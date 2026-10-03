@@ -1,0 +1,160 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/loader
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      fontsizex: 56
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Loader:
+  - name: Preset
+    style: Menu
+    default: cooking
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: What is supposedly loading. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: The loading label. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = 100 percent. The bar races to 99, hangs there from 0.7 to 0.92, then finishes. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_loader
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - cooking
+    - Cooking
+    - Cooking
+  - - wires
+    - Untangling wires
+    - Untangling wires
+  - - bananas
+    - Peeling bananas
+    - Peeling bananas
+  - - splines
+    - Reticulating splines
+    - Reticulating splines
+  - - agent
+    - Asking nicely
+    - Asking the agent nicely
+  - - nulls
+    - Adding Nulls
+    - Adding more Nulls
+  - - shaders
+    - Compiling shaders
+    - Compiling shaders
+  - - render
+    - Rendering in 8K
+    - Rendering in 8K for no reason
+  dat_content_format: table
+- name: text_pct
+  type: textTOP
+  parameters:
+    text: ='%d%%' % round(100 * op('glsl_loader').par.vec0valuey.eval())
+    font: Cascadia Mono
+  position: [600, -200]
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+  position: [600, 0]
+- name: glsl_loader
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_loader_pixel
+    computedat: glsl_loader_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: '=(lambda p: min(p / 0.7, 0.99) if p < 0.92 else 1.0)(parent.Mograph.par.Progress.eval())'
+    - name: uText
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+      valuey: =op('text_pct').evalTextSize(op('text_pct').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+  - text_pct
+- name: glsl_loader_info
+  type: infoDAT
+  parameters:
+    op: glsl_loader
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_loader
+  dat_read_only: true
+- name: glsl_loader_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_loader
+  dat_content: "// loader: a loading bar that races to 99 percent, hangs there, then finishes. Input 0 is the\n// label (text_main), input 1 the percentage (text_pct), both set at the frame's bottom left.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: how full the bar is, 0-1 (the stall lives in this parameter's expression)\nuniform vec4 uText;                 // x: label width px, y: percentage width px\n\nconst vec2 CENTRE = vec2(960.0, 540.0);\nconst float SIZE = 56.0;            // twin of the Text TOPs' font size\nconst float HALF = 420.0;           // half the bar's length\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tbool done = uAnim.y >= 1.0;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tfloat halfWidth = (HALF + 64.0) * easeOutExpo(ramp(P, 0.0, 0.1));\n\t\to = over(o, DARK, fill(sdRoundBox(p - CENTRE, vec2(halfWidth, 118.0), min(28.0, halfWidth))));\n\t\tif (halfWidth > HALF + 32.0) {\n\t\t\t// label, then three dots that take turns until it is done\n\t\t\tvec2 origin = CENTRE + vec2(-HALF, 18.0);\n\t\t\to = over(o, INK, textAt(sTD2DInputs[0], p, origin, 0.24 * SIZE, 1.0));\n\t\t\tfloat dots = done ? 0.0 : mod(floor(40.0 * P), 4.0);\n\t\t\tfor (int i = 0; i < 3; i++)\n\t\t\t\tif (float(i) < dots) o = over(o, INK, fill(length(p - origin - vec2(uText.x + 14.0 + 20.0 * float(i), 5.0)) - 5.0));\n\n\t\t\t// percentage, right aligned over the end of the bar\n\t\t\to = over(o, done ? GREEN : INK, textAt(sTD2DInputs[1], p, CENTRE + vec2(HALF - uText.y, 18.0), 0.23 * SIZE, 1.0));\n\n\t\t\tfloat track = fill(sdRoundBox(p - CENTRE + vec2(0.0, 46.0), vec2(HALF, 11.0), 11.0));\n\t\t\to = over(o, 2.2 * DARK, track);\n\t\t\to = over(o, GREEN, track * step(p.x, CENTRE.x - HALF + 2.0 * HALF * uAnim.y));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Loading bar
+  text: 'A bar that races to 99 percent, hangs there, then finishes. The stall lives in one place: the expression on glsl_loader''s uAnim y; text_pct reads its number from there.'
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

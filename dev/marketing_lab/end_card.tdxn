@@ -1,0 +1,175 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/end_card
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textTOP:
+    parameters:
+      dispmethod: scalable
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Card:
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: '0 = background only, 1 = mark, brand line and repo URL all set. The mark draws on (0 to 0.2), lifts, the line rises in (0.3 to 0.62), and after a beat the URL types on (0.78 to 0.92). Coming straight from op_tiles, start at 0.2: the mark sits exactly where op_tiles leaves it.'
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_card
+- name: text_url
+  type: textTOP
+  parameters:
+    text: github.com/dylanroscover/Embody
+    font: Cascadia Mono
+    fontsizex: 40
+    positiony: -172
+  position: [600, -200]
+- name: glsl_card
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_card_pixel
+    computedat: glsl_card_compute
+    premultrgbbyalpha: false
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uUrl
+      valuex: =960 - len(op('text_url').par.text.eval()) * op('text_url').evalTextSize('M')[0] / 2
+      valuey: =op('text_url').evalTextSize('M')[0]
+      valuez: =len(op('text_url').par.text.eval())
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+  - text_url
+  - select_plasma
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -600]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    font: Inter
+    typeface: SemiBold
+    fontsizex: 78
+    alignx: left
+    aligny: bottom
+  position: [600, 0]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  custom_pars:
+    Custom:
+    - name: Valuea
+      style: Float
+      label: Value A
+    - name: Valueb
+      style: Float
+      label: Value B
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: select_plasma
+  type: selectTOP
+  parameters:
+    top: ../bg_plasma/out1
+  position: [600, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_card_info
+  type: infoDAT
+  parameters:
+    op: glsl_card
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_card
+  dat_read_only: true
+- name: glsl_card_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_card
+  dat_content: "// end_card: over a darkened bg_plasma the mark draws on and lifts, the brand line rises in per\n// character, and after a beat the repo URL types on.\n// Inputs: 0 the brand line (text_glyphs), 1 the URL (text_url), 2 bg_plasma.\n// uCells holds one vec4 per row of script_layout:\n//   [0] size, numLines, numCells, total launch time   [1] line x0, x1, band bottom, band top\n//   [2..] cell x0, x1, 0.5 if accent, launch time\nuniform samplerBuffer uCells;\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uUrl;                  // x: left edge px, y: advance px, z: characters\n\nconst vec3 INK = vec3(0.933, 0.965, 0.933);\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 MINT = vec3(0.788, 0.961, 0.769);\nconst vec3 DARK = vec3(0.094, 0.118, 0.118);\nconst vec3 QUIET = vec3(0.6, 0.72, 0.62);     // the URL\nconst float PLASMA = 0.1;           // how much of bg_plasma shows through the dark\n\n// the mark, in units of the 64-unit artboard of docs/assets/embody-mark.svg (y up, e centred)\nconst float RADIUS = 17.0;\nconst float STROKE = 4.25;          // half the stroke width\nconst float ARC_START = radians(-74.4);     // the tail of the e; the arc sweeps clockwise from here\nconst float ARC_SWEEP = radians(296.6);\nconst vec2 BAR_A = vec2(-16.0, 0.0), BAR_B = vec2(15.5, 0.0);\nconst vec2 ORB = vec2(13.0, -12.0);\nconst float ORB_R = 4.7;\n// it draws on where op_tiles leaves it, then lifts and shrinks to make room for the line\nconst vec2 MARK_FROM = vec2(960.0, 540.0), MARK_TO = vec2(960.0, 706.0);\nconst float UNIT_FROM = 6.5, UNIT_TO = 4.2;\n\n// timeline, in Progress\nconst float DRAW_END = 0.13, BAR_START = 0.05, BAR_END = 0.14, ORB_START = 0.12, ORB_END = 0.2;\nconst float LIFT_START = 0.2, LIFT_END = 0.36;\nconst float LINE_START = 0.3, LINE_END = 0.62;\nconst float URL_START = 0.78, URL_END = 0.92;\nconst float CHAR_DUR = 7.0;         // twin of CHAR_DUR in script_layout\nconst float RISE = 0.85;            // how far below the line a glyph starts, x font size\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat easeOutBack(float u) {\n\tfloat v = clamp(u, 0.0, 1.0) - 1.0;\n\treturn 1.0 + 2.70158 * v * v * v + 1.70158 * v * v;\n}\n\nfloat easeInOutCubic(float u) {\n\tu = clamp(u, 0.0, 1.0);\n\treturn u < 0.5 ? 4.0 * u * u * u : 1.0 - 4.0 * (1.0 - u) * (1.0 - u) * (1.0 - u);\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n\tvec2 pa = p - a, ba = b - a;\n\treturn length(pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0));\n}\n\nfloat fill(float d) {\n\treturn 1.0 - smoothstep(-0.5, 0.5, d);\n}\n\nvoid main() {\n\tvec2 res = uTDOutputInfo.res.zw;\n\tvec2 p = vUV.st * res;\n\tfloat P = uAnim.x;\n\n\t// background: bg_plasma cover-fitted, pulled down to a breath of green on the brand dark\n\tvec2 uv = vUV.st - 0.5;\n\tfloat fit = (uTD2DInfos[2].res.z / uTD2DInfos[2].res.w) / (res.x / res.y);\n\tuv = fit < 1.0 ? vec2(uv.x, uv.y * fit) : vec2(uv.x / fit, uv.y);\n\tvec3 plasma = texture(sTD2DInputs[2], uv + 0.5).rgb;\n\tvec4 o = vec4(DARK + plasma * GREEN * PLASMA, 1.0);\n\n\t// mark\n\tfloat draw = easeInOutCubic(P / DRAW_END);\n\tif (draw > 0.0) {\n\t\tfloat lift = easeInOutCubic((P - LIFT_START) / (LIFT_END - LIFT_START));\n\t\tfloat unit = mix(UNIT_FROM, UNIT_TO, lift);\n\t\tvec2 q = (p - mix(MARK_FROM, MARK_TO, lift)) / unit;\n\t\tfloat sweep = ARC_SWEEP * draw;\n\t\tfloat dArc = mod(ARC_START - atan(q.y, q.x), 6.2831853) <= sweep\n\t\t\t? abs(length(q) - RADIUS)\n\t\t\t: min(length(q - RADIUS * vec2(cos(ARC_START), sin(ARC_START))), length(q - RADIUS * vec2(cos(ARC_START - sweep), sin(ARC_START - sweep))));\n\t\tfloat bar = easeInOutCubic((P - BAR_START) / (BAR_END - BAR_START));\n\t\tfloat dBar = bar > 0.0 ? sdSegment(q, BAR_A, mix(BAR_A, BAR_B, bar)) : 1e6;\n\t\to = mix(o, vec4(GREEN, 1.0), fill((min(dArc, dBar) - STROKE) * unit));\n\t\tfloat pop = (P - ORB_START) / (ORB_END - ORB_START);\n\t\tif (pop > 0.0) o = mix(o, vec4(MINT, 1.0), fill((length(q - ORB) - ORB_R * easeOutBack(pop)) * unit));\n\t}\n\n\t// brand line: every pixel belongs to one cell; sample the
+    set text displaced by that cell's rise\n\tvec4 meta = texelFetch(uCells, 0);\n\tvec4 ln = texelFetch(uCells, 1);\n\tif (p.y >= ln.z && p.y < ln.w) {\n\t\tfloat launch = clamp((P - LINE_START) / (LINE_END - LINE_START), 0.0, 1.0) * meta.w;\n\t\tfloat ink = 0.0, accent = 0.0;\n\t\tfor (int i = 0; i < 256; i++) {\n\t\t\tif (i >= int(meta.z)) break;\n\t\t\tvec4 c = texelFetch(uCells, 2 + i);\n\t\t\tif (p.x < c.x || p.x >= c.y) continue;\n\t\t\tfloat u = (launch - c.w) / CHAR_DUR;\n\t\t\tif (u <= 0.0) continue;\n\t\t\tfloat srcY = p.y + (1.0 - easeOutBack(u)) * RISE * meta.x;\n\t\t\tif (srcY < ln.z || srcY >= ln.w) continue;\n\t\t\tfloat a = texture(sTD2DInputs[0], vec2(p.x, srcY) / res).a;\n\t\t\tif (a > ink) {\n\t\t\t\tink = a;\n\t\t\t\taccent = step(0.25, c.z);\n\t\t\t}\n\t\t}\n\t\to = mix(o, vec4(mix(INK, GREEN, accent), 1.0), ink);\n\t}\n\n\t// URL: types on a character at a time\n\tfloat typed = floor(clamp((P - URL_START) / (URL_END - URL_START), 0.0, 1.0) * uUrl.z + 0.001);\n\to = mix(o, vec4(QUIET, 1.0), texture(sTD2DInputs[1], vUV.st).a * step(p.x, uUrl.x + typed * uUrl.y));\n\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# layout table read by two consumers:\n#   text_glyphs (spec DAT): text, x, y -- one row per line, y is the baseline\n#   glsl_card (via datto_cells): a, b, c, d -- one vec4 per row\n#     row 1        size, numLines, numCells, total launch time\n#     line rows    x0, x1, band bottom, band top\n#     cell rows    x0, x1, line (+0.5 if accent), launch time\n\nTEXT = 'Embody. Create at the speed of thought.'    # one line, one weight; the full stop earns the gravity\nACCENT = 'embody'   # words set in brand green, lower case\n\nWIDTH = 1920\nCENTRE_Y = 498      # middle of the cap height, px from the bottom of the frame\nPITCH = 1.16        # band height, x font size\nCAP = 0.727         # Inter cap height, x font size\nDESCENT = 0.25      # band bottom below the baseline, x font size\nWORD_GAP = 2.5      # extra launch-time units between words\nCHAR_DUR = 7.0      # launch-time units a glyph takes to settle; glsl_card holds the twin\n\n\ndef onCook(scriptOp):\n\tscriptOp.clear()\n\tglyphs = op('text_glyphs')\n\tsize = glyphs.par.fontsizex.eval()\n\tcache = {}\n\n\tdef width(s):\n\t\tif s not in cache:\n\t\t\tcache[s] = glyphs.evalTextSize(s)[0]\n\t\treturn cache[s]\n\n\twords = TEXT.split()\n\ts = ' '.join(words)\n\tx0 = (WIDTH - width(s)) / 2\n\tbase = CENTRE_Y - CAP * size / 2\n\tbottom = base - DESCENT * size\n\tcellRows = []\n\tn = pos = 0\n\tleft = x0 - 0.1 * size\n\tfor wordCount, word in enumerate(words):\n\t\tisAccent = word.strip('.,!?:;').lower() in ACCENT.split()\n\t\tfor j in range(len(word)):\n\t\t\tright = x0 + width(s[:pos + j + 1])\n\t\t\tcellRows.append(['', 0, 0, left, right, 0.5 * isAccent, n + wordCount * WORD_GAP])\n\t\t\tleft = right\n\t\t\tn += 1\n\t\tpos += len(word) + 1\n\tcellRows[-1][4] += 0.1 * size\n\n\tscriptOp.appendRow(['text', 'x', 'y', 'a', 'b', 'c', 'd'])\n\tscriptOp.appendRow(['', 0, 0, size, 1, len(cellRows), cellRows[-1][6] + CHAR_DUR])\n\tscriptOp.appendRow([s, x0, base, x0, x0 + width(s), bottom, bottom + PITCH * size])\n\tscriptOp.appendRows(cellRows)\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: End card
+  text: The mark draws on where op_tiles leaves it and lifts, the brand line rises in, and after a beat the repo URL types on, over ../bg_plasma pulled down to the brand dark. The line lives in script_layout (TEXT), the URL in text_url.
+  position: [130, -670]
+  size: [1470, 930]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

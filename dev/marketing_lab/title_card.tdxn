@@ -1,0 +1,231 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/title_card
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Title:
+  - name: Preset
+    style: Menu
+    default: custom
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: 'A ready-made line: taglines from the trailer script and a shelf of memes. Custom uses the Text and Accent parameters below. Add a row to the presets table inside to add one.'
+  - name: Text
+    style: Str
+    default: Create at the speed of thought.
+    help: The line to set when Preset is Custom. It wraps to balanced lines by itself and steps down the type scale as it gets longer.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = fully set. The plate opens first, then each glyph rises into place. Animate 0 to 1 to play it.
+  - name: Accent
+    style: Str
+    default: thought
+    help: 'When Preset is Custom: words to set in brand green, space separated. Case and trailing punctuation are ignored. Empty = no accent.'
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_type
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+    - accent
+  - - custom
+    - Custom (the Text parameter)
+    - ''
+    - ''
+  - - tagline
+    - Create at the speed of thought
+    - Create at the speed of thought.
+    - thought
+  - - stop
+    - Stop typing operator names
+    - I built Embody so I could stop typing operator names.
+    - Embody
+  - - byhand
+    - Not by hand
+    - I didn't wire any of these by hand.
+    - hand
+  - - textfile
+    - Also a text file
+    - The network is also a text file.
+    - text
+  - - feedback
+    - Feedback loop
+    - It's not a bug. It's a feedback loop.
+    - feedback
+  - - 'null'
+    - Add a Null
+    - Have you tried adding a Null?
+    - 'Null'
+  - - noise
+    - One more Noise TOP
+    - Just one more Noise TOP.
+    - Noise
+  - - wires
+    - No wires
+    - Wires? Where we're going we don't need wires.
+    - wires
+  - - gpu
+    - Works on my GPU
+    - Works on my GPU.
+    - GPU
+  - - network
+    - Fix it in the network
+    - We'll fix it in the network.
+    - network
+  - - cooks
+    - It cooks
+    - git commit -m "it cooks"
+    - cooks
+  - - banane
+    - Ceci n'est pas une banane
+    - Ceci n'est pas une banane.
+    - banane
+  - - trust
+    - In banana we trust
+    - In banana we trust.
+    - banana
+  dat_content_format: table
+- name: glsl_type
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_type_pixel
+    computedat: glsl_type_compute
+    premultrgbbyalpha: false
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: '=(lambda n: 168 if n <= 14 else 144 if n <= 34 else 120 if n <= 56 else 96)(len(op(''../kit_core/layout'').module.choice(parent.Mograph, ''text'', ''Text'')))'
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  custom_pars:
+    Custom:
+    - name: Valuea
+      style: Float
+      label: Value A
+    - name: Valueb
+      style: Float
+      label: Value B
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: glsl_type_info
+  type: infoDAT
+  parameters:
+    op: glsl_type
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_type
+  dat_read_only: true
+- name: glsl_type_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_type
+  dat_content: "// title_card: a dark plate snaps open, then each glyph rises into its line band,\n// staggered per character. uCells holds one vec4 per row of script_layout:\n//   [0]              size, numLines, numCells, total launch time\n//   [1..numLines]    line x0, x1, band bottom, band top\n//   [1+numLines..]   cell x0, x1, line (+0.5 if accent), launch time\nuniform samplerBuffer uCells;\nuniform vec4 uAnim;                 // x: Progress\n\nconst vec3 INK = vec3(0.933, 0.965, 0.933);\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 DARK = vec3(0.094, 0.118, 0.118);\nconst float CHAR_DUR = 7.0;         // twin of CHAR_DUR in script_layout\nconst float PLATE_END = 0.16;       // Progress at which the plate is fully open\nconst float TYPE_START = 0.06;      // Progress at which the first glyph launches\nconst float RISE = 0.85;            // how far below its line a glyph starts, x font size\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat easeOutExpo(float u) {\n\treturn u >= 1.0 ? 1.0 : 1.0 - exp2(-10.0 * max(u, 0.0));\n}\n\nfloat easeOutBack(float u) {\n\tfloat v = clamp(u, 0.0, 1.0) - 1.0;\n\treturn 1.0 + 2.70158 * v * v * v + 1.70158 * v * v;\n}\n\nfloat sdRoundBox(vec2 p, vec2 b, float r) {\n\tvec2 q = abs(p) - b + r;\n\treturn length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;\n}\n\nvoid main() {\n\tvec2 res = uTDOutputInfo.res.zw;\n\tvec2 p = vUV.st * res;\n\tvec4 meta = texelFetch(uCells, 0);\n\tfloat size = meta.x;\n\tint numLines = int(meta.y);\n\tint numCells = int(meta.z);\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\n\tif (numLines > 0) {\n\t\t// plate: the bounding box of the line bands, opening from its centre\n\t\tvec2 lo = vec2(1e6), hi = vec2(-1e6);\n\t\tfor (int i = 0; i < 8; i++) {\n\t\t\tif (i >= numLines) break;\n\t\t\tvec4 ln = texelFetch(uCells, 1 + i);\n\t\t\tlo = min(lo, ln.xz);\n\t\t\thi = max(hi, ln.yw);\n\t\t}\n\t\tfloat open = easeOutExpo(P / PLATE_END);\n\t\tvec2 halfSize = 0.5 * (hi - lo) + vec2(0.42, 0.16) * size;\n\t\thalfSize.x *= open;\n\t\tfloat d = sdRoundBox(p - 0.5 * (lo + hi), halfSize, min(0.2 * size, halfSize.x));\n\t\to = vec4(DARK, 1.0) * (1.0 - smoothstep(-0.5, 0.5, d)) * step(0.001, open);\n\n\t\t// glyphs: every pixel belongs to one cell; sample the set text displaced by that cell's rise\n\t\tfloat launch = clamp((P - TYPE_START) / (1.0 - TYPE_START), 0.0, 1.0) * meta.w;\n\t\tfloat ink = 0.0, accent = 0.0;\n\t\tfor (int i = 0; i < 256; i++) {\n\t\t\tif (i >= numCells) break;\n\t\t\tvec4 c = texelFetch(uCells, 1 + numLines + i);\n\t\t\tif (p.x < c.x || p.x >= c.y) continue;\n\t\t\tvec4 ln = texelFetch(uCells, 1 + int(c.z));\n\t\t\tif (p.y < ln.z || p.y >= ln.w) continue;\n\t\t\tfloat u = (launch - c.w) / CHAR_DUR;\n\t\t\tif (u <= 0.0) continue;\n\t\t\tfloat srcY = p.y + (1.0 - easeOutBack(u)) * RISE * size;\n\t\t\tif (srcY < ln.z || srcY >= ln.w) continue;\n\t\t\tfloat a = texture(sTD2DInputs[0], vec2(p.x, srcY) / res).a;\n\t\t\tif (a > ink) {\n\t\t\t\tink = a;\n\t\t\t\taccent = step(0.25, fract(c.z));\n\t\t\t}\n\t\t}\n\t\to = vec4(mix(INK, GREEN, accent), 1.0) * ink + o * (1.0 - ink);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# one call into kit_core/layout; its header documents the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tL.build(scriptOp, op('text_glyphs'), L.choice(parent.Mograph, 'text', 'Text'), accent=L.choice(parent.Mograph, 'accent', 'Accent'))\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Kinetic title
+  text: 'The line comes from the Preset menu (the presets table: taglines and memes) or, on Custom, from Text and Accent. script_layout hands it to kit_core/layout, which wraps it into balanced lines and measures one cell per glyph. glsl_type opens the plate and lifts each glyph into its line band.'
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25
