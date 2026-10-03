@@ -201,7 +201,7 @@ operators:
   - - convoy
     - Convoy
     - Convoy
-    - Every Embody project on your trusted LAN is a node. No controller. (Preview.)
+    - Every Embody project on your trusted LAN is a node. No controller.
     - a machine studio -560 0 | b machine render-01 0 220, c machine render-02 0 -220 | d machine lobby 560 0
     - a b both, a c both, b d both, c d both
   - - convoy_pick

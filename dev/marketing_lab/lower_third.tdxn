@@ -104,7 +104,7 @@ operators:
   - - convoy
     - Convoy
     - Convoy
-    - Embody projects on one trusted LAN (preview)
+    - Embody projects on one trusted LAN
   dat_content_format: table
 - name: text_sub
   type: textTOP
