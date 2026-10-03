@@ -1670,3 +1670,94 @@ class TestUpdateCheckIsQuiet(EmbodyTestCase):
         self.assertTrue(
             any('Up to date' in s for s in c.statuses),
             'the status par must still report the check: %r' % (c.statuses,))
+
+
+# ======================================================================
+# The TD-build floor is the user's call (issue #145)
+# ======================================================================
+
+def _floor_harness(td_build, answers=()):
+    """_stall_harness plus a local version and a scripted TD build."""
+    import types
+    version = types.SimpleNamespace(eval=lambda: '6.0.1')
+
+    class Harness(type(_stall_harness())):
+        # shadow the property with an attribute
+        _embody = types.SimpleNamespace(
+            par=types.SimpleNamespace(Version=version))
+
+        def _tdBuild(self):
+            return td_build
+
+        def isDevCheckout(self):
+            return False
+
+    h = Harness()
+    h.answers = list(answers)
+    return h
+
+
+def _floor_result():
+    manifest = _valid_manifest()   # min_td_build 2025.33070
+    return {'tag': manifest['tag'], 'manifest': manifest, 'notes': '',
+            'assets': {manifest['asset']: {'url': 'https://example/e.tox',
+                                           'size': manifest['size']}}}
+
+
+class TestBuildFloorIsTheUsersCall(EmbodyTestCase):
+    """An update below the release's TD floor used to be refused outright,
+    so the user installed it by hand -- without the backup or the rollback.
+    A manual check now warns and offers it; the unattended path, where
+    nobody can accept the risk, still refuses."""
+
+    def test_a_manual_check_offers_to_install_anyway(self):
+        h = _floor_harness('2025.32820', answers=[0])
+        h._finishCheck(_floor_result(), interactive=True, auto_install=False)
+        self.assertEqual([('download', True, True)], h.began)
+        self.assertTrue(h._pending.get('allow_old_build'))
+        self.assertEqual(1, len(h.dialogs), 'one decision, not two')
+        self.assertIn('2025.33070', h.dialogs[0])
+        self.assertIn('2025.32820', h.dialogs[0])
+
+    def test_declining_installs_nothing(self):
+        for answer in (1, -1):   # Cancel, and a suppressed dialog
+            h = _floor_harness('2025.32820', answers=[answer])
+            h._finishCheck(_floor_result(), interactive=True,
+                           auto_install=False)
+            self.assertEqual([], h.began)
+            self.assertFalse(h._pending.get('allow_old_build'))
+
+    def test_the_unattended_path_still_refuses(self):
+        h = _floor_harness('2025.32820')
+        h._finishCheck(_floor_result(), interactive=False, auto_install=True)
+        self.assertEqual([], h.began)
+        self.assertEqual([], h.dialogs)
+        self.assertIsNone(h._pending)
+        self.assertTrue(
+            any('requires TouchDesigner build' in s for s in h.status),
+            'the status par must say why: %r' % (h.status,))
+
+    def test_a_supported_build_is_not_warned(self):
+        h = _floor_harness('2025.33070', answers=[0])
+        h._finishCheck(_floor_result(), interactive=True, auto_install=False)
+        self.assertEqual([('download', True, True)], h.began)
+        self.assertFalse(h._pending.get('allow_old_build'))
+        self.assertIn('Download and install now?', h.dialogs[0])
+
+    def _pending(self, **extra):
+        import sys
+        # any file that exists stands in for the verified download
+        return dict(tag='v6.0.150', manifest=_valid_manifest(),
+                    tox_path=sys.executable, **extra)
+
+    def test_apply_refuses_an_old_build_without_consent(self):
+        h = _floor_harness('2025.32820')
+        h._pending = self._pending()
+        out = h.ApplyUpdate(interactive=False)
+        self.assertIn('requires TouchDesigner build', out.get('error', ''))
+
+    def test_apply_honours_the_consent(self):
+        h = _floor_harness('2025.32820', answers=[2])   # cancel at the save
+        h._pending = self._pending(allow_old_build=True)
+        self.assertEqual({'status': 'cancelled'},
+                         h.ApplyUpdate(interactive=True))
