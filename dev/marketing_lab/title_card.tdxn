@@ -132,6 +132,10 @@ operators:
     - 'Convoy: one hop'
     - Only one hop ever crosses the network.
     - one
+  - - tower
+    - 'Convoy: laptop to tower'
+    - Work on the laptop. Run it on the tower.
+    - tower
   dat_content_format: table
 - name: glsl_type
   type: glslTOP
