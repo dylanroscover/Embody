@@ -101,6 +101,10 @@ operators:
     - Embot
     - Embot
     - shows where the agent is working
+  - - convoy
+    - Convoy
+    - Convoy
+    - Embody projects on one trusted LAN (preview)
   dat_content_format: table
 - name: text_sub
   type: textTOP

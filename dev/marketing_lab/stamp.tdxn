@@ -86,6 +86,10 @@ operators:
     - BANANA GRADE
     - BANANA GRADE
     - '2'
+  - - fleet
+    - FLEET UPDATED
+    - FLEET UPDATED
+    - '0'
   dat_content_format: table
 - name: text_main
   type: textTOP

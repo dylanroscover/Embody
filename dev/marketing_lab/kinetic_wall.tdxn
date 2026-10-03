@@ -26,6 +26,8 @@ custom_pars:
     help: 0 and 1 = empty frame. Rows of the word slide in from alternating sides, scroll, and slide out. The frame is fully covered from 0.45 to 0.7, so it also works as a transition.
 parameters:
   parentshortcut: Mograph
+flags:
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdxn
@@ -71,6 +73,9 @@ operators:
   - - errors
     - NO ERRORS
     - NO ERRORS
+  - - convoy
+    - CONVOY
+    - CONVOY
   dat_content_format: table
 - name: glsl_wall
   type: glslTOP

@@ -75,6 +75,10 @@ operators:
     - What the agent does
     - create, wire, set, capture, fix, diff, revert
     - green
+  - - convoy
+    - Convoy
+    - select, call, batch, jobs, artifacts, restart, update
+    - green
   dat_content_format: table
 - name: glsl_chips
   type: glslTOP

@@ -42,7 +42,6 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: 0 = empty frame, 0.15 to 0.5 = the red error, 1 = the green fix. The toast drops in red, then flips to green as the fix replaces the error. Animate 0 to 1 to play it.
-    value: 0.4790000021
 parameters:
   parentshortcut: Mograph
 flags:
@@ -96,6 +95,10 @@ operators:
     - Banana warning
     - 'Warning: banana is still the default.'
     - Not fixed. The banana stays.
+  - - node
+    - Convoy node offline
+    - render-02 / lobby is offline.
+    - Fixed. Restarted the node.
   dat_content_format: table
 - name: text_err
   type: textTOP

@@ -84,6 +84,9 @@ operators:
   - - hands
     - No hands
     - look, no hands
+  - - node
+    - A Convoy node
+    - this project is a Convoy node
   dat_content_format: table
 - name: text_main
   type: textTOP

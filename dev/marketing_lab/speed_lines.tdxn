@@ -26,8 +26,11 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: 0 and 1 = empty frame. Emphasis lines arrive, flicker while Progress moves, and leave. Lay it over a shot or behind a title.
+    value: 1
 parameters:
   parentshortcut: Mograph
+flags:
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdxn

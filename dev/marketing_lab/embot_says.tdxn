@@ -73,6 +73,9 @@ operators:
   - - hello
     - Hello
     - Hi. I'm Embot.
+  - - convoy
+    - Convoy
+    - I can do that on the other machine too.
   dat_content_format: table
 - name: text_main
   type: textTOP

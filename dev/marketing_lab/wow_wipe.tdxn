@@ -26,14 +26,18 @@ custom_pars:
     - Scan line
     - Blinds
     help: Which transition.
+    value: blinds
   - name: Progress
     style: Float
     default: 0.5
     clampMin: true
     clampMax: true
     help: 'Transition. 0 and 1 = clear frame. The frame is fully covered from 0.47 to 0.53: cut the clips underneath there.'
+    value: 1
 parameters:
   parentshortcut: Mograph
+flags:
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdxn

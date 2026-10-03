@@ -37,8 +37,11 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: 0 = empty frame, 1 = 100 percent. The bar races to 99, hangs there from 0.7 to 0.92, then finishes. Animate 0 to 1 to play it.
+    value: 0.9929999709
 parameters:
   parentshortcut: Mograph
+flags:
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdxn
@@ -87,6 +90,9 @@ operators:
   - - render
     - Rendering in 8K
     - Rendering in 8K for no reason
+  - - fleet
+    - Updating the fleet
+    - Updating the fleet
   dat_content_format: table
 - name: text_pct
   type: textTOP

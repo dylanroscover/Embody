@@ -120,6 +120,18 @@ operators:
     - In banana we trust
     - In banana we trust.
     - banana
+  - - siblings
+    - 'Convoy: every node a sibling'
+    - No controller. Every node is a sibling.
+    - sibling
+  - - anymachine
+    - 'Convoy: any machine'
+    - Say it once. Run it on any machine.
+    - any
+  - - onehop
+    - 'Convoy: one hop'
+    - Only one hop ever crosses the network.
+    - one
   dat_content_format: table
 - name: glsl_type
   type: glslTOP
