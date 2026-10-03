@@ -32,7 +32,7 @@ custom_pars:
     style: Menu
     default: externalize
     menuSource: tdu.TableMenu(me.op('topics'), labelCol='label')
-    help: 'Which feature to explain. Each row of the topics table inside is one diagram: its title, caption, nodes and edges. Add a row to add one.'
+    help: 'Which feature to explain. Each row of the topics table inside is one diagram: its title, caption, nodes, edges and labelled regions. Add a row to add one.'
   - name: Backdrop
     style: Toggle
     default: true
@@ -45,6 +45,8 @@ custom_pars:
     help: 0 = empty frame, 1 = the whole diagram with its caption. The title rises, the nodes arrive group by group as their edges draw, and the caption lands last. Animate 0 to 1 to play it.
 parameters:
   parentshortcut: Mograph
+flags:
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdxn
@@ -72,168 +74,161 @@ operators:
     - caption
     - nodes
     - edges
+    - frames
   - - externalize
     - Externalize
     - Externalize
     - Embody writes your operators to files git can read.
     - toe blob .toe -640 0 | emb mark Embody -260 0 | py file .py 160 220, tdxn file .tdxn 160 0, tox file .tox 160 -220 | git git git 600 0
     - toe emb, emb py, emb tdxn, emb tox, py git, tdxn git, tox git
-  - - tdxn
-    - TDXN
-    - TDXN
-    - A whole network as YAML. Only what you changed is written.
-    - a tile noise -640 0 top, b tile level -380 0 top, c tile null -120 0 top | f file network.tdxn 300 0 | g git diff 660 0
-    - a b, b c, c f, f g
-  - - diff
-    - A diff you can read
-    - A diff you can read
-    - Change one parameter. One line changes.
-    - t tile noise -600 0 top | f1 file before -200 0 | f2 file after 200 0 | ok ok one_line 600 0
-    - t f1, f1 f2, f2 ok
-  - - restore
-    - Rebuilds on open
-    - It rebuilds itself on open
-    - At frames 30, 45 and 60 of opening, everything externalized comes back from disk.
-    - c1 clock 30:_agent_config -600 0 | c2 clock 45:_.tox_comps -200 0 | c3 clock 60:_.tdxn_comps 200 0 | ok ok restored 600 0
-    - c1 c2, c2 c3, c3 ok
+    - on_disk 20 -380 300 330
   - - envoy
     - Envoy
     - Envoy
     - An MCP server inside TouchDesigner. Your assistant talks to it.
-    - chat chat your_assistant -600 0 | srv server Envoy -100 0 | t1 tile create 400 220 top, t2 tile wire 400 0 chop, t3 tile set 400 -220 sop
-    - chat srv both, srv t1, srv t2, srv t3
+    - chat chat your_assistant -640 0 | srv server Envoy -80 0 | t1 tile create 420 220 top, t2 tile wire 420 0 chop, t3 tile set 420 -220 sop
+    - chat srv both MCP, srv t1, srv t2, srv t3
+    - TouchDesigner -260 -370 640 340
   - - threads
     - Two threads
     - Two threads
     - The server thread never touches TouchDesigner. The main thread does the work.
-    - chat chat request -640 0 | w server server_thread -240 0 | q stack queue 160 0 | m tile main_thread 560 0 comp
-    - chat w, w q, q m
+    - chat chat request -700 0 | w server MCP_server -300 0 | m tile TD_operators 380 0 comp
+    - chat w, w m both Event_+_Queue
+    - background_thread -480 -190 -120 210, main_thread 200 -190 560 210
   - - look
     - Looks at its own work
     - It looks at its own work
     - capture_top hands the agent the frame, with a verdict on it.
     - t tile out1 -600 0 top | e eye capture -200 0 | c chat agent 200 0 | ok ok judged 600 0
     - t e, e c, c ok
+    - ''
   - - errors
     - Reads the errors
     - It reads the errors
     - Cook errors, script tracebacks and shader compile failures, in one call.
     - b bad error -600 0 | c chat agent -200 0 | t tile the_fix 200 0 dat | ok ok clean 600 0
     - b c, c t, t ok
+    - ''
   - - batch
     - One batch, one undo
     - One batch, one undo
     - Many operations travel as one request, and one Ctrl+Z takes them back.
     - a tile create -640 220 top, b tile connect -640 0 chop, c tile set -640 -220 sop | s stack batch -180 0 | srv server Envoy 240 0 | ok ok one_undo 640 0
-    - a s, b s, c s, s srv, srv ok
-  - - layout
-    - Keeps it tidy
-    - It keeps the network tidy
-    - Every new operator lands on the grid, and every wire runs left to right.
-    - a tile noise -600 0 top | b tile level -200 0 top | c tile null 200 0 top | d tile out1 600 0 top
-    - a b, b c, c d
-  - - embot
-    - Embot
-    - Embot
-    - He stands on whatever the agent is working on.
-    - c chat agent -560 0 | e embot Embot -60 0 | t tile this_operator 440 0 top
-    - c e, e t
+    - a s, b s, c s, s srv one_request, srv ok
+    - ''
   - - sessions
     - Many agents
     - Many agents, one project
     - Each session claims what it is working on, so they never collide.
     - a chat session_1 -640 220, b chat session_2 -640 0, c chat session_3 -640 -220 | l lock claims -200 0 | srv server Envoy 220 0 | t tile your_project 640 0 comp
     - a l, b l, c l, l srv, srv t
+    - ''
   - - bridge
     - Finds its way back
     - It finds its way back
     - Close TouchDesigner and open it again. The bridge reconnects by itself.
     - c chat assistant -600 0 | b server bridge -200 0 | x bad TD_closed 200 0 | ok ok reconnected 600 0
     - c b, b x dashed, x ok
+    - ''
   - - autoexternalize
     - Saves new operators
     - New operators save themselves
     - With Autoexternalize on, every operator the agent creates gets its file.
     - c chat create_op -600 0 | t tile new_comp -200 0 comp | f file .tdxn 200 0 | g git tracked 600 0
     - c t, t f, f g
+    - ''
   - - install
     - One line to install
     - One line to install
     - Copy it from embody.tools and paste it into a Textport.
     - w cloud embody.tools -600 0 | t term Textport -200 0 | v ok sha256_checked 200 0 | m mark in_your_project 600 0
-    - w t, t v, v m
+    - w t copy, t v paste, v m
+    - ''
   - - update
     - Updates itself
     - It updates itself
     - Checked before it installs. Rolled back if it breaks.
     - c cloud new_release -600 0 | v ok verified -200 0 | m mark installed 200 0 | r clock rollback_ready 600 0
     - c v, v m, m r
+    - ''
   - - portable
     - Portable .tox
     - Export a portable .tox
     - Any COMP, self-contained, with Embody's own metadata stripped out.
     - t tile your_comp -500 0 comp | m mark export 0 0 | f file clean.tox 500 0
     - t m, m f
+    - ''
   - - docs
     - Reads the manual
     - It reads the manual
     - The agent looks up the real parameter name before it guesses one.
     - c chat agent -640 0 | d file TD_docs -220 150, p file op_types -220 -150 | ok ok the_real_name 220 0 | t tile blur:_size 640 0 top
     - c d, c p, d ok, p ok, ok t
+    - ''
   - - perf
     - Watches the frame rate
     - It watches the frame rate
     - Measured before and after every heavy step. If it drops, the agent stops.
     - t tile heavy_step -600 0 top | c clock measure -200 0 | ok ok 60_fps 200 0 | t2 tile next_step 600 0 chop
     - t c, c ok, ok t2
+    - ''
   - - clients
     - Any assistant
     - Bring your own assistant
     - Claude Code, Codex, Cursor, Gemini, Windsurf, OpenCode or Copilot.
     - a chat Claude_Code -640 255, b chat Codex -640 85, c chat Cursor -640 -85, d chat Gemini -640 -255 | srv server Envoy -40 0 | t tile TouchDesigner 520 0 comp
     - a srv, b srv, c srv, d srv, srv t
+    - TouchDesigner -220 -200 700 210
   - - tests
     - Tested in TD
     - Tested inside TouchDesigner
     - Thousands of test methods, run inside TouchDesigner itself.
     - t tile test_suites -500 0 dat | m mark run_in_TD 0 0 | ok ok green 500 0
     - t m, m ok
+    - ''
   - - convoy
     - Convoy
     - Convoy
     - Every Embody project on your trusted LAN is a node. No controller.
     - a machine studio -560 0 | b machine render-01 0 220, c machine render-02 0 -220 | d machine lobby 560 0
     - a b both, a c both, b d both, c d both
+    - one_trusted_LAN -740 -380 740 340
   - - convoy_pick
     - 'Convoy: pick a node'
     - Pick a node
     - Select a node, and the ordinary tools run there.
     - c chat agent -660 0 | s server Envoy -280 0 | n1 machine render-01 180 220, n2 machine render-02 180 0, n3 machine lobby 180 -220 | t tile runs_here 620 0 top
     - c s, s n1 dashed, s n2, s n3 dashed, n2 t
+    - trusted_LAN 20 -380 340 340
   - - convoy_hop
     - 'Convoy: one hop'
     - One hop on the network
     - Host app to host app, mutually authenticated. Envoy never faces the LAN.
-    - a server your_Envoy -660 0 | h1 machine host_app -240 0 | h2 machine host_app 240 0 | b server their_Envoy 660 0
-    - a h1, h1 h2 both, h2 b
+    - c chat assistant -780 0 | e server Envoy -520 0 | h1 machine host_app -240 0 | h2 machine host_app 240 0 | t tile remote_node 560 0 comp
+    - c e MCP, e h1, h1 h2 both trusted_LAN, h2 t
+    - your_computer -900 -200 -100 210, remote_computer 100 -200 720 210
   - - convoy_fleet
     - 'Convoy: fleet update'
     - Update the fleet
     - One call updates Embody on every node. Machines in a show are skipped.
     - c chat one_call -640 0 | a machine render-01 -80 220, b machine render-02 -80 0, d machine lobby -80 -220 | ok ok same_release 520 0
     - c a, c b, c d, a ok, b ok, d ok
+    - trusted_LAN -250 -380 90 340
   - - convoy_jobs
     - 'Convoy: jobs'
     - Jobs and artifacts
     - Send long work to a node as a job, then fetch what it made.
     - c chat agent -640 0 | n machine node -200 0 | j clock job 240 150, f file artifact 240 -150 | ok ok back_home 660 0
     - c n, n j, n f, j ok, f ok
+    - ''
   - - banana
     - The banana
     - Why is it always a banana?
     - moviefilein1 has entered the chat.
     - t tile moviefilein1 -480 0 top | b banana Banana.tif 0 0 | e embot ... 480 0
     - t b, b e
+    - ''
   dat_content_format: table
 - name: text_title
   type: textTOP
@@ -329,9 +324,9 @@ operators:
     extension: frag
   position: [925, -120]
   dock: glsl_explain
-  dat_content: "// explainer: a small animated diagram per Topic. The title rises, nodes arrive group by group\n// as their edges draw (a packet rides each edge while it draws), and the caption lands last.\n// Input 0 is the node labels (text_glyphs, placed by script_layout), input 1 the title and\n// input 2 the caption (both set at the frame's bottom left). uCells holds one vec4 per row of\n// the table kit_core/layout diagram() writes:\n//   [0]                 numNodes, numEdges, numGroups, label font size\n//   [1 + 2i], [2 + 2i]  node i: x, y, icon + family / 16, group; then label half width, label baseline\n//   [1 + 2 numNodes..]  edge: from, to, style (0 solid, 1 dashed, 2 both ways), its target's group\n#include <../kit_core/glsl_common>\nuniform samplerBuffer uCells;\nuniform vec4 uAnim;                 // x: Progress, y: 1 = dark backdrop\nuniform vec4 uText;                 // x: title width px, y: caption width px\n\nconst float S = 56.0;               // icon half size, px\nconst float REACH = 88.0;           // edges stop this far from a node's middle\nconst float TITLE = 64.0, CAPTION = 40.0;       // twins of the Text TOPs' font sizes\nconst vec3 SLATE = vec3(0.3, 0.35, 0.35);\n\nlayout(location = 0) out vec4 fragColor;\n\n// one icon laid over o; q is px from its middle. kind indexes ICONS in kit_core/layout.\nvec4 icon(vec4 o, vec2 q, int kind, int family) {\n\tif (kind == 0) {            // tile: an operator in its family colour\n\t\tvec3 body = FAMILY[family];\n\t\tvec2 halfSize = vec2(S, 0.62 * S);\n\t\to = over(o, body, fill(min(sdRoundBox(q, halfSize, 9.0), sdRoundBox(vec2(abs(q.x) - 1.04 * S, q.y), vec2(5.0, 6.0), 2.0))));\n\t\treturn over(o, 0.42 * body, fill(sdRoundBox(q, halfSize - 9.0, 3.0)));\n\t}\n\tif (kind == 1) {            // file: a page with its corner cut and lines of text\n\t\to = over(o, INK, fill(max(sdRoundBox(q, vec2(0.62, 0.82) * S, 6.0), (q.x + q.y - 1.06 * S) * 0.7071)));\n\t\to = over(o, GREEN, fill(sdRoundBox(q - vec2(-0.1, 0.3) * S, vec2(0.3 * S, 3.5), 3.5)));\n\t\treturn over(o, SLATE, fill(sdRoundBox(vec2(q.x, abs(q.y + 0.2 * S) - 0.16 * S), vec2(0.4 * S, 3.5), 3.5)));\n\t}\n\tif (kind == 2) {            // blob: a .toe, an opaque block of bits\n\t\tfloat d = sdRoundBox(q, vec2(0.8 * S), 12.0);\n\t\to = over(o, SLATE, fill(d));\n\t\tvec2 cell = floor(q / (0.3 * S) + 2.5);\n\t\tvec2 f = (fract(q / (0.3 * S) + 2.5) - 0.5) * 0.3 * S;\n\t\treturn over(o, INK, fill(max(sdRoundBox(f, vec2(0.085 * S), 2.0), d + 8.0)) * step(0.5, hash(cell.x + 9.0 * cell.y)));\n\t}\n\tif (kind == 3) return overMark(o, q, vec2(0.0), S / 21.25);\n\tif (kind == 4) {            // git: a diamond with a branch in it\n\t\to = over(o, GREEN, fill(sdRoundBox(rot(PI / 4.0) * q, vec2(0.64 * S), 8.0)));\n\t\tvec2 a = vec2(-0.16, -0.3) * S, b = vec2(-0.16, 0.3) * S, c = vec2(0.22, 0.12) * S;\n\t\tfloat d = min(sdSegment(q, a, b), sdSegment(q, vec2(-0.16, -0.08) * S, c)) - 3.0;\n\t\treturn over(o, DARK, fill(min(d, min(length(q - a), min(length(q - b), length(q - c))) - 7.0)));\n\t}\n\tif (kind == 5) {            // chat: a speech bubble, three dots\n\t\to = over(o, INK, fill(min(sdRoundBox(q - vec2(0.0, 0.08 * S), vec2(0.9, 0.58) * S, 16.0), sdRoundBox(rot(PI / 4.0) * (q + vec2(0.42, 0.46) * S), vec2(9.0), 2.0))));\n\t\treturn over(o, DARK, fill(length(vec2(mod(q.x + 0.18 * S, 0.36 * S) - 0.18 * S, q.y - 0.08 * S)) - 5.5) * step(abs(q.x), 0.54 * S));\n\t}\n\tif (kind == 6) {            // server: a green block with two slots, each with a light\n\t\to = over(o, GREEN, fill(sdRoundBox(q, vec2(0.8 * S), 12.0)));\n\t\tvec2 slot = vec2(q.x, abs(q.y) - 0.3 * S);\n\t\to = over(o, DARK, fill(sdRoundBox(slot, vec2(0.56, 0.16) * S, 5.0)));\n\t\treturn over(o, GREEN, fill(length(slot + vec2(0.36 * S, 0.0)) - 4.0));\n\t}\n\tif (kind == 7) {            // machine: a monitor on its stand\n\t\tvec2 screen = q - vec2(0.0, 0.14 * S);\n\t\tfloat d = min(sdRoundBox(screen, vec2(0.92, 0.6) * S, 8.0), min(sdRoundBox(q + vec2(0.0, 0.56 * S), vec2(0.1, 0.12) * S, 1.0), sdRoundBox(q + vec2(0.0, 0.72 * S), vec2(0.4, 0.05) * S, 3.0)));\n\t\to
-    = over(o, INK, fill(d));\n\t\to = over(o, DARK, fill(sdRoundBox(screen, vec2(0.92, 0.6) * S - 7.0, 3.0)));\n\t\treturn over(o, GREEN, fill(sdRoundBox(screen + vec2(0.4, -0.2) * S, vec2(0.3 * S, 3.5), 3.5)));\n\t}\n\tif (kind == 8) {            // embot: the blocks Envoy draws him from, standing still\n\t\tvec2 u = q * 44.0 / S + vec2(0.0, 1.5);\n\t\tfloat d = min(sdRoundBox(u, vec2(15.0, 17.0), 2.0), sdRoundBox(vec2(abs(u.x) - 22.0, u.y - 3.0), vec2(4.5, 13.0), 2.0));\n\t\td = min(d, min(sdRoundBox(vec2(abs(u.x) - 8.0, u.y + 29.0), vec2(5.5, 12.0), 2.0), sdRoundBox(u - vec2(0.0, 31.0), vec2(17.0, 13.0), 2.0)));\n\t\to = over(o, GREEN, fill(d * S / 44.0));\n\t\treturn over(o, DARK, fill(sdRoundBox(vec2(abs(u.x) - 8.0, u.y - 35.0), vec2(6.0, 6.5), 2.0) * S / 44.0));\n\t}\n\tif (kind == 9 || kind == 10) {  // ok: a tick on green. bad: a cross on red\n\t\to = over(o, kind == 9 ? GREEN : RED, fill(length(q) - 0.72 * S));\n\t\tfloat d = kind == 9\n\t\t\t? min(sdSegment(q, vec2(-0.32, 0.0) * S, vec2(-0.08, -0.24) * S), sdSegment(q, vec2(-0.08, -0.24) * S, vec2(0.34, 0.26) * S))\n\t\t\t: min(sdSegment(q, vec2(-0.26) * S, vec2(0.26) * S), sdSegment(q, vec2(-0.26, 0.26) * S, vec2(0.26, -0.26) * S));\n\t\treturn over(o, DARK, fill(d - 5.5));\n\t}\n\tif (kind == 11) {           // clock\n\t\to = over(o, INK, fill(abs(length(q) - 0.66 * S) - 5.0));\n\t\treturn over(o, GREEN, fill(min(sdSegment(q, vec2(0.0), vec2(0.0, 0.42 * S)), sdSegment(q, vec2(0.0), vec2(0.28, -0.14) * S)) - 4.0));\n\t}\n\tif (kind == 12) {           // eye: a camera\n\t\to = over(o, INK, fill(min(sdRoundBox(q, vec2(0.86, 0.54) * S, 10.0), sdRoundBox(q - vec2(-0.42, 0.6) * S, vec2(0.2, 0.1) * S, 3.0))));\n\t\to = over(o, DARK, fill(length(q) - 0.36 * S));\n\t\treturn over(o, GREEN, fill(length(q) - 0.2 * S));\n\t}\n\tif (kind == 13) {           // cloud\n\t\tfloat d = min(min(length(q - vec2(-0.38, -0.06) * S) - 0.36 * S, length(q - vec2(0.02, 0.18) * S) - 0.5 * S),\n\t\t\tmin(length(q - vec2(0.46, -0.04) * S) - 0.38 * S, sdRoundBox(q + vec2(-0.04, 0.24) * S, vec2(0.62, 0.2) * S, 10.0)));\n\t\treturn over(o, INK, fill(d));\n\t}\n\tif (kind == 14) {           // term: a Textport and its three chevrons\n\t\tfloat d = sdRoundBox(q, vec2(0.92, 0.62) * S, 10.0);\n\t\to = over(o, mix(GREEN, DARK, fill(d + 4.0)), fill(d));\n\t\tvec2 t = vec2(mod(q.x + 0.6 * S, 0.3 * S) - 0.2 * S, q.y);\n\t\tfloat chevron = min(sdSegment(t, vec2(-0.12, 0.13) * S, vec2(0.0)), sdSegment(t, vec2(-0.12, -0.13) * S, vec2(0.0))) - 3.0;\n\t\treturn over(o, GREEN, fill(chevron) * step(abs(q.x + 0.15 * S), 0.45 * S));\n\t}\n\tif (kind == 15)             // banana: a crescent\n\t\treturn over(o, BANANA, fill(max(length(q - vec2(0.0, 0.34 * S)) - 0.95 * S, 0.88 * S - length(q - vec2(0.0, 0.74 * S)))));\n\tif (kind == 16) {           // stack: three sheets, a batch\n\t\tfor (int i = 2; i >= 0; i--)\n\t\t\to = over(o, mix(INK, SLATE, 0.5 * float(i)), fill(sdRoundBox(q - (float(i) - 1.0) * vec2(0.18) * S, vec2(0.62, 0.46) * S, 8.0)));\n\t\treturn o;\n\t}\n\t// lock: a body, a shackle and a keyhole\n\tfloat shackle = max(abs(length(q - vec2(0.0, 0.24 * S)) - 0.36 * S) - 6.0, 0.24 * S - q.y);\n\to = over(o, INK, fill(min(sdRoundBox(q + vec2(0.0, 0.2 * S), vec2(0.6, 0.46) * S, 8.0), shackle)));\n\treturn over(o, DARK, fill(length(q + vec2(0.0, 0.2 * S)) - 0.13 * S));\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tif (uAnim.y > 0.5) {\n\t\t\t// the brand dark, with the network editor's grid of dots\n\t\t\to = vec4(DARK, 1.0);\n\t\t\to = over(o, 1.9 * DARK, fill(length(mod(p + 60.0, 120.0) - 60.0) - 2.5));\n\t\t}\n\t\tvec4 meta = texelFetch(uCells, 0);\n\t\tint numNodes = int(meta.x), numEdges = int(meta.y);\n\t\tfloat T = ramp(P, 0.1, 0.84) * meta.z;      // group g arrives over T = g to g + 0.6\n\n\t\t// edges, under the nodes: each draws just before its target's group, a packet at its tip\n\t\tfor (int i = 0; i < 24; i++) {\n\t\t\tif (i >= numEdges) break;\n\t\t\tvec4 e = texelFetch(uCells, 1 + 2 * numNodes + i);\n\t\t\tvec4 src = texelFetch(uCells,
-    1 + 2 * int(e.x));\n\t\t\tvec2 dst = texelFetch(uCells, 1 + 2 * int(e.y)).xy;\n\t\t\tfloat start = max(e.w - 0.75, src.w + 0.25);\n\t\t\tfloat k = easeInOutCubic(ramp(T, start, start + 0.7));\n\t\t\tif (k <= 0.0) continue;\n\t\t\tvec2 dir = normalize(dst - src.xy), side = vec2(-dir.y, dir.x);\n\t\t\tvec2 from = src.xy + dir * REACH;\n\t\t\tvec2 tip = mix(from, dst - dir * REACH, k);\n\t\t\tfloat line = fill(sdSegment(p, from, tip) - 2.5);\n\t\t\tif (int(e.z) == 1) line *= step(fract(dot(p - from, dir) / 28.0), 0.55);\n\t\t\tfloat head = min(sdSegment(p, tip, tip - 16.0 * dir + 10.0 * side), sdSegment(p, tip, tip - 16.0 * dir - 10.0 * side));\n\t\t\tif (int(e.z) == 2) head = min(head, min(sdSegment(p, from, from + 16.0 * dir + 10.0 * side), sdSegment(p, from, from + 16.0 * dir - 10.0 * side)));\n\t\t\to = over(o, QUIET, max(line, fill(head - 2.5)));\n\t\t\tif (k < 1.0) o = over(o, GREEN, fill(length(p - tip) - 8.0));\n\t\t}\n\n\t\t// nodes pop with their group, each with its label underneath\n\t\tfor (int i = 0; i < 16; i++) {\n\t\t\tif (i >= numNodes) break;\n\t\t\tvec4 node = texelFetch(uCells, 1 + 2 * i);\n\t\t\tfloat u = ramp(T, node.w, node.w + 0.6);\n\t\t\tif (u <= 0.0) continue;\n\t\t\tvec2 q = p - node.xy;\n\t\t\tif (max(abs(q.x), abs(q.y)) < 1.3 * S) o = icon(o, q / easeOutBack(u), int(node.z), int(fract(node.z) * 16.0 + 0.5));\n\t\t\tvec4 label = texelFetch(uCells, 2 + 2 * i);\n\t\t\tif (u > 0.5 && abs(q.x) < label.x + 4.0 && p.y > label.y - 0.3 * meta.w && p.y < label.y + meta.w)\n\t\t\t\to = over(o, INK, texture(sTD2DInputs[0], p / FRAME).a);\n\t\t}\n\n\t\t// title up top; the caption lands once the last group has\n\t\to = over(o, INK, lineRise(sTD2DInputs[1], p, vec2(960.0 - 0.5 * uText.x, 930.0), 0.24, TITLE, ramp(P, 0.0, 0.12)));\n\t\to = over(o, QUIET, lineRise(sTD2DInputs[2], p, vec2(960.0 - 0.5 * uText.y, 118.0), 0.24, CAPTION, ramp(P, 0.84, 0.96)));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content: "// explainer: a small animated diagram per Topic. Labelled regions and the title arrive first,\n// nodes arrive group by group as their edges draw (a packet rides each edge while it draws),\n// and the caption lands last. Input 0 is the small labels (text_glyphs, placed by\n// script_layout), input 1 the title, input 2 the caption (both set at the frame's bottom left).\n// uCells holds one vec4 per row of the table kit_core/layout diagram() writes:\n//   [0]              numNodes, numEdges, numGroups, label font size\n//   [1]              numFrames\n//   two per node     x, y, icon + family / 16, group / label half width, label baseline\n//   two per edge     from, to, style (0 solid, 1 dashed, 2 both ways), target's group / label middle x, baseline, half width\n//   one per frame    x0, y0, x1, y1\n#include <../kit_core/glsl_common>\nuniform samplerBuffer uCells;\nuniform vec4 uAnim;                 // x: Progress, y: 1 = dark backdrop\nuniform vec4 uText;                 // x: title width px, y: caption width px\n\nconst float S = 56.0;               // icon half size, px\nconst float REACH = 88.0;           // edges stop this far from a node's middle\nconst float TITLE = 64.0, CAPTION = 40.0;       // twins of the Text TOPs' font sizes\nconst vec3 SLATE = vec3(0.3, 0.35, 0.35);\n\nlayout(location = 0) out vec4 fragColor;\n\n// one icon laid over o; q is px from its middle. kind indexes ICONS in kit_core/layout.\nvec4 icon(vec4 o, vec2 q, int kind, int family) {\n\tif (kind == 0) return overTile(o, q, S, FAMILY[family]);\n\tif (kind == 1) return overPage(o, q, S);\n\tif (kind == 2) {            // blob: a .toe, an opaque block of bits\n\t\tfloat d = sdRoundBox(q, vec2(0.8 * S), 12.0);\n\t\to = over(o, SLATE, fill(d));\n\t\tvec2 cell = floor(q / (0.3 * S) + 2.5);\n\t\tvec2 f = (fract(q / (0.3 * S) + 2.5) - 0.5) * 0.3 * S;\n\t\treturn over(o, INK, fill(max(sdRoundBox(f, vec2(0.085 * S), 2.0), d + 8.0)) * step(0.5, hash(cell.x + 9.0 * cell.y)));\n\t}\n\tif (kind == 3) return overMark(o, q, vec2(0.0), S / 21.25);\n\tif (kind == 4) {            // git: a diamond with a branch in it\n\t\to = over(o, GREEN, fill(sdRoundBox(rot(PI / 4.0) * q, vec2(0.64 * S), 8.0)));\n\t\tvec2 a = vec2(-0.16, -0.3) * S, b = vec2(-0.16, 0.3) * S, c = vec2(0.22, 0.12) * S;\n\t\tfloat d = min(sdSegment(q, a, b), sdSegment(q, vec2(-0.16, -0.08) * S, c)) - 3.0;\n\t\treturn over(o, DARK, fill(min(d, min(length(q - a), min(length(q - b), length(q - c))) - 7.0)));\n\t}\n\tif (kind == 5) {            // chat: a speech bubble, three dots\n\t\to = over(o, INK, fill(min(sdRoundBox(q - vec2(0.0, 0.08 * S), vec2(0.9, 0.58) * S, 16.0), sdRoundBox(rot(PI / 4.0) * (q + vec2(0.42, 0.46) * S), vec2(9.0), 2.0))));\n\t\treturn over(o, DARK, fill(length(vec2(mod(q.x + 0.18 * S, 0.36 * S) - 0.18 * S, q.y - 0.08 * S)) - 5.5) * step(abs(q.x), 0.54 * S));\n\t}\n\tif (kind == 6) {            // server: a green block with two slots, each with a light\n\t\to = over(o, GREEN, fill(sdRoundBox(q, vec2(0.8 * S), 12.0)));\n\t\tvec2 slot = vec2(q.x, abs(q.y) - 0.3 * S);\n\t\to = over(o, DARK, fill(sdRoundBox(slot, vec2(0.56, 0.16) * S, 5.0)));\n\t\treturn over(o, GREEN, fill(length(slot + vec2(0.36 * S, 0.0)) - 4.0));\n\t}\n\tif (kind == 7) {            // machine: a monitor on its stand\n\t\tvec2 screen = q - vec2(0.0, 0.14 * S);\n\t\tfloat d = min(sdRoundBox(screen, vec2(0.92, 0.6) * S, 8.0), min(sdRoundBox(q + vec2(0.0, 0.56 * S), vec2(0.1, 0.12) * S, 1.0), sdRoundBox(q + vec2(0.0, 0.72 * S), vec2(0.4, 0.05) * S, 3.0)));\n\t\to = over(o, INK, fill(d));\n\t\to = over(o, DARK, fill(sdRoundBox(screen, vec2(0.92, 0.6) * S - 7.0, 3.0)));\n\t\treturn over(o, GREEN, fill(sdRoundBox(screen + vec2(0.4, -0.2) * S, vec2(0.3 * S, 3.5), 3.5)));\n\t}\n\tif (kind == 8) return overEmbot(o, q * 44.0 / S + vec2(0.0, 1.5), S / 44.0, vec2(0.0), 0.0);\n\tif (kind == 9 || kind == 10) {  // ok: a tick on green. bad: a cross on red\n\t\to = over(o, kind == 9 ? GREEN : RED, fill(length(q) - 0.72 * S));\n\t\tfloat d = kind == 9\n\t\t\t? min(sdSegment(q, vec2(-0.32, 0.0) * S, vec2(-0.08,
+    -0.24) * S), sdSegment(q, vec2(-0.08, -0.24) * S, vec2(0.34, 0.26) * S))\n\t\t\t: min(sdSegment(q, vec2(-0.26) * S, vec2(0.26) * S), sdSegment(q, vec2(-0.26, 0.26) * S, vec2(0.26, -0.26) * S));\n\t\treturn over(o, DARK, fill(d - 5.5));\n\t}\n\tif (kind == 11) {           // clock\n\t\to = over(o, INK, fill(abs(length(q) - 0.66 * S) - 5.0));\n\t\treturn over(o, GREEN, fill(min(sdSegment(q, vec2(0.0), vec2(0.0, 0.42 * S)), sdSegment(q, vec2(0.0), vec2(0.28, -0.14) * S)) - 4.0));\n\t}\n\tif (kind == 12) {           // eye: a camera\n\t\to = over(o, INK, fill(min(sdRoundBox(q, vec2(0.86, 0.54) * S, 10.0), sdRoundBox(q - vec2(-0.42, 0.6) * S, vec2(0.2, 0.1) * S, 3.0))));\n\t\to = over(o, DARK, fill(length(q) - 0.36 * S));\n\t\treturn over(o, GREEN, fill(length(q) - 0.2 * S));\n\t}\n\tif (kind == 13) {           // cloud\n\t\tfloat d = min(min(length(q - vec2(-0.38, -0.06) * S) - 0.36 * S, length(q - vec2(0.02, 0.18) * S) - 0.5 * S),\n\t\t\tmin(length(q - vec2(0.46, -0.04) * S) - 0.38 * S, sdRoundBox(q + vec2(-0.04, 0.24) * S, vec2(0.62, 0.2) * S, 10.0)));\n\t\treturn over(o, INK, fill(d));\n\t}\n\tif (kind == 14) {           // term: a Textport and its three chevrons\n\t\tfloat d = sdRoundBox(q, vec2(0.92, 0.62) * S, 10.0);\n\t\to = over(o, mix(GREEN, DARK, fill(d + 4.0)), fill(d));\n\t\tvec2 t = vec2(mod(q.x + 0.6 * S, 0.3 * S) - 0.2 * S, q.y);\n\t\tfloat chevron = min(sdSegment(t, vec2(-0.12, 0.13) * S, vec2(0.0)), sdSegment(t, vec2(-0.12, -0.13) * S, vec2(0.0))) - 3.0;\n\t\treturn over(o, GREEN, fill(chevron) * step(abs(q.x + 0.15 * S), 0.45 * S));\n\t}\n\tif (kind == 15)             // banana: a crescent\n\t\treturn over(o, BANANA, fill(max(length(q - vec2(0.0, 0.34 * S)) - 0.95 * S, 0.88 * S - length(q - vec2(0.0, 0.74 * S)))));\n\tif (kind == 16) {           // stack: three sheets, a batch\n\t\tfor (int i = 2; i >= 0; i--)\n\t\t\to = over(o, mix(INK, SLATE, 0.5 * float(i)), fill(sdRoundBox(q - (float(i) - 1.0) * vec2(0.18) * S, vec2(0.62, 0.46) * S, 8.0)));\n\t\treturn o;\n\t}\n\t// lock: a body, a shackle and a keyhole\n\tfloat shackle = max(abs(length(q - vec2(0.0, 0.24 * S)) - 0.36 * S) - 6.0, 0.24 * S - q.y);\n\to = over(o, INK, fill(min(sdRoundBox(q + vec2(0.0, 0.2 * S), vec2(0.6, 0.46) * S, 8.0), shackle)));\n\treturn over(o, DARK, fill(length(q + vec2(0.0, 0.2 * S)) - 0.13 * S));\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tif (uAnim.y > 0.5) {\n\t\t\t// the brand dark, with the network editor's grid of dots\n\t\t\to = vec4(DARK, 1.0);\n\t\t\to = over(o, 1.9 * DARK, fill(length(mod(p + 60.0, 120.0) - 60.0) - 2.5));\n\t\t}\n\t\tvec4 meta = texelFetch(uCells, 0);\n\t\tint numNodes = int(meta.x), numEdges = int(meta.y), numFrames = int(texelFetch(uCells, 1).x);\n\t\tint firstEdge = 2 + 2 * numNodes, firstFrame = firstEdge + 2 * numEdges;\n\t\tfloat T = ramp(P, 0.1, 0.84) * meta.z;      // group g arrives over T = g to g + 0.6\n\t\tfloat ink = texture(sTD2DInputs[0], p / FRAME).a;\n\n\t\t// regions: a lighter panel with a hairline edge, its label in the top left corner\n\t\tfloat early = ramp(P, 0.02, 0.1);\n\t\tfor (int i = 0; i < 4; i++) {\n\t\t\tif (i >= numFrames) break;\n\t\t\tvec4 f = texelFetch(uCells, firstFrame + i);\n\t\t\tfloat d = sdRoundBox(p - 0.5 * (f.xy + f.zw), 0.5 * (f.zw - f.xy), 22.0);\n\t\t\to = over(o, mix(0.6 * SLATE, 1.35 * DARK, fill(d + 2.5)), fill(d) * early);\n\t\t\tif (d < 0.0 && p.y > f.w - 62.0) o = over(o, QUIET, ink * early);\n\t\t}\n\n\t\t// edges, under the nodes: each draws just before its target's group, a packet at its tip\n\t\tfor (int i = 0; i < 24; i++) {\n\t\t\tif (i >= numEdges) break;\n\t\t\tvec4 e = texelFetch(uCells, firstEdge + 2 * i);\n\t\t\tvec4 src = texelFetch(uCells, 2 + 2 * int(e.x));\n\t\t\tvec2 dst = texelFetch(uCells, 2 + 2 * int(e.y)).xy;\n\t\t\tfloat start = max(e.w - 0.75, src.w + 0.25);\n\t\t\tfloat k = easeInOutCubic(ramp(T, start, start + 0.7));\n\t\t\tif (k <= 0.0) continue;\n\t\t\tvec2 dir = normalize(dst - src.xy), side = vec2(-dir.y, dir.x);\n\t\t\tvec2 from = src.xy + dir * REACH;\n\t\t\tvec2
+    tip = mix(from, dst - dir * REACH, k);\n\t\t\tfloat line = fill(sdSegment(p, from, tip) - 2.5);\n\t\t\tif (int(e.z) == 1) line *= step(fract(dot(p - from, dir) / 28.0), 0.55);\n\t\t\tfloat head = min(sdSegment(p, tip, tip - 16.0 * dir + 10.0 * side), sdSegment(p, tip, tip - 16.0 * dir - 10.0 * side));\n\t\t\tif (int(e.z) == 2) head = min(head, min(sdSegment(p, from, from + 16.0 * dir + 10.0 * side), sdSegment(p, from, from + 16.0 * dir - 10.0 * side)));\n\t\t\to = over(o, QUIET, max(line, fill(head - 2.5)));\n\t\t\tif (k < 1.0) o = over(o, GREEN, fill(length(p - tip) - 8.0));\n\t\t\tvec4 label = texelFetch(uCells, firstEdge + 2 * i + 1);\n\t\t\tif (k >= 1.0 && abs(p.x - label.x) < label.z + 4.0 && p.y > label.y - 0.3 * meta.w && p.y < label.y + meta.w)\n\t\t\t\to = over(o, GREEN, ink);\n\t\t}\n\n\t\t// nodes pop with their group, each with its label underneath\n\t\tfor (int i = 0; i < 16; i++) {\n\t\t\tif (i >= numNodes) break;\n\t\t\tvec4 node = texelFetch(uCells, 2 + 2 * i);\n\t\t\tfloat u = ramp(T, node.w, node.w + 0.6);\n\t\t\tif (u <= 0.0) continue;\n\t\t\tvec2 q = p - node.xy;\n\t\t\tif (max(abs(q.x), abs(q.y)) < 1.3 * S) o = icon(o, q / easeOutBack(u), int(node.z), int(fract(node.z) * 16.0 + 0.5));\n\t\t\tvec4 label = texelFetch(uCells, 3 + 2 * i);\n\t\t\tif (u > 0.5 && abs(q.x) < label.x + 4.0 && p.y > label.y - 0.3 * meta.w && p.y < label.y + meta.w)\n\t\t\t\to = over(o, INK, ink);\n\t\t}\n\n\t\t// title up top; the caption lands once the last group has\n\t\to = over(o, INK, lineRise(sTD2DInputs[1], p, vec2(960.0 - 0.5 * uText.x, 930.0), 0.24, TITLE, ramp(P, 0.0, 0.12)));\n\t\to = over(o, QUIET, lineRise(sTD2DInputs[2], p, vec2(960.0 - 0.5 * uText.y, 118.0), 0.24, CAPTION, ramp(P, 0.84, 0.96)));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
   dat_content_format: text
 - name: script_layout_callbacks
   type: textDAT
@@ -339,13 +334,13 @@ operators:
     language: python
   position: [200, -120]
   dock: script_layout
-  dat_content: "# one call into kit_core/layout; diagram() documents the topic format and the table this writes\ndef onCook(scriptOp):\n\ttopic = parent.Mograph.par.Topic.eval()\n\ttopics = op('topics')\n\top('../kit_core/layout').module.diagram(scriptOp, op('text_glyphs'), topics[topic, 'nodes'].val, topics[topic, 'edges'].val)\n"
+  dat_content: "# one call into kit_core/layout; diagram() documents the topic format and the table this writes\ndef onCook(scriptOp):\n\ttopic = parent.Mograph.par.Topic.eval()\n\ttopics = op('topics')\n\top('../kit_core/layout').module.diagram(scriptOp, op('text_glyphs'), topics[topic, 'nodes'].val, topics[topic, 'edges'].val, topics[topic, 'frames'].val)\n"
   dat_content_format: text
 annotations:
 - name: annotate1
   mode: annotate
   title: Feature explainer
-  text: 'One animated diagram per Topic. Each row of the topics table is a diagram: title, caption, nodes (''id icon label x y [family]'', groups split by |) and edges (''from to [dashed|both]''). kit_core/layout diagram() parses the row; glsl_explain draws the icons, edges and packets. Add a row to add a topic; add an icon in both places to add an icon.'
+  text: 'One animated node-and-edge diagram per Topic. Each row of the topics table is a diagram: title, caption, nodes (''id icon label x y [family]'', groups split by |), edges (''from to [dashed|both] [label]'') and frames (''label x0 y0 x1 y1'', the labelled regions). kit_core/layout diagram() parses the row; glsl_explain draws it. Add a row to add a topic; add an icon in both places to add an icon. Explanations that need their own staging live in explainer_scene.'
   position: [130, -670]
   size: [1470, 930]
   color: [0.13, 0.28, 0.32]
