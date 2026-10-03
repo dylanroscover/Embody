@@ -606,7 +606,7 @@ operators:
     - '752'
     - '0'
     - '1'
-    - '0.1'
+    - '0.09'
     - '2'
     - '0'
   - - collection
@@ -615,7 +615,7 @@ operators:
     - '340'
     - '0'
     - '0'
-    - '0.14'
+    - '0.12'
     - '2'
     - '0'
   - - collection
@@ -624,17 +624,17 @@ operators:
     - '340'
     - '0'
     - '5'
-    - '0.16'
+    - '0.14'
     - '2'
     - '201'
   - - collection
     - on the clipboard
-    - '855'
-    - '420'
+    - '1008'
+    - '376'
     - '0.5'
     - '1'
-    - '0.32'
-    - '0.5'
+    - '0.28'
+    - '0.44'
     - '0'
   - - collection
     - your network
@@ -642,7 +642,7 @@ operators:
     - '752'
     - '0.5'
     - '1'
-    - '0.14'
+    - '0.12'
     - '2'
     - '0'
   - - collection
@@ -651,8 +651,8 @@ operators:
     - '636'
     - '0'
     - '0'
-    - '0.52'
-    - '0.66'
+    - '0.46'
+    - '0.58'
     - '0'
   - - collection
     - Embody it as a new COMP?
@@ -660,8 +660,8 @@ operators:
     - '566'
     - '0'
     - '1'
-    - '0.52'
-    - '0.66'
+    - '0.46'
+    - '0.58'
     - '0'
   - - collection
     - Embody it
@@ -669,8 +669,8 @@ operators:
     - '468'
     - '0'
     - '5'
-    - '0.52'
-    - '0.66'
+    - '0.46'
+    - '0.58'
     - '201'
   - - collection
     - Dismiss
@@ -678,8 +678,8 @@ operators:
     - '468'
     - '0'
     - '1'
-    - '0.52'
-    - '0.66'
+    - '0.46'
+    - '0.58'
     - '0'
   - - collection
     - kaleidoscope
@@ -687,7 +687,196 @@ operators:
     - '400'
     - '0.5'
     - '0'
-    - '0.76'
+    - '0.67'
+    - '2'
+    - '0'
+  - - collection
+    - your_scene
+    - '900'
+    - '446'
+    - '0.5'
+    - '0'
+    - '0.79'
+    - '2'
+    - '0'
+  - - binary
+    - 0123456789ABCDEFGHJKMNPQRSTVWXYZ@#%&$?*+=<>/!
+    - '40'
+    - '1040'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - mixer.tox
+    - '40'
+    - '990'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - mixer.tdxn
+    - '300'
+    - '990'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - 'type: baseCOMP'
+    - '450'
+    - '728'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - 'operators:'
+    - '450'
+    - '686'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '- name: noise1'
+    - '450'
+    - '644'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  type: noiseTOP'
+    - '450'
+    - '602'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  parameters:'
+    - '450'
+    - '560'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '    period: 4'
+    - '450'
+    - '518'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '    tz: =absTime.seconds'
+    - '450'
+    - '476'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '- name: level1'
+    - '450'
+    - '434'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  type: levelTOP'
+    - '450'
+    - '392'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  inputs:'
+    - '450'
+    - '350'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  - noise1'
+    - '450'
+    - '308'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - binary
+    - '  position: [200, 0]'
+    - '450'
+    - '266'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - backups
+    - 0123456789
+    - '40'
+    - '1040'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - backups
+    - project.
+    - '40'
+    - '990'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - backups
+    - .toe
+    - '300'
+    - '990'
+    - '0'
+    - '7'
+    - '0'
+    - '2'
+    - '0'
+  - - backups
+    - Backup/
+    - '604'
+    - '752'
+    - '0'
+    - '1'
+    - '0.1'
+    - '2'
+    - '0'
+  - - backups
+    - '?'
+    - '1290'
+    - '524'
+    - '0.5'
+    - '3'
+    - '0.9'
     - '2'
     - '0'
   dat_content_format: table
@@ -721,8 +910,16 @@ operators:
     - At frames 30, 45 and 60 of opening, everything externalized comes back from disk.
   - - collection
     - Paste from the Collection
-    - Paste from the Collection
-    - Click embody it on the site. Embody spots the clipboard and offers to build it.
+    - See it. Embody it.
+    - Copy it on the site, accept it in TouchDesigner, wire your own work in.
+  - - binary
+    - Binary, or text
+    - Binary, or text you can read
+    - The same COMP, saved as a .tox and as a .tdxn.
+  - - backups
+    - The Backup folder
+    - Which .toe was it?
+    - Numbered saves, all binary. No way to see what changed between them.
   dat_content_format: table
 - name: glsl_scene
   type: glslTOP
@@ -822,10 +1019,11 @@ operators:
     extension: frag
   position: [925, -120]
   dock: glsl_scene
-  dat_content: "// explainer_scene: six explanations that need their own staging, one per branch below. All\n// their free text (labels, lines of code) comes from the texts table through kit_core/layout\n// items(), each with the Progress window it shows in; positions here and there are twins.\n// Input 0 is that text (text_glyphs), input 1 the title, input 2 the caption.\n// Scenes are numbered by their row in the scenes table: 0 diff, 1 tdxn, 2 embot, 3 layout, 4 restore,\n// 5 collection.\n#include <../kit_core/glsl_common>\n#include <../kit_core/glsl_type>\nuniform vec4 uAnim;                 // x: Progress, y: 1 = dark backdrop, z: scene\nuniform vec4 uText;                 // x: title width px, y: caption width px\n\nconst float TITLE = 64.0, CAPTION = 40.0;       // twins of the Text TOPs' font sizes\nconst vec3 CARD = vec3(0.063, 0.08, 0.08);      // a card of code, darker than the backdrop\n\nlayout(location = 0) out vec4 fragColor;\n\n// a wire from a to b, drawn up to fraction k\nvec4 overWire(vec4 o, vec2 p, vec2 a, vec2 b, float k) {\n\treturn k <= 0.0 ? o : over(o, QUIET, fill(sdSegment(p, a, mix(a, b, k)) - 2.5));\n}\n\n// a card of code between lo and hi, unrolling from its top edge\nvec4 overCard(vec4 o, vec2 p, vec2 lo, vec2 hi, float unroll) {\n\tif (unroll <= 0.0 || p.y < mix(hi.y, lo.y, unroll)) return o;\n\treturn over(o, CARD, fill(sdRoundBox(p - 0.5 * (lo + hi), 0.5 * (hi - lo), 16.0)));\n}\n\n// Before and after: the same operator either side of one parameter change, and under them the\n// file, where the old line turns red and the new one arrives green.\nvec4 sceneDiff(vec4 o, vec2 p, float P) {\n\tconst vec2 BEFORE = vec2(480.0, 690.0), AFTER = vec2(1440.0, 690.0), CHIP = vec2(0.0, -120.0);\n\tfloat a = easeOutBack(ramp(P, 0.1, 0.2));\n\tif (a > 0.0) {\n\t\to = overTile(o, (p - BEFORE) / a, 84.0, FAMILY[0]);\n\t\to = over(o, 1.7 * DARK, fill(sdRoundBox(p - BEFORE - CHIP, vec2(124.0, 30.0) * a, 12.0)));\n\t}\n\to = overCard(o, p, vec2(560.0, 251.0), vec2(1360.0, 493.0), easeOutCubic(ramp(P, 0.16, 0.26)));\n\n\tfloat k = easeInOutCubic(ramp(P, 0.3, 0.44));\n\tif (k > 0.0) {\n\t\tvec2 from = BEFORE + vec2(150.0, 0.0), tip = mix(from, AFTER - vec2(150.0, 0.0), k);\n\t\to = over(o, QUIET, fill(min(sdSegment(p, from, tip), min(sdSegment(p, tip, tip + vec2(-16.0, 10.0)), sdSegment(p, tip, tip + vec2(-16.0, -10.0)))) - 2.5));\n\t}\n\tfloat b = easeOutBack(ramp(P, 0.44, 0.54));\n\tif (b > 0.0) {\n\t\to = overTile(o, (p - AFTER) / b, 84.0, FAMILY[0]);\n\t\tfloat d = sdRoundBox(p - AFTER - CHIP, vec2(124.0, 30.0) * b, 12.0);\n\t\to = over(o, mix(GREEN, 1.7 * DARK, fill(d + 3.0)), fill(d));\n\t}\n\treturn o;\n}\n\n// The network on the left, its file on the right. Each operator arrives, then its block of\n// lines does, and the two carry the same number.\nvec4 sceneTdxn(vec4 o, vec2 p, float P) {\n\to = overCard(o, p, vec2(968.0, 237.0), vec2(1752.0, 743.0), easeOutCubic(ramp(P, 0.06, 0.18)));\n\tfor (int i = 0; i < 3; i++) {\n\t\tfloat t = 0.14 + 0.22 * float(i);\n\t\tvec2 c = vec2(250.0 + 250.0 * float(i), 560.0);\n\t\tif (i > 0) o = overWire(o, p, c - vec2(164.0, 0.0), c - vec2(86.0, 0.0), easeInOutCubic(ramp(P, t - 0.08, t)));\n\t\tfloat a = easeOutBack(ramp(P, t, t + 0.1));\n\t\tif (a > 0.0) o = overTile(o, (p - c) / a, 78.0, FAMILY[0]);\n\t\tfloat n = easeOutBack(ramp(P, t + 0.1, t + 0.18));\n\t\tif (n > 0.0) {\n\t\t\tfloat top = i == 0 ? 648.0 : i == 1 ? 564.0 : 396.0;        // baseline of the block's first line\n\t\t\tfloat bottom = i == 0 ? 606.0 : i == 1 ? 438.0 : 270.0;     // and of its last\n\t\t\to = over(o, GREEN, fill(length(p - c - vec2(72.0, 54.0)) - 20.0 * n));\n\t\t\to = over(o, GREEN, fill(length(p - vec2(1012.0, top + 11.0)) - 18.0 * n));\n\t\t\to = over(o, GREEN, fill(sdRoundBox(p - vec2(1036.0, 0.5 * (top + bottom) + 10.0), vec2(2.0, 0.5 * (top - bottom) + 20.0), 2.0)));\n\t\t}\n\t}\n\treturn o;\n}\n\n// Embot hops in and works his way along the chain. Each operator is built as he lands on it,\n// the one he stands on is ringed, and his bubble says what it did (items 4-7 of the texts,
-    one\n// per tile, parked and laid here; the bubble fits its line). His colour is Envoy's: cool as\n// the agent acts, warming while it thinks.\nvec4 sceneEmbot(vec4 o, vec2 p, float P) {\n\tconst float SIZE = 96.0, U = 3.2, ARC = 90.0;\n\tconst float LAND = 0.12, STEP = 0.22, HOP = 0.08;   // he reaches tile i at LAND + STEP * i and leaves the one before HOP earlier\n\tconst float GROUND = 430.0 + 0.62 * 96.0;           // the tops of the tiles, where he stands\n\tfloat on = clamp(floor((P - LAND) / STEP), 0.0, 3.0);   // the tile he last landed on\n\tfloat hop = on < 3.0 ? ramp(P, LAND + STEP * (on + 1.0) - HOP, LAND + STEP * (on + 1.0)) : 0.0;\n\tvec3 skin = embotSkin(P < LAND || hop > 0.0 ? 0.0 : 0.3 * (P - LAND - STEP * on) / (STEP - HOP));\n\tfor (int i = 0; i < 4; i++) {\n\t\tfloat t = LAND + STEP * float(i);\n\t\tvec2 c = vec2(390.0 + 380.0 * float(i), 430.0);\n\t\tif (i > 0) o = overWire(o, p, c - vec2(380.0 - SIZE - 10.0, 0.0), c - vec2(SIZE + 10.0, 0.0), ramp(P, t - HOP, t));\n\t\tfloat a = easeOutBack(ramp(P, t - 0.02, t + 0.06));\n\t\tif (a <= 0.0) continue;\n\t\to = overTile(o, (p - c) / a, SIZE, FAMILY[0]);\n\t\tif (float(i) == on && hop <= 0.0 && P >= t)\n\t\t\to = over(o, GREEN, fill(abs(sdRoundBox(p - c, vec2(SIZE, 0.62 * SIZE) + 10.0, 0.16 * SIZE + 10.0)) - 2.5));\n\t}\n\t// before the first landing he is still on his way in from the left\n\tfloat arrive = ramp(P, 0.0, LAND);\n\tfloat air = P < LAND ? arrive : hop;\n\tfloat squash = sin(PI * ramp(P, LAND + STEP * on, LAND + STEP * on + 0.05));\n\tvec2 body = vec2(P < LAND ? mix(-220.0, 390.0, easeOutCubic(arrive)) : 390.0 + 380.0 * (on + easeInOutCubic(hop)),\n\t\tGROUND + 41.0 * U + 4.0 * ARC * air * (1.0 - air));\n\tvec2 u = (p - body) / U;\n\tu = vec2(u.x / (1.0 + 0.08 * squash), (u.y + 41.0) / (1.0 - 0.12 * squash) - 41.0);\n\tfloat wave = sin(PI * ramp(P, 0.86, 0.99));\n\to = overEmbot(o, u, U, vec2(3.0 * sin(110.0 * P) * wave, 16.0 * wave), sin(PI * ramp(P, 0.46, 0.5)), skin);\n\n\tint item = 4 + int(on);\n\tvec4 line = texelFetch(uCells, 1 + 2 * item), when = texelFetch(uCells, 2 + 2 * item);\n\tfloat say = P < when.y ? easeOutBack(ramp(P, when.x - 0.03, when.x)) : 0.0;\n\tif (say <= 0.0) return o;\n\tvec2 g = (p - vec2(390.0 + 380.0 * on, 766.0)) / say;       // it grows from a point just above his head\n\tfloat d = min(sdRoundBox(g - vec2(0.0, 46.0), vec2(0.5 * line.y + 24.0, 32.0), 14.0),\n\t\tsdRoundBox(rot(PI / 4.0) * (g - vec2(0.0, 18.0)), vec2(10.0), 2.0)) * say;\n\to = over(o, mix(skin, CARD, fill(d + 3.0)), fill(d));\n\treturn over(o, INK, itemAt(item, g, vec2(-0.5 * line.y, 35.0)));\n}\n\n// Every operator starts in a heap on the origin, where a bare create() leaves it, then goes\n// to its place on the grid; a wire is drawn once both of its ends have landed.\nvec4 sceneLayout(vec4 o, vec2 p, float P) {\n\tconst vec2 ORIGIN = vec2(960.0, 600.0);\n\tfloat axes = ramp(P, 0.08, 0.14) * (1.0 - ramp(P, 0.32, 0.38));\n\to = over(o, QUIET, fill(min(sdSegment(p, ORIGIN - vec2(150.0, 0.0), ORIGIN + vec2(150.0, 0.0)), sdSegment(p, ORIGIN - vec2(0.0, 120.0), ORIGIN + vec2(0.0, 120.0))) - 1.5) * axes);\n\tfor (int i = 0; i < 5; i++) {\n\t\tfloat fi = float(i);\n\t\tvec2 slot = vec2(480.0 + 240.0 * fi, 600.0);\n\t\tif (i > 0) o = overWire(o, p, slot - vec2(148.0, 0.0), slot - vec2(92.0, 0.0), ramp(P, 0.5 + 0.07 * fi, 0.56 + 0.07 * fi));\n\t\tfloat a = easeOutBack(ramp(P, 0.1 + 0.03 * fi, 0.2 + 0.03 * fi));\n\t\tif (a <= 0.0) continue;\n\t\tvec2 heap = ORIGIN + (vec2(hash(fi + 3.0), hash(fi + 11.0)) - 0.5) * vec2(110.0, 80.0);\n\t\tvec2 at = mix(heap, slot, easeOutBack(ramp(P, 0.36 + 0.07 * fi, 0.5 + 0.07 * fi)));\n\t\to = overTile(o, (p - at) / a, 84.0, FAMILY[i == 1 ? 1 : i == 3 ? 4 : 0]);\n\t}\n\treturn o;\n}\n\n// A frame ruler with a playhead: agent config at 30, .tox COMPs at 45, .tdxn COMPs at 60,\n// everything back at 75.\nvec4 sceneRestore(vec4 o, vec2 p, float P) {\n\tconst float RULE = 330.0, LEFT = 360.0, PER = 16.0;     // the ruler's height, frame 0, px per frame\n\tfloat show = ramp(P, 0.04, 0.12);\n\tif (show <= 0.0) return o;\n\tfloat
-    head = LEFT + PER * 75.0 * ramp(P, 0.12, 0.8);\n\to = over(o, p.x <= head ? GREEN : QUIET, fill(sdSegment(p, vec2(LEFT, RULE), vec2(LEFT + 75.0 * PER * show, RULE)) - 2.0));\n\tif (p.x > LEFT - 4.0 && p.x < LEFT + 75.0 * PER * show + 4.0)\n\t\to = over(o, QUIET, fill(max(abs(mod(p.x - LEFT + 120.0, 240.0) - 120.0) - 2.0, abs(p.y - RULE + 12.0) - 12.0)));\n\tfor (int i = 0; i < 4; i++) {\n\t\tfloat f = 30.0 + 15.0 * float(i);\n\t\tfloat t = 0.12 + 0.68 * f / 75.0;                   // when the playhead reaches this mark\n\t\tfloat a = easeOutBack(ramp(P, t, t + 0.07));\n\t\tif (a <= 0.0) continue;\n\t\tvec2 c = vec2(LEFT + PER * f, 560.0);\n\t\to = over(o, QUIET, fill(sdSegment(p, vec2(c.x, RULE + 16.0), vec2(c.x, mix(RULE + 16.0, 480.0, a))) - 1.5));\n\t\tvec2 q = (p - c) / a;\n\t\tif (i == 0) {\n\t\t\to = overPage(o, q, 56.0);\n\t\t} else if (i == 3) {\n\t\t\to = over(o, GREEN, fill(length(q) - 42.0));\n\t\t\to = over(o, DARK, fill(min(sdSegment(q, vec2(-18.0, 0.0), vec2(-5.0, -14.0)), sdSegment(q, vec2(-5.0, -14.0), vec2(19.0, 15.0))) - 5.0));\n\t\t} else {\n\t\t\to = overTile(o, q - vec2(-16.0, 12.0), 52.0, 0.75 * FAMILY[6]);\n\t\t\to = overTile(o, q - vec2(16.0, -12.0), 52.0, FAMILY[6]);\n\t\t}\n\t}\n\treturn over(o, GREEN, fill(min(sdSegment(p, vec2(head, RULE - 14.0), vec2(head, RULE + 38.0)) - 2.0, length(p - vec2(head, RULE + 44.0)) - 9.0)) * show);\n}\n\n// the specimen in the collection scene, an eight-fold star in the kit's colours: q is px from\n// its middle, s its half height\nvec3 specimen(vec2 q, float s, float turn) {\n\tvec2 u = rot(turn) * q / s;\n\tfloat r = length(u), around = atan(u.y, u.x);\n\tfloat a = abs(mod(around, PI / 4.0) - PI / 8.0);\n\tvec2 f = r * vec2(cos(a), sin(a));              // folded into one mirrored wedge\n\tvec3 c = mix(0.55 * DARK, FAMILY[0], fill(s * (abs(r - 0.78) - 0.035)));\n\tc = mix(c, GREEN, fill(s * sdRoundBox(rot(PI / 4.0) * (f - vec2(0.56, 0.0)), vec2(0.085), 0.01)));\n\tc = mix(c, MINT, fill(s * (length(f - 0.78 * vec2(cos(PI / 8.0), sin(PI / 8.0))) - 0.07)));\n\treturn mix(c, INK, fill(s * (r - 0.2 - 0.07 * cos(8.0 * around))));\n}\n\n// Paste from the Collection: the site's card and its button, the clipboard carrying the\n// network across, Embody's own prompt in TouchDesigner, then the COMP it builds. The pointer\n// clicks at the right-hand end of each button, clear of its text.\nvec4 sceneCollection(vec4 o, vec2 p, float P) {\n\tconst vec2 THUMB = vec2(450.0, 565.0), BUTTON = vec2(656.0, 340.0);     // on the site's card\n\tconst vec2 HOME = vec2(1360.0, 560.0), ACCEPT = vec2(1492.0, 468.0);    // the prompt, and the COMP after it\n\tfloat turn = 0.5 * P;\n\n\to = overCard(o, p, vec2(200.0, 290.0), vec2(700.0, 800.0), easeOutCubic(ramp(P, 0.04, 0.14)));\n\to = over(o, specimen(p - THUMB, 145.0, turn), fill(sdRoundBox(p - THUMB, vec2(218.0, 145.0), 12.0)) * ramp(P, 0.1, 0.16));\n\n\tfloat fly = ramp(P, 0.32, 0.48);\n\tif (fly > 0.0 && fly < 1.0) {\n\t\tfloat e = easeInOutCubic(fly);\n\t\tvec2 at = mix(BUTTON, HOME, e) + vec2(0.0, 480.0 * e * (1.0 - e));\n\t\to = overPage(o, (p - at) / easeOutBack(ramp(fly, 0.0, 0.25)), 46.0);\n\t}\n\n\tfloat ask = easeOutBack(ramp(P, 0.46, 0.52)) * (1.0 - ramp(P, 0.66, 0.69));\n\tif (ask > 0.0) o = over(o, 1.7 * DARK, fill(sdRoundBox(p - HOME, vec2(350.0, 140.0) * ask, 16.0)));\n\n\tfloat b = easeOutBack(ramp(P, 0.68, 0.78));\n\tif (b > 0.0) {\n\t\to = overTile(o, (p - HOME) / b, 190.0, FAMILY[6]);\n\t\to = over(o, specimen(p - HOME, 87.4, turn), fill(sdRoundBox(p - HOME, vec2(159.6, 87.4), 9.5)) * ramp(P, 0.78, 0.84));\n\t}\n\n\tvec2 tip = mix(mix(vec2(790.0, 250.0), BUTTON, easeInOutCubic(ramp(P, 0.16, 0.26))), ACCEPT, easeInOutCubic(ramp(P, 0.5, 0.62)));\n\tfor (int i = 0; i < 2; i++) {\n\t\tfloat k = ramp(P, i == 0 ? 0.27 : 0.63, i == 0 ? 0.33 : 0.69);\n\t\tif (k > 0.0 && k < 1.0) o = over(o, INK, fill(abs(length(p - tip) - 46.0 * k) - 2.0) * (1.0 - k));\n\t}\n\tfloat seen = ramp(P, 0.14, 0.18) * (1.0 - ramp(P, 0.7, 0.76));\n\tfloat dp = 0.6 * sdPointer((p - tip) / 0.6);\n\to = over(o, DARK, fill(dp - 3.0) * seen);\n\treturn
-    over(o, INK, fill(dp) * seen);\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tif (uAnim.y > 0.5) {\n\t\t\t// the brand dark, with the network editor's grid of dots (on multiples of 120 px)\n\t\t\to = vec4(DARK, 1.0);\n\t\t\to = over(o, 1.9 * DARK, fill(length(mod(p + 60.0, 120.0) - 60.0) - 2.5));\n\t\t}\n\t\tint scene = int(uAnim.z);\n\t\tif (scene == 0) o = sceneDiff(o, p, P);\n\t\telse if (scene == 1) o = sceneTdxn(o, p, P);\n\t\telse if (scene == 2) o = sceneEmbot(o, p, P);\n\t\telse if (scene == 3) o = sceneLayout(o, p, P);\n\t\telse if (scene == 4) o = sceneRestore(o, p, P);\n\t\telse o = sceneCollection(o, p, P);\n\t\to = overItems(o, p, P);\n\t\to = over(o, INK, lineRise(sTD2DInputs[1], p, vec2(960.0 - 0.5 * uText.x, 930.0), 0.24, TITLE, ramp(P, 0.0, 0.12)));\n\t\to = over(o, QUIET, lineRise(sTD2DInputs[2], p, vec2(960.0 - 0.5 * uText.y, 118.0), 0.24, CAPTION, ramp(P, 0.84, 0.96)));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content: "// explainer_scene: eight explanations that need their own staging, one per branch below. All\n// their free text (labels, lines of code) comes from the texts table through kit_core/layout\n// items(), each with the Progress window it shows in; positions here and there are twins.\n// Input 0 is that text (text_glyphs), input 1 the title, input 2 the caption.\n// Scenes are numbered by their row in the scenes table: 0 diff, 1 tdxn, 2 embot, 3 layout, 4 restore,\n// 5 collection, 6 binary, 7 backups.\n#include <../kit_core/glsl_common>\n#include <../kit_core/glsl_type>\nuniform vec4 uAnim;                 // x: Progress, y: 1 = dark backdrop, z: scene\nuniform vec4 uText;                 // x: title width px, y: caption width px\n\nconst float TITLE = 64.0, CAPTION = 40.0;       // twins of the Text TOPs' font sizes\nconst vec3 CARD = vec3(0.063, 0.08, 0.08);      // a card of code, darker than the backdrop\n\nlayout(location = 0) out vec4 fragColor;\n\n// a wire from a to b, drawn up to fraction k\nvec4 overWire(vec4 o, vec2 p, vec2 a, vec2 b, float k) {\n\treturn k <= 0.0 ? o : over(o, QUIET, fill(sdSegment(p, a, mix(a, b, k)) - 2.5));\n}\n\n// a card of code between lo and hi, unrolling from its top edge\nvec4 overCard(vec4 o, vec2 p, vec2 lo, vec2 hi, float unroll) {\n\tif (unroll <= 0.0 || p.y < mix(hi.y, lo.y, unroll)) return o;\n\treturn over(o, CARD, fill(sdRoundBox(p - 0.5 * (lo + hi), 0.5 * (hi - lo), 16.0)));\n}\n\n// Before and after: the same operator either side of one parameter change, and under them the\n// file, where the old line turns red and the new one arrives green.\nvec4 sceneDiff(vec4 o, vec2 p, float P) {\n\tconst vec2 BEFORE = vec2(480.0, 690.0), AFTER = vec2(1440.0, 690.0), CHIP = vec2(0.0, -120.0);\n\tfloat a = easeOutBack(ramp(P, 0.1, 0.2));\n\tif (a > 0.0) {\n\t\to = overTile(o, (p - BEFORE) / a, 84.0, FAMILY[0]);\n\t\to = over(o, 1.7 * DARK, fill(sdRoundBox(p - BEFORE - CHIP, vec2(124.0, 30.0) * a, 12.0)));\n\t}\n\to = overCard(o, p, vec2(560.0, 251.0), vec2(1360.0, 493.0), easeOutCubic(ramp(P, 0.16, 0.26)));\n\n\tfloat k = easeInOutCubic(ramp(P, 0.3, 0.44));\n\tif (k > 0.0) {\n\t\tvec2 from = BEFORE + vec2(150.0, 0.0), tip = mix(from, AFTER - vec2(150.0, 0.0), k);\n\t\to = over(o, QUIET, fill(min(sdSegment(p, from, tip), min(sdSegment(p, tip, tip + vec2(-16.0, 10.0)), sdSegment(p, tip, tip + vec2(-16.0, -10.0)))) - 2.5));\n\t}\n\tfloat b = easeOutBack(ramp(P, 0.44, 0.54));\n\tif (b > 0.0) {\n\t\to = overTile(o, (p - AFTER) / b, 84.0, FAMILY[0]);\n\t\tfloat d = sdRoundBox(p - AFTER - CHIP, vec2(124.0, 30.0) * b, 12.0);\n\t\to = over(o, mix(GREEN, 1.7 * DARK, fill(d + 3.0)), fill(d));\n\t}\n\treturn o;\n}\n\n// The network on the left, its file on the right. Each operator arrives, then its block of\n// lines does, and the two carry the same number.\nvec4 sceneTdxn(vec4 o, vec2 p, float P) {\n\to = overCard(o, p, vec2(968.0, 237.0), vec2(1752.0, 743.0), easeOutCubic(ramp(P, 0.06, 0.18)));\n\tfor (int i = 0; i < 3; i++) {\n\t\tfloat t = 0.14 + 0.22 * float(i);\n\t\tvec2 c = vec2(250.0 + 250.0 * float(i), 560.0);\n\t\tif (i > 0) o = overWire(o, p, c - vec2(164.0, 0.0), c - vec2(86.0, 0.0), easeInOutCubic(ramp(P, t - 0.08, t)));\n\t\tfloat a = easeOutBack(ramp(P, t, t + 0.1));\n\t\tif (a > 0.0) o = overTile(o, (p - c) / a, 78.0, FAMILY[0]);\n\t\tfloat n = easeOutBack(ramp(P, t + 0.1, t + 0.18));\n\t\tif (n > 0.0) {\n\t\t\tfloat top = i == 0 ? 648.0 : i == 1 ? 564.0 : 396.0;        // baseline of the block's first line\n\t\t\tfloat bottom = i == 0 ? 606.0 : i == 1 ? 438.0 : 270.0;     // and of its last\n\t\t\to = over(o, GREEN, fill(length(p - c - vec2(72.0, 54.0)) - 20.0 * n));\n\t\t\to = over(o, GREEN, fill(length(p - vec2(1012.0, top + 11.0)) - 18.0 * n));\n\t\t\to = over(o, GREEN, fill(sdRoundBox(p - vec2(1036.0, 0.5 * (top + bottom) + 10.0), vec2(2.0, 0.5 * (top - bottom) + 20.0), 2.0)));\n\t\t}\n\t}\n\treturn o;\n}\n\n// Embot hops in and works his way along the chain. Each operator is built as he lands on it,\n// the one he stands on is ringed, and his bubble says what it did
+    (items 4-7 of the texts, one\n// per tile, parked and laid here; the bubble fits its line). His colour is Envoy's: cool as\n// the agent acts, warming while it thinks.\nvec4 sceneEmbot(vec4 o, vec2 p, float P) {\n\tconst float SIZE = 96.0, U = 3.2, ARC = 90.0;\n\tconst float LAND = 0.12, STEP = 0.22, HOP = 0.08;   // he reaches tile i at LAND + STEP * i and leaves the one before HOP earlier\n\tconst float GROUND = 430.0 + 0.62 * 96.0;           // the tops of the tiles, where he stands\n\tfloat on = clamp(floor((P - LAND) / STEP), 0.0, 3.0);   // the tile he last landed on\n\tfloat hop = on < 3.0 ? ramp(P, LAND + STEP * (on + 1.0) - HOP, LAND + STEP * (on + 1.0)) : 0.0;\n\tvec3 skin = embotSkin(P < LAND || hop > 0.0 ? 0.0 : 0.3 * (P - LAND - STEP * on) / (STEP - HOP));\n\tfor (int i = 0; i < 4; i++) {\n\t\tfloat t = LAND + STEP * float(i);\n\t\tvec2 c = vec2(390.0 + 380.0 * float(i), 430.0);\n\t\tif (i > 0) o = overWire(o, p, c - vec2(380.0 - SIZE - 10.0, 0.0), c - vec2(SIZE + 10.0, 0.0), ramp(P, t - HOP, t));\n\t\tfloat a = easeOutBack(ramp(P, t - 0.02, t + 0.06));\n\t\tif (a <= 0.0) continue;\n\t\to = overTile(o, (p - c) / a, SIZE, FAMILY[0]);\n\t\tif (float(i) == on && hop <= 0.0 && P >= t)\n\t\t\to = over(o, GREEN, fill(abs(sdRoundBox(p - c, vec2(SIZE, 0.62 * SIZE) + 10.0, 0.16 * SIZE + 10.0)) - 2.5));\n\t}\n\t// before the first landing he is still on his way in from the left\n\tfloat arrive = ramp(P, 0.0, LAND);\n\tfloat air = P < LAND ? arrive : hop;\n\tfloat squash = sin(PI * ramp(P, LAND + STEP * on, LAND + STEP * on + 0.05));\n\tvec2 body = vec2(P < LAND ? mix(-220.0, 390.0, easeOutCubic(arrive)) : 390.0 + 380.0 * (on + easeInOutCubic(hop)),\n\t\tGROUND + 41.0 * U + 4.0 * ARC * air * (1.0 - air));\n\tvec2 u = (p - body) / U;\n\tu = vec2(u.x / (1.0 + 0.08 * squash), (u.y + 41.0) / (1.0 - 0.12 * squash) - 41.0);\n\tfloat wave = sin(PI * ramp(P, 0.86, 0.99));\n\to = overEmbot(o, u, U, vec2(3.0 * sin(110.0 * P) * wave, 16.0 * wave), sin(PI * ramp(P, 0.46, 0.5)), skin);\n\n\tint item = 4 + int(on);\n\tvec4 line = texelFetch(uCells, 1 + 2 * item), when = texelFetch(uCells, 2 + 2 * item);\n\tfloat say = P < when.y ? easeOutBack(ramp(P, when.x - 0.03, when.x)) : 0.0;\n\tif (say <= 0.0) return o;\n\tvec2 g = (p - vec2(390.0 + 380.0 * on, 766.0)) / say;       // it grows from a point just above his head\n\tfloat d = min(sdRoundBox(g - vec2(0.0, 46.0), vec2(0.5 * line.y + 24.0, 32.0), 14.0),\n\t\tsdRoundBox(rot(PI / 4.0) * (g - vec2(0.0, 18.0)), vec2(10.0), 2.0)) * say;\n\to = over(o, mix(skin, CARD, fill(d + 3.0)), fill(d));\n\treturn over(o, INK, itemAt(item, g, vec2(-0.5 * line.y, 35.0)));\n}\n\n// Every operator starts in a heap on the origin, where a bare create() leaves it, then goes\n// to its place on the grid; a wire is drawn once both of its ends have landed.\nvec4 sceneLayout(vec4 o, vec2 p, float P) {\n\tconst vec2 ORIGIN = vec2(960.0, 600.0);\n\tfloat axes = ramp(P, 0.08, 0.14) * (1.0 - ramp(P, 0.32, 0.38));\n\to = over(o, QUIET, fill(min(sdSegment(p, ORIGIN - vec2(150.0, 0.0), ORIGIN + vec2(150.0, 0.0)), sdSegment(p, ORIGIN - vec2(0.0, 120.0), ORIGIN + vec2(0.0, 120.0))) - 1.5) * axes);\n\tfor (int i = 0; i < 5; i++) {\n\t\tfloat fi = float(i);\n\t\tvec2 slot = vec2(480.0 + 240.0 * fi, 600.0);\n\t\tif (i > 0) o = overWire(o, p, slot - vec2(148.0, 0.0), slot - vec2(92.0, 0.0), ramp(P, 0.5 + 0.07 * fi, 0.56 + 0.07 * fi));\n\t\tfloat a = easeOutBack(ramp(P, 0.1 + 0.03 * fi, 0.2 + 0.03 * fi));\n\t\tif (a <= 0.0) continue;\n\t\tvec2 heap = ORIGIN + (vec2(hash(fi + 3.0), hash(fi + 11.0)) - 0.5) * vec2(110.0, 80.0);\n\t\tvec2 at = mix(heap, slot, easeOutBack(ramp(P, 0.36 + 0.07 * fi, 0.5 + 0.07 * fi)));\n\t\to = overTile(o, (p - at) / a, 84.0, FAMILY[i == 1 ? 1 : i == 3 ? 4 : 0]);\n\t}\n\treturn o;\n}\n\n// A frame ruler with a playhead: agent config at 30, .tox COMPs at 45, .tdxn COMPs at 60,\n// everything back at 75.\nvec4 sceneRestore(vec4 o, vec2 p, float P) {\n\tconst float RULE = 330.0, LEFT = 360.0, PER = 16.0;     // the ruler's height, frame 0, px per frame\n\tfloat show = ramp(P, 0.04, 0.12);\n\tif (show
+    <= 0.0) return o;\n\tfloat head = LEFT + PER * 75.0 * ramp(P, 0.12, 0.8);\n\to = over(o, p.x <= head ? GREEN : QUIET, fill(sdSegment(p, vec2(LEFT, RULE), vec2(LEFT + 75.0 * PER * show, RULE)) - 2.0));\n\tif (p.x > LEFT - 4.0 && p.x < LEFT + 75.0 * PER * show + 4.0)\n\t\to = over(o, QUIET, fill(max(abs(mod(p.x - LEFT + 120.0, 240.0) - 120.0) - 2.0, abs(p.y - RULE + 12.0) - 12.0)));\n\tfor (int i = 0; i < 4; i++) {\n\t\tfloat f = 30.0 + 15.0 * float(i);\n\t\tfloat t = 0.12 + 0.68 * f / 75.0;                   // when the playhead reaches this mark\n\t\tfloat a = easeOutBack(ramp(P, t, t + 0.07));\n\t\tif (a <= 0.0) continue;\n\t\tvec2 c = vec2(LEFT + PER * f, 560.0);\n\t\to = over(o, QUIET, fill(sdSegment(p, vec2(c.x, RULE + 16.0), vec2(c.x, mix(RULE + 16.0, 480.0, a))) - 1.5));\n\t\tvec2 q = (p - c) / a;\n\t\tif (i == 0) {\n\t\t\to = overPage(o, q, 56.0);\n\t\t} else if (i == 3) {\n\t\t\to = over(o, GREEN, fill(length(q) - 42.0));\n\t\t\to = over(o, DARK, fill(min(sdSegment(q, vec2(-18.0, 0.0), vec2(-5.0, -14.0)), sdSegment(q, vec2(-5.0, -14.0), vec2(19.0, 15.0))) - 5.0));\n\t\t} else {\n\t\t\to = overTile(o, q - vec2(-16.0, 12.0), 52.0, 0.75 * FAMILY[6]);\n\t\t\to = overTile(o, q - vec2(16.0, -12.0), 52.0, FAMILY[6]);\n\t\t}\n\t}\n\treturn over(o, GREEN, fill(min(sdSegment(p, vec2(head, RULE - 14.0), vec2(head, RULE + 38.0)) - 2.0, length(p - vec2(head, RULE + 44.0)) - 9.0)) * show);\n}\n\n// the specimen in the collection scene, an eight-fold star in the kit's colours: q is px from\n// its middle, s its half height\nvec3 specimen(vec2 q, float s, float turn) {\n\tvec2 u = rot(turn) * q / s;\n\tfloat r = length(u), around = atan(u.y, u.x);\n\tfloat a = abs(mod(around, PI / 4.0) - PI / 8.0);\n\tvec2 f = r * vec2(cos(a), sin(a));              // folded into one mirrored wedge\n\tvec3 c = mix(0.55 * DARK, FAMILY[0], fill(s * (abs(r - 0.78) - 0.035)));\n\tc = mix(c, GREEN, fill(s * sdRoundBox(rot(PI / 4.0) * (f - vec2(0.56, 0.0)), vec2(0.085), 0.01)));\n\tc = mix(c, MINT, fill(s * (length(f - 0.78 * vec2(cos(PI / 8.0), sin(PI / 8.0))) - 0.07)));\n\treturn mix(c, INK, fill(s * (r - 0.2 - 0.07 * cos(8.0 * around))));\n}\n\n// the viewer's own picture in that scene, a banana on the dark: same q and s\nvec3 yours(vec2 q, float s) {\n\tvec2 u = rot(0.5) * q / s;\n\tfloat d = max(length(u - vec2(0.0, 0.1)) - 0.62, 0.6 - length(u - vec2(0.0, 0.42)));\n\treturn mix(0.55 * DARK, BANANA, fill(s * d));\n}\n\n// and that picture through the specimen: the same eight mirrored wedges, each holding it\nvec3 folded(vec2 q, float s, float turn) {\n\tvec2 u = rot(turn) * q;\n\tfloat a = abs(mod(atan(u.y, u.x), PI / 4.0) - PI / 8.0);\n\treturn yours(length(u) * vec2(cos(a), sin(a)) - vec2(0.6, 0.13) * s, 0.3 * s);\n}\n\n// Paste from the Collection: the site's card and its button, the clipboard carrying the\n// network across, Embody's own prompt in TouchDesigner, the COMP it builds, and last the\n// viewer's own COMP wired into it. The pointer clicks at the right-hand end of each button,\n// clear of its text.\nvec4 sceneCollection(vec4 o, vec2 p, float P) {\n\tconst vec2 THUMB = vec2(450.0, 565.0), BUTTON = vec2(656.0, 340.0);     // on the site's card\n\tconst vec2 HOME = vec2(1360.0, 560.0), ACCEPT = vec2(1492.0, 468.0);    // the prompt, and the COMP after it\n\tconst vec2 SOURCE = vec2(900.0, 560.0);                                 // the viewer's COMP\n\tfloat turn = 0.5 * P;\n\n\to = overCard(o, p, vec2(200.0, 290.0), vec2(700.0, 800.0), easeOutCubic(ramp(P, 0.04, 0.12)));\n\to = over(o, specimen(p - THUMB, 145.0, turn), fill(sdRoundBox(p - THUMB, vec2(218.0, 145.0), 12.0)) * ramp(P, 0.09, 0.14));\n\n\tfloat fly = ramp(P, 0.28, 0.42);\n\tif (fly > 0.0 && fly < 1.0) {\n\t\tfloat e = easeInOutCubic(fly);\n\t\tvec2 at = mix(BUTTON, HOME, e) + vec2(0.0, 480.0 * e * (1.0 - e));\n\t\to = overPage(o, (p - at) / easeOutBack(ramp(fly, 0.0, 0.25)), 46.0);\n\t}\n\n\tfloat ask = easeOutBack(ramp(P, 0.4, 0.46)) * (1.0 - ramp(P, 0.58, 0.61));\n\tif (ask > 0.0) o = over(o, 1.7 * DARK, fill(sdRoundBox(p - HOME, vec2(350.0, 140.0) * ask, 16.0)));\n\n\tfloat
+    b = easeOutBack(ramp(P, 0.6, 0.68));\n\tif (b > 0.0) {\n\t\to = overTile(o, (p - HOME) / b, 190.0, FAMILY[6]);\n\t\tvec3 picture = mix(specimen(p - HOME, 87.4, turn), folded(p - HOME, 87.4, turn), ramp(P, 0.86, 0.92));\n\t\to = over(o, picture, fill(sdRoundBox(p - HOME, vec2(159.6, 87.4), 9.5)) * ramp(P, 0.68, 0.73));\n\t}\n\tfloat mine = easeOutBack(ramp(P, 0.74, 0.81));\n\tif (mine > 0.0) {\n\t\to = overWire(o, p, SOURCE + vec2(136.0, 0.0), HOME - vec2(215.0, 0.0), easeInOutCubic(ramp(P, 0.8, 0.86)));\n\t\to = overTile(o, (p - SOURCE) / mine, 120.0, FAMILY[6]);\n\t\to = over(o, yours(p - SOURCE, 55.2), fill(sdRoundBox(p - SOURCE, vec2(100.8, 55.2), 6.0)) * ramp(P, 0.78, 0.82));\n\t}\n\n\tvec2 tip = mix(mix(vec2(790.0, 250.0), BUTTON, easeInOutCubic(ramp(P, 0.14, 0.23))), ACCEPT, easeInOutCubic(ramp(P, 0.44, 0.54)));\n\tfor (int i = 0; i < 2; i++) {\n\t\tfloat k = ramp(P, i == 0 ? 0.24 : 0.55, i == 0 ? 0.29 : 0.6);\n\t\tif (k > 0.0 && k < 1.0) o = over(o, INK, fill(abs(length(p - tip) - 46.0 * k) - 2.0) * (1.0 - k));\n\t}\n\tfloat seen = ramp(P, 0.12, 0.16) * (1.0 - ramp(P, 0.62, 0.67));\n\tfloat dp = 0.6 * sdPointer((p - tip) / 0.6);\n\to = over(o, DARK, fill(dp - 3.0) * seen);\n\treturn over(o, INK, fill(dp) * seen);\n}\n\n// one character out of a parked row of them: set is that item's first row (left x, width,\n// baseline), count how many it holds, k which one, fx 0-1 across the cell, ly px above the baseline\nfloat charAt(vec4 set, float count, float k, float fx, float ly) {\n\treturn texture(sTD2DInputs[0], vec2(set.x + (k + fx) * set.y / count, set.z + ly) / uTDOutputInfo.res.zw).a;\n}\n\n// One file in an editor, twice. First the COMP saved as a .tox: bytes scrolling past, drawn a\n// cell at a time from item 0 of the texts (a parked row of characters). Then a bar sweeps down\n// and above it the same COMP reads as its .tdxn: items 3-14, parked in place. Items 1 and 2\n// are the file's two names, parked and laid on its tab here.\nvec4 sceneBinary(vec4 o, vec2 p, float P) {\n\tconst vec2 LO = vec2(330.0, 232.0), HI = vec2(1590.0, 850.0);\n\tconst float LEFT = 450.0, TOP = 759.4, PITCH = 42.0, ROWS = 12.0, COLS = 58.0, CHARS = 45.0;\n\tconst vec2 SWEEP = vec2(0.48, 0.78);\n\to = overCard(o, p, LO, HI, easeOutCubic(ramp(P, 0.06, 0.16)));\n\tbool inside = p.x > LO.x + 24.0 && p.x < HI.x - 24.0;\n\tif (P > 0.14 && inside) o = over(o, QUIET, 0.5 * fill(abs(p.y - 771.0) - 0.75));\n\tif (P > 0.14) o = over(o, P < SWEEP.x ? QUIET : GREEN, itemAt(P < SWEEP.x ? 1 : 2, p, vec2(372.0, 790.0)));\n\tfloat bar = TOP - PITCH * ROWS * ramp(P, SWEEP.x, SWEEP.y);\n\tfloat row = (TOP - p.y) / PITCH;                        // 0 at the top of the first line\n\tif (P > 0.14 && row >= 0.0 && row < ROWS) {\n\t\tvec4 set = texelFetch(uCells, 1);\n\t\tfloat size = texelFetch(uCells, 0).y, adv = set.y / CHARS;\n\t\tbool text = p.y >= bar;                             // above the bar it is already YAML\n\t\tfloat at = text ? row : row + 40.0 * easeOutCubic(ramp(P, 0.16, 0.44));\n\t\tfloat line = floor(at), ly = 0.98 * size - fract(at) * PITCH;\n\t\tif (text || P >= 0.14 + 0.008 * floor(row)) {\n\t\t\tfor (int j = 0; j < 2; j++) {                   // the line's number, right-aligned\n\t\t\t\tfloat fx = (p.x - LEFT + 34.0) / adv + float(j + 1);\n\t\t\t\tif (fx < 0.0 || fx >= 1.0 || (j == 1 && line < 9.0)) continue;\n\t\t\t\to = over(o, QUIET, 0.7 * charAt(set, CHARS, mod(floor((line + 1.0) / (j == 0 ? 1.0 : 10.0)), 10.0), fx, ly));\n\t\t\t}\n\t\t\tfloat col = floor((p.x - LEFT) / adv), id = col + 61.0 * line;\n\t\t\tif (text) {\n\t\t\t\tif (p.x >= LEFT) o = over(o, INK, texture(sTD2DInputs[0], p / uTDOutputInfo.res.zw).a);\n\t\t\t} else if (col >= 0.0 && col < COLS && hash(id) > 0.12) {\n\t\t\t\tfloat fx = fract((p.x - LEFT) / adv);\n\t\t\t\tif (hash(id) > 0.62) o = over(o, RED, fill(sdRoundBox(vec2((fx - 0.5) * adv, ly - 0.32 * size), vec2(0.5 * adv - 1.0, 0.52 * size), 2.0)));\n\t\t\t\to = over(o, INK, charAt(set, CHARS, floor(hash(id + 0.5) * CHARS), fx, ly));\n\t\t\t}\n\t\t}\n\t}\n\tfloat sweeping = ramp(P, SWEEP.x - 0.01, SWEEP.x) *
+    (1.0 - ramp(P, SWEEP.y, SWEEP.y + 0.03));\n\treturn inside ? over(o, GREEN, fill(abs(p.y - bar) - 1.5) * sweeping) : o;\n}\n\n// The Backup folder: numbered saves pile up, the list scrolling once it is full, then a frame\n// hunts among them for the one worth keeping and settles on a guess. Each name is put\n// together here from three parked items (0 the digits, 1 \"project.\", 2 \".toe\"); the question\n// mark's row and time in the table are twins of GUESS and SETTLE.\nvec4 sceneBackups(vec4 o, vec2 p, float P) {\n\tconst vec2 LO = vec2(560.0, 262.0), HI = vec2(1360.0, 800.0);\n\tconst float TOP = 708.0, PITCH = 70.0, ROWS = 6.0, SAVES = 47.0, GUESS = 2.0, SETTLE = 0.9;\n\to = overCard(o, p, LO, HI, easeOutCubic(ramp(P, 0.04, 0.12)));\n\tif (P < 0.1) return o;\n\tif (p.x > LO.x + 24.0 && p.x < HI.x - 24.0) o = over(o, QUIET, 0.5 * fill(abs(p.y - 730.0) - 0.75));\n\tfloat count = 1.0 + floor((SAVES - 1.0) * easeInOutCubic(ramp(P, 0.14, 0.64)));     // saves so far\n\tfloat row = (TOP - p.y) / PITCH;\n\tif (row >= 0.0 && row < ROWS && floor(row) < count) {\n\t\tfloat n = floor(row) + 1.0 + max(0.0, count - ROWS);    // this row's save\n\t\tfloat base = TOP - 44.0 - PITCH * floor(row), digits = n < 10.0 ? 1.0 : 2.0;\n\t\tvec4 set = texelFetch(uCells, 1);\n\t\tfloat adv = set.y / 10.0, from = 690.0 + texelFetch(uCells, 3).y;       // where the number starts\n\t\to = overPage(o, p - vec2(640.0, base + 11.0), 22.0);\n\t\tfloat ink = itemAt(1, p, vec2(690.0, base)) + itemAt(2, p, vec2(from + digits * adv, base));\n\t\tfloat fx = (p.x - from) / adv;\n\t\tif (fx >= 0.0 && fx < digits && p.y - base > -10.0 && p.y - base < 31.0)\n\t\t\tink += charAt(set, 10.0, mod(floor(n / (digits - floor(fx) > 1.5 ? 10.0 : 1.0)), 10.0), fract(fx), p.y - base);\n\t\to = over(o, INK, ink);\n\t}\n\tfloat hunting = ramp(P, 0.66, 0.68);\n\tif (hunting > 0.0) {\n\t\tfloat on = P < SETTLE ? floor(hash(floor((P - 0.66) * 45.0) + 3.0) * ROWS) : GUESS;\n\t\tfloat d = abs(sdRoundBox(p - vec2(960.0, TOP - 35.0 - PITCH * on), vec2(372.0, 30.0), 10.0)) - 1.5;\n\t\to = over(o, P < SETTLE ? INK : RED, fill(d) * hunting);\n\t}\n\treturn o;\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tif (uAnim.y > 0.5) {\n\t\t\t// the brand dark, with the network editor's grid of dots (on multiples of 120 px)\n\t\t\to = vec4(DARK, 1.0);\n\t\t\to = over(o, 1.9 * DARK, fill(length(mod(p + 60.0, 120.0) - 60.0) - 2.5));\n\t\t}\n\t\tint scene = int(uAnim.z);\n\t\tif (scene == 0) o = sceneDiff(o, p, P);\n\t\telse if (scene == 1) o = sceneTdxn(o, p, P);\n\t\telse if (scene == 2) o = sceneEmbot(o, p, P);\n\t\telse if (scene == 3) o = sceneLayout(o, p, P);\n\t\telse if (scene == 4) o = sceneRestore(o, p, P);\n\t\telse if (scene == 5) o = sceneCollection(o, p, P);\n\t\telse if (scene == 6) o = sceneBinary(o, p, P);\n\t\telse o = sceneBackups(o, p, P);\n\t\to = overItems(o, p, P);\n\t\to = over(o, INK, lineRise(sTD2DInputs[1], p, vec2(960.0 - 0.5 * uText.x, 930.0), 0.24, TITLE, ramp(P, 0.0, 0.12)));\n\t\to = over(o, QUIET, lineRise(sTD2DInputs[2], p, vec2(960.0 - 0.5 * uText.y, 118.0), 0.24, CAPTION, ramp(P, 0.84, 0.96)));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
   dat_content_format: text
 - name: script_layout_callbacks
   type: textDAT
@@ -833,7 +1031,7 @@ operators:
     language: python
   position: [200, -120]
   dock: script_layout
-  dat_content: "# the chosen scene's rows of the texts table, handed to kit_core/layout items()\ndef onCook(scriptOp):\n\tscene = parent.Mograph.par.Scene.eval()\n\ttexts = op('texts')\n\trows = [[cell.val for cell in texts.row(i)[1:]] for i in range(1, texts.numRows) if texts[i, 'scene'] == scene]\n\top('../kit_core/layout').module.items(scriptOp, op('text_glyphs'), rows)\n"
+  dat_content: "# the chosen scene's rows of the texts table, handed to kit_core/layout items()\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tscene = L.chosen(parent.Mograph.par.Scene, op('scenes'))\n\ttexts = op('texts')\n\trows = [[cell.val for cell in texts.row(i)[1:]] for i in range(1, texts.numRows) if texts[i, 'scene'] == scene]\n\tL.items(scriptOp, op('text_glyphs'), rows)\n"
   dat_content_format: text
 annotations:
 - name: annotate1

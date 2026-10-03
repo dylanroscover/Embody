@@ -79,6 +79,10 @@ operators:
     - Convoy
     - select, call, batch, jobs, artifacts, restart, update
     - green
+  - - skills
+    - Skills
+    - create-operator, glsl-shaders, pop-networks, movie-export, visual-aesthetics, build-ui, testing
+    - green
   dat_content_format: table
 - name: glsl_chips
   type: glslTOP

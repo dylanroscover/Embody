@@ -236,6 +236,13 @@ operators:
     - l machine your_laptop -420 0 | t machine the_tower_with_the_GPU 420 0
     - l t both trusted_LAN
     - ''
+  - - skills
+    - 'Skills: playbooks for the agent'
+    - Skills
+    - Before it builds, the agent reads the playbook for that job.
+    - c chat agent -640 0 | k1 file create-operator -180 220, k2 file glsl-shaders -180 0, k3 file movie-export -180 -220 | e server Envoy 260 0 | t tile your_network 640 0 top
+    - c k1 dashed, c k2 reads, c k3 dashed, k2 e, e t
+    - .claude/skills -340 -380 -20 340
   dat_content_format: table
 - name: text_title
   type: textTOP
@@ -341,7 +348,7 @@ operators:
     language: python
   position: [200, -120]
   dock: script_layout
-  dat_content: "# one call into kit_core/layout; diagram() documents the topic format and the table this writes\ndef onCook(scriptOp):\n\ttopic = parent.Mograph.par.Topic.eval()\n\ttopics = op('topics')\n\top('../kit_core/layout').module.diagram(scriptOp, op('text_glyphs'), topics[topic, 'nodes'].val, topics[topic, 'edges'].val, topics[topic, 'frames'].val)\n"
+  dat_content: "# one call into kit_core/layout; diagram() documents the topic format and the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\ttopic = L.chosen(parent.Mograph.par.Topic)\n\ttopics = op('topics')\n\tL.diagram(scriptOp, op('text_glyphs'), topics[topic, 'nodes'].val, topics[topic, 'edges'].val, topics[topic, 'frames'].val)\n"
   dat_content_format: text
 annotations:
 - name: annotate1
