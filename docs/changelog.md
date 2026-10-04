@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.68
+
+A release built for a newer TouchDesigner is yours to install anyway.
+
+- **Install Anyway on a manual update check** (#145). When a release needs a newer TouchDesigner build than yours, Check for Update now warns and offers the install instead of refusing; it takes the same backup, verification and rollback as any update. Startup auto-update and fleet updates still stop at the floor. +6 tests.
+
 ## v6.2.67
 
 Text DATs get the right language, and a COMP your project repoints keeps its `.tox`.

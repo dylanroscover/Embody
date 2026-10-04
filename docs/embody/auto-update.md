@@ -27,7 +27,7 @@ An update never writes your content: the post-update validation reconciles Embod
 | Parameter | Name | Meaning |
 |---|---|---|
 | Auto-Update | `Autoupdate` | **A fresh install ships set to `Check and Notify`** (the parameter's own default is `Off`, but the released `.tox` carries `Check and Notify`, so a new install does check once at startup until you change it). `Off`: never checks. `Check and Notify`: checks once at startup and shows availability in Update Status — nothing is installed. `Check and Install`: checks at startup and installs a verified update automatically. A check that can't complete (no network, no manifest, TD too old) is logged quietly; a failure *during* an install (backup, reload, verify, rollback) always shows a dialog. |
-| Check for Update | `Checkforupdate` | Checks GitHub now and prompts if an update is available (`up to date` and network errors are reported in a dialog). |
+| Check for Update | `Checkforupdate` | Checks GitHub now and prompts if an update is available (`up to date` and network errors are reported in a dialog). A release built for a newer TouchDesigner than yours is offered with a warning (**Install Anyway**), not refused. |
 | Update Status | `Updatestatus` | Read-only status line: `Disabled` (Auto-Update is Off -- the fresh-install resting state), `Up to date (v6.0.150)`, `v6.0.151 available`, `Downloading...`, `Retrying download (2/3)...`, `Updated to v6.0.151`, or an error summary. |
 
 The `Autoupdate` choice is a persisted setting (`.embody/config.json`), so it
@@ -43,9 +43,11 @@ preference.
    in Update Status without interrupting you.
 2. **Gate** — the release's `embody-release.json` manifest is fetched and
    validated. If the release requires a newer TouchDesigner build than the
-   one running (`min_td_build`), the update is refused with a clear message
-   *before* anything is downloaded — a `.tox` saved in a newer TD build
-   fails to load in older ones.
+   one running (`min_td_build`), the automatic path refuses *before*
+   anything is downloaded — a `.tox` saved in a newer TD build can fail to
+   load in older ones. A manual **Check for Update** warns you instead and
+   offers **Install Anyway**: the risk is yours to take, and the backup and
+   rollback below still cover you.
 3. **Download** — the release `.tox` is downloaded to `.embody/updates/` and
    verified against the manifest's byte size and SHA-256 digest. A download
    that fails verification is discarded.
@@ -101,9 +103,11 @@ replacement, and the new version revalidates every tracked operator on boot
   signature, `Check and Install` is an explicit opt-in — if you are cautious,
   prefer `Check and Notify` and review each release before installing. (A
   signed-manifest scheme with a pinned public key is planned.)
-- **Compatibility**: `min_td_build` is enforced before download. Without
-  this gate, loading a newer-build `.tox` on an older TouchDesigner fails
-  silently and could leave a broken component.
+- **Compatibility**: `min_td_build` is checked before download. Loading a
+  newer-build `.tox` on an older TouchDesigner can fail silently, so an
+  unattended update never crosses that floor. On a manual check the choice
+  is yours: **Install Anyway** runs the same backed-up, verified install,
+  and a version that fails to boot is rolled back.
 - **Downgrade protection**: version tags are compared numerically
   (`MAJOR.MINOR.PATCH`); a release whose tag is not strictly newer than the
   installed version is never installed. Tags that don't parse are refused.
@@ -195,7 +199,8 @@ invisible to the updater** — users on auto-update simply won't receive it.
 | Symptom | Cause / fix |
 |---|---|
 | "cannot be verified: release has no embody-release.json" | The release predates the manifest system. Update manually from GitHub. |
-| "requires TouchDesigner build X+" | Your TD build is older than the release's floor. Update TouchDesigner, or stay on the current Embody. |
+| "requires TouchDesigner build X+" | Your TD build is older than the release's floor, and the automatic path will not cross it. Update TouchDesigner, stay on the current Embody, or pulse **Check for Update** and choose **Install Anyway** (unsupported: the release was not built for your TD; a version that fails to boot is rolled back). |
+| "was built for TouchDesigner X+ ... and may not load here" | The manual check found a release built for a newer TouchDesigner than yours. **Cancel** changes nothing. **Install Anyway** installs it with the usual backup; save when asked, since the saved `.toe` is the recovery point of last resort. |
 | "Update failed after 3 tries -- check your internet connection" | The check or download failed three times in a row (no internet, a proxy that stalls the transfer, GitHub down, or the 60/hour anonymous rate limit shared per IP). The attempt is cancelled and nothing is left half-done -- press Check for Update again whenever you like. |
 | "An update is already running (download)" | A check or download really is in flight. It retries by itself and stops on its own; you never have to restart TouchDesigner to get out of it. |
 | "A previous update to vX did not complete" on a manual check | An earlier update stopped before it could be verified. Choose `Restore Backup` to go back to the pre-update version, or `Discard and Continue` to drop the leftover and check again. |

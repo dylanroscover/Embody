@@ -1,0 +1,139 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/sprite_storm
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Storm:
+  - name: Sprite
+    style: Menu
+    default: banana
+    menuNames:
+    - banana
+    - tile
+    - mark
+    menuLabels:
+    - Banana
+    - Operator tile
+    - Embody mark
+    help: What flies. Banana is TouchDesigner's own default image, Banana.tif.
+  - name: Pattern
+    style: Menu
+    default: rain
+    menuNames:
+    - rain
+    - burst
+    - wall
+    - spiral
+    menuLabels:
+    - Rain
+    - Burst
+    - Wall (transition)
+    - Spiral
+    help: How it flies. Wall covers the whole frame from 0.47 to 0.53, so it works as a transition.
+    value: burst
+  - name: Count
+    style: Int
+    default: 40
+    min: 1.0
+    max: 80.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 80.0
+    help: How many sprites. Wall always uses its 8 x 5 grid.
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: '0 and 1 = empty frame. Scrubs the whole pattern: sprites enter, cross or cover the frame, and leave. Animate 0 to 1 to play it.'
+    value: 1
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_storm
+- name: glsl_storm
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_storm_pixel
+    computedat: glsl_storm_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Sprite.menuIndex
+      valuez: =parent.Mograph.par.Pattern.menuIndex
+      valuew: =parent.Mograph.par.Count
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - moviefilein_banana
+- name: glsl_storm_info
+  type: infoDAT
+  parameters:
+    op: glsl_storm
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_storm
+  dat_read_only: true
+- name: glsl_storm_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_storm
+  dat_content: "// sprite_storm: one flock of sprites, three kinds and four ways to fly. Every sprite's path\n// is a function of Progress alone, so any frame can be scrubbed to. Input 0 is Banana.tif.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: sprite (0 banana, 1 tile, 2 mark), z: pattern (0 rain, 1 burst, 2 wall, 3 spiral), w: count\n\nconst vec2 GRID = vec2(8.0, 5.0);   // the wall\n\nlayout(location = 0) out vec4 fragColor;\n\n// one sprite of half size s at local position q; premultiplied\nvec4 sprite(vec2 q, float s, int kind, float seed) {\n\tif (max(abs(q.x), abs(q.y)) > s * 1.1) return vec4(0.0);\n\tif (kind == 0) return bananaAt(sTD2DInputs[0], q, s);\n\tvec4 o = vec4(0.0);\n\tif (kind == 2) return overMark(o, q, vec2(0.0), s / 21.25);\n\t// an operator tile: body, connector nubs, viewer\n\tvec3 body = FAMILY[int(seed * 6.999)];\n\tvec2 halfSize = vec2(s, 0.62 * s);\n\tfloat d = min(sdRoundBox(q, halfSize, 0.15 * s), sdRoundBox(vec2(abs(q.x) - 1.04 * s, q.y), vec2(0.09, 0.11) * s, 0.03 * s));\n\to = over(o, body, fill(d));\n\treturn over(o, body * 0.42, fill(sdRoundBox(q, halfSize - 0.16 * s, 0.05 * s)));\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tint kind = int(uAnim.y), pattern = int(uAnim.z);\n\tint count = pattern == 2 ? int(GRID.x * GRID.y) : int(uAnim.w);\n\tvec4 o = vec4(0.0);\n\n\tif (pattern == 2) {\n\t\t// the wall's backing: a dark iris that closes behind the sprites, so the cover is total\n\t\tfloat back = P < 0.5 ? easeInCubic(ramp(P, 0.18, 0.47)) : 1.0 - easeOutCubic(ramp(P, 0.53, 0.82));\n\t\tif (back > 0.0) o = over(o, DARK, fill(length(p - 0.5 * FRAME) - 1120.0 * back));\n\t}\n\n\tfor (int i = 0; i < 80; i++) {\n\t\tif (i >= count) break;\n\t\tfloat fi = float(i);\n\t\tfloat h1 = hash(fi), h2 = hash(fi + 31.7), h3 = hash(fi + 71.3);\n\t\tvec2 c;\n\t\tfloat s, ang;\n\t\tif (pattern == 0) {                 // rain: each falls the height of the frame, tumbling\n\t\t\tfloat t = 1.6 * P - 0.6 * h1;\n\t\t\tif (t <= 0.0 || t >= 1.0) continue;\n\t\t\ts = mix(70.0, 150.0, h2);\n\t\t\tc = vec2(FRAME.x * fract(fi * 0.618034 + 0.13), mix(FRAME.y + 1.5 * s, -1.5 * s, t * (0.6 + 0.4 * t)));\n\t\t\tang = 2.0 * PI * h3 + (h2 - 0.5) * 10.0 * t;\n\t\t} else if (pattern == 1) {          // burst: thrown out of the middle, clear of the frame by the end\n\t\t\tfloat t = ramp(P, 0.25 * h1, 0.25 * h1 + 0.75);\n\t\t\tif (t <= 0.0 || t >= 1.0) continue;\n\t\t\ts = mix(60.0, 140.0, h2) * min(1.0, 8.0 * t);\n\t\t\tfloat a = fi * 2.39996;\n\t\t\tc = 0.5 * FRAME + vec2(cos(a), sin(a)) * (1260.0 + 800.0 * h3) * pow(t, 0.75);\n\t\t\tang = 2.0 * PI * h3 + (h2 - 0.5) * 14.0 * t;\n\t\t} else if (pattern == 2) {          // wall: a grid that swells shut and shrinks open\n\t\t\tfloat k = P < 0.5 ? easeOutBack(ramp(P, 0.27 * h1, 0.27 * h1 + 0.2)) : 1.0 - easeInCubic(ramp(P, 0.53 + 0.27 * h1, 0.73 + 0.27 * h1));\n\t\t\tif (k <= 0.0) continue;\n\t\t\tc = (vec2(mod(fi, GRID.x), floor(fi / GRID.x)) + 0.5) * FRAME / GRID;\n\t\t\ts = 175.0 * k;\n\t\t\tang = 2.0 * PI * h3 + 5.0 * P;\n\t\t} else {                            // spiral: wound out from the middle, turning\n\t\t\tfloat t = ramp(P, 0.2 * h1, 0.8 + 0.2 * h1);\n\t\t\tif (t <= 0.0 || t >= 1.0) continue;\n\t\t\tfloat a = fi * 2.39996 + 4.0 * P;\n\t\t\tc = 0.5 * FRAME + vec2(cos(a), sin(a)) * sqrt((fi + 0.5) / float(count)) * 700.0 * (0.35 + 0.65 * easeOutCubic(t));\n\t\t\ts = mix(50.0, 105.0, h2) * smoothstep(0.0, 0.12, t) * (1.0 - smoothstep(0.88, 1.0, t));\n\t\t\tang = a + 2.0 * PI * h3;\n\t\t}\n\t\tvec4 sp = sprite(rot(-ang) * (p - c), s, kind, h1);\n\t\to = sp + o * (1.0 - sp.a);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: moviefilein_banana
+  type: moviefileinTOP
+  parameters:
+    file: =app.samplesFolder+'/Map/Banana.tif'
+    index: =me.time.frame
+    timecodeop: =tdu.Timecode()
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Sprite storm
+  text: 'One shader: Banana.tif (TD''s default image), operator tiles or the Embody mark, flying as rain, burst, wall or spiral. Every path is a function of Progress alone. Wall covers the frame from 0.47 to 0.53.'
+  position: [530, -190]
+  size: [1070, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

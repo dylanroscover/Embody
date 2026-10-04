@@ -1,0 +1,99 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/speed_lines
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Lines:
+  - name: Style
+    style: Menu
+    default: radial
+    menuNames:
+    - radial
+    - streaks
+    menuLabels:
+    - Radial
+    - Streaks
+    help: Radial spikes stab in around the centre; streaks fly across.
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 0 and 1 = empty frame. Emphasis lines arrive, flicker while Progress moves, and leave. Lay it over a shot or behind a title.
+    value: 1
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_lines
+- name: glsl_lines
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_lines_pixel
+    computedat: glsl_lines_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Style.menuIndex
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_lines_info
+  type: infoDAT
+  parameters:
+    op: glsl_lines
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_lines
+  dat_read_only: true
+- name: glsl_lines_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_lines
+  dat_content: "// speed_lines: emphasis lines. Radial: spikes stab in from the edge towards the middle and\n// re-seed 16 times across Progress, which is the flicker. Streaks: bars cross right to left,\n// each on its own lane and clock.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: style (0 radial, 1 streaks)\n\nconst float SPIKES = 96.0;\nconst float LANE = 30.0;            // px\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\t// arrive over the first sixth, leave over the last\n\tfloat env = easeOutCubic(ramp(P, 0.0, 0.16)) * (1.0 - easeInCubic(ramp(P, 0.82, 1.0)));\n\tvec4 o = vec4(0.0);\n\tif (env <= 0.0) {\n\t\t// empty frame\n\t} else if (uAnim.y < 0.5) {\n\t\tvec2 q = p - 0.5 * FRAME;\n\t\tfloat r = length(q);\n\t\tfloat turn = (atan(q.y, q.x) / (2.0 * PI) + 0.5) * SPIKES;\n\t\tfloat seed = floor(16.0 * P);\n\t\tfloat h = hash(floor(turn) + 131.0 * seed), w = hash(3.7 * floor(turn) + 57.0 * seed);\n\t\tfloat inner = mix(300.0, 640.0, h) + 1000.0 * (1.0 - env);\n\t\t// a spike is widest at the frame edge and tapers to a point at its inner end; four in ten wedges stay empty\n\t\tfloat halfWidth = w < 0.4 ? 0.0 : 0.42 * w * clamp((r - inner) / 520.0, 0.0, 1.0);\n\t\tif (halfWidth > 0.0)\n\t\t\to = vec4(h > 0.82 ? GREEN : INK, 1.0) * fill((abs(fract(turn) - 0.5) - halfWidth) * r * 2.0 * PI / SPIKES);\n\t} else {\n\t\tfloat lane = floor(p.y / LANE);\n\t\tfloat h = hash(lane), w = hash(lane + 7.7);\n\t\tif (h > 0.45) {\n\t\t\tfloat len = mix(160.0, 620.0, w);\n\t\t\tvec2 c = vec2(mix(FRAME.x + len, -len, fract(P * (1.5 + 2.0 * w) + 3.0 * h)), (lane + 0.5) * LANE);\n\t\t\to = vec4(w > 0.8 ? GREEN : INK, 1.0) * fill(sdRoundBox(p - c, vec2(0.5 * len, mix(2.0, 6.0, h) * env), 2.0));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Emphasis lines
+  text: One shader, no inputs. Radial spikes that flicker around the middle, or streaks crossing the frame. Lay it over a shot or behind a title.
+  position: [855, -190]
+  size: [745, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

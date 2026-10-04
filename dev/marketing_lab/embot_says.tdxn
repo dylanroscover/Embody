@@ -1,0 +1,189 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/embot_says
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Embot:
+  - name: Preset
+    style: Menu
+    default: wired
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: What Embot says. Add a row to the presets table inside to add one.
+    value: blended
+  - name: Text
+    style: Str
+    help: The speech bubble. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = Embot standing with the bubble fully typed. He hops in, waves, and his line types on. Animate 0 to 1 to play it.
+  - name: Warmth
+    style: Float
+    clampMin: true
+    clampMax: true
+    help: 'Embot''s colour, as Envoy paints him in the network editor: 0 is the cool blue he turns the moment the agent acts, 1 the red he reaches after about 14 seconds of it thinking. About 0.43 is green.'
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_embot
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - seeded
+    - Seeded a noise texture
+    - seeded a noise texture
+  - - graded
+    - Graded brightness & contrast
+    - graded brightness & contrast
+  - - blended
+    - Blended two layers
+    - blended two layers
+  - - shader
+    - Ran a GLSL shader
+    - ran a GLSL shader
+  - - feedback
+    - Fed the output back in
+    - fed the output back in
+  - - output
+    - Exposed the output
+    - exposed the output
+  - - wired
+    - I wired that
+    - I wired that for you.
+  - - 'null'
+    - Forgot the Null
+    - You forgot the Null. I added it.
+  - - banana
+    - Always a banana
+    - Why is it always a banana?
+  - - cooks
+    - It cooks
+    - It cooks. I checked.
+  - - hands
+    - No hands
+    - Look. No hands.
+  - - sixty
+    - 60 fps
+    - Still 60 fps.
+  - - hello
+    - Hello
+    - Hi. I'm Embot.
+  - - convoy
+    - Convoy
+    - I can do that on the other machine too.
+  dat_content_format: table
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Cascadia Mono
+    fontsizex: 44
+  position: [600, 0]
+- name: text_name
+  type: textTOP
+  parameters:
+    text: Embot
+    font: Inter
+    typeface: SemiBold
+    fontsizex: 26
+  position: [600, -200]
+- name: glsl_embot
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_embot_pixel
+    computedat: glsl_embot_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Warmth
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+      valuey: =op('text_main').evalTextSize('M')[0]
+      valuez: =len(op('text_main').par.text.eval())
+      valuew: =op('text_name').evalTextSize(op('text_name').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+  - text_name
+- name: glsl_embot_info
+  type: infoDAT
+  parameters:
+    op: glsl_embot
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_embot
+  dat_read_only: true
+- name: glsl_embot_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_embot
+  dat_content: "// embot_says: Embot hops in, lands, waves and says his line in a bubble under his name, as he\n// does in the network editor. kit_core's overEmbot draws him, at U px per unit of Envoy's own\n// proportions for him, in the colour Envoy gives him (Warmth, see embotSkin).\n// Input 0 is the line (text_main), input 1 his name (text_name), both set at the frame's bottom left.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: Warmth\nuniform vec4 uMain;                 // the line: x width px, y advance px, z characters; w: the name's width px\n\nconst float U = 4.4;\nconst vec2 HOME = vec2(300.0, 330.0);   // where the middle of his body rests\nconst float FEET = -41.0;               // the soles of his feet, in units below that\nconst float SIZE = 44.0, NAME = 26.0;   // twins of the font sizes of text_main and text_name\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\t// hop in from the left, squash on landing\n\t\tfloat hop = ramp(P, 0.0, 0.22);\n\t\tvec2 at = vec2(mix(-260.0, HOME.x, easeOutCubic(hop)), HOME.y + 1040.0 * hop * (1.0 - hop));\n\t\tfloat squash = sin(PI * ramp(P, 0.22, 0.32));\n\t\tvec2 q = (p - at) / U;\n\t\tq = vec2(q.x / (1.0 + 0.08 * squash), (q.y - FEET) / (1.0 - 0.12 * squash) + FEET);\n\n\t\tvec3 skin = embotSkin(uAnim.y);\n\t\tfloat wave = sin(PI * ramp(P, 0.34, 0.74));     // his right arm goes up and waggles\n\t\to = overEmbot(o, q, U, vec2(3.0 * sin(110.0 * P) * wave, 16.0 * wave), sin(PI * ramp(P, 0.62, 0.68)), skin);     // and blinks once\n\n\t\t// the bubble grows out of a corner beside his head, tail first\n\t\tfloat say = easeOutBack(ramp(P, 0.32, 0.46));\n\t\tif (say > 0.0) {\n\t\t\tvec2 halfSize = vec2(0.5 * max(uMain.x, uMain.w) + 40.0, 72.0);\n\t\t\tvec2 g = (p - HOME - vec2(150.0, 150.0)) / say;\n\t\t\tfloat dB = min(sdRoundBox(g - halfSize, halfSize, 22.0), sdRoundBox(rot(PI / 4.0) * (g - vec2(26.0, 4.0)), vec2(16.0), 3.0)) * say;\n\t\t\to = over(o, mix(skin, DARK, fill(dB + 4.0)), fill(dB));\n\t\t\to = over(o, QUIET, textAt(sTD2DInputs[1], g, vec2(40.0, 97.0), 0.24 * NAME, 1.0));\n\t\t\tvec2 origin = vec2(40.0, 32.0);\n\t\t\tfloat typed = floor(ramp(P, 0.46, 0.9) * uMain.z + 0.001);\n\t\t\to = over(o, INK, textAt(sTD2DInputs[0], g, origin, 0.23 * SIZE, 1.0) * step(g.x, origin.x + typed * uMain.y));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Embot speaks
+  text: Embot hops in, lands, waves and says his line. He is drawn in the shader from the same block proportions Envoy uses for him in the network editor.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

@@ -1,0 +1,88 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/diff_wipe
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Wipe:
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 'Transition. 0 and 1 = clear frame. Diff rows sweep in from the left until the frame is covered (0.47 to 0.53: cut the clips underneath here), then sweep out to the right.'
+    value: 0.7810000181
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_diff
+- name: glsl_diff
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_diff_pixel
+    computedat: glsl_diff_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_diff_info
+  type: infoDAT
+  parameters:
+    op: glsl_diff
+  flags:
+  - viewer
+  position: [275, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_diff
+  dat_read_only: true
+- name: glsl_diff_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [125, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_diff
+  dat_content: "// diff_wipe: the rows of a diff sweep in from the left until they cover the frame; cut the clips\n// underneath while it is covered (Progress 0.47 to 0.53); then they sweep out to the right.\n// Added rows are green, removed rows red, context rows dark.\nuniform vec4 uAnim;                 // x: Progress\n\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 RED = vec3(0.957, 0.38, 0.36);\nconst vec3 DARK = vec3(0.094, 0.118, 0.118);\nconst vec3 INK = vec3(0.933, 0.965, 0.933);\nconst vec2 FRAME = vec2(1920.0, 1080.0);\nconst int ROWS = 18;\n// 0 context, 1 added, 2 removed; runs of the same kind read as hunks\nconst int KIND[ROWS] = int[ROWS](0, 2, 2, 1, 1, 1, 0, 1, 1, 2, 1, 1, 1, 0, 2, 2, 1, 1);\nconst float GUTTER = 96.0;          // px, holds the + and -\nconst float STAGGER = 0.17, SWEEP = 0.3, OUT_START = 0.53;\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat hash(float n) {\n\treturn fract(sin(n * 12.9898 + 4.1414) * 43758.5453);\n}\n\nfloat easeInOutCubic(float u) {\n\treturn u < 0.5 ? 4.0 * u * u * u : 1.0 - 4.0 * (1.0 - u) * (1.0 - u) * (1.0 - u);\n}\n\nfloat sdRoundBox(vec2 p, vec2 b, float r) {\n\tvec2 q = abs(p) - b + r;\n\treturn length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;\n}\n\nfloat fill(float d) {\n\treturn 1.0 - smoothstep(-0.5, 0.5, d);\n}\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tfloat rowH = FRAME.y / float(ROWS);\n\tint row = clamp(int((FRAME.y - p.y) / rowH), 0, ROWS - 1);\n\tfloat y = FRAME.y - p.y - (float(row) + 0.5) * rowH;       // from the row's centre line\n\tfloat r = float(row);\n\n\t// rows start top to bottom, each a little off the beat\n\tfloat delay = STAGGER * (0.65 * r / float(ROWS - 1) + 0.35 * hash(r));\n\tfloat lead = (FRAME.x + 2.0) * easeInOutCubic(clamp((P - delay) / SWEEP, 0.0, 1.0));\n\tfloat trail = (FRAME.x + 2.0) * easeInOutCubic(clamp((P - OUT_START - delay) / SWEEP, 0.0, 1.0));\n\n\tvec4 o = vec4(0.0);\n\tif (p.x < lead && p.x >= trail) {\n\t\tint kind = KIND[row];\n\t\tvec3 col = kind == 1 ? GREEN : kind == 2 ? RED : DARK;\n\t\tvec3 text = kind == 0 ? mix(DARK, INK, 0.14) : mix(col, DARK, 0.42);\n\t\tfloat mark = 0.0;\n\n\t\t// the + or - in the gutter\n\t\tif (kind != 0) {\n\t\t\tvec2 g = vec2(p.x - 0.5 * GUTTER, y);\n\t\t\tmark = fill(sdRoundBox(g, vec2(11.0, 3.0), 1.5));\n\t\t\tif (kind == 1) mark = max(mark, fill(sdRoundBox(g, vec2(3.0, 11.0), 1.5)));\n\t\t}\n\n\t\t// the line of code: blocks of varying width stand in for its tokens\n\t\tfloat x = p.x - GUTTER - 40.0 - 60.0 * floor(hash(r + 7.0) * 4.0);\n\t\tfloat len = mix(500.0, 1500.0, hash(r + 3.0));\n\t\tfloat pos = 0.0;\n\t\tfor (int i = 0; i < 12; i++) {\n\t\t\tif (pos > len) break;\n\t\t\tfloat w = 30.0 * (2.0 + floor(hash(r * 31.0 + float(i)) * 7.0));\n\t\t\tmark = max(mark, fill(sdRoundBox(vec2(x - pos - 0.5 * w, y), vec2(0.5 * w, 0.15 * rowH), 4.0)));\n\t\t\tpos += w + 24.0;\n\t\t}\n\t\to = vec4(mix(col, text, mark), 1.0);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Diff transition
+  text: One shader, no inputs. 18 diff rows sweep in from the left until the frame is covered (cut underneath at Progress 0.47 to 0.53), then sweep out to the right.
+  position: [55, -190]
+  size: [745, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

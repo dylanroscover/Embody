@@ -1,0 +1,197 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/prompt_chip
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Prompt:
+  - name: Preset
+    style: Menu
+    default: custom
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: A ready-made prompt from the trailer script, or the install line from embody.tools. Custom uses the Text parameter below. A preset whose kind is paste sits behind the Textport prompt and lands all at once instead of typing on. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    default: Build me a noise-driven particle system that reacts to audio.
+    help: The prompt to type when Preset is Custom. It wraps like an input field and steps down the type scale as it gets longer.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = fully typed with the cursor resting after the last character. The chip opens first, then the prompt types on. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_chip
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+    - kind
+  - - custom
+    - Custom (the Text parameter)
+    - ''
+    - prompt
+  - - build
+    - Build a particle system
+    - Build me a noise-driven particle system that reacts to audio.
+    - prompt
+  - - chaotic
+    - More chaotic
+    - Actually, make it more chaotic.
+    - prompt
+  - - calm
+    - Calm, monochrome
+    - Now calm and monochrome.
+    - prompt
+  - - revert
+    - Back to the first version
+    - Go back to the first version.
+    - prompt
+  - - install
+    - Textport install (pasted)
+    - 'import requests, hashlib, tempfile, os; h = {''User-Agent'': ''Embody-Install''}; mf = requests.get( ...'
+    - paste
+  dat_content_format: table
+- name: glsl_chip
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_chip_pixel
+    computedat: glsl_chip_compute
+    premultrgbbyalpha: false
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =1 if op('presets')[parent.Mograph.par.Preset.eval(), 'kind'] == 'paste' else 0
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    font: Cascadia Mono
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: '=(lambda n: 76 if n <= 30 else 64 if n <= 66 else 52)(len(op(''../kit_core/layout'').module.choice(parent.Mograph, ''text'', ''Text'')))'
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  custom_pars:
+    Custom:
+    - name: Valuea
+      style: Float
+      label: Value A
+    - name: Valueb
+      style: Float
+      label: Value B
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: glsl_chip_info
+  type: infoDAT
+  parameters:
+    op: glsl_chip
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_chip
+  dat_read_only: true
+- name: glsl_chip_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_chip
+  dat_content: "// prompt_chip: an outlined chip opens, then the prompt types on behind a block cursor. A\n// pasted preset sits behind the Textport's >>> and lands all at once (script_layout gives\n// every glyph the same launch time). uCells holds one vec4 per row of script_layout:\n//   [0]              size, numLines, numCells, total launch time\n//   [1..numLines]    line x0, x1, band bottom, band top\n//   [1+numLines..]   cell x0, x1, line, launch time (ascending)\nuniform samplerBuffer uCells;\nuniform vec4 uAnim;                 // x: Progress, y: 1 = pasted into a Textport, 0 = typed to an agent\n\nconst vec3 INK = vec3(0.933, 0.965, 0.933);\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 DARK = vec3(0.094, 0.118, 0.118);\nconst float CHIP_END = 0.1;         // Progress at which the chip is fully open\nconst float TYPE_END = 0.94;        // Progress at which the last character lands\nconst float DESCENT = 0.3;          // twin of descent in script_layout\nconst float BORDER = 4.0;           // px\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat easeOutExpo(float u) {\n\treturn u >= 1.0 ? 1.0 : 1.0 - exp2(-10.0 * max(u, 0.0));\n}\n\nfloat sdRoundBox(vec2 p, vec2 b, float r) {\n\tvec2 q = abs(p) - b + r;\n\treturn length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n\tvec2 pa = p - a, ba = b - a;\n\treturn length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));\n}\n\nfloat fill(float d) {\n\treturn 1.0 - smoothstep(-0.5, 0.5, d);\n}\n\nvoid main() {\n\tvec2 res = uTDOutputInfo.res.zw;\n\tvec2 p = vUV.st * res;\n\tvec4 meta = texelFetch(uCells, 0);\n\tfloat size = meta.x;\n\tint numLines = int(meta.y);\n\tint numCells = int(meta.z);\n\tfloat P = uAnim.x;\n\tbool pasted = uAnim.y > 0.5;\n\tfloat indent = pasted ? 2.3 : 1.15;     // twin of indent in script_layout: the gutter the chevrons sit in\n\tvec4 o = vec4(0.0);\n\n\tif (numLines > 0) {\n\t\tvec2 lo = vec2(1e6), hi = vec2(-1e6);\n\t\tfor (int i = 0; i < 8; i++) {\n\t\t\tif (i >= numLines) break;\n\t\t\tvec4 ln = texelFetch(uCells, 1 + i);\n\t\t\tlo = min(lo, ln.xz);\n\t\t\thi = max(hi, ln.yw);\n\t\t}\n\n\t\t// chip: hugs the full prompt plus the chevron gutter and room for the cursor\n\t\tvec2 chipLo = lo - vec2((indent + 0.55) * size, 0.32 * size);\n\t\tvec2 chipHi = hi + vec2(1.25 * size, 0.32 * size);\n\t\tfloat open = easeOutExpo(P / CHIP_END);\n\t\tvec2 halfSize = 0.5 * (chipHi - chipLo);\n\t\tfloat r = min(0.46 * size, halfSize.y);\n\t\thalfSize.x = mix(r, halfSize.x, open);\n\t\tfloat d = sdRoundBox(p - 0.5 * (chipLo + chipHi), halfSize, r);\n\t\tfloat inside = fill(d) * step(0.001, open);\n\t\to = vec4(mix(DARK, GREEN, 1.0 - fill(d + BORDER)), 1.0) * inside;\n\n\t\tif (inside > 0.0 && open > 0.98) {\n\t\t\t// chevrons level with the first line: one for an agent prompt, three for the Textport\n\t\t\tfloat base = texelFetch(uCells, 1).z + DESCENT * size;\n\t\t\tvec2 tip = vec2(lo.x - (indent - 0.45) * size, base + 0.35 * size);\n\t\t\tvec2 arm = vec2(0.34, 0.25) * size;\n\t\t\tfloat dc = 1e6;\n\t\t\tfor (int i = 0; i < 3; i++) {\n\t\t\t\tif (i > 0 && !pasted) break;\n\t\t\t\tvec2 t = tip + vec2(0.575 * size * float(i), 0.0);\n\t\t\t\tdc = min(dc, min(sdSegment(p, t - arm, t), sdSegment(p, t - arm * vec2(1.0, -1.0), t)));\n\t\t\t}\n\t\t\to = mix(o, vec4(GREEN, 1.0), fill(dc - 0.058 * size));\n\n\t\t\t// glyphs in launch order; the cursor rests after the last one shown\n\t\t\tfloat launch = clamp((P - CHIP_END) / (TYPE_END - CHIP_END), 0.0, 1.0) * meta.w;\n\t\t\tfloat ink = 0.0;\n\t\t\tfloat curX = lo.x;\n\t\t\tint curLine = 0;\n\t\t\tfor (int i = 0; i < 256; i++) {\n\t\t\t\tif (i >= numCells) break;\n\t\t\t\tvec4 c = texelFetch(uCells, 1 + numLines + i);\n\t\t\t\tif (launch <= c.w) break;\n\t\t\t\tcurX = c.y;\n\t\t\t\tcurLine = int(c.z);\n\t\t\t\tvec4 ln = texelFetch(uCells, 1 + curLine);\n\t\t\t\tif (p.x >= c.x && p.x < c.y && p.y >= ln.z && p.y < ln.w)\n\t\t\t\t\tink = max(ink, texture(sTD2DInputs[0], p / res).a);\n\t\t\t}\n\t\t\to = mix(o, vec4(INK, 1.0), ink);\n\n\t\t\tvec2 curHalf = vec2(0.26,
+    0.5) * size;\n\t\t\tvec2 curCtr = vec2(curX + 0.1 * size, texelFetch(uCells, 1 + curLine).z + (DESCENT - 0.15) * size) + curHalf;\n\t\t\to = mix(o, vec4(GREEN, 1.0), fill(sdRoundBox(p - curCtr, curHalf, 0.06 * size)));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# one call into kit_core/layout; its header documents the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tcomp = parent.Mograph\n\t# a pasted line lands all at once behind the Textport's three chevrons; a typed one arrives a keystroke at a time\n\tpasted = comp.op('presets')[L.chosen(comp.par.Preset), 'kind'] == 'paste'\n\tL.build(scriptOp, op('text_glyphs'), L.choice(comp, 'text', 'Text'), anchor=(960, 290), lineAlign=0, maxWidth=1440,\n\t\tbalance=False, indent=2.3 if pasted else 1.15, pitch=1.34, cap=0.7, descent=0.3, step=0 if pasted else 1,\n\t\twordGap=0 if pasted else 1.2, jitter=0 if pasted else 0.7, tail=0.01, pad=0)\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Typed prompt
+  text: script_layout wraps Text the way an input field does and measures one cell per glyph. text_glyphs sets the lines once. glsl_chip opens the outlined chip, then reveals the cells in typing order behind a block cursor. Progress drives all of it.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

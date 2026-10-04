@@ -1,0 +1,155 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/caption_card
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Caption:
+  - name: Preset
+    style: Menu
+    default: previously
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: Which caption to show. The lines live in the presets table inside; add a row to add one.
+  - name: Text
+    style: Str
+    help: Your own caption. When this is not empty it replaces the preset; put the asterisks in yourself.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 'Scrub 0 to 1: the caption pops in at the foot of the frame over the first third, then holds.'
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_caption
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - previously
+    - Previously
+    - '*PREVIOUSLY*'
+  - - pause
+    - Pause
+    - '*PAUSE*'
+  - - unpause
+    - Unpause
+    - '*UNPAUSE*'
+  - - later
+    - 13 minutes later
+    - '*13 MINUTES LATER*'
+  - - meanwhile
+    - Meanwhile
+    - '*MEANWHILE*'
+  - - tower
+    - Meanwhile, on the tower
+    - '*MEANWHILE, ON THE TOWER*'
+  - - sped
+    - Sped up
+    - '*SPED UP*'
+  - - realtime
+    - Real time
+    - '*REAL TIME*'
+  - - scale
+    - Banana for scale
+    - '*BANANA FOR SCALE*'
+  dat_content_format: table
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Georgia
+    typeface: Bold Italic
+    dispmethod: scalable
+    fontsizex: 84
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_caption
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_caption_pixel
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+      valuey: 0
+      valuez: 0
+      valuew: 0
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+- name: glsl_caption_info
+  type: infoDAT
+  parameters:
+    op: glsl_caption
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_caption
+  dat_read_only: true
+- name: glsl_caption_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_caption
+  dat_content: "// caption_card: one line of caption at the foot of the frame, the way an editor labels a\n// cutaway (*PREVIOUSLY*). It pops in about its own middle and carries a dark edge, so it\n// reads over any footage. Input 0 is the line (text_main, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uMain;                 // x: the line's width px\n\nconst float SIZE = 84.0;            // twin of text_main's font size\nconst float BASELINE = 18.0;        // how far up its texture Georgia's baseline sits at that size (measured)\nconst vec2 FOOT = vec2(960.0, 96.0);    // the middle of the line's baseline\nconst float EDGE = 5.0;             // the dark edge, px\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tvec4 o = vec4(0.0);\n\tfloat pop = easeOutBack(ramp(uAnim.x, 0.0, 0.3));\n\tif (pop > 0.0) {\n\t\tvec2 middle = FOOT + vec2(0.0, 0.34 * SIZE);\n\t\tvec2 q = (p - middle) / pop + middle;\n\t\tvec2 origin = FOOT - vec2(0.5 * uMain.x, 0.0);\n\t\tfloat edge = 0.0;\n\t\tfor (int i = 0; i < 12; i++)\n\t\t\tedge = max(edge, textAt(sTD2DInputs[0], q + EDGE * vec2(cos(float(i) * PI / 6.0), sin(float(i) * PI / 6.0)), origin, BASELINE, 1.0));\n\t\to = over(o, DARK, edge);\n\t\to = over(o, INK, textAt(sTD2DInputs[0], q, origin, BASELINE, 1.0));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Caption card
+  text: One line of caption at the foot of the frame, for labelling a cutaway. Georgia bold italic with a dark edge, so it reads over footage.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

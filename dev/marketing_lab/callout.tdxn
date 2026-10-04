@@ -1,0 +1,163 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/callout
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Callout:
+  - name: Preset
+    style: Menu
+    default: tdxn
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: What the label says. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: The label. Typed text wins over the preset; leave empty to use the preset.
+  - name: Targetx
+    style: Float
+    label: Target X
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 'Where the callout points, across the frame: 0 = left edge, 1 = right edge.'
+  - name: Targety
+    style: Float
+    label: Target Y
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 'Where the callout points, up the frame: 0 = bottom edge, 1 = top edge.'
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = fully set. A ring lands on the target, a leader draws out, the label opens and its text wipes on. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_callout
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - tdxn
+    - The .tdxn
+    - the whole network, as text
+  - - agent
+    - Built by the agent
+    - nobody dragged this wire
+  - - embot
+    - Embot
+    - that's Embot, where the agent is working
+  - - 'null'
+    - 'Null'
+    - always end on a Null
+  - - banana
+    - Default banana
+    - default banana. do not remove
+  - - hands
+    - No hands
+    - look, no hands
+  - - node
+    - A Convoy node
+    - this project is a Convoy node
+  dat_content_format: table
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: 44
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_callout
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_callout_pixel
+    computedat: glsl_callout_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Targetx
+      valuez: =parent.Mograph.par.Targety
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+- name: glsl_callout_info
+  type: infoDAT
+  parameters:
+    op: glsl_callout
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_callout
+  dat_read_only: true
+- name: glsl_callout_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_callout
+  dat_content: "// callout: a ring lands on the target, a leader draws out to an elbow, a label opens away\n// from it and its text wipes on. The label goes to whichever side of the target has room.\n// Input 0 is the label (text_main, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y z: the target, 0-1 across and up the frame\nuniform vec4 uMain;                 // x: label width px\n\nconst float SIZE = 44.0;            // twin of text_main's font size\nconst float REACH = 120.0;          // how far the leader runs on each axis before it levels out\nconst float LEVEL = 44.0;           // the level run into the label\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec2 target = uAnim.yz * FRAME;\n\tfloat side = target.x < 0.6 * FRAME.x ? 1.0 : -1.0;\n\tfloat up = target.y < 0.7 * FRAME.y ? 1.0 : -1.0;\n\tvec2 elbow = target + vec2(side, up) * REACH;\n\tfloat slant = REACH * 1.41421;\n\tvec4 o = vec4(0.0);\n\n\tif (P > 0.0) {\n\t\tfloat pop = easeOutBack(ramp(P, 0.0, 0.14));\n\t\tfloat r = length(p - target);\n\t\to = over(o, GREEN, max(fill(abs(r - 18.0 * pop) - 3.0), fill(r - 6.0 * pop)));\n\n\t\tfloat run = easeInOutCubic(ramp(P, 0.1, 0.4)) * (slant + LEVEL);\n\t\tif (run > 24.0) {\n\t\t\tvec2 dir = normalize(elbow - target);\n\t\t\tfloat d = sdSegment(p, target + dir * 24.0, target + dir * min(run, slant));\n\t\t\tif (run > slant) d = min(d, sdSegment(p, elbow, elbow + vec2(side * (run - slant), 0.0)));\n\t\t\to = over(o, GREEN, fill(d - 2.5));\n\t\t}\n\n\t\tfloat open = easeOutExpo(ramp(P, 0.36, 0.6));\n\t\tif (open > 0.0) {\n\t\t\tfloat near = elbow.x + side * LEVEL;\n\t\t\tvec2 halfSize = vec2(0.5 * uMain.x + 36.0, 46.0);\n\t\t\tfloat dBox = sdRoundBox(p - vec2(near + side * halfSize.x * open, elbow.y), vec2(halfSize.x * open, halfSize.y), min(12.0, halfSize.x * open));\n\t\t\to = over(o, DARK, fill(dBox));\n\t\t\to = over(o, GREEN, fill(dBox) * step(abs(p.x - near - side * 3.0), 3.0));\n\t\t\tvec2 origin = vec2(near + side * halfSize.x - 0.5 * uMain.x, elbow.y - 0.5 * 0.727 * SIZE);\n\t\t\to = over(o, INK, textAt(sTD2DInputs[0], p, origin, 0.24 * SIZE, 1.0) * step(p.x, origin.x + uMain.x * ramp(P, 0.5, 0.85)) * fill(dBox));\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Pointing label
+  text: A ring lands on Target X / Target Y, a leader draws out and a label opens on whichever side has room. For pointing at things in a screen recording.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

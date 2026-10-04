@@ -1,0 +1,163 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/banana_rating
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Rating:
+  - name: Preset
+    style: Menu
+    default: vibes
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: What is being rated. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: What is being rated. Typed text wins over the preset; leave empty to use the preset.
+  - name: Score
+    style: Int
+    default: 5
+    max: 5.0
+    clampMin: true
+    clampMax: true
+    normMax: 5.0
+    help: Bananas out of five.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = every banana in. The plate opens, the label rises and the bananas pop in one by one up to Score. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_rating
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - vibes
+    - Vibes
+    - vibes
+  - - fps
+    - Frame rate
+    - frame rate
+  - - wires
+    - Wires untangled
+    - wires untangled
+  - - nulls
+    - Nulls added
+    - Nulls added
+  - - scale
+    - Banana for scale
+    - banana for scale
+  - - docs
+    - Docs read
+    - docs read before asking
+  dat_content_format: table
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: 60
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_rating
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_rating_pixel
+    computedat: glsl_rating_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Score
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+  - moviefilein_banana
+- name: glsl_rating_info
+  type: infoDAT
+  parameters:
+    op: glsl_rating
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_rating
+  dat_read_only: true
+- name: glsl_rating_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_rating
+  dat_content: "// banana_rating: a label over five banana slots; the scored ones fill in one by one, each\n// with a wobble as it lands. Input 0 is the label (text_main, set at the frame's bottom\n// left), input 1 Banana.tif.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: score, bananas out of five\nuniform vec4 uMain;                 // x: label width px\n\nconst vec2 CENTRE = vec2(960.0, 540.0);\nconst float SIZE = 60.0;            // twin of text_main's font size\nconst float PITCH = 150.0, HALF = 64.0;     // spacing and half size of a banana\nconst vec3 EMPTY = vec3(0.18, 0.22, 0.22);  // an unfilled slot\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\tfloat open = easeOutExpo(ramp(P, 0.0, 0.14));\n\t\tfloat halfWidth = (max(0.5 * uMain.x, 2.5 * PITCH) + 56.0) * open;\n\t\to = over(o, DARK, fill(sdRoundBox(p - CENTRE, vec2(halfWidth, 150.0), min(28.0, halfWidth))));\n\n\t\t// the label rises as one line out of its own band\n\t\tfloat u = ramp(P, 0.1, 0.3);\n\t\tvec2 origin = CENTRE + vec2(-0.5 * uMain.x, 62.0);\n\t\tif (u > 0.0 && p.y > origin.y - 0.25 * SIZE && p.y < origin.y + 0.95 * SIZE)\n\t\t\to = over(o, INK, textAt(sTD2DInputs[0], p + vec2(0.0, (1.0 - easeOutBack(u)) * 0.9 * SIZE), origin, 0.24 * SIZE, 1.0));\n\n\t\tfor (int i = 0; i < 5; i++) {\n\t\t\tvec2 q = p - CENTRE - vec2((float(i) - 2.0) * PITCH, -50.0);\n\t\t\tif (open > 0.98) o = over(o, EMPTY, bananaAt(sTD2DInputs[1], q, HALF).a);\n\t\t\tfloat k = ramp(P, 0.3 + 0.1 * float(i), 0.44 + 0.1 * float(i));\n\t\t\tif (float(i) < uAnim.y && k > 0.0) {\n\t\t\t\tvec4 b = bananaAt(sTD2DInputs[1], rot(0.5 * sin(9.0 * k) * (1.0 - k)) * q / easeOutBack(k), HALF);\n\t\t\t\to = b + o * (1.0 - b.a);\n\t\t\t}\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: moviefilein_banana
+  type: moviefileinTOP
+  parameters:
+    file: =app.samplesFolder+'/Map/Banana.tif'
+    index: =me.time.frame
+    timecodeop: =tdu.Timecode()
+  position: [600, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Banana rating
+  text: A label over five banana slots; the first Score of them fill in one by one, each with a wobble as it lands.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

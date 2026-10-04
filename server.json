@@ -1,9 +1,10 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.dylanroscover/embody",
   "title": "Embody - MCP Server for TouchDesigner",
-  "description": "62-tool MCP server that lets AI assistants create operators, set parameters, wire connections, and manage externalizations in a live TouchDesigner session. Automates TouchDesigner externalization for version control.",
-  "version": "1.4.0",
+  "description": "70-tool MCP server for TouchDesigner: build, wire and debug live networks from an AI agent.",
+  "version": "6.2.67",
+  "websiteUrl": "https://embody.tools",
   "repository": {
     "url": "https://github.com/dylanroscover/Embody",
     "source": "github"

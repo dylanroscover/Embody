@@ -1,0 +1,106 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/wow_wipe
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Wipe:
+  - name: Style
+    style: Menu
+    default: iris
+    menuNames:
+    - iris
+    - tiles
+    - grid
+    - scan
+    - blinds
+    menuLabels:
+    - Mark iris
+    - Operator tiles
+    - Grid dissolve
+    - Scan line
+    - Blinds
+    help: Which transition.
+    value: blinds
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 'Transition. 0 and 1 = clear frame. The frame is fully covered from 0.47 to 0.53: cut the clips underneath there.'
+    value: 1
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_wow
+- name: glsl_wow
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_wow_pixel
+    computedat: glsl_wow_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =parent.Mograph.par.Style.menuIndex
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_wow_info
+  type: infoDAT
+  parameters:
+    op: glsl_wow
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wow
+  dat_read_only: true
+- name: glsl_wow_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wow
+  dat_content: "// wow_wipe: five ways to cover the frame and uncover it. c runs 0 (clear) to 1 (covered):\n// up over Progress 0 to 0.47, held while the clips underneath are cut, down over 0.53 to 1.\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress, y: style (0 iris, 1 tiles, 2 grid, 3 scan, 4 blinds)\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tbool closing = P < 0.5;\n\tfloat c = closing ? ramp(P, 0.0, 0.47) : 1.0 - ramp(P, 0.53, 1.0);\n\tint style = int(uAnim.y);\n\tvec2 q = p - 0.5 * FRAME;\n\tvec4 o = vec4(0.0);\n\n\tif (c <= 0.0) {\n\t\t// clear frame\n\t} else if (style == 0) {\n\t\tif (closing) {              // dive into the bar of the e until it fills the frame\n\t\t\tfloat unit = 0.2 * exp(c * log(2000.0));\n\t\t\to = over(o, GREEN, fill(sdMark(q / unit, 1.0) * unit));\n\t\t\to = over(o, MINT, fill((length(q / unit - MARK_ORB) - MARK_ORB_R) * unit));\n\t\t} else {                    // an orb opens it again\n\t\t\tfloat r = 1140.0 * easeInOutCubic(1.0 - c);\n\t\t\to = vec4(mix(GREEN, MINT, fill(length(q) - r - min(26.0, r))), 1.0) * (1.0 - fill(length(q) - r));\n\t\t}\n\t} else if (style == 1) {        // operator tiles swell until they tile the frame, in a diagonal sweep\n\t\tvec2 grid = vec2(8.0, 5.0), size = FRAME / grid;\n\t\tvec2 cell = floor(p / size);\n\t\tfloat diag = (cell.x + (closing ? grid.y - 1.0 - cell.y : cell.y)) / (grid.x + grid.y - 2.0);\n\t\tfloat k = easeOutCubic(ramp(c, 0.5 * diag, 0.5 * diag + 0.5));\n\t\tif (k > 0.0) {\n\t\t\tvec2 local = p - (cell + 0.5) * size;\n\t\t\tvec3 body = FAMILY[int(hash(cell.x + 13.0 * cell.y) * 6.999)];\n\t\t\to = over(o, body, fill(sdRoundBox(local, 0.5 * size * k, 40.0 * (1.0 - k))));\n\t\t\tif (k > 0.3) o = over(o, body * 0.42, fill(sdRoundBox(local, 0.5 * size * k - 22.0, 8.0)));\n\t\t}\n\t} else if (style == 2) {        // squares switch on in a scatter, each flashing green as it does\n\t\tvec2 cell = floor(p / 120.0);\n\t\tfloat h = 0.86 * hash(cell.x * 7.3 + cell.y * 91.7 + (closing ? 0.0 : 40.0));\n\t\tif (c > h) o = vec4(c < 1.0 && c - h < 0.07 ? GREEN : DARK, 1.0);\n\t} else if (style == 3) {        // a screen switching off: the picture closes to a line, the line to nothing\n\t\tfloat gap = 0.5 * FRAME.y * (1.0 - easeInOutCubic(ramp(c, 0.0, 0.6)));\n\t\tfloat line = 0.5 * FRAME.x * (1.0 - easeInCubic(ramp(c, 0.6, 0.94)));\n\t\tif (abs(q.y) > max(gap, 4.0)) o = vec4(DARK, 1.0);\n\t\telse if (gap <= 4.0) o = vec4(abs(q.x) < line ? MINT : DARK, 1.0);\n\t\telse if (abs(q.y) > gap - 5.0) o = vec4(GREEN, 1.0);\n\t} else {                        // slanted blinds widen until they meet, each with a green leading edge\n\t\tfloat s = (p.x + 0.6 * p.y) / 170.0;\n\t\tfloat start = 0.4 * floor(s) / 15.0;\n\t\tfloat k = easeInOutCubic(ramp(c, start, start + 0.6));\n\t\tif (fract(s) < k) o = vec4(k < 1.0 && fract(s) > k - 0.08 ? GREEN : DARK, 1.0);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Five wipes
+  text: 'One shader, no inputs, five styles: dive into the mark, operator tiles, grid dissolve, scan line, blinds. All cover the frame from Progress 0.47 to 0.53.'
+  position: [855, -190]
+  size: [745, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

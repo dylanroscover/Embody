@@ -1,0 +1,214 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/lower_third
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Lower:
+  - name: Preset
+    style: Menu
+    default: dylan
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: Who or what the lower third introduces. Add a row to the presets table inside to add one.
+  - name: Title
+    style: Str
+    help: First line. Typed text wins over the preset; leave empty to use the preset.
+  - name: Subtitle
+    style: Str
+    help: Second line. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = fully set. The mark draws on, the plate opens, the title rises in and the second line types on. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_lower
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - title
+    - subtitle
+  - - dylan
+    - Dylan Roscover
+    - Dylan Roscover
+    - creator of Embody
+  - - github
+    - GitHub
+    - github.com/dylanroscover/Embody
+    - free and open source
+  - - site
+    - embody.tools
+    - embody.tools
+    - docs and downloads
+  - - embody
+    - Embody
+    - Embody
+    - your network as files git can read
+  - - envoy
+    - Envoy
+    - Envoy
+    - the MCP server inside TouchDesigner
+  - - tdxn
+    - TDXN
+    - TDXN
+    - your whole network as diffable text
+  - - embot
+    - Embot
+    - Embot
+    - shows where the agent is working
+  - - convoy
+    - Convoy
+    - Convoy
+    - Embody projects on one trusted LAN
+  dat_content_format: table
+- name: text_sub
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'subtitle', 'Subtitle')
+    font: Cascadia Mono
+  position: [600, -200]
+- name: glsl_lower
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_lower_pixel
+    computedat: glsl_lower_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uSub
+      valuex: =op('text_sub').evalTextSize(op('text_sub').par.text.eval())[0]
+      valuey: =op('text_sub').evalTextSize('M')[0]
+      valuez: =len(op('text_sub').par.text.eval())
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+  - text_sub
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    font: Inter
+    typeface: SemiBold
+    fontsizex: 60
+  position: [600, 0]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: glsl_lower_info
+  type: infoDAT
+  parameters:
+    op: glsl_lower
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_lower
+  dat_read_only: true
+- name: glsl_lower_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_lower
+  dat_content: "// lower_third: the mark draws on, the plate opens to the right, the title rises in per\n// character and the second line types on. Input 0 is the title (text_glyphs, placed by\n// script_layout), input 1 the second line (text_sub, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\n#include <../kit_core/glsl_type>\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uSub;                  // second line: x width px, y advance px, z characters\n\nconst vec2 MARK = vec2(152.0, 153.0);\nconst float UNIT = 1.9;                 // px per unit of the mark's artboard\nconst vec2 SUB = vec2(222.0, 112.0);    // left end of the second line's baseline\nconst float SUB_SIZE = 30.0;            // twin of text_sub's font size\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0) {\n\t\t// plate: a square round the mark that opens out to the longer line\n\t\tfloat right = max(typeBounds().z, SUB.x + uSub.x) + 44.0;\n\t\tvec2 lo = vec2(86.0, 88.0), hi = vec2(mix(218.0, right, easeOutExpo(ramp(P, 0.04, 0.3))), 218.0);\n\t\to = over(o, DARK, fill(sdRoundBox(p - 0.5 * (lo + hi), 0.5 * (hi - lo), 20.0)));\n\n\t\tvec2 q = (p - MARK) / UNIT;\n\t\to = over(o, GREEN, fill(sdMark(q, easeInOutCubic(ramp(P, 0.0, 0.22))) * UNIT));\n\t\tfloat pop = ramp(P, 0.18, 0.3);\n\t\tif (pop > 0.0) o = over(o, MINT, fill((length(q - MARK_ORB) - MARK_ORB_R * easeOutBack(pop)) * UNIT));\n\n\t\to = over(o, INK, typeRise(p, ramp(P, 0.16, 0.62) * texelFetch(uCells, 0).w, 7.0, 0.85).x);\n\t\tfloat typed = floor(ramp(P, 0.5, 0.85) * uSub.z + 0.001);\n\t\to = over(o, GREEN, textAt(sTD2DInputs[1], p, SUB, 0.23 * SUB_SIZE, 1.0) * step(p.x, SUB.x + typed * uSub.y));\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# one call into kit_core/layout; its header documents the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tL.build(scriptOp, op('text_glyphs'), L.preset(parent.Mograph, 'title', 'Title'), anchor=(222, 172), blockAlign=0, lineAlign=0, maxWidth=1500, balance=False)\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Lower third
+  text: Preset or typed text. The title goes through kit_core/layout and rises per glyph; the second line is a plain Text TOP that the shader places and types on. The plate opens out from the mark.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

@@ -1,0 +1,150 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/kinetic_wall
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Wall:
+  - name: Preset
+    style: Menu
+    default: embody
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: The word the wall repeats. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: The word. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: 0 and 1 = empty frame. Rows of the word slide in from alternating sides, scroll, and slide out. The frame is fully covered from 0.45 to 0.7, so it also works as a transition.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_wall
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - text
+  - - embody
+    - EMBODY
+    - EMBODY
+  - - create
+    - CREATE
+    - CREATE
+  - - wow
+    - WOW
+    - WOW
+  - - banana
+    - BANANA
+    - BANANA
+  - - 'null'
+    - 'NULL'
+    - 'NULL'
+  - - cooks
+    - IT COOKS
+    - IT COOKS
+  - - errors
+    - NO ERRORS
+    - NO ERRORS
+  - - convoy
+    - CONVOY
+    - CONVOY
+  dat_content_format: table
+- name: glsl_wall
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_wall_pixel
+    computedat: glsl_wall_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uMain
+      valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_main
+- name: text_main
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'text', 'Text')
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: 150
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_wall_info
+  type: infoDAT
+  parameters:
+    op: glsl_wall
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wall
+  dat_read_only: true
+- name: glsl_wall_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [925, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_wall
+  dat_content: "// kinetic_wall: six rows of one word, alternately green on dark and dark on green, slide in\n// from alternating sides, scroll against each other and slide out. Fully covered from\n// Progress 0.45 to 0.7. Input 0 is the word (text_main, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uMain;                 // x: the word's width px\n\nconst float SIZE = 150.0;           // twin of text_main's font size\nconst float ROWS = 6.0;\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tfloat rowH = FRAME.y / ROWS;\n\tfloat row = floor((FRAME.y - p.y) / rowH);\n\tbool odd = mod(row, 2.0) > 0.5;\n\t// even rows enter from the left and leave to the right; odd rows the other way\n\tfloat x = odd ? FRAME.x - p.x : p.x;\n\tfloat delay = 0.035 * row;\n\tvec4 o = vec4(0.0);\n\tif (x < FRAME.x * easeOutCubic(ramp(P, delay, delay + 0.25)) && x >= FRAME.x * easeInCubic(ramp(P, 0.7 + delay, 0.82 + delay))) {\n\t\tfloat scroll = mod(p.x + (odd ? 700.0 : -700.0) * P + 173.0 * row, uMain.x + 0.5 * SIZE);\n\t\tfloat ink = textAt(sTD2DInputs[0], vec2(scroll, p.y - FRAME.y + (row + 1.0) * rowH), vec2(0.0, 0.5 * (rowH - 0.727 * SIZE)), 0.24 * SIZE, 1.0);\n\t\to = vec4(odd ? mix(DARK, GREEN, ink) : mix(GREEN, DARK, ink), 1.0);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Word wall
+  text: Six rows of one word slide in from alternating sides, scroll against each other and slide out. Fully covered from Progress 0.45 to 0.7, so it also works as a transition.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

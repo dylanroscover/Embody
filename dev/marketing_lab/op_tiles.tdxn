@@ -1,0 +1,89 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/op_tiles
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+custom_pars:
+  Tiles:
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = the finished Embody mark. Tiles fly onto the grid and get wired (0 to 0.4), hold as a network, then travel into the mark (0.48 to 0.9). Animate 0 to 1 to play it.
+    value: 0
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_tiles
+- name: glsl_tiles
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_tiles_pixel
+    computedat: glsl_tiles_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_tiles_info
+  type: infoDAT
+  parameters:
+    op: glsl_tiles
+  flags:
+  - viewer
+  position: [275, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_tiles
+  dat_read_only: true
+- name: glsl_tiles_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  flags:
+  - viewer
+  position: [125, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_tiles
+  dat_content: "// op_tiles: operator tiles fly onto a network grid left to right and get wired, then travel\n// into the Embody mark: 22 along the arc of the e, 8 along its bar, the last one becomes the orb.\nuniform vec4 uAnim;                 // x: Progress\n\nconst vec3 GREEN = vec3(0.431, 0.902, 0.408);\nconst vec3 MINT = vec3(0.788, 0.961, 0.769);\nconst vec3 INK = vec3(0.933, 0.965, 0.933);\n// TD's own family colours (ui.colors), lifted by GAIN so they read on a dark frame\nconst vec3 FAMILY[7] = vec3[7](\n\tvec3(0.41, 0.36, 0.575),        // TOP\n\tvec3(0.385, 0.55, 0.275),       // CHOP\n\tvec3(0.29, 0.5, 0.7),           // SOP\n\tvec3(0.315, 0.305, 0.75),       // POP\n\tvec3(0.575, 0.36, 0.5),         // DAT\n\tvec3(0.625, 0.58, 0.28),        // MAT\n\tvec3(0.36, 0.38, 0.38));        // COMP (0.19 in TD; lifted further or it sinks into the dark)\nconst float GAIN = 1.3;\n\nconst vec2 FRAME = vec2(1920.0, 1080.0);\nconst vec2 PITCH = vec2(250.0, 190.0);   // grid spacing, px\nconst vec2 TILE = vec2(80.0, 50.0);      // tile half size on the grid\nconst int COLS = 7, ROWS = 5, NUM = 31;  // 35 slots, 4 left empty\nconst int NUM_ARC = 22, NUM_BAR = 8;\n\n// the mark, in px around the frame centre (the 64-unit artboard of docs/assets/embody-mark.svg, y up)\nconst float UNIT = 6.5;\nconst float RADIUS = 17.0 * UNIT;\nconst float STROKE = 4.25 * UNIT;        // half the stroke width\nconst float ARC_START = radians(-74.4);  // the tail of the e; the arc sweeps clockwise from here\nconst float ARC_SWEEP = radians(296.6);\nconst vec2 BAR_A = vec2(-16.0, 0.0) * UNIT;\nconst vec2 BAR_B = vec2(15.5, 0.0) * UNIT;\nconst vec2 ORB = vec2(13.0, -12.0) * UNIT;\nconst float ORB_R = 4.7 * UNIT;\n\n// timeline, in Progress\nconst float FLY_SPREAD = 0.22, FLY_DUR = 0.13;\nconst float WIRE_AFTER = 0.07, WIRE_DUR = 0.06;\nconst float MORPH_START = 0.48, MORPH_SPREAD = 0.24, MORPH_DUR = 0.14;\nconst float MARK_START = 0.855, MARK_END = 0.895;\n\nlayout(location = 0) out vec4 fragColor;\n\nfloat hash(float n) {\n\treturn fract(sin(n * 12.9898 + 4.1414) * 43758.5453);\n}\n\nfloat easeOutExpo(float u) {\n\treturn u >= 1.0 ? 1.0 : 1.0 - exp2(-10.0 * max(u, 0.0));\n}\n\nfloat easeOutBack(float u) {\n\tfloat v = clamp(u, 0.0, 1.0) - 1.0;\n\treturn 1.0 + 2.70158 * v * v * v + 1.70158 * v * v;\n}\n\nfloat easeInOutCubic(float u) {\n\treturn u < 0.5 ? 4.0 * u * u * u : 1.0 - 4.0 * (1.0 - u) * (1.0 - u) * (1.0 - u);\n}\n\nfloat sdRoundBox(vec2 p, vec2 b, float r) {\n\tvec2 q = abs(p) - b + r;\n\treturn length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n\tvec2 pa = p - a, ba = b - a;\n\treturn length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));\n}\n\nfloat fill(float d) {\n\treturn 1.0 - smoothstep(-0.5, 0.5, d);\n}\n\nbool empty(int s) {\n\treturn s == 6 || s == 9 || s == 25 || s == 28;\n}\n\nint tileIndex(int s) {\n\treturn s - int(s > 6) - int(s > 9) - int(s > 25) - int(s > 28);\n}\n\nvec2 slotCentre(int s) {\n\treturn 0.5 * FRAME + vec2(float(s % COLS) - 3.0, 2.0 - float(s / COLS)) * PITCH;\n}\n\n// tiles land in a left to right sweep, the direction signal flows\nfloat landTime(int s) {\n\treturn FLY_SPREAD * float(s % COLS) / float(COLS - 1) + 0.04 * hash(float(s));\n}\n\nvec3 family(int s) {\n\tint k = (tileIndex(s) * 7 + 3) % NUM;\n\tint f = k < 8 ? 0 : k < 14 ? 1 : k < 17 ? 2 : k < 21 ? 3 : k < 25 ? 4 : k < 27 ? 5 : 6;\n\treturn min(FAMILY[f] * GAIN, 1.0);\n}\n\n// the wire from slot s to slot n, drawn up to fraction w of its length\nfloat sdWire(vec2 p, int s, int n, float w) {\n\tvec2 a = slotCentre(s) + vec2(TILE.x + 9.0, 0.0);\n\tvec2 b = slotCentre(n) - vec2(TILE.x + 9.0, 0.0);\n\tif (p.x < a.x - 4.0 || p.x > b.x + 4.0 || p.y < min(a.y, b.y) - 4.0 || p.y > max(a.y, b.y) + 4.0) return 1e6;\n\tfloat x = clamp(p.x, a.x, mix(a.x, b.x, w));\n\tfloat t = (x - a.x) / (b.x - a.x);\n\tfloat y = mix(a.y, b.y, t * t * (3.0 - 2.0 * t));\n\tfloat slope = (b.y - a.y) * 6.0 * t * (1.0 - t) / (b.x - a.x);\n\treturn length(vec2(p.x - x, (p.y - y) / sqrt(1.0 + slope * slope))) - 2.5;\n}\n\nvoid
+    main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 o = vec4(0.0);\n\n\t// wires, under the tiles; each draws once the tile it feeds has landed\n\tfloat wireFade = 1.0 - smoothstep(MORPH_START - 0.02, MORPH_START + 0.04, P);\n\tif (wireFade > 0.0) {\n\t\tfor (int s = 0; s < COLS * ROWS; s++) {\n\t\t\tif (empty(s) || s % COLS == COLS - 1) continue;\n\t\t\tvec3 col = family(s);\n\t\t\tint n = s + 1;                              // the neighbour on the same row\n\t\t\tif (!empty(n)) {\n\t\t\t\tfloat w = easeOutExpo((P - landTime(n) - WIRE_AFTER) / WIRE_DUR);\n\t\t\t\tif (w > 0.0) o = mix(o, vec4(col, 1.0), fill(sdWire(p, s, n, w)) * wireFade);\n\t\t\t}\n\t\t\tn = s + COLS + 1;                           // and sometimes the one below that\n\t\t\tif (s / COLS < ROWS - 1 && !empty(n) && hash(float(s) + 0.5) < 0.4) {\n\t\t\t\tfloat w = easeOutExpo((P - landTime(n) - WIRE_AFTER) / WIRE_DUR);\n\t\t\t\tif (w > 0.0) o = mix(o, vec4(col, 1.0), fill(sdWire(p, s, n, w)) * wireFade);\n\t\t\t}\n\t\t}\n\t}\n\n\tfor (int s = 0; s < COLS * ROWS; s++) {\n\t\tif (empty(s)) continue;\n\t\tfloat u = (P - landTime(s)) / FLY_DUR;\n\t\tif (u <= 0.0) continue;\n\t\tfloat h = hash(float(s));\n\t\tvec2 grid = slotCentre(s);\n\n\t\t// where this tile ends up in the mark\n\t\tint m = (tileIndex(s) * 11 + 5) % NUM;\n\t\tvec2 target = ORB;\n\t\tfloat endR = ORB_R;\n\t\tvec3 endCol = MINT;\n\t\tif (m < NUM_ARC + NUM_BAR) {\n\t\t\tfloat a = ARC_START - ARC_SWEEP * float(m) / float(NUM_ARC - 1);\n\t\t\ttarget = m < NUM_ARC ? RADIUS * vec2(cos(a), sin(a)) : mix(BAR_A, BAR_B, float(m - NUM_ARC) / float(NUM_BAR - 1));\n\t\t\tendR = STROKE;\n\t\t\tendCol = GREEN;\n\t\t}\n\t\ttarget += 0.5 * FRAME;\n\t\t// tiles leave in mark order: the stroke draws from the tail round to the bar, the orb lands last\n\t\tfloat v = easeInOutCubic(clamp((P - MORPH_START - MORPH_SPREAD * float(m) / float(NUM - 1)) / MORPH_DUR, 0.0, 1.0));\n\n\t\tvec2 from = grid + normalize(grid - 0.5 * FRAME + vec2(h - 0.5, 0.31)) * 1500.0;\n\t\tvec2 c = mix(from, grid, easeOutExpo(u));\n\t\tvec2 path = target - grid;\n\t\tc = mix(c, target, v) + vec2(-path.y, path.x) / max(length(path), 1.0) * sin(3.14159 * v) * 140.0 * (h - 0.5);\n\t\tvec2 hs = mix(TILE * (0.6 + 0.4 * easeOutBack(u)), vec2(endR), v);\n\t\tvec2 q = p - c;\n\t\tif (abs(q.x) > hs.x + 20.0 || abs(q.y) > hs.y + 30.0) continue;\n\n\t\tvec3 body = mix(family(s), endCol, smoothstep(0.55, 1.0, v));    // keeps its family colour until it arrives\n\t\tfloat d = sdRoundBox(q, hs, mix(12.0, endR, v));\n\t\t// connector nubs, the viewer and the name under the tile are all gone by the time it is a dot\n\t\tfloat k = 1.0 - smoothstep(0.0, 0.5, v);\n\t\tif (k > 0.0) {\n\t\t\td = min(d, sdRoundBox(vec2(abs(q.x) - hs.x - 3.0, q.y), vec2(7.0, 9.0) * k, 3.0 * k));\n\t\t\to = mix(o, vec4(INK, 1.0), fill(sdRoundBox(q + vec2(0.0, hs.y + 15.0), vec2(hs.x * 0.5, 3.5), 3.5)) * 0.45 * k);\n\t\t}\n\t\to = mix(o, vec4(body, 1.0), fill(d));\n\t\tif (k > 0.0) o = mix(o, vec4(body * 0.42, 1.0), fill(sdRoundBox(q, hs - 13.0, 4.0)) * k);\n\t}\n\n\t// the exact mark takes over once the tiles have gathered into it\n\tfloat mk = smoothstep(MARK_START, MARK_END, P);\n\tif (mk > 0.0) {\n\t\tvec2 q = p - 0.5 * FRAME;\n\t\tfloat ang = atan(q.y, q.x);\n\t\tfloat gapEnd = ARC_START + radians(360.0) - ARC_SWEEP;      // the opening of the e\n\t\tfloat dArc = ang > ARC_START && ang < gapEnd\n\t\t\t? min(length(q - RADIUS * vec2(cos(ARC_START), sin(ARC_START))), length(q - RADIUS * vec2(cos(gapEnd), sin(gapEnd))))\n\t\t\t: abs(length(q) - RADIUS);\n\t\to = mix(o, vec4(GREEN, 1.0), fill(min(dArc, sdSegment(q, BAR_A, BAR_B)) - STROKE) * mk);\n\t\tfloat pop = clamp((P - MARK_END) / 0.09, 0.0, 1.0);\n\t\to = mix(o, vec4(MINT, 1.0), fill(length(q - ORB) - ORB_R * (1.0 + 0.4 * sin(3.14159 * pop) * (1.0 - pop))) * mk);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Tiles into the mark
+  text: One shader, no inputs. 31 operator tiles in TD's family colours land on a 7x5 grid left to right and get wired, then travel into the Embody mark (docs/assets/embody-mark.svg), where the exact mark takes over.
+  position: [55, -190]
+  size: [745, 450]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

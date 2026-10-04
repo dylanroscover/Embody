@@ -1,0 +1,200 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/step_card
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textTOP:
+    parameters:
+      alignx: left
+      aligny: bottom
+      dispmethod: scalable
+      font: Inter
+      fontsizexunit: pixels
+      outputresolution: custom
+      resolutionh: 1080
+      resolutionw: 1920
+      typeface: SemiBold
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Step:
+  - name: Preset
+    style: Menu
+    default: one
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: Which step to show. Add a row to the presets table inside to add one.
+  - name: Number
+    style: Str
+    help: The numeral in the badge. Typed text wins over the preset; leave empty to use the preset.
+  - name: Text
+    style: Str
+    help: The step. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = fully set. The badge lands with a ring, the plate opens and the step rises in per character. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_step
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - number
+    - text
+  - - one
+    - 1  Drag the .tox in
+    - '1'
+    - Drag the .tox in.
+  - - paste
+    - 1  Paste one line into a Textport
+    - '1'
+    - Paste one line into a Textport.
+  - - two
+    - 2  Pick your assistant
+    - '2'
+    - Pick your assistant.
+  - - three
+    - 3  Start talking
+    - '3'
+    - Start talking.
+  - - profit
+    - 4  Profit
+    - '4'
+    - Profit.
+  dat_content_format: table
+- name: text_num
+  type: textTOP
+  parameters:
+    text: =op('../kit_core/layout').module.preset(parent.Mograph, 'number', 'Number')
+    fontsizex: 120
+  position: [600, -200]
+- name: glsl_step
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_step_pixel
+    computedat: glsl_step_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+    - name: uNum
+      valuex: =op('text_num').evalTextSize(op('text_num').par.text.eval())[0]
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+  - text_num
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    fontsizex: 96
+  position: [600, 0]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: glsl_step_info
+  type: infoDAT
+  parameters:
+    op: glsl_step
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_step
+  dat_read_only: true
+- name: glsl_step_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_step
+  dat_content: "// step_card: a numbered badge lands and throws off a ring, the plate opens, and the step\n// rises in per character. Input 0 is the step (text_glyphs, placed by script_layout),\n// input 1 the numeral (text_num, set at the frame's bottom left).\n#include <../kit_core/glsl_common>\n#include <../kit_core/glsl_type>\nuniform vec4 uAnim;                 // x: Progress\nuniform vec4 uNum;                  // x: width of the numeral, px\n\nconst float INDENT = 2.2;           // twin of indent in script_layout: the badge's gutter, in font sizes\nconst float BADGE = 75.0;           // badge radius, px\nconst float NUM_SIZE = 120.0;       // twin of text_num's font size\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tfloat P = uAnim.x;\n\tvec4 meta = texelFetch(uCells, 0);\n\tvec4 o = vec4(0.0);\n\tif (P > 0.0 && meta.y > 0.0) {\n\t\tvec4 b = typeBounds();\n\t\tvec2 badge = vec2(b.x - INDENT * meta.x + BADGE, 0.5 * (b.y + b.w));\n\n\t\t// plate: starts round the badge and opens out over the step\n\t\tvec2 lo = vec2(badge.x - BADGE - 40.0, min(b.y, badge.y - BADGE) - 34.0);\n\t\tvec2 hi = vec2(b.z + 56.0, max(b.w, badge.y + BADGE) + 34.0);\n\t\thi.x = mix(badge.x + BADGE + 40.0, hi.x, easeOutExpo(ramp(P, 0.06, 0.3)));\n\t\to = over(o, DARK, fill(sdRoundBox(p - 0.5 * (lo + hi), 0.5 * (hi - lo), 28.0)));\n\n\t\t// the badge lands and a ring leaves it\n\t\tfloat pop = easeOutBack(ramp(P, 0.0, 0.16));\n\t\tfloat ring = ramp(P, 0.1, 0.42);\n\t\tfloat r = length(p - badge);\n\t\tif (ring > 0.0 && ring < 1.0)\n\t\t\to = over(o, GREEN, fill(abs(r - BADGE - 70.0 * easeOutCubic(ring)) - 6.0 * (1.0 - ring)));\n\t\to = over(o, GREEN, fill(r - BADGE * pop));\n\t\tif (pop > 0.5)\n\t\t\to = over(o, DARK, textAt(sTD2DInputs[1], (p - badge) / pop, vec2(-0.5 * uNum.x, -0.5 * 0.727 * NUM_SIZE), 0.24 * NUM_SIZE, 1.0));\n\n\t\to = over(o, INK, typeRise(p, ramp(P, 0.2, 0.9) * meta.w, 7.0, 0.85).x);\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# one call into kit_core/layout; its header documents the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tL.build(scriptOp, op('text_glyphs'), L.preset(parent.Mograph, 'text', 'Text'), lineAlign=0, indent=2.2, maxWidth=1250)\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Numbered step
+  text: A badge with the numeral lands and throws off a ring, then the step rises in per glyph beside it. kit_core/layout leaves a gutter for the badge (indent).
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25

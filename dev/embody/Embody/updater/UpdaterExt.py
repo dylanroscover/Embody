@@ -74,7 +74,9 @@ TD-2025 facts baked in: there is no project.dirty (the manual path offers a
 save; the startup path runs when the just-opened .toe IS the recovery point),
 and an older TD build loading a newer-build tox returns None/empty SILENTLY --
 hence the manifest min_td_build gate BEFORE download and the reload-token
-check AFTER.
+check AFTER. The gate refuses only the unattended path; a manual check warns
+and offers Install Anyway (issue #145), and the reload-token check plus the
+rollback catch a tox that does not load.
 """
 
 import hashlib
@@ -426,6 +428,16 @@ class UpdaterExt:
         dat = self._embody.op('EmbodyExt')
         return bool(dat is not None and dat.par.file.eval())
 
+    def _tdBuild(self):
+        """The running TD build. Overridable so gate tests need no TD."""
+        return app.build
+
+    def _belowBuildFloor(self, manifest):
+        """True when this TD build is older than the release's floor."""
+        floor = self.parseBuild(manifest['min_td_build'])
+        this = self.parseBuild(self._tdBuild())
+        return this is None or floor is None or this < floor
+
     def _refuse(self, why, interactive):
         """Pre-commit refusal (nothing on disk touched). Quiet unless asked."""
         self._log(f'update refused: {why}', 'WARNING')
@@ -748,13 +760,16 @@ class UpdaterExt:
                 interactive)
             return
 
-        min_build = self.parseBuild(manifest['min_td_build'])
-        this_build = self.parseBuild(app.build)
-        if this_build is None or min_build is None or this_build < min_build:
+        # Below the floor is the user's call (issue #145): refused outright,
+        # they installed by hand, without the backup or the rollback. Only
+        # the unattended path refuses -- nobody is there to accept the risk.
+        too_old = self._belowBuildFloor(manifest)
+        if too_old and not interactive:
             self._refuse(
                 f'Update {tag} requires TouchDesigner build '
-                f'{manifest["min_td_build"]}+ (this is {app.build}). '
-                f'Update TouchDesigner first.', interactive)
+                f'{manifest["min_td_build"]}+ (this is {self._tdBuild()}). '
+                f'Update TouchDesigner, or press Check for Update to '
+                f'install anyway.', False)
             return
 
         asset = result['assets'].get(manifest['asset'])
@@ -773,6 +788,28 @@ class UpdaterExt:
         self._status(f'{tag} available')
         self._log(f'update available: {tag}')
 
+        notes_url = (f'https://github.com/{self._GITHUB_OWNER}/'
+                     f'{self._GITHUB_REPO}/releases/tag/{tag}')
+        if too_old:
+            self._log(f'{tag} is below its TouchDesigner floor '
+                      f'({manifest["min_td_build"]}+, this is '
+                      f'{self._tdBuild()}) -- asking', 'WARNING')
+            choice = self._dialog(
+                'Embody Update',
+                f'Update {tag} was built for TouchDesigner '
+                f'{manifest["min_td_build"]}+ (this is {self._tdBuild()}) '
+                'and may not load here.\n\n'
+                'If it fails to boot, Embody rolls back to the pre-update '
+                'backup. Save the project when asked: the saved .toe is '
+                'the recovery point of last resort.\n\n'
+                f'Release notes: {notes_url}\n\n'
+                'Install anyway?',
+                ['Install Anyway', 'Cancel'])
+            if choice == 0:  # affirmative only, as below
+                self._pending['allow_old_build'] = True
+                self._startDownload(interactive=True, apply_after=True)
+            return
+
         if auto_install:
             self._startDownload(interactive=False, apply_after=True)
             return
@@ -784,8 +821,7 @@ class UpdaterExt:
                 'Embody Update',
                 f'Update available: {tag} (installed: '
                 f'v{".".join(map(str, local))}).\n\n'
-                f'Release notes: https://github.com/{self._GITHUB_OWNER}/'
-                f'{self._GITHUB_REPO}/releases/tag/{tag}\n\n'
+                f'Release notes: {notes_url}\n\n'
                 'Download and install now?',
                 ['Install', 'Not Now'])
             if choice == 0:  # affirmative only; -1/1/None => do nothing
@@ -919,10 +955,10 @@ class UpdaterExt:
             return self._refuse('Downloaded file vanished; re-run the check.',
                                 interactive)
         # Re-gate the TD-build floor (cheap; app.build is constant in-session,
-        # but this keeps apply self-contained and honest).
-        min_build = self.parseBuild(pending['manifest']['min_td_build'])
-        this_build = self.parseBuild(app.build)
-        if this_build is None or min_build is None or this_build < min_build:
+        # but this keeps apply self-contained and honest). The user's
+        # Install Anyway from _finishCheck is the one way past it.
+        if (self._belowBuildFloor(pending['manifest'])
+                and not pending.get('allow_old_build')):
             return self._refuse(
                 f'Update {pending["tag"]} requires TouchDesigner build '
                 f'{pending["manifest"]["min_td_build"]}+.', interactive)

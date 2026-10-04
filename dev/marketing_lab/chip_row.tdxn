@@ -1,0 +1,191 @@
+format: tdxn
+version: '2.1'
+build: 1
+generator: Embody/6.2.68
+td_build: 099.2025.33230
+network_path: /marketing_lab/chip_row
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Chips:
+  - name: Preset
+    style: Menu
+    default: assistants
+    menuSource: tdu.TableMenu(me.op('presets'), labelCol='label')
+    help: Which set of chips to show. A preset whose colour is family paints each chip in a TD family colour. Add a row to the presets table inside to add one.
+  - name: Text
+    style: Str
+    help: Chips, comma separated. Typed text wins over the preset; leave empty to use the preset.
+  - name: Progress
+    style: Float
+    default: 1
+    clampMin: true
+    clampMax: true
+    help: 0 = empty frame, 1 = every chip set. Chips pop in one after another, wrapping to more rows when they need to. Animate 0 to 1 to play it.
+parameters:
+  parentshortcut: Mograph
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_chips
+- name: presets
+  type: tableDAT
+  position: [200, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - name
+    - label
+    - items
+    - colour
+  - - assistants
+    - AI assistants
+    - Claude Code, Codex, Cursor, Gemini, Windsurf, OpenCode, Copilot
+    - green
+  - - files
+    - File types
+    - .tox, .tdxn, .py, .glsl, .json, .xml
+    - green
+  - - families
+    - Operator families
+    - TOP, CHOP, SOP, POP, DAT, MAT, COMP
+    - family
+  - - verbs
+    - What the agent does
+    - create, wire, set, capture, fix, diff, revert
+    - green
+  - - convoy
+    - Convoy
+    - select, call, batch, jobs, artifacts, restart, update
+    - green
+  - - skills
+    - Skills
+    - create-operator, glsl-shaders, pop-networks, movie-export, visual-aesthetics, build-ui, testing
+    - green
+  dat_content_format: table
+- name: glsl_chips
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_chips_pixel
+    computedat: glsl_chips_compute
+    premultrgbbyalpha: false
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uAnim
+      valuex: =parent.Mograph.par.Progress
+      valuey: =1 if op('presets')[parent.Mograph.par.Preset.eval(), 'colour'] == 'family' and not parent.Mograph.par.Text.eval() else 0
+    array:
+    - name: uCells
+      type: vec4
+      chop: datto_cells
+      arraytype: texturebuffer
+  position: [1000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyphs
+- name: datto_cells
+  type: dattoCHOP
+  parameters:
+    dat: script_layout
+    rowindexend: =me.inputTable.numRows - 1
+    rowexpr: =re.match('.*',me.inputCell.val) != None
+    extractcols: byname
+    colnamestart: a
+    colnameend: d
+    colindexend: =me.inputTable.numCols - 1
+    colexpr: =re.match('.*',me.inputCell.val) != None
+    output: chanpercol
+    firstrow: names
+    firstcolumn: values
+    autoexportroot: =parent()
+  position: [600, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: text_glyphs
+  type: textTOP
+  parameters:
+    specdat: script_layout
+    font: Inter
+    typeface: SemiBold
+    dispmethod: scalable
+    fontsizex: 54
+    fontsizexunit: pixels
+    alignx: left
+    aligny: bottom
+    outputresolution: custom
+    resolutionw: 1920
+    resolutionh: 1080
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: script_layout
+  type: scriptDAT
+  parameters:
+    callbacks: script_layout_callbacks
+  position: [200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_read_only: true
+- name: glsl_chips_info
+  type: infoDAT
+  parameters:
+    op: glsl_chips
+  flags:
+  - viewer
+  position: [1075, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_chips
+  dat_read_only: true
+- name: glsl_chips_pixel
+  type: textDAT
+  parameters:
+    language: glsl
+    extension: frag
+  position: [925, -120]
+  dock: glsl_chips
+  dat_content: "// chip_row: chips pop in one after another. Input 0 is the labels (text_glyphs); every cell\n// of script_layout's table is one chip and its tag x 16 is the chip's index.\n#include <../kit_core/glsl_common>\n#include <../kit_core/glsl_type>\nuniform vec4 uAnim;                 // x: Progress, y: 1 = paint each chip in a TD family colour\n\nconst float POP = 6.0;              // launch units a chip takes to settle: twin of tail in kit_core/layout chips()\n\nlayout(location = 0) out vec4 fragColor;\n\nvoid main() {\n\tvec2 p = vUV.st * FRAME;\n\tvec4 meta = texelFetch(uCells, 0);\n\tint numLines = int(meta.y);\n\tvec4 o = vec4(0.0);\n\tfor (int i = 0; i < 16; i++) {\n\t\tif (i >= int(meta.z)) break;\n\t\tvec4 c = texelFetch(uCells, 1 + numLines + i);\n\t\tfloat u = (uAnim.x * meta.w - c.w) / POP;\n\t\tif (u <= 0.0) continue;\n\t\tvec4 ln = texelFetch(uCells, 1 + int(c.z));\n\t\tvec2 ctr = 0.5 * vec2(c.x + c.y, ln.z + ln.w);\n\t\tvec2 halfSize = 0.5 * vec2(c.y - c.x, ln.w - ln.z);\n\t\tfloat s = easeOutBack(u);\n\t\tvec2 q = (p - ctr) / s;         // the chip pops about its own middle, label and all\n\t\tfloat d = sdRoundBox(q, halfSize, halfSize.y) * s;\n\t\tif (d > 1.0) continue;\n\t\tfloat ink = texture(sTD2DInputs[0], (q + ctr) / FRAME).a;\n\t\tif (uAnim.y > 0.5) {\n\t\t\to = over(o, FAMILY[int(fract(c.z) * 16.0 + 0.5) % 7], fill(d));\n\t\t\to = over(o, DARK, ink);\n\t\t} else {\n\t\t\to = over(o, mix(GREEN, DARK, fill(d + 4.0)), fill(d));\n\t\t\to = over(o, INK, ink);\n\t\t}\n\t}\n\tfragColor = TDOutputSwizzle(o);\n}\n"
+  dat_content_format: text
+- name: script_layout_callbacks
+  type: textDAT
+  parameters:
+    language: python
+  position: [200, -120]
+  dock: script_layout
+  dat_content: "# one call into kit_core/layout; its header documents the table this writes\ndef onCook(scriptOp):\n\tL = op('../kit_core/layout').module\n\tL.chips(scriptOp, op('text_glyphs'), [s.strip() for s in L.preset(parent.Mograph, 'items', 'Text').split(',') if s.strip()])\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Row of chips
+  text: A comma separated list becomes chips that pop in one after another. kit_core/layout chips() places them in centred rows; each table cell is one chip. A preset whose colour is family paints them in TD's family colours.
+  position: [130, -470]
+  size: [1470, 730]
+  color: [0.13, 0.28, 0.32]
+  opacity: 0.25
