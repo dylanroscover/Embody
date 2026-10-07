@@ -110,7 +110,7 @@ Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-brid
 |------|-------------|
 | `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, restart attempts remaining, and instance registry status |
 | `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge auto-picks a TouchDesigner install — the machine-local `.embody/local.json` build pin when present, the newest installed TD otherwise — see [Architecture](architecture.md#embodylocaljson-build-pin-machine-local-and-embodyprojectjson-committed). |
-| `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy. Targets only the active instance's verified process — on machines running several TD projects, the others are never touched |
+| `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy. Targets only this session's pinned instance's verified process (unpinned: the registry default's) — on machines running several TD projects, the others are never touched |
 | `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
 | `list_dialogs` | List the modal dialogs blocking TD (message boxes, missing-file prompts, the license box), with optional screenshots, even while TD's main thread is frozen |
 | `dismiss_dialog` | Dismiss a blocking dialog (close, then escape, then enter, verified gone) so the session can continue without a human at the machine |

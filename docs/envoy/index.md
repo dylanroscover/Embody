@@ -228,7 +228,7 @@ These tools run on the local bridge process, not inside TD. They're available ev
 |---|---|
 | `get_td_status` | Connection state, process liveness, crash detection, restart attempts, instance registry |
 | `launch_td` | Launch TD with the project's `.toe` file; waits for Envoy to become reachable |
-| `restart_td` | Gracefully quit and relaunch TD (only the active instance — other TD instances are never touched) |
+| `restart_td` | Gracefully quit and relaunch TD (only this session's pinned instance — other TD instances are never touched) |
 | `switch_instance` | List registered TD instances or switch to a different running instance (or pass `instance=<name>` on any tool to address one call without switching) |
 | `list_dialogs` | List the modal dialogs blocking a TD instance; `screenshot=true` saves a PNG of each so the AI can read what TD is asking |
 | `dismiss_dialog` | Dismiss a blocking dialog with a close -> escape -> enter ladder, verified gone; the main window is never touched |

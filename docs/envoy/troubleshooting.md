@@ -276,6 +276,15 @@ Reopening the conversation re-initializes the MCP connection. The message histor
 2. **Switch to the correct one**: Call `switch_instance` with the instance name (`.toe` filename without the extension).
 3. **Stale entries**: If an instance shows as "reachable" but you've already closed it, the registry entry is stale. Restarting Envoy in the running instance will clean it up.
 
+### Calls fail with `envoy.instance.unavailable`
+
+**Symptoms:** every Envoy tool returns `envoy.instance.unavailable`, naming the instance this session is pinned to; `get_td_status` shows `pin_unavailable`.
+
+The pinned TouchDesigner left the registry (it closed or crashed). The bridge never redirects a pinned session to another instance, because that instance is a different project: nothing is sent until the pinned one comes back.
+
+1. **Reopen it**: call `launch_td`. It reopens the pinned instance's `.toe`, and the session re-attaches when it registers.
+2. **Or move on**: call `switch_instance` with the name of a running instance.
+
 ### Port exhaustion
 
 **Symptoms:** Envoy fails to start with a message about no available ports.

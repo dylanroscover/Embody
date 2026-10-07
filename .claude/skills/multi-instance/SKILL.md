@@ -16,7 +16,8 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
 ```
 
 - **One bridge process per SESSION** (spawned by each AI client's MCP client)
-- **Per-session pinning** - each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals. The registry `active` field only seeds NEW bridges without a pin.
+- **Per-session pinning** - each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals, and a save that renames its `.toe` is followed (same TD process). The registry `active` field only seeds NEW bridges without a pin.
+- **A vanished pin fails closed** - if the pinned instance leaves the registry (closed, crashed), the session has no target: calls return `envoy.instance.unavailable` and nothing is forwarded - never to another instance - until it re-registers (a call that names another instance with `instance=` still goes there). Recover with `launch_td` (reopens the pinned `.toe`) or `switch_instance`.
 - **Per-call addressing** - every Envoy tool accepts an optional `instance` argument; the bridge routes that one call to the named instance and leaves the pin alone (unknown or unreachable names fail only that call with `error_code` `envoy.instance.unknown` / `envoy.instance.unreachable`). Prefer it over switching when you only need one look at another instance.
 - **Switching is instant and session-local** - `switch_instance` re-pins THIS session's bridge in-memory; peers are untouched unless you pass `all_sessions=True` (writes the registry default and bumps `active_epoch`, which moves every session)
 - **Registration never re-routes running sessions** - a new instance takes the `active` default slot only when it is vacant or names a dead instance
@@ -151,5 +152,5 @@ When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes
 - The bridge connects to **one instance at a time** - no parallel MCP calls to multiple instances
 - Maximum **10 instances** per base port range
 - `.embody/envoy.json` is per git root - instances in different repos have separate registries
-- `launch_td` always launches the `.toe` configured in `.embody/envoy.json` top-level `toe_path` - use TD directly to open additional files
+- `launch_td` and `restart_td` act on this session's pinned instance and its `.toe` (unpinned: the registry default) - pass `project_path` to open another file
 - Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.)

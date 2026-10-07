@@ -2112,6 +2112,205 @@ class TestBridgeMetaTools(EmbodyTestCase):
         with state:
             self.assertFalse(state.crash_detected)
 
+    def test_restart_td_targets_the_pinned_instance_not_the_default(self):
+        """Pinned to live A while B is the registry default: restart_td
+        quits A and relaunches A's .toe. It used to quit B (#147 audit)."""
+        registry = {'active': 'B', 'instances': {
+            'A': {'port': 9870, 'td_pid': 111, 'toe_path': 'dev/A.toe'},
+            'B': {'port': 9871, 'td_pid': 222, 'toe_path': 'dev/B.toe'}}}
+        quits, launches = [], []
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[222]), \
+             patch.object(bridge, 'quit_td',
+                          side_effect=lambda p: quits.append(p) or (True, 'Exited')), \
+             patch.object(bridge, 'launch_td',
+                          side_effect=lambda *a, **k: launches.append(
+                              k.get('project_path')) or (True, 'Launched', 333)), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True):
+            state = self._make_state(td_pid=111, config=registry,
+                                     pinned_instance='A')
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(quits, [111], 'never the default instance B')
+        self.assertEqual(launches, ['dev/A.toe'])
+
+    def test_launch_td_reopens_the_pinned_instance_after_it_left(self):
+        """A closed and left the registry; B is the default and alive.
+        launch_td reopens A's last known .toe -- not 'B is already
+        running', and never B's project."""
+        registry = {'active': 'B', 'instances': {
+            'B': {'port': 9871, 'td_pid': 222, 'toe_path': 'dev/B.toe'}}}
+        launches = []
+        with patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda p: p == 222), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[222]), \
+             patch.object(bridge, 'launch_td',
+                          side_effect=lambda *a, **k: launches.append(
+                              k.get('project_path')) or (True, 'Launched', 333)), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True):
+            state = self._make_state(
+                url=None, config=registry, pinned_instance='A',
+                pin_row={'td_pid': 111, 'toe_path': 'dev/A.toe'})
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(launches, ['dev/A.toe'])
+
+    def test_launch_td_never_guesses_for_a_pin_with_no_known_toe(self):
+        """A pin whose .toe was never seen (an EMBODY_PIN_INSTANCE that never
+        registered) must not launch the registry default's project."""
+        registry = {'active': 'B', 'instances': {
+            'B': {'port': 9871, 'td_pid': 222, 'toe_path': 'dev/B.toe'}}}
+        launches = []
+        with patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'launch_td',
+                          side_effect=lambda *a, **k: launches.append(k) or (
+                              True, 'Launched', 333)):
+            state = self._make_state(url=None, config=registry,
+                                     pinned_instance='Ghost')
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('project_path', result['message'])
+        self.assertEqual(launches, [])
+
+    def test_restart_td_never_quits_a_reused_pid_once_the_pin_is_gone(self):
+        """The pin left the registry; its tracked pid is alive again as a
+        TD -- another project that reused it. restart_td must not quit it."""
+        registry = {'active': 'B', 'instances': {
+            'B': {'port': 9871, 'td_pid': 222, 'toe_path': 'dev/B.toe'}}}
+        quits = []
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'quit_td',
+                          side_effect=lambda p: quits.append(p) or (True, 'x')):
+            state = self._make_state(
+                td_pid=111, url=None, config=registry, pinned_instance='A',
+                pin_row={'td_pid': 111, 'toe_path': 'dev/A.toe'})
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertEqual(quits, [])
+
+    def test_restart_td_walks_the_pinned_toe_forward(self):
+        """The registry still names X-1.157 but a save left X-1.158 on disk:
+        relaunch the newest, as the unpinned path always did -- never quit
+        TD and then fail 'not found'."""
+        import shutil
+        import tempfile
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, '.embody'))
+            os.makedirs(os.path.join(root, 'dev'))
+            newest = os.path.join(root, 'dev', 'X-1.158.toe')
+            open(newest, 'w').close()
+            registry = {'active': 'X-1.157', 'instances': {'X-1.157': {
+                'port': 9870, 'td_pid': 111, 'toe_path': 'dev/X-1.157.toe'}}}
+            launches = []
+            with patch.object(bridge, 'load_config', return_value=registry), \
+                 patch.object(bridge, 'is_td_process_alive', return_value=True), \
+                 patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+                 patch.object(bridge, 'quit_td', return_value=(True, 'x')), \
+                 patch.object(bridge, 'launch_td',
+                              side_effect=lambda *a, **k: launches.append(
+                                  k.get('project_path')) or (True, 'L', 333)), \
+                 patch.object(bridge, 'wait_for_envoy', return_value=True):
+                state = self._make_state(
+                    td_pid=111, config=registry, pinned_instance='X-1.157',
+                    config_path=os.path.join(root, '.embody', 'envoy.json'))
+                bridge.handle_restart_td({}, state)
+            self.assertEqual([os.path.normcase(p) for p in launches],
+                             [os.path.normcase(newest)])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_launching_another_project_never_re_pins(self):
+        """launch_td(project_path=C) from a session pinned to vanished A
+        must not make C's pid A's identity (the rename rule would then
+        re-pin the session to C)."""
+        registry = {'active': 'B', 'instances': {}}
+        row = {'td_pid': 111, 'toe_path': 'dev/A.toe'}
+        with patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'launch_td', return_value=(True, 'L', 333)), \
+             patch.object(bridge, 'wait_for_envoy', return_value=False):
+            state = self._make_state(url=None, config=registry,
+                                     pinned_instance='A', pin_row=dict(row))
+            bridge.handle_launch_td({'project_path': 'show/C.toe',
+                                     'timeout': 0}, state)
+        self.assertEqual(state.pin_row, row)
+
+    def test_launch_td_refuses_a_duplicate_while_the_tracked_td_lives(self):
+        """Envoy stopped in our TD (Stop() deregisters): the pin is gone but
+        its TD still runs. launch_td must not open a second copy."""
+        launches = []
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[111]), \
+             patch.object(bridge, 'wait_for_envoy', return_value=False), \
+             patch.object(bridge, 'launch_td',
+                          side_effect=lambda *a, **k: launches.append(k) or (
+                              True, 'L', 333)):
+            state = self._make_state(
+                url=None, td_pid=111, config={'instances': {}},
+                pinned_instance='A',
+                pin_row={'td_pid': 111, 'toe_path': 'dev/A.toe'})
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('Envoy stopped', result['message'])
+        self.assertEqual(launches, [])
+
+    def test_launch_td_tracks_its_own_relaunch_and_its_url(self):
+        """Relaunching the pin's own .toe makes the launched pid the pin's
+        identity (a newer versioned name is then followed), and the wait
+        re-reads the url the reconciler sets, not a stale snapshot."""
+        waits = []
+
+        def fake_wait(url, deadline):
+            waits.append(url)
+            return True
+
+        with patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'launch_td', return_value=(True, 'L', 333)), \
+             patch.object(bridge, 'wait_for_envoy', side_effect=fake_wait):
+            state = self._make_state(
+                url=None, config={'instances': {}}, pinned_instance='A',
+                pin_row={'td_pid': 111, 'toe_path': 'dev/A.toe'})
+            bridge.handle_launch_td({}, state)
+        self.assertEqual(state.pin_row,
+                         {'td_pid': 333, 'toe_path': 'dev/A.toe'})
+        self.assertTrue(callable(waits[0]))
+        with state:
+            state.url = 'http://127.0.0.1:9875/mcp'
+        self.assertEqual(waits[0](), 'http://127.0.0.1:9875/mcp')
+
+    def test_dialog_tools_refuse_once_the_pin_is_gone(self):
+        state = self._make_state(url=None, td_pid=111, pinned_instance='A')
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            pid, _name, err = bridge._dialog_target({}, state)
+        self.assertIsNone(pid)
+        self.assertIsNotNone(err)
+
+    def test_load_config_tolerates_non_object_json(self):
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix='.json')
+        os.close(fd)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write('null')
+            self.assertEqual(bridge.load_config(path), {})
+        finally:
+            os.remove(path)
+
+    def test_wait_for_envoy_without_a_target_returns_at_once(self):
+        with patch('time.sleep', side_effect=AssertionError('must not wait')):
+            self.assertFalse(
+                bridge.wait_for_envoy(None, time.monotonic() + 30))
+
+    def test_get_td_status_names_a_vanished_pin(self):
+        state = self._make_state(url=None, pinned_instance='A')
+        result = bridge.handle_get_td_status(state)
+        self.assertIn('"A"', result['pin_unavailable'])
+        self.assertIn('switch_instance', result['pin_unavailable'])
+
     # --- dispatch ---
 
     def test_handle_bridge_tool_dispatch(self):
@@ -2591,9 +2790,9 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
         """The REAL post-crash shape, and the one the name guard exists for.
 
         The registry garbage-collects dead-pid rows on every write by any
-        peer TD, so after our instance crashes its row is GONE. Resolution
-        then falls through to the registry default -- a different, live
-        project. Neither its URL nor its pid may become our crash signal.
+        peer TD, so after our instance crashes its row is GONE. The registry
+        default is then a different, live project: its pid must never
+        become our crash signal.
         """
         registry = {'active': 'projB', 'instances': {
             'projB': {'port': 9871, 'td_pid': 8002, 'toe_path': 'b.toe'}}}
@@ -2628,9 +2827,9 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
         state.config_mtime, so it needs a file on disk -- mocking
         load_config alone never reaches it, which is why the Phase 1 gate
         was untested when it was written. With our pin GC-ed out of the
-        registry the bridge deliberately follows the default's URL, but
-        taking its PID too would point crash detection at another
-        project's TouchDesigner.
+        registry the session has no target (#147), and taking the
+        default's PID would point crash detection at another project's
+        TouchDesigner.
         """
         import shutil
         import tempfile
@@ -2656,6 +2855,8 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
                  patch.object(bridge, 'save_tools_cache'):
                 bridge.reconcile(state, None, heartbeat=True)
             with state:
+                self.assertIsNone(
+                    state.url, 'no route to the default instance (#147)')
                 self.assertNotEqual(
                     8002, state.td_pid,
                     'Phase 1 must not adopt the default instance pid while '
@@ -2667,41 +2868,49 @@ class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_renamed_instance_on_same_port_is_still_ours(self):
-        """A version bump renames the .toe, so the pin goes stale on the
-        next open (Embody-6.157 -> Embody-6.159). If the resolved instance
-        answers on the port we are ALREADY using, it is our instance under
-        a new name -- refusing its pid would degrade crash detection after
-        every release. Observed live during the v6.0.159 smoke run.
+    def test_renamed_instance_is_followed_by_process_identity(self):
+        """A version bump renames the .toe (Embody-6.157 -> Embody-6.159)
+        and re-keys the registry row in one write, same pid. The bridge saw
+        the 6.157 row, so the 6.159 row with that pid and .toe lineage is
+        our instance renamed: re-pin to it and adopt its pid. Observed live
+        during the v6.0.159 smoke run. Port is NOT identity (a freed port
+        goes to the next instance), so it plays no part.
         """
         import shutil
         import tempfile
-        registry = {'active': 'Embody-6.159', 'instances': {
+        before = {'active': 'Embody-6.157', 'instances': {
+            'Embody-6.157': {'port': 9872, 'td_pid': 60844,
+                             'toe_path': 'dev/Embody-6.157.toe'}}}
+        after = {'active': 'Embody-6.159', 'instances': {
             'Embody-6.159': {'port': 9872, 'td_pid': 60844,
                              'toe_path': 'dev/Embody-6.159.toe'}}}
         tmpdir = tempfile.mkdtemp()
         tmp = os.path.join(tmpdir, 'envoy.json')
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(registry, fh)
         try:
             state = bridge.BridgeState(
                 url='http://127.0.0.1:9872/mcp', td_pid=None,
                 config_path=tmp)
             with state:
-                state.pinned_instance = 'Embody-6.157'   # stale after rename
-                state.config_mtime = 0
+                state.pinned_instance = 'Embody-6.157'
             with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
                  patch.object(bridge, 'is_td_process_alive',
                               side_effect=lambda pid: pid == 60844), \
                  patch.object(bridge, 'find_all_td_pids', return_value=[]), \
                  patch.object(bridge, 'fetch_tools_list', return_value=None), \
                  patch.object(bridge, 'save_tools_cache'):
-                bridge.reconcile(state, None, heartbeat=True)
+                for registry in (before, after):
+                    with open(tmp, 'w', encoding='utf-8') as fh:
+                        json.dump(registry, fh)
+                    with state:
+                        state.config_mtime = 0   # force the Phase 1 reload
+                    bridge.reconcile(state, None, heartbeat=True)
             with state:
+                self.assertEqual('Embody-6.159', state.pinned_instance)
+                self.assertEqual('http://127.0.0.1:9872/mcp', state.url)
                 self.assertEqual(
                     60844, state.td_pid,
-                    'same port => same instance, just renamed by the '
-                    'release bump; its pid must be adopted')
+                    'our instance renamed by the release bump; its pid must '
+                    'be adopted')
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -3828,11 +4037,18 @@ class TestBridgeInstancePinning(EmbodyTestCase):
         self.assertEqual(name, 'A')
         self.assertEqual(port, 9870)
 
-    def test_vanished_pin_falls_back_to_active(self):
-        with patch.object(bridge, 'is_td_process_alive', return_value=True):
-            port, pid, name = bridge._resolve_from_registry(
-                dict(self.REG), None, pin='GONE')
-        self.assertEqual(name, 'A')
+    def test_vanished_pin_resolves_to_no_target(self):
+        """A pin naming an unregistered instance resolves to NOTHING -- not
+        the registry default (another project), not the fallback port
+        (#147)."""
+        with patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'find_td_pid', return_value=999):
+            self.assertEqual(
+                bridge._resolve_from_registry(dict(self.REG), 9870, pin='GONE'),
+                (None, None, None))
+            self.assertEqual(
+                bridge._resolve_from_registry({}, 9870, pin='GONE'),
+                (None, None, None))
 
     # -- reconcile Phase 1 --------------------------------------------
 
@@ -3914,6 +4130,207 @@ class TestBridgeInstancePinning(EmbodyTestCase):
         self.assertIn('9999', state.url)
         self.assertEqual(state.pinned_instance, 'A')
 
+    # -- a pinned instance leaving the registry (#147) -------------------
+
+    def _rewrite_registry(self, path, data):
+        import json as _json
+        with open(path, 'w', encoding='utf-8') as f:
+            _json.dump(data, f)
+        stamp = os.path.getmtime(path) + 5   # a fresh mtime for Phase 1
+        os.utime(path, (stamp, stamp))
+
+    def _pinned_to(self, name, path, config):
+        return bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(config),
+            config_path=path, active_name=name,
+            pinned_instance=name, seen_epoch=0)
+
+    def test_vanished_pin_never_routes_to_the_sibling(self):
+        """Pinned A leaves the registry while B stays registered and is the
+        default. The session keeps its pin and has NO target -- never B."""
+        path = self._write_registry(
+            {'active': 'B', 'instances': {'B': self.REG['instances']['B']}})
+        state = self._pinned_to('A', path, self.REG)
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A')
+        self.assertIsNone(state.url)
+        self.assertNotEqual(state.td_pid, 222)
+
+    def test_vanished_pin_reattaches_when_it_returns(self):
+        """A re-registers on a new port and pid: the bridge re-attaches."""
+        path = self._write_registry(
+            {'active': 'B', 'instances': {'B': self.REG['instances']['B']}})
+        state = self._pinned_to('A', path, self.REG)
+        self._reconcile_once(state)
+        self.assertIsNone(state.url)
+        back = {'active': 'B', 'instances': {
+            'A': {'toe_path': 'dev/A.toe', 'port': 9875, 'td_pid': 333},
+            'B': self.REG['instances']['B']}}
+        self._rewrite_registry(path, back)
+        self._reconcile_once(state)
+        self.assertEqual(state.url, 'http://127.0.0.1:9875/mcp')
+        self.assertEqual(state.pinned_instance, 'A')
+        self.assertEqual(state.td_pid, 333)
+
+    def test_save_rename_follows_our_process_while_a_sibling_is_default(self):
+        """The save-time version bump re-keys OUR row (same pid, same .toe
+        lineage) while B is the registry default. Before #147 the session
+        slid onto B; it must follow the rename and re-pin."""
+        b = self.REG['instances']['B']
+        path = self._write_registry({'active': 'B', 'instances': {
+            'A-1.157': {'toe_path': 'dev/A-1.157.toe', 'port': 9870,
+                        'td_pid': 111},
+            'B': b}})
+        state = self._pinned_to('A-1.157', path, self.REG)
+        self._reconcile_once(state)
+        self._rewrite_registry(path, {'active': 'B', 'instances': {
+            'A-1.158': {'toe_path': 'dev/A-1.158.toe', 'port': 9870,
+                        'td_pid': 111},
+            'B': b}})
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A-1.158')
+        self.assertEqual(state.url, 'http://127.0.0.1:9870/mcp')
+
+    def test_first_save_of_a_name_ending_in_a_digit_is_followed(self):
+        """TD's first save of Proj-6.toe is Proj-6.1.toe: the '-6' is the
+        name, only '.N' is the version (#147 verify panel)."""
+        path = self._write_registry({'active': 'Proj-6', 'instances': {
+            'Proj-6': {'toe_path': 'dev/Proj-6.toe', 'port': 9870,
+                       'td_pid': 111}}})
+        state = self._pinned_to('Proj-6', path, self.REG)
+        self._reconcile_once(state)
+        self._rewrite_registry(path, {'active': 'Proj-6.1', 'instances': {
+            'Proj-6.1': {'toe_path': 'dev/Proj-6.1.toe', 'port': 9870,
+                         'td_pid': 111}}})
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'Proj-6.1')
+        self.assertEqual(state.url, 'http://127.0.0.1:9870/mcp')
+
+    def test_ambiguous_rename_is_not_followed(self):
+        """Two rows with our pid and lineage: no way to tell which is us."""
+        row = {'td_pid': 111, 'toe_path': 'dev/A-1.157.toe'}
+        reg = {'instances': {
+            'A-1.158': {'toe_path': 'dev/A-1.158.toe', 'port': 9870,
+                        'td_pid': 111},
+            'A-1.159': {'toe_path': 'dev/A-1.159.toe', 'port': 9871,
+                        'td_pid': 111}}}
+        self.assertIsNone(bridge._renamed_pin(reg, row))
+
+    def test_concurrent_switch_keeps_its_own_url(self):
+        """switch_instance landing while Phase 1 resolves without the lock:
+        the switch's pin AND url win, and the read is redone next tick."""
+        path = self._write_registry(
+            {'active': 'B', 'instances': {'B': self.REG['instances']['B']}})
+        state = self._pinned_to('A', path, self.REG)
+        real = bridge._resolve_from_registry
+
+        def switch_meanwhile(*args, **kwargs):
+            with state:
+                state.pinned_instance = 'B'
+                state.url = 'http://127.0.0.1:9871/mcp'
+            return real(*args, **kwargs)
+
+        with patch.object(bridge, '_resolve_from_registry',
+                          side_effect=switch_meanwhile):
+            self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'B')
+        self.assertEqual(state.url, 'http://127.0.0.1:9871/mcp')
+        self.assertNotEqual(state.config_mtime, os.path.getmtime(path))
+
+    def test_stale_unreadable_registry_stops_retrying(self):
+        """A file still unreadable well after its write is not mid-write:
+        stop re-reading it every tick (and logging) until the next write."""
+        path = self._write_registry(dict(self.REG))
+        state = self._pinned_to('A', path, self.REG)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('{"active": "A", "instan')
+        old = time.time() - 60
+        os.utime(path, (old, old))
+        self._reconcile_once(state)
+        self.assertEqual(state.config_mtime, os.path.getmtime(path))
+        self.assertEqual(state.url, 'http://127.0.0.1:9870/mcp')
+
+    def test_unpinned_empty_registry_never_adopts_a_guessed_pid(self):
+        """An empty registry resolves to the any-TD guess; Phase 1 must not
+        take it as this session's pid."""
+        path = self._write_registry({'instances': {}})
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config={}, config_path=path,
+            active_name=None, pinned_instance=None, seen_epoch=0)
+        with patch.object(bridge, 'find_td_pid', return_value=777):
+            self._reconcile_once(state)
+        self.assertIsNone(state.td_pid)
+
+    def test_reused_pid_in_another_project_is_not_a_rename(self):
+        """Our TD died and an unrelated project's TD got its pid (and the
+        freed port). The same-pid row prune makes that ONE registry write,
+        exactly like a rename -- but a different .toe lineage: no target."""
+        path = self._write_registry({'active': 'A-1.157', 'instances': {
+            'A-1.157': {'toe_path': 'dev/A-1.157.toe', 'port': 9870,
+                        'td_pid': 111}}})
+        state = self._pinned_to('A-1.157', path, self.REG)
+        self._reconcile_once(state)
+        self._rewrite_registry(path, {'active': 'C', 'instances': {
+            'C': {'toe_path': 'show/C.toe', 'port': 9870, 'td_pid': 111}}})
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A-1.157')
+        self.assertIsNone(state.url)
+
+    def test_unreadable_registry_is_not_a_vanished_pin(self):
+        """load_config answers {} for a file caught mid-write. That is no
+        information: keep the target and re-read on the next tick."""
+        path = self._write_registry(dict(self.REG))
+        state = self._pinned_to('A', path, self.REG)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('{"active": "A", "instan')   # torn write
+        self._reconcile_once(state)
+        self.assertEqual(state.url, 'http://127.0.0.1:9870/mcp')
+        self.assertNotEqual(state.config_mtime, os.path.getmtime(path),
+                            'the failed read must be retried')
+
+    def test_dead_default_is_never_adopted_as_a_pin(self):
+        """An unpinned bridge pins only a LIVE instance: a dead row's name
+        would strand the session once a differently named TD opens."""
+        path = self._write_registry(dict(self.REG))
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name=None,
+            pinned_instance=None, seen_epoch=0)
+        with patch.object(bridge, 'ping_backend_mcp', return_value=False), \
+             patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]):
+            bridge.reconcile(state, None, heartbeat=False)
+        self.assertIsNone(state.pinned_instance)
+
+    def test_epoch_command_takes_the_new_instance_identity(self):
+        """An all-sessions switch re-pins to B; the identity a later rename
+        is matched against must be B's row, not A's."""
+        reg = dict(self.REG)
+        reg['active'] = 'B'
+        reg['active_epoch'] = 5
+        path = self._write_registry(reg)
+        state = self._pinned_to('A', path, self.REG)
+        with state:
+            state.pin_row = {'td_pid': 111, 'toe_path': 'dev/A.toe'}
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'B')
+        self.assertEqual(state.pin_row['td_pid'], 222)
+
+    def test_epoch_command_to_an_unregistered_name_drops_the_old_identity(self):
+        """Commanded to a name with no row yet: no target, and A's identity
+        must not ride along -- a later rename of A would re-pin to A."""
+        reg = dict(self.REG)
+        reg['active'] = 'X'
+        reg['active_epoch'] = 5
+        path = self._write_registry(reg)
+        state = self._pinned_to('A', path, self.REG)
+        with state:
+            state.pin_row = {'td_pid': 111, 'toe_path': 'dev/A.toe'}
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'X')
+        self.assertIsNone(state.url)
+        self.assertIsNone(state.pin_row)
+
     # -- switch_instance ----------------------------------------------
 
     def _switch(self, params, registry):
@@ -3939,6 +4356,8 @@ class TestBridgeInstancePinning(EmbodyTestCase):
         self.assertFalse(result.get('all_sessions'))
         self.assertEqual(state.pinned_instance, 'B')
         self.assertIn('9871', state.url)
+        self.assertEqual(state.pin_row['td_pid'], 222,
+                         "a later rename is matched against B's identity")
         # The registry must NOT be rewritten -- peers unaffected.
         self.assertEqual(writes, [])
 
