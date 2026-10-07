@@ -97,6 +97,7 @@ _STREAM_FALLBACK_ENV = "EMBODY_BRIDGE_NO_STREAM"
 
 # Reconciler tick intervals.
 CONFIG_TICK_S = 1                 # envoy.json mtime polling
+CONFIG_RETRY_S = 5                # re-read an unreadable envoy.json this long
 HEARTBEAT_TICK_S = 10             # backend HTTP ping (fixed cadence)
 TOOL_CACHE_TTL_S = 5         # How long a cached tool list counts as fresh
 BACKEND_PING_TIMEOUT_S = 2   # Per-ping timeout
@@ -136,7 +137,8 @@ BRIDGE_TOOLS = [
     {
         "name": "launch_td",
         "description": (
-            "Launch TouchDesigner with the project's .toe file. "
+            "Launch TouchDesigner with this session's pinned instance's "
+            ".toe (unpinned: the registry default's). "
             "Use to start TD for the first time or restart after a crash. "
             "Waits for Envoy to become reachable before returning."
         ),
@@ -155,8 +157,8 @@ BRIDGE_TOOLS = [
                     "type": "string",
                     "description": (
                         "Override the .toe file to open. Absolute path or "
-                        "relative to git root. If omitted, uses the default "
-                        "toe_path from envoy.json."
+                        "relative to git root. If omitted, uses this "
+                        "session's pinned instance's .toe."
                     ),
                 },
             },
@@ -166,8 +168,9 @@ BRIDGE_TOOLS = [
     {
         "name": "restart_td",
         "description": (
-            "Quit TouchDesigner gracefully and relaunch with the project's "
-            ".toe file. Waits for the process to exit before relaunching. "
+            "Quit this session's pinned TouchDesigner gracefully and relaunch "
+            "its .toe (unpinned: the registry default's). Other TD instances "
+            "are never touched. Waits for the process to exit before relaunching. "
             "Use when TD is running but needs a fresh start."
         ),
         "inputSchema": {
@@ -185,8 +188,8 @@ BRIDGE_TOOLS = [
                     "type": "string",
                     "description": (
                         "Override the .toe file to open. Absolute path or "
-                        "relative to git root. If omitted, uses the default "
-                        "toe_path from envoy.json."
+                        "relative to git root. If omitted, uses this "
+                        "session's pinned instance's .toe."
                     ),
                 },
             },
@@ -849,6 +852,23 @@ def instance_error_result(name, reason, detail, available=None):
     }
 
 
+def _no_target(state):
+    """(pin, detail, available) for a session whose pinned instance left
+    the registry (#147): what happened, and the two ways back."""
+    with state:
+        pin = state.pinned_instance
+        toe = (state.pin_row or {}).get("toe_path")
+        config = state.config
+    available = sorted(((config or {}).get("instances") or {}).keys())
+    reopen = (f"launch_td reopens it ({toe})" if toe
+              else "launch_td with project_path opens its .toe")
+    detail = (f'This session is pinned to TouchDesigner instance "{pin}", '
+              "which is not in the registry (closed, crashed, or saved under "
+              "a new name), so nothing was sent. switch_instance pins this "
+              f"session to a running instance; {reopen}.")
+    return pin, detail, available
+
+
 # ---------------------------------------------------------------------------
 # Shared state + stdout serialization
 # ---------------------------------------------------------------------------
@@ -971,7 +991,13 @@ class BridgeState:
         # registering, a peer's all-sessions switch of old-format
         # registries) cannot re-target a pinned bridge unless
         # active_epoch increases (an explicit all-sessions command).
+        # A pin that leaves the registry leaves this session with NO target
+        # (url None) until it re-registers -- never the default (#147).
         self.pinned_instance = pinned_instance
+        # The pinned instance's registry row as last seen ({td_pid,
+        # toe_path}): the identity a save-time rename is matched against,
+        # and the .toe launch_td reopens. Reset whenever the pin changes.
+        self.pin_row = None
         # None means direct local Envoy.  A populated address is an explicit
         # session pin and is never cleared merely because a peer disappears.
         # Ordinary tools then cross the same durable Convoy relay as
@@ -1158,10 +1184,12 @@ def load_config(config_path):
         return {}
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
         log(f"Warning: could not read config {config_path}: {e}")
         return {}
+    # valid JSON that is not an object (`null`) crashed every .get() caller
+    return data if isinstance(data, dict) else {}
 
 
 def find_latest_versioned_toe(toe_path):
@@ -4349,6 +4377,8 @@ def handle_get_td_status(state):
         # relayed to the pinned remote node until convoy_select_node(clear=true)
         # (or switch_instance) clears it.
         status["convoy_pin"] = convoy_pin
+    if url is None:
+        status["pin_unavailable"] = _no_target(state)[1]
     return status
 
 
@@ -4412,6 +4442,7 @@ def handle_switch_instance(params, state):
         # Session-local re-pin: THIS bridge follows the target from now
         # on; peers' routing is untouched (their pins hold).
         state.pinned_instance = target
+        state.pin_row = _pin_row(config, target)
         _HEARTBEAT_PIN["name"] = target
         # Switching to a LOCAL instance while a Convoy pin is set is a
         # contradiction: without this, switch_instance returned success but the
@@ -4486,6 +4517,50 @@ def handle_switch_instance(params, state):
     return result
 
 
+def _session_toe(state, config, config_path):
+    """(pin, toe_path) of this session's pinned instance -- its registry
+    row, else the row last seen, walked forward past a save's version bump
+    like resolve_toe_path -- so launch_td and restart_td reopen OUR
+    project, never the registry default's. (None, None) when unpinned."""
+    with state:
+        pin = state.pinned_instance
+        last = state.pin_row
+    if not pin:
+        return None, None
+    toe = (_pin_row(config, pin) or last or {}).get("toe_path")
+    if not toe:
+        return pin, None
+    if not os.path.isabs(toe) and config_path:
+        git_root = os.path.dirname(os.path.dirname(os.path.abspath(config_path)))
+        toe = os.path.join(git_root, toe)
+    return pin, find_latest_versioned_toe(toe)
+
+
+def _no_toe_error(pin):
+    return {
+        "status": "error",
+        "message": (
+            f'No .toe is known for this session\'s pinned instance "{pin}" '
+            "(it never registered here). Pass project_path, or "
+            "switch_instance to a running instance."),
+    }
+
+
+def _state_url(state):
+    with state:
+        return state.url
+
+
+def _remember_launch(state, pid):
+    """The pid this bridge launched from its pin's own .toe IS that
+    instance: if it registers under a newer versioned name, the rename
+    rule in _reconcile_registry follows it. Only the pid changes -- the
+    lineage stays the pin's; an explicit project_path never re-pins."""
+    with state:
+        if state.pin_row and pid:
+            state.pin_row = dict(state.pin_row, td_pid=pid)
+
+
 def handle_launch_td(params, state):
     """Handle the launch_td meta-tool."""
     timeout = params.get("timeout", 120)
@@ -4494,6 +4569,26 @@ def handle_launch_td(params, state):
     with state:
         config = state.config
         config_path = state.config_path
+    own_toe = not project_path
+    if own_toe:
+        pin, project_path = _session_toe(state, config, config_path)
+        if pin and not project_path:
+            return _no_toe_error(pin)
+        with state:
+            tracked = state.td_pid
+        gone = pin and pin not in ((config or {}).get("instances") or {})
+        if gone and tracked and is_td_process_alive(tracked):
+            # The pin left the registry while the TD it named still runs:
+            # Envoy stopped in it (Stop() deregisters), or another project
+            # reused the pid. Either way a launch would be a duplicate.
+            return {
+                "status": "error",
+                "message": (
+                    f'TouchDesigner PID {tracked}, tracked for pinned instance '
+                    f'"{pin}", is still running. If it is that project with '
+                    "Envoy stopped, enable Envoy in it and this session "
+                    "re-attaches. Pass project_path to open a .toe anyway."),
+            }
 
     # Resolve the target .toe so we can check whether THIS specific
     # instance is already running. Other TDs (different .toe, unrelated
@@ -4593,12 +4688,14 @@ def handle_launch_td(params, state):
         state.td_pid = pid
         state.crash_detected = False
         state.launch_timestamps.append(time.monotonic())
-        url = state.url
+    if own_toe:
+        _remember_launch(state, pid)
     log(message)
 
-    # Wait for Envoy to become reachable
+    # Wait for Envoy to become reachable, re-reading the url: the pinned
+    # instance may re-register on a new port, or from no target at all.
     deadline = time.monotonic() + timeout
-    if wait_for_envoy(url, deadline):
+    if wait_for_envoy(lambda: _state_url(state), deadline):
         with state:
             state.connected = True
             state.last_connected_time = time.time()
@@ -4635,26 +4732,38 @@ def handle_restart_td(params, state):
     timeout = params.get("timeout", 120)
     project_path = params.get("project_path")
 
-    # Quit ONLY the ACTIVE instance's verified process. The old find_td_pid()
+    # Quit ONLY this session's instance's verified process. The old find_td_pid()
     # here grabbed the first TD on the machine -- with several instances
     # running, restart_td could quit a DIFFERENT project's TD entirely
     # (issue #57 follow-up). Identity comes from the registry (written by
     # the instance itself), falling back to the bridge's own launch-tracked
-    # pid; both are image-verified against pid reuse.
+    # pid; both are image-verified against pid reuse. A pinned session
+    # resolves ITS pin, never the registry default: that quit another
+    # project's TD and relaunched the default's .toe (#147 audit).
     with state:
         cfg_path = state.config_path
         state_pid = state.td_pid
+        pin = state.pinned_instance
     cfg = load_config(cfg_path)
-    _port, reg_pid, active_name = _resolve_from_registry(cfg, None)
+    own_toe = bool(pin and not project_path)
+    if own_toe:
+        project_path = _session_toe(state, cfg, cfg_path)[1]
+        if not project_path:
+            return _no_toe_error(pin)
+    _port, reg_pid, active_name = _resolve_from_registry(cfg, None, pin=pin)
     pid = reg_pid if reg_pid and is_td_process_alive(reg_pid) else None
-    if pid is None and state_pid and is_td_process_alive(state_pid):
+    # The tracked pid stands in only while the pin is registered: once it
+    # left, a TD that reused that pid is another project's.
+    if (pid is None and state_pid and (not pin or active_name == pin)
+            and is_td_process_alive(state_pid)):
         pid = state_pid
     if not pid:
+        name = pin or active_name
         return {
             "status": "error",
             "message": (
-                f'The active instance'
-                f'{f" ({active_name})" if active_name else ""} is not '
+                f"This session's instance"
+                f'{f" ({name})" if name else ""} is not '
                 "running (no verified TouchDesigner process for it -- other "
                 "TD instances are ignored). Use launch_td to start it."
             ),
@@ -4689,12 +4798,13 @@ def handle_restart_td(params, state):
     with state:
         state.td_pid = new_pid
         state.launch_timestamps.append(time.monotonic())
-        url = state.url
+    if own_toe:
+        _remember_launch(state, new_pid)
     log(launch_msg)
 
-    # Wait for Envoy to become reachable
+    # Wait for Envoy to become reachable (url re-read: see handle_launch_td)
     deadline = time.monotonic() + timeout
-    if wait_for_envoy(url, deadline):
+    if wait_for_envoy(lambda: _state_url(state), deadline):
         with state:
             state.connected = True
             state.last_connected_time = time.time()
@@ -5009,6 +5119,7 @@ def _dialog_target(params, state):
         config_path = state.config_path
         pinned = state.pinned_instance or state.active_name
         td_pid = state.td_pid
+        no_target = state.url is None
     if name and name != pinned:
         if not config:
             config = load_config(config_path)
@@ -5024,6 +5135,10 @@ def _dialog_target(params, state):
                 "instance_not_running",
                 f'Instance "{name}" has no live TouchDesigner process.')
         return int(pid), name, None
+    if no_target:
+        # The pin left the registry: a TD that reused its tracked pid is
+        # another project's, so its dialogs are not ours to dismiss.
+        return None, pinned, _dialog_error("no_process", _no_target(state)[1])
     if not td_pid or not is_td_process_alive(td_pid):
         return None, pinned, _dialog_error(
             "no_process",
@@ -6115,16 +6230,25 @@ def start_orphan_watchdog(stdin_probe_fd, config_path):
 
 
 def wait_for_envoy(url, deadline):
-    """Block until Envoy is reachable or deadline expires. Returns True on success."""
+    """Block until Envoy is reachable or deadline expires. Returns True on success.
+
+    ``url`` may be a callable, re-read every attempt: a relaunched pinned
+    instance re-registers on whatever port it gets, and until it does the
+    session has no target (None). A plain None is unreachable at once."""
+    if url is None:
+        return False
     attempt = 0
     while time.monotonic() < deadline:
+        target = url() if callable(url) else url
         try:
+            if not target:
+                raise ConnectionError("no target yet")
             # Probe with an empty POST -- any HTTP response (even 4xx/5xx)
             # means the server is up.  Only connection errors (refused,
             # timeout, DNS) indicate it's not running yet.
             urllib.request.urlopen(
                 urllib.request.Request(
-                    url, data=b"{}",
+                    target, data=b"{}",
                     headers={
                         "Content-Type": "application/json",
                         "Accept": "application/json, text/event-stream",
@@ -6311,6 +6435,99 @@ def _abandon_frozen_forward(state, url, *, is_up, pid_alive, td_pid,
     return True
 
 
+def _reconcile_registry(state, config_path, mtime):
+    """Phase 1 body: re-resolve this session's target from a changed
+    registry and switch to it. True when the url changed (a None url is
+    no target: the pinned instance left the registry)."""
+    new_config = load_config(config_path)
+    with state:
+        read_pin = state.pinned_instance
+        pin_row = state.pin_row
+        seen_epoch = state.seen_epoch
+    # load_config answers {} for a file caught mid-write: no information,
+    # not "the pin is gone". Re-read while the write is fresh; a file
+    # still unreadable after that waits for the next registry write.
+    if read_pin and not isinstance(new_config.get("instances"), dict):
+        if time.time() - mtime > CONFIG_RETRY_S:
+            with state:
+                state.config_mtime = mtime
+        return False
+    pin = read_pin
+    # An increased active_epoch is an explicit all-sessions switch
+    # command (switch_instance all_sessions=True) -- it overrides
+    # this bridge's pin. Ordinary registry churn (a new instance
+    # registering, port updates) never does.
+    try:
+        epoch = int(new_config.get("active_epoch") or 0)
+    except (TypeError, ValueError):
+        epoch = 0
+    if epoch > seen_epoch:
+        commanded = new_config.get("active")
+        if commanded:
+            log(f"active_epoch {seen_epoch} -> {epoch}: adopting "
+                f"all-sessions switch to '{commanded}'")
+            pin, pin_row = commanded, None
+    if pin and pin not in (new_config.get("instances") or {}):
+        renamed = _renamed_pin(new_config, pin_row)
+        if renamed:
+            log(f"Pinned instance '{pin}' is now '{renamed}' (same "
+                f"TouchDesigner process, renamed by a save); following it")
+            pin = renamed
+    port, pid, resolved_name = _resolve_from_registry(
+        new_config, None, pin=pin)
+    if pin and resolved_name is None:
+        log(f"WARNING: pinned instance '{pin}' is not in the registry; "
+            f"no target until it returns (never the default instance)")
+    candidate = f"http://127.0.0.1:{port}/mcp" if port else None
+    # One lock from the pin check to the url write: a switch_instance
+    # landing in between would otherwise get this tick's url (#147 verify).
+    with state:
+        if state.pinned_instance != read_pin:
+            # switch_instance re-pinned while this resolved without the
+            # lock: its state wins, and the next tick redoes this read.
+            return False
+        state.config = new_config
+        state.config_mtime = mtime
+        state.seen_epoch = max(seen_epoch, epoch)
+        if pin:
+            row = _pin_row(new_config, pin)
+            if row or pin != read_pin:
+                # A missing pin keeps its last row (rename match, the .toe
+                # launch_td reopens); a NEW pin never inherits the old one.
+                state.pin_row = row
+            state.pinned_instance = pin
+        elif resolved_name and pid:
+            # First resolution of a LIVE instance: adopt it as this
+            # bridge's pin so later registry 'active' churn cannot
+            # re-target this session. A dead row's name would strand
+            # the session once a differently named TD opens.
+            state.pinned_instance = resolved_name
+            state.pin_row = _pin_row(new_config, resolved_name)
+        # Only a registered row's pid: the pin's own, or unpinned, the
+        # default's -- never the resolver's any-TD guess for an empty
+        # registry. A foreign pid aims crash detection and the dialog
+        # tools at another project's TD.
+        if pid and resolved_name:
+            state.td_pid = pid
+        if resolved_name != state.active_name:
+            state.active_name = resolved_name
+        _HEARTBEAT_PIN["name"] = state.pinned_instance
+        old_url = state.url
+        # Pinned with no target clears the url; unpinned keeps the last one.
+        if candidate == old_url or not (candidate or pin):
+            return False
+        if candidate:
+            log(f"Active instance changed: {old_url} -> {candidate}")
+        else:
+            log(f"No target: pinned instance '{pin}' left the registry "
+                f"(was {old_url}); nothing is forwarded until it returns")
+        state.url = candidate
+        state.connected = False
+        state.cached_tools = None
+        state.cached_tools_hash = None
+    return True
+
+
 def reconcile(state, on_tools_change, *, heartbeat):
     """Run one reconciliation pass against ``state``.
 
@@ -6331,94 +6548,17 @@ def reconcile(state, on_tools_change, *, heartbeat):
     with state:
         config_path = state.config_path
         old_mtime = state.config_mtime
-        old_url = state.url
 
-    new_url = None
+    # A changed target switches the URL immediately -- whether or not the
+    # old URL still responds -- and Phase 2 re-probes on this same tick.
+    url_switched = False
     if config_path and os.path.exists(config_path):
         try:
             mtime = os.path.getmtime(config_path)
         except OSError:
             mtime = old_mtime
         if mtime != old_mtime:
-            new_config = load_config(config_path)
-            with state:
-                pin = state.pinned_instance
-                seen_epoch = state.seen_epoch
-            # An increased active_epoch is an explicit all-sessions switch
-            # command (switch_instance all_sessions=True) -- it overrides
-            # this bridge's pin. Ordinary registry churn (a new instance
-            # registering, port updates) never does.
-            try:
-                epoch = int(new_config.get("active_epoch") or 0)
-            except (TypeError, ValueError):
-                epoch = 0
-            if epoch > seen_epoch:
-                commanded = new_config.get("active")
-                if commanded:
-                    log(f"active_epoch {seen_epoch} -> {epoch}: adopting "
-                        f"all-sessions switch to '{commanded}'")
-                    pin = commanded
-            port, pid, resolved_name = _resolve_from_registry(
-                new_config, None, pin=pin)
-            if pin and resolved_name != pin:
-                # Pinned instance vanished from the registry: follow the
-                # default LOUDLY but keep the pin -- if the instance
-                # re-registers (TD restart, same toe name) we re-attach.
-                log(f"WARNING: pinned instance '{pin}' is not in the "
-                    f"registry; following default "
-                    f"'{resolved_name}' until it returns")
-            candidate = f"http://127.0.0.1:{port}/mcp" if port else None
-            with state:
-                state.config = new_config
-                state.config_mtime = mtime
-                state.seen_epoch = max(seen_epoch, epoch)
-                if pin:
-                    state.pinned_instance = pin
-                elif resolved_name:
-                    # First successful resolution: adopt it as this
-                    # bridge's pin so later registry 'active' churn
-                    # cannot silently re-target this session.
-                    state.pinned_instance = resolved_name
-                # Adopt a pid ONLY from OUR pinned instance. When the pin is
-                # missing from the registry we deliberately follow the
-                # default's URL (logged above) -- but taking its PID too
-                # would point crash detection at a foreign project's
-                # TouchDesigner. That is the normal post-crash shape, not an
-                # edge case: the registry garbage-collects dead-pid rows on
-                # every write by any peer, so our crashed instance's row
-                # disappears and this branch is exactly where we land.
-                # ...but a RENAME is not a foreign instance. Every release
-                # bumps the .toe filename, so the instance name changes
-                # (Embody-6.157 -> Embody-6.159) and the pin goes stale on
-                # the very next open. If the resolved instance answers on
-                # the port we are already talking to, it IS our instance
-                # under a new name -- adopting its pid is correct, and
-                # refusing would silently degrade crash detection after
-                # every single release. A genuinely foreign instance is on
-                # a different port, so this stays closed to it.
-                same_endpoint = bool(
-                    port and state.url
-                    and state.url.endswith(f':{port}/mcp'))
-                if pid and (not pin or resolved_name == pin or same_endpoint):
-                    state.td_pid = pid
-                if resolved_name != state.active_name:
-                    state.active_name = resolved_name
-                _HEARTBEAT_PIN["name"] = state.pinned_instance
-            if candidate and candidate != old_url:
-                new_url = candidate
-
-    # If the active instance changed, switch URL immediately.
-    # This is the unconditional switch -- doesn't matter if the old URL
-    # still responds.  Forces a re-probe on this same tick.
-    url_switched = False
-    if new_url is not None:
-        with state:
-            log(f"Active instance changed: {old_url} -> {new_url}")
-            state.url = new_url
-            state.connected = False
-            state.cached_tools = None
-            state.cached_tools_hash = None
-            url_switched = True
+            url_switched = _reconcile_registry(state, config_path, mtime)
 
     # --- PHASE 2: Heartbeat (every HEARTBEAT_TICK_S, fixed -- see
     # _current_heartbeat_interval_s -- or right after a URL switch so the
@@ -6649,6 +6789,44 @@ def _describe_target(state, url):
     return ", ".join(parts)
 
 
+def _pin_row(config, name):
+    """The identity fields of registry row ``name``, or None."""
+    info = ((config or {}).get("instances") or {}).get(name)
+    if not isinstance(info, dict):
+        return None
+    return {"td_pid": info.get("td_pid"), "toe_path": info.get("toe_path")}
+
+
+def _toe_lineage(toe_path):
+    """(directory, stem minus TD's ".N" save version): every save of one
+    .toe shares it -- dev/Foo-6.toe, dev/Foo-6.1.toe, dev/Foo-6.399.toe.
+    Only ".N": a digit in the name itself (Foo-6, show2025) is the name."""
+    if not isinstance(toe_path, str) or not toe_path:
+        return None
+    directory, _, name = toe_path.replace("\\", "/").rpartition("/")
+    stem = name[:-4] if name.lower().endswith(".toe") else name
+    return directory, re.sub(r"\.\d+$", "", stem)
+
+
+def _renamed_pin(config, pin_row):
+    """The key our pinned instance goes by after a save-time rename, or None.
+
+    The rename re-keys the row in ONE registry write and keeps the process,
+    so the successor is the single row with the same td_pid AND .toe
+    lineage. Pid alone is not identity: a TD that reuses a dead instance's
+    pid has its same-pid row pruned in exactly that one-write shape. Port
+    is not identity either -- a freed port goes to the next instance."""
+    pid = (pin_row or {}).get("td_pid")
+    lineage = _toe_lineage((pin_row or {}).get("toe_path"))
+    if not pid or lineage is None:
+        return None
+    matches = [name for name, info
+               in ((config or {}).get("instances") or {}).items()
+               if isinstance(info, dict) and info.get("td_pid") == pid
+               and _toe_lineage(info.get("toe_path")) == lineage]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _resolve_from_registry(config, fallback_port, pin=None):
     """Resolve port and PID from the instance registry.
     Returns (port, td_pid, resolved_name).
@@ -6657,11 +6835,14 @@ def _resolve_from_registry(config, fallback_port, pin=None):
     ignore the registry's global ``active`` default -- per-bridge pinning:
     each session routes independently, and ``active`` only seeds bridges
     that have no pin yet. A pin naming a NO-LONGER-registered instance
-    falls through to the default (the caller logs that loudly and keeps
-    the pin, so the bridge re-attaches if the instance re-registers)."""
+    resolves to (None, None, None): no target. The default is another
+    project, so following it misroutes every call (#147); the caller keeps
+    the pin and re-attaches when the instance re-registers."""
     instances = config.get("instances", {})
     resolved_name = None
-    if pin and pin in instances:
+    if pin:
+        if not isinstance(instances, dict) or pin not in instances:
+            return None, None, None
         resolved_name = pin
     else:
         active_name = config.get("active")
@@ -6729,11 +6910,13 @@ def main():
     env_pin = os.environ.get("EMBODY_PIN_INSTANCE") or None
     port, td_pid, active_name = _resolve_from_registry(
         config, cli_port, pin=env_pin)
-    # Adopt the resolved instance as this bridge's pin (env pin wins even
-    # if not yet registered -- we re-attach when it registers). Seed the
-    # epoch from the current registry so a pre-existing all-sessions
-    # switch is not re-adopted as a fresh command on the first tick.
-    initial_pin = env_pin or active_name
+    # Adopt the resolved instance as this bridge's pin. An env pin wins
+    # even if not yet registered: no target until it registers (#147).
+    # The default seeds a pin only when it is LIVE (see
+    # _reconcile_registry). Seed the epoch from the current registry so a
+    # pre-existing all-sessions switch is not re-adopted as a fresh
+    # command on the first tick.
+    initial_pin = env_pin or (active_name if td_pid else None)
     try:
         initial_epoch = int(config.get("active_epoch") or 0)
     except (TypeError, ValueError):
@@ -6744,7 +6927,9 @@ def main():
     # SEQUENTIALLY -- on hosts whose firewall delays or drops loopback SYNs
     # (issue #57), every forward then burns seconds (or the full request
     # timeout) on a doomed ::1 attempt before falling back to IPv4.
-    url = f"http://127.0.0.1:{port}/mcp"
+    if not port and not env_pin:
+        port = cli_port   # "no target" is only ever a pinned session's state
+    url = f"http://127.0.0.1:{port}/mcp" if port else None
 
     # Seed config_mtime so the reconciler only reacts to actual drift,
     # not the initial load we already performed here.
@@ -6769,12 +6954,16 @@ def main():
     with state:
         state.config_mtime = initial_mtime
         state.main_tick_probe = fetch_main_tick_age   # issue #110
+        state.pin_row = _pin_row(config, initial_pin)
 
     my_pid = os.getpid()
     ppid = os.getppid()
     if active_name:
         log(f"Starting (instance: {active_name}, port: {port}) "
             f"[PID {my_pid}, parent {ppid}]")
+    elif url is None:
+        log(f"Starting (pinned instance '{env_pin}' is not registered; no "
+            f"target until it is) [PID {my_pid}, parent {ppid}]")
     else:
         log(f"Starting (target: 127.0.0.1:{port}) "
             f"[PID {my_pid}, parent {ppid}]")
@@ -6878,8 +7067,10 @@ def main():
 
         # --- Per-call instance addressing ---
         # `instance` names a registered TD instance for THIS call only. It
-        # is always stripped: Envoy declares no such parameter. Naming the
-        # pinned instance, or nothing, falls through to the normal path.
+        # is always stripped: Envoy declares no such parameter. A name that
+        # resolves to this session's own target, or no name, falls through
+        # to the normal path. Decided by registry URL, never by name: a pin
+        # that left the registry is no longer anyone's address (#147).
         if method == "tools/call":
             tool_args = params.get("arguments")
             if isinstance(tool_args, dict) and INSTANCE_ARG in tool_args:
@@ -6887,12 +7078,15 @@ def main():
                 with state:
                     routed_config = state.config
                     routed_cfg_path = state.config_path
-                    own_names = {state.pinned_instance, state.active_name}
-                if target_name and target_name not in own_names:
+                    own_url = state.url
+                target_url = None
+                if target_name:
                     if not routed_config:
                         routed_config = load_config(routed_cfg_path)
                     target_url, reason, available = resolve_instance_url(
                         routed_config, target_name)
+                if target_name and (target_url is None
+                                    or target_url != own_url):
                     routed = None
                     if target_url is None:
                         routed = instance_error_result(
@@ -7008,7 +7202,7 @@ def main():
                 # tools (disk cache or bridge-only) immediately.  The
                 # reconciler handles recovery in the background.
                 deadline = time.monotonic() + INITIAL_PROBE_TIMEOUT_S
-                if wait_for_envoy(current_url, deadline):
+                if current_url and wait_for_envoy(current_url, deadline):
                     with state:
                         state.connected = True
                         state.last_connected_time = time.time()
@@ -7018,9 +7212,11 @@ def main():
                             # recover the pid from the registry (written by
                             # the TD instance itself), never from a blind
                             # any-TD scan that could name a different
-                            # instance's process (issue #57 follow-up).
+                            # instance's process (issue #57 follow-up) --
+                            # and from OUR pin's row, never the default's.
                             _cfg = load_config(state.config_path)
-                            _p, _rpid, _a = _resolve_from_registry(_cfg, None)
+                            _p, _rpid, _a = _resolve_from_registry(
+                                _cfg, None, pin=state.pinned_instance)
                             state.td_pid = _rpid
                     is_connected = True
                     log("Connected to Envoy (during tools/list): "
@@ -7060,15 +7256,17 @@ def main():
         # connected.  If it fails, the error handler marks disconnected
         # and the reconciler drives recovery.  This avoids the 3-second
         # blocking probe that was causing cascading "not responding"
-        # errors during normal TD operations.
-        if not is_connected:
+        # errors during normal TD operations. A PINNED session's target is
+        # the reconciler's alone (Phase 1, on every registry write): this
+        # re-resolve once adopted the default's url and pid (#147).
+        with state:
+            fwd_pin = state.pinned_instance
+        if not is_connected and not fwd_pin:
             with state:
                 fresh_config_path = state.config_path
             fresh_config = load_config(fresh_config_path)
-            with state:
-                fwd_pin = state.pinned_instance
             new_port, new_pid, new_active = _resolve_from_registry(
-                fresh_config, cli_port, pin=fwd_pin)
+                fresh_config, cli_port)
             new_url = f"http://127.0.0.1:{new_port}/mcp" if new_port else current_url
             if new_url != current_url:
                 with state:
@@ -7083,6 +7281,20 @@ def main():
                 with state:
                     state.td_pid = new_pid
             # Fall through to the forward path -- no blocking wait.
+
+        # --- No target (#147) ---
+        # The pinned instance left the registry. Answer here; never forward.
+        if current_url is None:
+            if not is_notification:
+                pin, detail, available = _no_target(state)
+                if method == "tools/call":
+                    send_response({
+                        "jsonrpc": "2.0", "id": request_id,
+                        "result": instance_error_result(
+                            pin, "unavailable", detail, available)})
+                else:
+                    send_error(request_id, -32000, detail)
+            continue
 
         # --- Forward to TD (single attempt -- reconciler handles recovery) ---
         # Through state.inflight so the reconciler can release this loop

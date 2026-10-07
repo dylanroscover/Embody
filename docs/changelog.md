@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.69
+
+A session stays with its own TouchDesigner, or stops.
+
+- **No drift into another project** (#147). When a session's TouchDesigner closes or crashes while another instance is open, calls now fail with `envoy.instance.unavailable` instead of quietly running against the other project, and an `instance=` naming the gone instance is refused. The session re-attaches when it comes back.
+- **Saves are followed.** A save that renames the `.toe` keeps the session on the same TouchDesigner, even while another instance is the registry default.
+- **`launch_td` and `restart_td` act on the session's own instance.** They used to quit and relaunch the registry default; now they reopen the session's newest saved `.toe` and never touch another project's TD. +27 tests.
+
 ## v6.2.68
 
 A release built for a newer TouchDesigner is yours to install anyway.

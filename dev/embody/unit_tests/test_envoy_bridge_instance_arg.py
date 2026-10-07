@@ -107,11 +107,13 @@ class TestInstanceResolution(EmbodyTestCase):
 class TestInstanceRouting(EmbodyTestCase):
     """The main loop, with mocked I/O, network and registry."""
 
-    def _run(self, messages, forward):
+    def _run(self, messages, forward, env_pin=None):
         stdin = io.StringIO('\n'.join(json.dumps(m) for m in messages) + '\n')
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with patch.object(sys, 'stdin', stdin), \
+        env = {'EMBODY_PIN_INSTANCE': env_pin or ''}
+        with patch.dict(os.environ, env), \
+             patch.object(sys, 'stdin', stdin), \
              patch.object(sys, 'stdout', stdout), \
              patch.object(sys, 'stderr', stderr), \
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
@@ -203,3 +205,44 @@ class TestInstanceRouting(EmbodyTestCase):
         # no "Lost connection" error and no fallback tools.
         self.assertEqual(responses[1]['result'], {'ok': True})
         self.assertNotIn('error', responses[1])
+
+    def test_a_dead_default_is_not_seeded_as_the_pin(self):
+        """Startup pins the registry default only when it is LIVE: REGISTRY
+        pids verify as no TouchDesigner, so the session starts unpinned."""
+        def forward(url, msg, **kw):
+            return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': {}}
+
+        self._run([self._call(1, {'op_path': '/a'})], forward)
+        self.assertIsNone(bridge._HEARTBEAT_PIN.get('name'))
+
+    def test_unregistered_pin_has_no_target(self):
+        """#147: pinned to an instance that is not registered, the session
+        forwards NOTHING on its own -- above all not to the registry default
+        'Dev'. tools/list still answers, a notification gets no reply, the
+        stale pin's name is unknown, and another registered instance can
+        still be addressed per call."""
+        seen = []
+
+        def forward(url, msg, **kw):
+            seen.append(url)
+            return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': {}}
+
+        responses = self._run([
+            {'jsonrpc': '2.0', 'id': 0, 'method': 'tools/list'},
+            self._call(1, {'op_path': '/a'}),
+            {'jsonrpc': '2.0', 'method': 'tools/call',
+             'params': {'name': 'get_op', 'arguments': {}}},
+            self._call(2, {'op_path': '/a', 'instance': 'Gone'}),
+            self._call(3, {'op_path': '/a', 'instance': 'Show'}),
+        ], forward, env_pin='Gone')
+        self.assertEqual([r['id'] for r in responses], [0, 1, 2, 3])
+        tools = {t['name'] for t in responses[0]['result']['tools']}
+        self.assertIn('switch_instance', tools)
+        first = json.loads(responses[1]['result']['content'][0]['text'])
+        self.assertEqual(first['error_code'], 'envoy.instance.unavailable')
+        self.assertEqual(first['instance'], 'Gone')
+        self.assertEqual(first['available'], ['Dev', 'Show'])
+        stale = json.loads(responses[2]['result']['content'][0]['text'])
+        self.assertEqual(stale['error_code'], 'envoy.instance.unknown')
+        self.assertEqual(seen, ['http://127.0.0.1:9871/mcp'],
+                         'only the explicitly addressed call went out')

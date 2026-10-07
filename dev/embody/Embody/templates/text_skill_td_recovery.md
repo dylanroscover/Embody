@@ -10,7 +10,7 @@ description: "MUST READ when Envoy/TD connectivity is broken and has not self-he
 
 The bridge runs a background reconciler thread that continuously manages connectivity:
 
-- **Config polling** (every 1s): Watches `.embody/envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
+- **Config polling** (every 1s): Watches `.embody/envoy.json` for mtime changes and re-resolves this session's pinned instance (a new port after a restart, a new name after a save). If the pinned instance leaves the registry, the session has **no target**: calls fail with `envoy.instance.unavailable` and nothing is forwarded until it re-registers. It never moves to another instance on its own.
 - **Heartbeat** (every 10s, fixed -- `HEARTBEAT_TICK_S`): Pings the backend to detect connect/disconnect transitions, and reads how long TD's main thread has been away from Envoy's request loop.
 - **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
 - **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
@@ -37,8 +37,8 @@ Most connectivity issues self-heal (see the two layers above). Before any manual
 Manual recovery below is only for when TD is actually down or the bridge process itself is broken:
 
 1. **Call `get_td_status`**: This is always available (even when TD is down). It shows connection state, process liveness, instance registry, and any unregistered TD processes.
-2. **If TD is not running**: Call `launch_td`. The bridge will launch TD with the configured `.toe` file and wait for Envoy to become reachable.
-3. **If the wrong instance is active**: Call `switch_instance` to list or switch instances. The reconciler also auto-switches when `.embody/envoy.json` is edited.
+2. **If TD is not running**: Call `launch_td`. The bridge launches this session's pinned instance's `.toe` (unpinned: the registry default's) and waits for Envoy to become reachable.
+3. **If the wrong instance is targeted, or calls fail with `envoy.instance.unavailable`**: Call `switch_instance` to list or switch instances, or `launch_td` to reopen the pinned one. Only `switch_instance` (or a peer's `all_sessions=true` switch) moves a pinned session.
 4. **If the bridge process is stuck**: Tell the user to **reopen this session/conversation** -- this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
 
 ### Common failure: stale active instance
