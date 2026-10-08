@@ -1,8 +1,8 @@
 """Off-TD contract tests for Convoy's user-facing parameter scaffold.
 
 These tests intentionally do not import TouchDesigner. They pin the source TDXN
-that creates the page, the nested copy used by the development network, and the
-fail-closed projection helpers that can be exercised with plain Python fakes.
+that creates the page and the fail-closed projection helpers that can be
+exercised with plain Python fakes.
 """
 
 from __future__ import annotations
@@ -30,11 +30,7 @@ def _load_yaml(path: Path):
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _convoy_page(document, nested=False):
-    if nested:
-        embody = next(row for row in document["operators"]
-                      if row.get("name") == "Embody")
-        return embody["custom_pars"]["Convoy"]
+def _convoy_page(document):
     return document["custom_pars"]["Convoy"]
 
 
@@ -139,10 +135,14 @@ def test_the_convoy_comp_carries_its_global_shortcut():
     assert convoy["parameters"].get("opshortcut") == "Convoy"
 
 
-def test_source_and_nested_convoy_parameter_pages_match():
-    source = _convoy_page(_load_yaml(EMBODY_TDXN))
-    nested = _convoy_page(_load_yaml(ROOT_TDXN), nested=True)
-    assert nested == source
+def test_embody_tdxn_is_the_only_copy_of_the_convoy_page():
+    """The parent's Embody entry is a tdn_ref with no custom_pars (6.2.71):
+    a second copy there could drift from the one these tests pin."""
+    embody = next(row for row in _load_yaml(ROOT_TDXN)["operators"]
+                  if row.get("name") == "Embody")
+    assert embody.get("tdn_ref")
+    assert "custom_pars" not in embody
+    assert _convoy_page(_load_yaml(EMBODY_TDXN))
 
 
 def test_agreed_controls_have_safe_defaults_and_detailed_help():
