@@ -1404,12 +1404,12 @@ operators:
         # loops: the drone swells with each explosion, the crackle with heat and closeness, the hum only as the
         # suns draw together
         beds = float(comp.par.Beds.eval()) * master
-        lv = op('const_bed_levels').par
         levels = (beds * (0.55 + 0.25 * env), beds * (0.2 + 0.6 * env + 0.2 * close), beds * (0.05 + 0.6 * close * close))
         if capture is not None:
             capture.append(('beds', absTime.seconds) + levels)
             levels = (0.0, 0.0, 0.0)
-        lv.const0value, lv.const1value, lv.const2value = levels
+        # published through storage, read by const_bed_levels' expressions: runtime state never lands in the .tdxn
+        op('const_bed_levels').store('beds', levels)
         audio_beds = op('audio_beds')
         # the players run outside TouchDesigner (they keep going when this COMP stops cooking), so Sound off stops them
         if not on and (audio_beds['state'][0] > 0.5 or op('audio_events')['state'][0] > 0.5):
@@ -1768,11 +1768,11 @@ operators:
   sequences:
     const:
     - name: drone
-      value: 0.3850298799
+      value: =me.fetch('beds', (0.0, 0.0, 0.0))[0]
     - name: crackle
-      value: 0.2800717117
+      value: =me.fetch('beds', (0.0, 0.0, 0.0))[1]
     - name: hum
-      value: 0.455
+      value: =me.fetch('beds', (0.0, 0.0, 0.0))[2]
   position: [1600, -4800]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]

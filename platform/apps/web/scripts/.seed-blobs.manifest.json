@@ -146,9 +146,9 @@
   {
     "slug": "thermite-and-freon",
     "kind": "tdxn",
-    "key": "a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28",
-    "sha256": "a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28",
-    "size": 130026,
+    "key": "8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f",
+    "sha256": "8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f",
+    "size": 130165,
     "content_type": "application/json",
     "path": "specimens/simulation/thermite-and-freon.tdxn"
   },

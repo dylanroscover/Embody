@@ -287,7 +287,7 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', 34243, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
   ('ver-mandala', 'sp-mandala', 1, 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 89571, 461, 'scan-mandala', NULL, 'First-party specimen.'),
-  ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, 'a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28', 'a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28', 130026, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.');
+  ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', 130165, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
