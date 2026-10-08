@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
-build: 10
-generator: Embody/6.2.70
+build: 13
+generator: Embody/6.2.71
 td_build: 099.2025.33230
 network_path: /specimen_lab
 options:
@@ -35,6 +35,8 @@ operators:
   type: baseCOMP
   parameters:
     parentshortcut: Mandala
+  flags:
+  - viewer
   position: [1600, -400]
   tdn_ref: specimen_lab/mandala.tdxn
 - name: hyper_ntsc

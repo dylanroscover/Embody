@@ -2767,6 +2767,17 @@ class TDXNExt:
 				set() if clear_first
 				else {c.name for c in dest.children})
 
+			# Phase 0: the target's own custom pars, before its children, so
+			# an extension or expression inside finds them mid-build. A
+			# tdn_ref shell gets none from its parent file. Phase 9
+			# re-applies the values after any extension reinit.
+			target_custom = (
+				self._flattenCustomPars(tdn.get('custom_pars') or {})
+				if isinstance(tdn, dict) else [])
+			if target_custom:
+				self._createCustomParsOnOp(dest, target_custom)
+				self._setCustomParValues(dest, target_custom)
+
 			# Phase 1: Create all operators (depth-first)
 			self._createOps(dest, op_defs, created, pre_existing)
 
@@ -2862,11 +2873,9 @@ class TDXNExt:
 						f'destination is {dest.OPType}', 'WARNING')
 
 				# Custom parameters
-				tdxn_custom = tdn.get('custom_pars', {})
-				if tdxn_custom:
-					flat_defs = self._flattenCustomPars(tdxn_custom)
-					self._createCustomParsOnOp(dest, flat_defs)
-					self._setCustomParValues(dest, flat_defs)
+				if target_custom:
+					self._createCustomParsOnOp(dest, target_custom)
+					self._setCustomParValues(dest, target_custom)
 
 				# Built-in parameters
 				tdxn_params = tdn.get('parameters', {})
@@ -3327,6 +3336,10 @@ class TDXNExt:
 				tdn_ref = self._resolveTDXNRef(target)
 				if tdn_ref:
 					data['tdn_ref'] = tdn_ref
+					# the child's file owns its custom pars (import Phase 0
+					# creates them before its children); a copy here only
+					# doubled the parent's size and churned on every value
+					data.pop('custom_pars', None)
 			elif self._hasTOXTag(target) and not options.get('embed_all'):
 				# Child's network managed by its own .tox file.
 				# Write a tox_ref pointer for cross-validation.

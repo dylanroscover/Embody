@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/step_card
 options:
@@ -118,6 +118,9 @@ operators:
       valuex: =parent.Mograph.par.Progress
     - name: uNum
       valuex: =op('text_num').evalTextSize(op('text_num').par.text.eval())[0]
+      valuey: 1
+      valuez: 1
+      valuew: 1
     array:
     - name: uCells
       type: vec4

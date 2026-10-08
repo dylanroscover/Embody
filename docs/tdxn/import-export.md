@@ -87,6 +87,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (the `tdxn_exclude` tag) are preserved, not destroyed. |
+| 0 | **Create target custom parameters** | The target COMP's own custom parameters, created before any child so an extension or expression inside finds them. A `tdn_ref` shell gets none from its parent file. |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
@@ -101,7 +102,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | 8 | **Restore file links** | File/syncfile parameters restored on externalized DATs. |
 | 8.5 | **Restore TOX content** | `.tox` content loaded into `tox_ref` shells. |
 | 8.6 | **Restore nested TDXN content** | `tdn_ref` shells filled from their own `.tdxn` files in the same import (recursive, with an ancestor-chain cycle guard). Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDXN COMP exactly once. |
-| 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags applied last. |
+| 9 | **Apply target COMP properties** | The target COMP's own type, custom and built-in parameters, flags, color, tags applied last. |
 | 10 | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP/POP operators this import created are logged with their source (lock preserved, frozen data is not), after every wire is restored. See [Lock Flag Limitation](specification.md#lock-flag-limitation). |
 
 ### Version Compatibility

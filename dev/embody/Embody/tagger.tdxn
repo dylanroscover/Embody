@@ -1,10 +1,8 @@
 format: tdxn
 version: '2.1'
 build: 35
-generator: Embody/6.2.29
-td_build: 099.2025.33070
-source_file: Embody-6.332.toe
-exported_at: '2026-09-07T09:16:59Z'
+generator: Embody/6.2.70
+td_build: 099.2025.33230
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -246,11 +244,11 @@ operators:
 - name: button2
   type: buttonCOMP
   parameters:
-    label: =op('tags')[me.digits, 'label']
-    colorr: =parent.Embody.par.Taggingmenucolorr
-    colorg: =parent.Embody.par.Taggingmenucolorg
-    colorb: =parent.Embody.par.Taggingmenucolorb
-    alignorder: 1
+    label: ×  Remove tdxn
+    colorr: 0.2
+    colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
+    colorb: 0.2
+    alignorder: 3
     topsmoothness: mipmap
     reloadbuiltin: false
     relpath: inherit
@@ -392,7 +390,7 @@ operators:
 - name: btn_embed
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed DATs in tdxn
+    label: ⊞  Embed DATs in tdxn  ✓
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -785,7 +783,7 @@ operators:
 - name: btn_embed_storage
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed storage in tdxn  ✓
+    label: ⊞  Embed storage in tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2

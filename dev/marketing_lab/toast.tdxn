@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/toast
 options:
@@ -127,6 +127,8 @@ operators:
     - name: uText
       valuex: =op('text_err').evalTextSize(op('text_err').par.text.eval())[0]
       valuey: =op('text_fix').evalTextSize(op('text_fix').par.text.eval())[0]
+      valuez: 1
+      valuew: 1
   position: [1000, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
