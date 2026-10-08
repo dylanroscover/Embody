@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect, type CSSProperties, type ReactNode } from "react";
 import { tokenize, leadingSpaces, type Seg } from "../lib/tdxnTokenize";
+import { detectLanguage, tokenizeCodeBlock, type CodeLang } from "../lib/codeTokenize";
 
 // Read-only, TDXN-aware YAML viewer for the specimen "raw TDXN" block:
 // syntax highlighting (with the TDXN =expression shorthand in the brand accent),
@@ -38,7 +39,7 @@ type Line = {
 // ~3 MB of HTML -- the practical ceiling for a viewer that is not virtualized.
 const MAX_RENDER_LINES = 20000;
 
-function parse(raw: string): { lines: Line[]; truncated: boolean; totalLines: number } {
+function parse(raw: string): { lines: Line[]; truncated: boolean; totalLines: number; blocks: CodeBlock[] } {
   const allLines = raw.replace(/\n$/, "").split("\n");
   const totalLines = allLines.length;
   const truncated = totalLines > MAX_RENDER_LINES;
@@ -89,7 +90,57 @@ function parse(raw: string): { lines: Line[]; truncated: boolean; totalLines: nu
     }
   }
 
-  return { lines, truncated, totalLines };
+  return { lines, truncated, totalLines, blocks: findCodeBlocks(lines) };
+}
+
+// A DAT's `dat_content: |` block: its body lines [start, end), their YAML block
+// indentation, and the language they are written in.
+type CodeBlock = { head: number; start: number; end: number; indent: number; lang: CodeLang };
+
+// The owning operator's name / type / language / extension: walk its mapping
+// (the lines at the key's indent, plus `parameters:` one level in).
+function operatorFields(lines: Line[], at: number, d: number) {
+  let s = at;
+  while (s > 0 && ((lines[s - 1]?.blank ?? false) || (lines[s - 1]?.indent ?? 0) >= d)) s--;
+  let e = at + 1;
+  while (e < lines.length && ((lines[e]?.blank ?? false) || (lines[e]?.indent ?? 0) >= d)) e++;
+  const fields: { name?: string; type?: string; language?: string; extension?: string } = {};
+  const item = lines[s - 1]?.text.match(/^\s*-\s+name:\s*(.+)$/);
+  if (item && item[1]) fields.name = unquoteScalar(item[1]);
+  let key = "";
+  for (let k = s; k < e; k++) {
+    const l = lines[k];
+    if (!l || l.blank) continue;
+    const m = l.text.trim().match(/^([\w.-]+):\s*(.*)$/);
+    if (l.indent === d && m) {
+      key = m[1] ?? "";
+      if (key === "type" && m[2]) fields.type = unquoteScalar(m[2]);
+      if (key === "name" && m[2]) fields.name = unquoteScalar(m[2]);
+    } else if (l.indent === d + 2 && key === "parameters" && m && m[2]) {
+      if (m[1] === "language") fields.language = unquoteScalar(m[2]);
+      if (m[1] === "extension") fields.extension = unquoteScalar(m[2]);
+    }
+  }
+  return fields;
+}
+
+function findCodeBlocks(lines: Line[]): CodeBlock[] {
+  const out: CodeBlock[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (!l || l.blank || !/^\s*dat_content:\s*[|>][-+0-9]*\s*$/.test(l.text)) continue;
+    const d = l.indent;
+    let end = i + 1;
+    while (end < lines.length && ((lines[end]?.blank ?? false) || (lines[end]?.indent ?? 0) > d)) end++;
+    while (end > i + 1 && (lines[end - 1]?.blank ?? false)) end--;
+    if (end === i + 1) continue;
+    let indent = Infinity;
+    for (let k = i + 1; k < end; k++) if (!lines[k]?.blank) indent = Math.min(indent, lines[k]?.indent ?? 0);
+    const code = lines.slice(i + 1, end).map((x) => x.text.slice(indent)).join("\n");
+    out.push({ head: i, start: i + 1, end, indent, lang: detectLanguage(operatorFields(lines, i, d), code) });
+    i = end - 1;
+  }
+  return out;
 }
 
 function unquoteScalar(s: string): string {
@@ -176,9 +227,20 @@ function renderSeg(seg: Seg, key: number, q: string): ReactNode {
 const EMPTY: ReadonlySet<number> = new Set();
 
 export default function TdxnYamlViewer({ raw, summary }: Props) {
-  const { lines, truncated, totalLines } = useMemo(() => parse(raw), [raw]);
+  const { lines, truncated, totalLines, blocks } = useMemo(() => parse(raw), [raw]);
   const jumps = useMemo(() => buildJumps(lines), [lines]);
-  const tokens = useMemo(() => lines.map((l) => (l.blank ? [] : tokenize(l.text))), [lines]);
+  // YAML everywhere, except a DAT's dat_content, which is highlighted in its own
+  // language (and labelled with it on the `dat_content: |` line).
+  const { tokens, langAt } = useMemo(() => {
+    const toks: Seg[][] = lines.map((l) => (l.blank ? [] : tokenize(l.text)));
+    const labels = new Map<number, CodeLang>();
+    for (const b of blocks) {
+      labels.set(b.head, b.lang);
+      const body = tokenizeCodeBlock(lines.slice(b.start, b.end).map((l) => l.text), b.lang, b.indent);
+      body.forEach((segs, k) => { toks[b.start + k] = segs; });
+    }
+    return { tokens: toks, langAt: labels };
+  }, [lines, blocks]);
 
   const [folded, setFolded] = useState<ReadonlySet<number>>(EMPTY);
   const [query, setQuery] = useState("");
@@ -447,6 +509,7 @@ export default function TdxnYamlViewer({ raw, summary }: Props) {
               </span>
               <code className="tdxn-yaml__text">
                 {l.blank ? " " : (tokens[i] ?? []).map((s, k) => renderSeg(s, k, q))}
+                {langAt.has(i) && <span className="tdxn-yaml__lang" aria-label={`${langAt.get(i)} code`}>{langAt.get(i)}</span>}
                 {isFolded && <span className="tdxn-yaml__ellipsis"> &#8943;</span>}
               </code>
             </div>

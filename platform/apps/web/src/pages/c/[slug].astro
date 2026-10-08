@@ -15,7 +15,7 @@ import { resultImage, resultVideo } from "../../lib/specimenThumb";
 import { SITE_ORIGIN, absoluteUrl } from "../../lib/site";
 import { sampleTdxn } from "../../fixtures/sample-tdxn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
-import { getSpecimenBySlug } from "../../server/db";
+import { getResultPanelScale, getSpecimenBySlug } from "../../server/db";
 import { getParsedTdxnForSlug } from "../../server/tdxn";
 import { getSpecimenIdBySlug, getUserReactions, REPORT_REASONS } from "../../server/engagement";
 
@@ -83,6 +83,17 @@ if (sessionUser) {
     }
   } catch {
     myReactions = [];
+  }
+}
+
+// The signed-in visitor's saved size for the rendered-result panel (null: their
+// localStorage choice or the default). Best-effort, like the reactions above.
+let resultPanelScale: number | null = null;
+if (sessionUser) {
+  try {
+    resultPanelScale = await getResultPanelScale(env.DB, sessionUser.id);
+  } catch {
+    resultPanelScale = null;
   }
 }
 
@@ -725,26 +736,40 @@ function emitKey(key: string): string {
     </aside>
 
     {/* Rendered-result thumbnail ('d'), shown by default. */}
-    <aside class="specimen-app__thumb app-panel" data-panel="thumbnail" data-draggable aria-label="rendered result">
+    <aside
+      class="specimen-app__thumb app-panel"
+      data-panel="thumbnail"
+      data-draggable
+      aria-label="rendered result"
+      data-result-scale={resultPanelScale ?? undefined}
+      data-signed-in={isSignedIn ? "" : undefined}
+    >
+      {/* Resize grip: the panel is docked bottom-right, so it grows up and left. */}
+      <button
+        type="button"
+        class="thumb-resize"
+        data-thumb-resize
+        aria-label="resize rendered result (arrow keys; double-click resets)"
+        title="drag to resize, double-click to reset"
+      >
+        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M1.5 6.5V1.5h5M1.5 1.5l5 5M5.5 10.5h5v-5" /></svg>
+      </button>
       <div class="panel-head" data-drag-handle>
         <p class="eyebrow"><span class="kbd" aria-hidden="true">r</span>endered result</p>
         <button type="button" class="panel-collapse" data-panel-collapse="thumbnail" aria-label="hide rendered result (r)" title="hide (r)">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
         </button>
       </div>
-      <figure class:list={["thumb-figure", { "thumb-figure--video": Boolean(coverVideo) }]}>
+      <figure class="thumb-figure" data-thumb-figure>
         {/* The poster <img> ALWAYS renders (unchanged for image-only covers). A
             video cover layers a <video> on top of it, so if the video fails to
             load the poster underneath stays visible -- never a broken media
-            element. This mirrors the grid cover's poster + layered <video>. */}
-        {/* Width/height only when a 16:9 video pins the box; image-only
-            covers keep their native ratio, so a fixed 640x360 reservation
-            would reflow the panel when a portrait cover loads. */}
+            element. This mirrors the grid cover's poster + layered <video>.
+            The figure's box takes the artwork's aspect ratio from whichever
+            loads first (see the panel-size script), so no width/height here. */}
         <img
           src={cover.src}
           alt={cover.rendered ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
-          width={coverVideo ? "640" : undefined}
-          height={coverVideo ? "360" : undefined}
           loading="lazy"
         />
         {coverVideo && (
@@ -763,8 +788,6 @@ function emitKey(key: string): string {
             muted
             loop
             playsinline
-            width="640"
-            height="360"
             preload="auto"
             aria-label={`${specimen.name} rendered result`}
             data-cover-video-detail
@@ -842,10 +865,15 @@ function emitKey(key: string): string {
     const layout: {
       pos: Record<string, { x: number; y: number }>;
       open: Record<string, boolean>;
+      scale?: number; // rendered-result panel size (1 = default)
     } = (() => {
       try {
         const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}");
-        return { pos: raw.pos || {}, open: raw.open || {} };
+        return {
+          pos: raw.pos || {},
+          open: raw.open || {},
+          scale: typeof raw.scale === "number" ? raw.scale : undefined
+        };
       } catch {
         return { pos: {}, open: {} };
       }
@@ -1216,6 +1244,107 @@ function emitKey(key: string): string {
           resetPos();
         });
       });
+    }
+
+    // ---- Rendered-result panel: the artwork's aspect, visitor-sized ------------
+    // The figure takes the artwork's own aspect ratio (read from the poster or the
+    // video, whichever loads first) at the same AREA a 16:9 cover has, times the
+    // visitor's size (--thumb-scale), dragged from the top-left grip or set with the
+    // arrow keys on it. The size persists in localStorage and, for a signed-in
+    // visitor, on the account (the server's value wins on load).
+    {
+      const app = document.querySelector<HTMLElement>("[data-tdxn-app]");
+      const panel = document.querySelector<HTMLElement>('[data-panel="thumbnail"]');
+      const figure = panel?.querySelector<HTMLElement>("[data-thumb-figure]");
+      const grip = panel?.querySelector<HTMLElement>("[data-thumb-resize]");
+      if (app && panel && figure && grip) {
+        const MIN = 0.5, MAX = 3, GAP = 12;
+        const drawers = window.matchMedia("(max-width: 760px)");
+        const signedIn = panel.hasAttribute("data-signed-in");
+        const saved = parseFloat(panel.dataset.resultScale ?? "");
+        let scale = Number.isFinite(saved) ? saved : (layout.scale ?? 1);
+
+        // Clamp to [MIN, MAX] and to what the viewport can show at this aspect.
+        const apply = (s: number) => {
+          const unitW = figure.offsetWidth / scale, unitH = figure.offsetHeight / scale;
+          const room = unitW && unitH
+            ? Math.min((window.innerWidth * 0.7) / unitW, (app.clientHeight - 140) / unitH)
+            : MAX;
+          scale = Math.max(MIN, Math.min(s, MAX, Math.max(MIN, room)));
+          figure.style.setProperty("--thumb-scale", String(scale));
+        };
+        const setAspect = (w: number, h: number) => {
+          if (!w || !h) return;
+          const ar = w / h;
+          figure.style.setProperty("--thumb-ar", String(ar));
+          figure.style.setProperty("--thumb-k", String(Math.sqrt(ar / (16 / 9))));
+          apply(scale);
+        };
+        figure.style.setProperty("--thumb-scale", String(scale));
+        const img = figure.querySelector("img");
+        const video = figure.querySelector("video");
+        if (img) {
+          if (img.complete && img.naturalWidth) setAspect(img.naturalWidth, img.naturalHeight);
+          else img.addEventListener("load", () => setAspect(img.naturalWidth, img.naturalHeight), { once: true });
+        }
+        video?.addEventListener("loadedmetadata", () => setAspect(video.videoWidth, video.videoHeight));
+
+        let saveTimer = 0;
+        const persist = () => {
+          layout.scale = scale;
+          saveLayout();
+          if (!signedIn) return;
+          window.clearTimeout(saveTimer);
+          saveTimer = window.setTimeout(() => {
+            fetch("/api/account/preferences", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ resultPanelScale: scale })
+            }).catch(() => {});
+          }, 300);
+        };
+
+        let drag: { x: number; y: number; s: number; size: number } | null = null;
+        grip.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0 || drawers.matches) return;
+          e.preventDefault();
+          drag = { x: e.clientX, y: e.clientY, s: scale, size: (figure.offsetWidth + figure.offsetHeight) / 2 };
+          try { grip.setPointerCapture(e.pointerId); } catch {}
+          panel.classList.add("is-resizing");
+        });
+        grip.addEventListener("pointermove", (e) => {
+          if (!drag) return;
+          // Up and left grows: the panel is anchored at its bottom-right corner.
+          const grow = (drag.x - e.clientX + (drag.y - e.clientY)) / 2;
+          apply(drag.s * (1 + grow / drag.size));
+        });
+        const end = (e: PointerEvent) => {
+          if (!drag) return;
+          drag = null;
+          panel.classList.remove("is-resizing");
+          try { grip.releasePointerCapture(e.pointerId); } catch {}
+          persist();
+        };
+        grip.addEventListener("pointerup", end);
+        grip.addEventListener("pointercancel", end);
+        grip.addEventListener("dblclick", () => { apply(1); persist(); });
+        grip.addEventListener("keydown", (e) => {
+          const f = e.key === "ArrowUp" || e.key === "ArrowRight" ? 1.1
+            : e.key === "ArrowDown" || e.key === "ArrowLeft" ? 1 / 1.1 : 0;
+          if (!f) return;
+          e.preventDefault();
+          apply(scale * f);
+          persist();
+        });
+
+        // The properties panel above stops short of this one: reserve its real
+        // height (it changes with the aspect and the size) instead of a constant.
+        const reserve = () => {
+          if (!drawers.matches) app.style.setProperty("--app-thumb-h", `${panel.offsetHeight + GAP}px`);
+        };
+        new ResizeObserver(reserve).observe(panel);
+        window.addEventListener("resize", () => apply(scale));
+      }
     }
   </script>
 
@@ -1933,47 +2062,65 @@ function emitKey(key: string): string {
   .tdxn-tab__label .kbd { margin-right: 0; }
   .tdxn-tab .tdxn-acr { text-transform: uppercase; }
 
-  /* Rendered-result thumbnail, pinned bottom-right. */
+  /* Rendered-result thumbnail, pinned bottom-right; as wide as its figure. */
   .specimen-app__thumb {
     position: absolute;
     right: var(--app-side);
     bottom: var(--app-bottom);
-    width: var(--app-panel-w);
+    width: max-content;
     padding: 14px 16px 16px;
   }
+  .specimen-app__thumb.is-resizing { transition: none; user-select: none; }
+  /* The figure takes the artwork's aspect ratio (--thumb-ar, set by the panel-size
+     script from the poster or video; 16:9 until one loads) at the SAME AREA as a
+     16:9 cover at the default panel width: width = base x sqrt(ar / (16/9))
+     (--thumb-k), times the visitor's size (--thumb-scale). */
   .thumb-figure {
     position: relative;
-    margin: 0;
+    width: calc((var(--app-panel-w) - 32px) * var(--thumb-k, 1) * var(--thumb-scale, 1));
+    aspect-ratio: var(--thumb-ar, 16 / 9);
+    margin: 0 auto;
     overflow: hidden;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-sm);
     background: var(--bg-code);
   }
-  /* Image covers keep their NATIVE aspect ratio -- TD output is not always
-     16:9, so the panel adapts to the frame instead of cropping it. Tall
-     portraits are capped and letterbox inside the figure. Video covers stay
-     a fixed 16:9 box (the video pipeline is 16:9 end to end). */
-  .thumb-figure img {
-    width: 100%;
-    height: auto;
-    max-height: 68vh;
-    object-fit: contain;
-    display: block;
-  }
-  .thumb-figure--video {
-    aspect-ratio: 16 / 9;
-  }
-  .thumb-figure--video img { width: 100%; height: 100%; object-fit: cover; }
-  /* The video layers ON TOP of the always-present poster img, filling the figure.
-     If it errors, the controller hides it (is-error) and the poster shows through
-     underneath -- never a broken media element. */
+  /* The poster and the video both fill the figure; contain, so nothing is ever
+     cropped before the aspect is known. The video layers ON TOP of the
+     always-present poster; if it errors, the controller hides it (is-error) and
+     the poster shows through -- never a broken media element. */
+  .thumb-figure img,
   .thumb-figure .thumb-video {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
+  }
+  /* Resize grip in the panel's top-left corner (it grows up and left). */
+  .thumb-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius) 0 var(--radius-sm) 0;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: nwse-resize;
+    touch-action: none;
+  }
+  .thumb-resize:hover,
+  .thumb-resize:focus-visible,
+  .specimen-app__thumb.is-resizing .thumb-resize {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
   .thumb-figure .thumb-video.is-error { display: none; }
   .thumb-soon {
@@ -2196,6 +2343,10 @@ function emitKey(key: string): string {
     /* Panels are not draggable at this size -- the header is a plain header, and
        `touch-action: none` on it would otherwise eat the drawer's own scrolling. */
     [data-drag-handle] { cursor: default; touch-action: auto; }
+    /* The drawer is a fixed width: the figure fills it at the artwork's aspect,
+       and the desktop-only size grip goes away. */
+    .thumb-figure { width: 100%; }
+    .thumb-resize { display: none; }
   }
 
   /* Touch devices: the engagement-row controls are mouse-sized (12px text,
