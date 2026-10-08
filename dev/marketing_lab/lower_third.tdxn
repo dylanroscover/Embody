@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/lower_third
 options:
@@ -130,6 +130,7 @@ operators:
       valuex: =op('text_sub').evalTextSize(op('text_sub').par.text.eval())[0]
       valuey: =op('text_sub').evalTextSize('M')[0]
       valuez: =len(op('text_sub').par.text.eval())
+      valuew: 1
     array:
     - name: uCells
       type: vec4

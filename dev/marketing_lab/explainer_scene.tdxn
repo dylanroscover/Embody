@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/explainer_scene
 options:
@@ -940,6 +940,8 @@ operators:
     - name: uText
       valuex: =op('text_title').evalTextSize(op('text_title').par.text.eval())[0]
       valuey: =op('text_caption').evalTextSize(op('text_caption').par.text.eval())[0]
+      valuez: 1
+      valuew: 1
     array:
     - name: uCells
       type: vec4

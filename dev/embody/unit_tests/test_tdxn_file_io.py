@@ -1178,6 +1178,37 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertNotIn('tdn_ref', child_entry)
 		self.assertIn('children', child_entry)
 
+	def test_tdxn_ref_shell_omits_custom_pars(self):
+		"""A tdn_ref entry carries no custom_pars: the child's own .tdxn owns them."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.create(textDAT, 'leaf')
+		child.appendCustomPage('Ctl').appendFloat('Speed')
+		child.par.Speed = 3
+		child.tags.add(self.embody.par.Tdxntag.val)
+		child_path = self.embody_ext._buildTDXNRelPath(child)
+		child_abs = self.embody_ext.buildAbsolutePath(child_path)
+		child_abs.parent.mkdir(parents=True, exist_ok=True)
+		self._auto_files.append(str(child_abs))
+		child_result = self.embody.ext.TDXN.ExportNetwork(
+			root_path=child.path, output_file=str(child_abs))
+		self.assertIn('custom_pars', child_result['tdn'])
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, str(child_path), timestamp,
+			False, 1, str(app.build), 'tdn')
+		# protect the child's file the way every real caller does
+		fp = str(Path(self._temp_dir) / 'parent.tdn')
+		self.embody.ext.TDXN.ExportNetwork(
+			root_path=parent.path, output_file=fp,
+			cleanup_protected=[str(child_abs)])
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'child_comp'][0]
+		self.assertIn('tdn_ref', child_entry)
+		self.assertNotIn('custom_pars', child_entry)
+
 	def test_validateTDXNRefs_happy_path(self):
 		"""Valid tdn_refs matching table entries and disk files produce no warnings."""
 		# Create child and add to table with a real file
@@ -1460,3 +1491,36 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertIsNotNone(ref_comp)
 		# Should have no children (tdn_ref = separate file manages them)
 		self.assertLen(list(ref_comp.children), 0)
+
+	def test_import_creates_target_custom_pars_before_children(self):
+		"""The target's custom pars exist before its children are built.
+
+		A tdn_ref shell gets none from its parent file, so this early pass is
+		what an extension or expression inside the COMP finds mid-build.
+		"""
+		target = self.sandbox.create(baseCOMP, 'import_target')
+		doc = {
+			'type': 'baseCOMP',
+			'custom_pars': {'Ctl': [
+				{'name': 'Speed', 'style': 'Float', 'value': 3}]},
+			'operators': [{'name': 'leaf', 'type': 'textDAT'}],
+		}
+		seen = []
+		orig = self.embody.ext.TDXN._createOps
+		def spy(parent, *args, **kwargs):
+			if parent.path == target.path:
+				seen.append([p.name for p in parent.customPars])
+			return orig(parent, *args, **kwargs)
+		self.embody.ext.TDXN._createOps = spy
+		try:
+			result = self.embody.ext.TDXN.ImportNetwork(
+				target_path=target.path, tdn=doc, clear_first=True)
+		finally:
+			try:
+				del self.embody.ext.TDXN._createOps
+			except AttributeError:
+				pass
+		self.assertFalse(result.get('error'), result.get('error'))
+		self.assertTrue(seen, '_createOps never ran on the target')
+		self.assertIn('Speed', seen[0])
+		self.assertEqual(target.par.Speed.eval(), 3)

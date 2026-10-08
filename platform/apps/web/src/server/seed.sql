@@ -30,11 +30,11 @@ DELETE FROM specimen_categories WHERE specimen_id IN (SELECT id FROM specimens W
 DELETE FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil');
 
 -- Purge any prior copy of these real specimens (clean re-run).
-DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala'));
-DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
-DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
-DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
-DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala');
+DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon'));
+DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
+DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
+DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
+DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
 
 -- Tags (deduped across all specimens).
 INSERT OR REPLACE INTO tags (id, name, slug) VALUES
@@ -250,6 +250,28 @@ INSERT OR REPLACE INTO specimens (
     0,
     0,
     0
+  ),
+  (
+    'sp-thermite-and-freon',
+    'thermite-and-freon',
+    'dev-user',
+    'Thermite and Freon',
+    'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.',
+    'simulation',
+    'advanced',
+    '[]',
+    111,
+    'TOP,POP,CHOP',
+    'ver-thermite-and-freon',
+    'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
   );
 
 -- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdxn bytes).
@@ -264,7 +286,8 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-plasma-interference', 'sp-plasma-interference', 1, '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', 34243, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
-  ('ver-mandala', 'sp-mandala', 1, 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 89571, 461, 'scan-mandala', NULL, 'First-party specimen.');
+  ('ver-mandala', 'sp-mandala', 1, 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 89571, 461, 'scan-mandala', NULL, 'First-party specimen.'),
+  ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', 130165, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -277,7 +300,8 @@ INSERT OR REPLACE INTO scans (
   ('scan-plasma-interference', 'ver-plasma-interference', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-mandelbulb-march', 'ver-mandelbulb-march', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-prismatic-strata', 'ver-prismatic-strata', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
-  ('scan-mandala', 'ver-mandala', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
+  ('scan-mandala', 'ver-mandala', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-thermite-and-freon', 'ver-thermite-and-freon', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
 
 -- Specimen <-> tag links.
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
@@ -329,7 +353,14 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
   ('sp-mandala', 'tag-geometry'),
   ('sp-mandala', 'tag-line'),
   ('sp-mandala', 'tag-loop'),
-  ('sp-mandala', 'tag-vj');
+  ('sp-mandala', 'tag-vj'),
+  ('sp-thermite-and-freon', 'tag-simulation'),
+  ('sp-thermite-and-freon', 'tag-glsl'),
+  ('sp-thermite-and-freon', 'tag-feedback'),
+  ('sp-thermite-and-freon', 'tag-pop'),
+  ('sp-thermite-and-freon', 'tag-particles'),
+  ('sp-thermite-and-freon', 'tag-streaks'),
+  ('sp-thermite-and-freon', 'tag-generative');
 
 -- FTS5 keyword mirror (rowid = specimen rowid; dat_text = key_ops).
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
@@ -363,6 +394,10 @@ FROM specimens WHERE id = 'sp-prismatic-strata';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'mandala', 'Serenity and Beauty', 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', 'generative pop glsl mandala geometry line loop vj', 'envoy', 'glslPOP copyPOP circlePOP mergePOP parameterCHOP shuffleCHOP lineMAT constantMAT glslTOP'
 FROM specimens WHERE id = 'sp-mandala';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'thermite-and-freon', 'Thermite and Freon', 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.', 'simulation glsl feedback pop particles streaks generative', 'envoy', 'glslTOP glslmultiTOP feedbackTOP renderselectTOP glslPOP feedbackPOP audioplayCHOP'
+FROM specimens WHERE id = 'sp-thermite-and-freon';
 
 -- Category membership (multi). Seed the join table from each specimen's primary
 -- category so the collection facet filter (which reads specimen_categories) and

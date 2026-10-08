@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/diff_wipe
 options:
@@ -16,7 +16,7 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: 'Transition. 0 and 1 = clear frame. Diff rows sweep in from the left until the frame is covered (0.47 to 0.53: cut the clips underneath here), then sweep out to the right.'
-    value: 0.7810000181
+    value: 0.781
 parameters:
   parentshortcut: Mograph
 flags:

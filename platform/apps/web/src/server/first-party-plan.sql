@@ -254,3 +254,34 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'mandala'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
+SELECT 'thermite-and-freon' AS slug, '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f' AS repo_sha, 130165 AS repo_size,
+  s.id AS specimen_id, u.handle AS author_handle,
+  CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
+  CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
+  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
+  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99' AS repo_thumbnail_key,
+  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
+     AND v.tdn_sha256 = '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+  CASE WHEN s.id IS NULL THEN NULL WHEN (
+      s.title IS NOT 'Thermite and Freon'
+   OR s.description IS NOT 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'advanced'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 111
+   OR s.family_summary IS NOT 'TOP,POP,CHOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  ) THEN 1 ELSE 0 END AS stale
+FROM (SELECT 1) AS one
+LEFT JOIN specimens AS s ON s.slug = 'thermite-and-freon'
+LEFT JOIN users_profile AS u ON u.id = s.author_id
+LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;

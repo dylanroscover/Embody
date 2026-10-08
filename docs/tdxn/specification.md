@@ -122,7 +122,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
 | `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
-| `tdn_ref` | string | No | Only for COMPs with their own TDXN externalization. Relative file path to the child's `.tdxn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
+| `tdn_ref` | string | No | Only for COMPs with their own TDXN externalization. Relative file path to the child's `.tdxn` file. Mutually exclusive with `children`; the entry also carries no `custom_pars`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
 | `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
 
 ### Compact Formatting
@@ -152,6 +152,15 @@ Exports of tracked COMPs stopped writing `exported_at` and `source_file`: both c
 save and nothing read them. The schema therefore no longer requires `exported_at`; readers never
 required either field, so there is no format version bump. A vendored copy of
 `docs/tdxn.schema.yaml` from before this change rejects new tracked files -- refresh it.
+
+### `tdn_ref` entries dropped `custom_pars` (within 2.1)
+
+A parent's `tdn_ref` entry no longer repeats the child's custom parameters; the child's own file
+already carries them at its root (see [COMP References](#comp-references-tdn_ref)). `custom_pars`
+was always optional, so the schema is unchanged and there is no version bump. Older files keep
+their copy and still import. An older Embody reading a new parent file creates the child's custom
+parameters only at the end of the child's import (Phase 9), so an extension inside that child that
+reads them in `__init__` can miss them on that older build.
 
 ### v2.1: widened definition fields
 
@@ -1103,7 +1112,7 @@ This prevents a common problem: if a child COMP is updated and re-exported to it
 
 **What this means in practice:**
 
-- **Export** is unchanged — parent TDXN files still include the full recursive hierarchy in their `children` arrays. This keeps the file self-contained and useful as a portable snapshot.
+- **Export** writes a [`tdn_ref`](#comp-references-tdn_ref) pointer in place of the child's `children`. An `embed_all` export still writes the full recursive hierarchy, for a self-contained portable snapshot.
 - **Import** detects child COMPs with their own TDXN entries and skips their children. A log message is emitted for each skipped child (e.g., `Skipping children of /project/parent/child — has its own TDXN externalization`).
 - **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdxn` file.
 
@@ -1127,6 +1136,8 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 | `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdxn` file. Includes the COMP name in the path for cross-validation. |
 
 **Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
+
+**Placement only**: the entry records how the COMP sits in its parent (name, type, built-in parameters, flags, position, size, color, tags, wires, dock) and carries **no `custom_pars`**. The child's own file holds them at its root, and import [Phase 0](#import-process) creates them before the child's operators, so anything inside the COMP finds them while it builds. A second copy in the parent was overwritten on every import and changed the parent file whenever a value changed.
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdxn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdxn` -> `B.tdxn` -> `A.tdxn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdxn`.
 
@@ -1312,6 +1323,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). Stale entries matching a preserved excluded COMP, and children of nested TDXN/TOX-externalized COMPs, are dropped so their own files stay authoritative. |
+| 0 | **Create target custom parameters** | The target COMP's own root-level `custom_pars` are created and their values set before any child exists, so an extension or expression inside the COMP finds them mid-build. A `tdn_ref` shell gets none from its parent file. Phase 9 re-applies the values. |
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
 | 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
@@ -1326,7 +1338,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 8 | **Restore file links** | File/syncfile parameters are restored on externalized DATs. |
 | 8.5 | **Restore TOX content** | `.tox` content is loaded into `tox_ref` shells so their internals are present immediately after import. |
 | 8.6 | **Restore nested TDXN content** | `tdn_ref` shells are imported from their own `.tdxn` files (recursively, with an ancestor-chain cycle guard) so their internals are present immediately after import. Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDXN COMP exactly once. See [COMP References](#comp-references-tdn_ref). |
-| 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags, and comment are applied — last, so extension reinit triggered by recreating source DATs cannot overwrite them. |
+| 9 | **Apply target COMP properties** | The target COMP's own type, custom and built-in parameters, flags, color, tags, and comment are applied — last, so extension reinit triggered by recreating source DATs cannot overwrite them. |
 | 10 | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP/POP operators this import created are logged with their source, after every wire (the target COMP's own external wires included) is restored. The lock is preserved but the frozen data is not (see [Lock Flag Limitation](#lock-flag-limitation)). Startup reconstruction and the post-save restore log only the count, since nested shells are not filled yet. |
 
 The importer accepts either a full `.tdxn` document (with metadata) or just the `operators` array directly.

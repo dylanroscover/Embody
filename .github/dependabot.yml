@@ -36,5 +36,11 @@ updates:
         update-types:
           - minor
           - patch
+    # typescript held at 6: astro check refuses TS 7.0 and Astro's replacement
+    # checker needs 7.1+ (#150 closed 2026-10-08). Lift once Astro supports TS 7.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: deps

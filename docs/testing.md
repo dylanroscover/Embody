@@ -280,7 +280,7 @@ AI-client connectivity tier, listed separately under
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdxn_reconstruction` | 236 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdxn_file_io` | 100 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdxn_file_io` | 102 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
 | `test_tdxn_helpers` | 120 | TDXN serialization utility functions, locked-content source classification and Switch to TOX |
 | `test_tdxn_export_import` | 65 | Network export/import + storage round-trip |
 | `test_tdxn_crash_safety` | 48 | Atomic writes, backup rotation, validation |

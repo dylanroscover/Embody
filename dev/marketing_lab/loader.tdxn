@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.1'
 build: 1
-generator: Embody/6.2.68
+generator: Embody/6.2.70
 td_build: 099.2025.33230
 network_path: /marketing_lab/loader
 options:
@@ -37,7 +37,7 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: 0 = empty frame, 1 = 100 percent. The bar races to 99, hangs there from 0.7 to 0.92, then finishes. Animate 0 to 1 to play it.
-    value: 0.9929999709
+    value: 0.993
 parameters:
   parentshortcut: Mograph
 flags:
@@ -125,6 +125,8 @@ operators:
     - name: uText
       valuex: =op('text_main').evalTextSize(op('text_main').par.text.eval())[0]
       valuey: =op('text_pct').evalTextSize(op('text_pct').par.text.eval())[0]
+      valuez: 1
+      valuew: 1
   position: [1000, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]

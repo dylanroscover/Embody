@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.2.71
+
+Parent `.tdxn` files stop repeating their externalized children's parameters.
+
+- **Leaner parent files.** When a child COMP has its own `.tdxn`, the parent now records only where it sits (its `tdn_ref`, position and wires), not a second copy of its custom parameters. That copy was overwritten on every import and changed the parent file whenever a value moved; a specimen lab of 15 COMPs drops from 2,368 lines of child entries to 72.
+- **Custom parameters exist before a COMP's contents are built.** Import now creates a COMP's own custom parameters first, so an extension or expression inside finds them while it builds. Older files import unchanged. +2 tests.
+
 ## v6.2.69
 
 A session stays with its own TouchDesigner, or stops.
