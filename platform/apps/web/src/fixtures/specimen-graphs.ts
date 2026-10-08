@@ -3083,6 +3083,1118 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       }
     ]
+  },
+  "thermite-and-freon": {
+    "format": "tdxn",
+    "version": "2.1",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          8000,
+          -800
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "glsl_finish"
+        ]
+      },
+      {
+        "name": "blur_heat",
+        "type": "blurTOP",
+        "position": [
+          5200,
+          -2400
+        ],
+        "inputs": [
+          "glsl_heat"
+        ]
+      },
+      {
+        "name": "glsl_heat",
+        "type": "glslmultiTOP",
+        "position": [
+          4800,
+          -2400
+        ],
+        "inputs": [
+          "null_life",
+          "null_pigment",
+          "null_streaks"
+        ]
+      },
+      {
+        "name": "glsl_life",
+        "type": "glslmultiTOP",
+        "position": [
+          4000,
+          -2000
+        ],
+        "inputs": [
+          "feedback_life",
+          "rselect_flow",
+          "glsl_canopy"
+        ]
+      },
+      {
+        "name": "null_life",
+        "type": "nullTOP",
+        "position": [
+          4400,
+          -2000
+        ],
+        "inputs": [
+          "glsl_life"
+        ]
+      },
+      {
+        "name": "audio_beds",
+        "type": "audioplayCHOP",
+        "position": [
+          2000,
+          -4600
+        ],
+        "inputs": [
+          null,
+          "const_bed_levels"
+        ]
+      },
+      {
+        "name": "blur_bloom",
+        "type": "blurTOP",
+        "position": [
+          6800,
+          -1200
+        ],
+        "inputs": [
+          "glsl_bright"
+        ]
+      },
+      {
+        "name": "geo_sparks",
+        "type": "geometryCOMP",
+        "position": [
+          2400,
+          -4000
+        ],
+        "operators": [
+          {
+            "name": "grid_spark",
+            "type": "gridPOP"
+          },
+          {
+            "name": "glsl_sparks",
+            "type": "glslPOP",
+            "position": [
+              1200,
+              0
+            ],
+            "inputs": [
+              "feedback_sparks"
+            ]
+          },
+          {
+            "name": "null_sparks",
+            "type": "nullPOP",
+            "position": [
+              1600,
+              0
+            ],
+            "inputs": [
+              "glsl_sparks"
+            ]
+          },
+          {
+            "name": "feedback_sparks",
+            "type": "feedbackPOP",
+            "position": [
+              800,
+              0
+            ],
+            "inputs": [
+              "glsl_spark_seed"
+            ]
+          },
+          {
+            "name": "glsl_spark_seed",
+            "type": "glslPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "grid_spark"
+            ]
+          },
+          {
+            "name": "glsl_sparks_info",
+            "type": "infoDAT",
+            "position": [
+              1275,
+              -120
+            ]
+          },
+          {
+            "name": "glsl_sparks_compute",
+            "type": "textDAT",
+            "position": [
+              1125,
+              -120
+            ]
+          },
+          {
+            "name": "glsl_spark_seed_info",
+            "type": "infoDAT",
+            "position": [
+              475,
+              -120
+            ]
+          },
+          {
+            "name": "glsl_spark_seed_compute",
+            "type": "textDAT",
+            "position": [
+              325,
+              -120
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_drops",
+        "type": "glslTOP",
+        "position": [
+          2400,
+          -3600
+        ],
+        "inputs": [
+          "feedback_drops",
+          "glsl_orbit",
+          "rselect_flow"
+        ]
+      },
+      {
+        "name": "glsl_orbit",
+        "type": "glslTOP",
+        "position": [
+          400,
+          -400
+        ],
+        "inputs": [
+          "feedback_orbit"
+        ]
+      },
+      {
+        "name": "glsl_spray",
+        "type": "glslTOP",
+        "position": [
+          2800,
+          -3200
+        ],
+        "inputs": [
+          "feedback_spray",
+          "glsl_drops",
+          "glsl_orbit"
+        ]
+      },
+      {
+        "name": "glsl_water",
+        "type": "glslTOP",
+        "position": [
+          2800,
+          -3600
+        ],
+        "inputs": [
+          "glsl_drops"
+        ]
+      },
+      {
+        "name": "null_state",
+        "type": "nullTOP",
+        "position": [
+          2000,
+          -1000
+        ],
+        "inputs": [
+          "glsl_project"
+        ]
+      },
+      {
+        "name": "null_water",
+        "type": "nullTOP",
+        "position": [
+          3200,
+          -3600
+        ],
+        "inputs": [
+          "glsl_water"
+        ]
+      },
+      {
+        "name": "glsl_bright",
+        "type": "glslTOP",
+        "position": [
+          6400,
+          -1200
+        ],
+        "inputs": [
+          "glsl_compose"
+        ]
+      },
+      {
+        "name": "glsl_canopy",
+        "type": "glslTOP",
+        "position": [
+          3600,
+          -400
+        ],
+        "inputs": [
+          "glsl_orbit"
+        ]
+      },
+      {
+        "name": "glsl_finish",
+        "type": "glslmultiTOP",
+        "position": [
+          7600,
+          -800
+        ],
+        "inputs": [
+          "glsl_compose",
+          "blur_heat",
+          "blur_bloom",
+          "blur_halation"
+        ]
+      },
+      {
+        "name": "glsl_ground",
+        "type": "glslTOP",
+        "position": [
+          400,
+          0
+        ],
+        "inputs": [
+          "glsl_terrain"
+        ]
+      },
+      {
+        "name": "glsl_stream",
+        "type": "glslTOP",
+        "position": [
+          0,
+          -600
+        ]
+      },
+      {
+        "name": "topto_drops",
+        "type": "toptoCHOP",
+        "position": [
+          800,
+          -5200
+        ]
+      },
+      {
+        "name": "topto_orbit",
+        "type": "toptoCHOP",
+        "position": [
+          800,
+          -4800
+        ]
+      },
+      {
+        "name": "audio_events",
+        "type": "audioplayCHOP",
+        "position": [
+          2000,
+          -5000
+        ]
+      },
+      {
+        "name": "blur_streaks",
+        "type": "blurTOP",
+        "position": [
+          4400,
+          -4000
+        ],
+        "inputs": [
+          "null_streaks"
+        ]
+      },
+      {
+        "name": "cam_sediment",
+        "type": "cameraCOMP",
+        "position": [
+          2400,
+          -2800
+        ],
+        "size": [
+          160,
+          130
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "operators": [
+          {
+            "name": "file1",
+            "type": "fileinPOP",
+            "size": [
+              130,
+              90
+            ],
+            "color": [
+              0.67,
+              0.67,
+              0.67
+            ]
+          }
+        ]
+      },
+      {
+        "name": "geo_sediment",
+        "type": "geometryCOMP",
+        "position": [
+          2400,
+          -2400
+        ],
+        "operators": [
+          {
+            "name": "glsl_seed",
+            "type": "glslPOP",
+            "position": [
+              400,
+              0
+            ],
+            "inputs": [
+              "grid_seed"
+            ]
+          },
+          {
+            "name": "grid_seed",
+            "type": "gridPOP"
+          },
+          {
+            "name": "glsl_grains",
+            "type": "glslPOP",
+            "position": [
+              1200,
+              0
+            ],
+            "inputs": [
+              "feedback_grains"
+            ]
+          },
+          {
+            "name": "null_grains",
+            "type": "nullPOP",
+            "position": [
+              1600,
+              0
+            ],
+            "inputs": [
+              "glsl_grains"
+            ]
+          },
+          {
+            "name": "glsl_seed_info",
+            "type": "infoDAT",
+            "position": [
+              475,
+              -120
+            ]
+          },
+          {
+            "name": "feedback_grains",
+            "type": "feedbackPOP",
+            "position": [
+              800,
+              0
+            ],
+            "inputs": [
+              "glsl_seed"
+            ]
+          },
+          {
+            "name": "glsl_grains_info",
+            "type": "infoDAT",
+            "position": [
+              1275,
+              -120
+            ]
+          },
+          {
+            "name": "glsl_seed_compute",
+            "type": "textDAT",
+            "position": [
+              325,
+              -120
+            ]
+          },
+          {
+            "name": "glsl_grains_compute",
+            "type": "textDAT",
+            "position": [
+              1125,
+              -120
+            ]
+          }
+        ]
+      },
+      {
+        "name": "glsl_compose",
+        "type": "glslmultiTOP",
+        "position": [
+          6000,
+          -800
+        ],
+        "inputs": [
+          "glsl_terrain",
+          "glsl_ground",
+          "null_pigment",
+          "rselect_flow",
+          "render_sediment",
+          "null_life",
+          "glsl_canopy",
+          "null_water",
+          "blur_heat",
+          "null_streaks",
+          "blur_streaks",
+          "glsl_orbit",
+          "glsl_spray"
+        ]
+      },
+      {
+        "name": "glsl_pigment",
+        "type": "glslmultiTOP",
+        "position": [
+          3200,
+          -1600
+        ],
+        "inputs": [
+          "feedback_pigment",
+          "rselect_flow",
+          "glsl_terrain",
+          "render_sediment",
+          "null_state",
+          "glsl_orbit"
+        ]
+      },
+      {
+        "name": "glsl_project",
+        "type": "glslmultiTOP",
+        "position": [
+          1600,
+          -800
+        ],
+        "inputs": [
+          "glsl_pressure",
+          "glsl_terrain",
+          "feedback_pigment"
+        ]
+      },
+      {
+        "name": "glsl_streaks",
+        "type": "glslTOP",
+        "position": [
+          3600,
+          -4000
+        ],
+        "inputs": [
+          "feedback_streaks",
+          "render_sparks",
+          "rselect_flow"
+        ]
+      },
+      {
+        "name": "glsl_terrain",
+        "type": "glslTOP"
+      },
+      {
+        "name": "null_pigment",
+        "type": "nullTOP",
+        "position": [
+          3600,
+          -1600
+        ],
+        "inputs": [
+          "glsl_pigment"
+        ]
+      },
+      {
+        "name": "null_streaks",
+        "type": "nullTOP",
+        "position": [
+          4000,
+          -4000
+        ],
+        "inputs": [
+          "glsl_streaks"
+        ]
+      },
+      {
+        "name": "rselect_flow",
+        "type": "renderselectTOP",
+        "position": [
+          2000,
+          -600
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "sound_events",
+        "type": "executeDAT",
+        "position": [
+          2400,
+          -4800
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "blur_halation",
+        "type": "blurTOP",
+        "position": [
+          7200,
+          -1200
+        ],
+        "inputs": [
+          "blur_bloom"
+        ]
+      },
+      {
+        "name": "feedback_flow",
+        "type": "feedbackTOP",
+        "position": [
+          400,
+          -1000
+        ],
+        "inputs": [
+          "const_flow_seed"
+        ]
+      },
+      {
+        "name": "feedback_life",
+        "type": "feedbackTOP",
+        "position": [
+          400,
+          -2000
+        ],
+        "inputs": [
+          "const_life_seed"
+        ]
+      },
+      {
+        "name": "glsl_pressure",
+        "type": "glslTOP",
+        "position": [
+          1200,
+          -800
+        ],
+        "inputs": [
+          "glsl_flow_step",
+          "glsl_terrain"
+        ]
+      },
+      {
+        "name": "render_sparks",
+        "type": "renderTOP",
+        "position": [
+          2800,
+          -4000
+        ]
+      },
+      {
+        "name": "feedback_drops",
+        "type": "feedbackTOP",
+        "position": [
+          400,
+          -3600
+        ],
+        "inputs": [
+          "const_drops_seed"
+        ]
+      },
+      {
+        "name": "feedback_orbit",
+        "type": "feedbackTOP",
+        "position": [
+          0,
+          -400
+        ],
+        "inputs": [
+          "const_orbit_seed"
+        ]
+      },
+      {
+        "name": "feedback_spray",
+        "type": "feedbackTOP",
+        "position": [
+          400,
+          -3200
+        ],
+        "inputs": [
+          "const_spray_seed"
+        ]
+      },
+      {
+        "name": "glsl_flow_step",
+        "type": "glslmultiTOP",
+        "position": [
+          800,
+          -800
+        ],
+        "inputs": [
+          "feedback_flow",
+          "glsl_stream",
+          "glsl_terrain",
+          "feedback_pigment",
+          "glsl_orbit"
+        ]
+      },
+      {
+        "name": "glsl_heat_info",
+        "type": "infoDAT",
+        "position": [
+          4875,
+          -2520
+        ]
+      },
+      {
+        "name": "glsl_life_info",
+        "type": "infoDAT",
+        "position": [
+          4075,
+          -2120
+        ]
+      },
+      {
+        "name": "table_sfx_beds",
+        "type": "tableDAT",
+        "position": [
+          1200,
+          -4600
+        ]
+      },
+      {
+        "name": "const_flow_seed",
+        "type": "constantTOP",
+        "position": [
+          0,
+          -1000
+        ]
+      },
+      {
+        "name": "const_life_seed",
+        "type": "constantTOP",
+        "position": [
+          0,
+          -2000
+        ]
+      },
+      {
+        "name": "glsl_drops_info",
+        "type": "infoDAT",
+        "position": [
+          2475,
+          -3720
+        ]
+      },
+      {
+        "name": "glsl_heat_pixel",
+        "type": "textDAT",
+        "position": [
+          4725,
+          -2520
+        ]
+      },
+      {
+        "name": "glsl_life_pixel",
+        "type": "textDAT",
+        "position": [
+          3925,
+          -2120
+        ]
+      },
+      {
+        "name": "glsl_orbit_info",
+        "type": "infoDAT",
+        "position": [
+          475,
+          -520
+        ]
+      },
+      {
+        "name": "glsl_spray_info",
+        "type": "infoDAT",
+        "position": [
+          2875,
+          -3320
+        ]
+      },
+      {
+        "name": "glsl_water_info",
+        "type": "infoDAT",
+        "position": [
+          2875,
+          -3720
+        ]
+      },
+      {
+        "name": "render_sediment",
+        "type": "renderTOP",
+        "position": [
+          2800,
+          -2400
+        ]
+      },
+      {
+        "name": "sprite_sediment",
+        "type": "pointspriteMAT",
+        "position": [
+          2000,
+          -2400
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "const_bed_levels",
+        "type": "constantCHOP",
+        "position": [
+          1600,
+          -4800
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "const_drops_seed",
+        "type": "constantTOP",
+        "position": [
+          0,
+          -3600
+        ]
+      },
+      {
+        "name": "const_orbit_seed",
+        "type": "constantTOP",
+        "position": [
+          -400,
+          -400
+        ]
+      },
+      {
+        "name": "const_spray_seed",
+        "type": "constantTOP",
+        "position": [
+          0,
+          -3200
+        ]
+      },
+      {
+        "name": "feedback_pigment",
+        "type": "feedbackTOP",
+        "position": [
+          400,
+          -1600
+        ],
+        "inputs": [
+          "const_pigment_seed"
+        ]
+      },
+      {
+        "name": "feedback_streaks",
+        "type": "feedbackTOP",
+        "position": [
+          3200,
+          -4200
+        ],
+        "inputs": [
+          "render_sparks"
+        ]
+      },
+      {
+        "name": "glsl_bright_info",
+        "type": "infoDAT",
+        "position": [
+          6475,
+          -1320
+        ]
+      },
+      {
+        "name": "glsl_canopy_info",
+        "type": "infoDAT",
+        "position": [
+          3675,
+          -520
+        ]
+      },
+      {
+        "name": "glsl_drops_pixel",
+        "type": "textDAT",
+        "position": [
+          2325,
+          -3720
+        ]
+      },
+      {
+        "name": "glsl_finish_info",
+        "type": "infoDAT",
+        "position": [
+          7525,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_ground_info",
+        "type": "infoDAT",
+        "position": [
+          475,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_orbit_pixel",
+        "type": "textDAT",
+        "position": [
+          325,
+          -520
+        ]
+      },
+      {
+        "name": "glsl_spray_pixel",
+        "type": "textDAT",
+        "position": [
+          2725,
+          -3320
+        ]
+      },
+      {
+        "name": "glsl_stream_info",
+        "type": "infoDAT",
+        "position": [
+          75,
+          -720
+        ]
+      },
+      {
+        "name": "glsl_water_pixel",
+        "type": "textDAT",
+        "position": [
+          2725,
+          -3720
+        ]
+      },
+      {
+        "name": "table_sfx_events",
+        "type": "tableDAT",
+        "position": [
+          1200,
+          -5000
+        ]
+      },
+      {
+        "name": "glsl_bright_pixel",
+        "type": "textDAT",
+        "position": [
+          6325,
+          -1320
+        ]
+      },
+      {
+        "name": "glsl_canopy_pixel",
+        "type": "textDAT",
+        "position": [
+          3525,
+          -520
+        ]
+      },
+      {
+        "name": "glsl_compose_info",
+        "type": "infoDAT",
+        "position": [
+          5925,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_finish_pixel",
+        "type": "textDAT",
+        "position": [
+          7675,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_ground_pixel",
+        "type": "textDAT",
+        "position": [
+          325,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_pigment_info",
+        "type": "infoDAT",
+        "position": [
+          3275,
+          -1720
+        ]
+      },
+      {
+        "name": "glsl_project_info",
+        "type": "infoDAT",
+        "position": [
+          1675,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_streaks_info",
+        "type": "infoDAT",
+        "position": [
+          3675,
+          -4120
+        ]
+      },
+      {
+        "name": "glsl_stream_pixel",
+        "type": "textDAT",
+        "position": [
+          -75,
+          -720
+        ]
+      },
+      {
+        "name": "glsl_terrain_info",
+        "type": "infoDAT",
+        "position": [
+          75,
+          -120
+        ]
+      },
+      {
+        "name": "const_pigment_seed",
+        "type": "constantTOP",
+        "position": [
+          0,
+          -1600
+        ]
+      },
+      {
+        "name": "glsl_compose_pixel",
+        "type": "textDAT",
+        "position": [
+          6075,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_pigment_pixel",
+        "type": "textDAT",
+        "position": [
+          3125,
+          -1720
+        ]
+      },
+      {
+        "name": "glsl_pressure_info",
+        "type": "infoDAT",
+        "position": [
+          1275,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_project_pixel",
+        "type": "textDAT",
+        "position": [
+          1525,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_streaks_pixel",
+        "type": "textDAT",
+        "position": [
+          3525,
+          -4120
+        ]
+      },
+      {
+        "name": "glsl_terrain_pixel",
+        "type": "textDAT",
+        "position": [
+          -75,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_flow_step_info",
+        "type": "infoDAT",
+        "position": [
+          875,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_pressure_pixel",
+        "type": "textDAT",
+        "position": [
+          1125,
+          -920
+        ]
+      },
+      {
+        "name": "glsl_flow_step_pixel",
+        "type": "textDAT",
+        "position": [
+          725,
+          -920
+        ]
+      }
+    ]
   }
 };
 

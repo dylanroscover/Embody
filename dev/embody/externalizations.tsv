@@ -77,7 +77,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /specimen_lab/crosspoint_matrix/glsl_bloom_pixel	text	glsl	specimen_lab/crosspoint_matrix/glsl_bloom_pixel.glsl	2026-06-20 20:36:02 UTC				2550	-120	0.9000,0.3000,0.4000
 /specimen_lab/crosspoint_matrix/glsl_bloom_compute	text	glsl	specimen_lab/crosspoint_matrix/glsl_bloom_compute.glsl	2026-06-20 20:36:02 UTC				2400	-120	0.9000,0.3000,0.4000
 /specimen_lab/crosspoint_matrix	base	tdxn	specimen_lab/crosspoint_matrix.tdxn	2026-09-07 09:16:56 UTC		2	099.2025.33070	800	0	0.3000,0.5000,0.9000
-/specimen_lab	base	tdxn	specimen_lab.tdxn	2026-09-18 07:53:43 UTC		10	099.2025.33230	400	-300	0.3000,0.5000,0.9000
+/specimen_lab	base	tdxn	specimen_lab.tdxn	2026-10-08 19:59:09 UTC		10	099.2025.33230	400	-300	0.3000,0.5000,0.9000
 /perform	window	tdxn	perform.tdxn	2026-09-07 09:16:49 UTC		4	099.2025.33070	-200	50	0.3000,0.5000,0.9000
 /embody/unit_tests/test_update_sync	text	py	embody/unit_tests/test_update_sync.py	2026-06-20 20:36:02 UTC				2600	-1000	0.9000,0.3000,0.4000
 /embody/unit_tests/test_tdxn_sequences	text	py	embody/unit_tests/test_tdxn_sequences.py	2026-09-06 18:02:44 UTC				800	-3000	0.9000,0.3000,0.4000
@@ -351,3 +351,4 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /marketing_lab/explainer	base	tdxn	marketing_lab/explainer.tdxn	2026-10-03 21:09:47 UTC		1	099.2025.33230	1200	-3400	0.3000,0.5000,0.9000
 /marketing_lab/explainer_scene	base	tdxn	marketing_lab/explainer_scene.tdxn	2026-10-03 21:08:50 UTC		1	099.2025.33230	1600	-3400	0.3000,0.5000,0.9000
 /marketing_lab/caption_card	base	tdxn	marketing_lab/caption_card.tdxn	2026-10-03 21:10:53 UTC		1	099.2025.33230	2000	-3400	0.3000,0.5000,0.9000
+/specimen_lab/thermite_and_freon	base	tdxn	specimen_lab/thermite_and_freon.tdxn	2026-10-08 20:02:51 UTC		21	099.2025.33230	1600	-800	0.3000,0.5000,0.9000

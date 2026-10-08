@@ -179,5 +179,32 @@
       "constantMAT",
       "glslTOP"
     ]
+  },
+  {
+    "slug": "thermite-and-freon",
+    "name": "Thermite and Freon",
+    "category": "simulation",
+    "level": "advanced",
+    "description": "Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.",
+    "tags": [
+      "simulation",
+      "glsl",
+      "feedback",
+      "pop",
+      "particles",
+      "streaks",
+      "generative"
+    ],
+    "requires": [],
+    "operator_count": 111,
+    "key_ops": [
+      "glslTOP",
+      "glslmultiTOP",
+      "feedbackTOP",
+      "renderselectTOP",
+      "glslPOP",
+      "feedbackPOP",
+      "audioplayCHOP"
+    ]
   }
 ]

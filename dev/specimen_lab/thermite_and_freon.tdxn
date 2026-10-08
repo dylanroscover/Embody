@@ -1,0 +1,3221 @@
+format: tdxn
+version: '2.1'
+build: 21
+generator: Embody/6.2.70
+td_build: 099.2025.33230
+network_path: /specimen_lab/thermite_and_freon
+options:
+  include_dat_content: true
+  include_storage: false
+type_defaults:
+  audioplayCHOP:
+    parameters:
+      autoexportroot: =parent()
+      file: =app.configFolder+'/Audio/Notify.aiff'
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  blurTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  constantTOP:
+    parameters:
+      alpha: 0
+      colorb: 0
+      colorg: 0
+      colorr: 0
+      outputresolution: custom
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  feedbackPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  feedbackTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  geometryCOMP:
+    parameters:
+      material: sprite_sediment
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  glslPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslTOP:
+    parameters:
+      premultrgbbyalpha: false
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslmultiTOP:
+    parameters:
+      premultrgbbyalpha: false
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  gridPOP:
+    parameters:
+      surftype: points
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  nullPOP:
+    flags:
+    - display
+    - render
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  nullTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  renderTOP:
+    parameters:
+      antialias: aa1
+      camera: cam_sediment
+      format: rgba16float
+      lights: ''
+      resolutionh: =parent.Specimen.par.Resolution
+      resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  tableDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  toptoCHOP:
+    parameters:
+      autoexportroot: =parent()
+      outputcolorspace: passthrough
+      rate: =me.time.rate
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  World:
+  - name: Collapse
+    style: Float
+    startSection: true
+    default: 0.035
+    max: 0.3
+    clampMin: true
+    normMax: 0.3
+    help: How fast the world caves in toward the drain, in octaves per second. Structure is born at the edges and swallowed at the drain.
+  - name: Twist
+    style: Float
+    default: 0.25
+    min: -3.0
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMin: -3.0
+    normMax: 3.0
+    help: 'Rotation per octave of collapse: the world spirals into the drain along a logarithmic spiral. Negative twists the other way.'
+  - name: Warp
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Domain-warp distortion of the ground. Higher folds and smears the landforms.
+  - name: Morph
+    style: Float
+    default: 1
+    max: 5.0
+    clampMin: true
+    normMax: 5.0
+    help: How fast the warp evolves in place, so the land keeps reshaping as it falls in.
+  Flow:
+  - name: Tidelevel
+    style: Float
+    label: Tide Level
+    startSection: true
+    default: 0.31
+    max: 0.6
+    clampMin: true
+    normMax: 0.6
+    help: Mean water level in terrain height units. Raise it to flood more of the drainage network.
+    value: 0.4600000083
+  - name: Tiderange
+    style: Float
+    label: Tide Range
+    default: 0.05
+    max: 0.2
+    clampMin: true
+    normMax: 0.2
+    help: How far the tide rises and falls around the mean level. 0 holds the water still.
+    value: 0.0900000036
+  - name: Tideperiod
+    style: Float
+    label: Tide Period
+    default: 48
+    min: 5.0
+    max: 300.0
+    clampMin: true
+    clampMax: true
+    normMin: 5.0
+    normMax: 300.0
+    help: Seconds for one full tide cycle (rise and fall).
+  - name: Runoff
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Strength of the downhill flow that drains the land into the channels. Carries the grains and silt.
+    value: 1.7999999523
+  - name: Swirl
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Curl-noise stirring of the open water. Higher values break the plumes into finer eddies.
+    value: 1.1399999857
+  - name: Jets
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: How hard the channels discharge into the lagoon, setting off vortices at the mouths.
+    value: 1.6599999666
+  - name: Vorticity
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: 'Vorticity confinement: restores the small eddies numerical diffusion smears away.'
+  - name: Carve
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: How deeply grain trails engrave the terrain. The engraved channels pull more flow, so the drainage tree reinforces itself.
+  Pigment:
+  - name: Silt
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Pale sediment picked up by fast runoff and carried into the water as plumes.
+  - name: Trails
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: How strongly the moving grains leave lines on the ground. These lines are the visible drainage tree.
+  - name: Spores
+    style: Float
+    startSection: true
+    default: 2
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: How fast new organism colonies seed in the water. Runoff grains also carry spores in at the channel mouths.
+  - name: Rdsteps
+    style: Int
+    label: RD Steps
+    default: 8
+    min: 1.0
+    max: 24.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 24.0
+    help: Reaction-diffusion iterations per frame. More makes the organism grow and divide faster (and costs GPU time).
+  - name: Patternscale
+    style: Float
+    label: Pattern Scale
+    default: 1
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+    help: Size of the reaction-diffusion features, in output pixels per diffusion step.
+  - name: Feed
+    style: Float
+    label: Feed Bias
+    min: -0.015
+    max: 0.015
+    clampMin: true
+    clampMax: true
+    normMin: -0.015
+    normMax: 0.015
+    help: Offset added to the Gray-Scott feed rate everywhere. Positive grows denser labyrinths, negative thins it to spots.
+  - name: Kill
+    style: Float
+    label: Kill Bias
+    min: -0.006
+    max: 0.006
+    clampMin: true
+    clampMax: true
+    normMin: -0.006
+    normMax: 0.006
+    help: Offset added to the Gray-Scott kill rate everywhere. Small changes swing the pattern between coral, worms and dividing spots.
+  - name: Sizerange
+    style: Float
+    label: Size Range
+    default: 1
+    max: 2.0
+    clampMin: true
+    normMax: 2.0
+    help: How far feature sizes vary across the water within each layer. 0 gives each layer a single width.
+  - name: Flares
+    style: Float
+    default: 1
+    max: 4.0
+    clampMin: true
+    normMax: 2.5
+    help: How far the flares can reach out from the sun, relative to its radius. 0 keeps everything in the core.
+  - name: Sunsize
+    style: Float
+    label: Large Sun
+    startSection: true
+    default: 0.255
+    min: 0.03
+    max: 0.3
+    clampMin: true
+    clampMax: true
+    normMin: 0.05
+    normMax: 0.3
+    help: Radius of the large sun as a fraction of the frame. The flares reach out in multiples of it.
+  - name: Smallsun
+    style: Float
+    label: Small Sun
+    default: 0.21
+    min: 0.15
+    clampMin: true
+    clampMax: true
+    normMin: 0.15
+    help: Radius of the small sun relative to the large one.
+  - name: Watersize
+    style: Float
+    label: Water Size
+    startSection: true
+    default: 0.75
+    min: 0.2
+    max: 2.5
+    clampMin: true
+    clampMax: true
+    normMin: 0.3
+    normMax: 2.0
+    help: Scale of every zero-g water drop and spray droplet. At 1 the largest glob is two thirds of the large sun's radius and the finest droplets about a hundredth of that.
+  - name: Waterpull
+    style: Float
+    label: Water Pull
+    default: 1
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: How strongly the water falls back toward the large sun. 0 lets flung drops drift free.
+  - name: Waterfling
+    style: Float
+    label: Water Fling
+    default: 1
+    max: 5.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: How often drops are flung off the large sun. 0 keeps them clinging until the suns collide.
+  - name: Waterspray
+    style: Float
+    label: Water Spray
+    default: 1
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: 'How much spray the water throws when it is hit: the small sun ploughing through it, the suns colliding, drops flung off or slamming together. 0 turns the spray off.'
+  - name: Separation
+    style: Float
+    default: 1
+    min: 0.4
+    max: 2.0
+    clampMin: true
+    normMin: 0.4
+    normMax: 2.0
+    help: Scale of the distance the two suns keep. Lower keeps them touching more of the time.
+  - name: Orbitspeed
+    style: Float
+    label: Orbit Speed
+    default: 2.2
+    max: 4.0
+    clampMin: true
+    normMax: 4.0
+    help: Speed of the two suns' dance around each other.
+  - name: Bursts
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Strength of the slow colour explosions released while the suns touch.
+  - name: Streaks
+    style: Float
+    default: 2
+    min: 0.03
+    max: 6.0
+    clampMin: true
+    normMin: 0.03
+    normMax: 4.0
+    help: How long the spark trails linger, as the time each colour channel takes to fade. Higher keeps long cooling lines behind the embers; low gives a short comet flick. Trails cool lemon to gold to orange to vermilion.
+  Look:
+  - name: Exposure
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Overall exposure before tone mapping.
+  - name: Sunazimuth
+    style: Float
+    label: Sun Azimuth
+    default: 142
+    max: 360.0
+    clampMin: true
+    clampMax: true
+    normMax: 360.0
+    help: Sun direction in degrees, counterclockwise from the right edge of the frame.
+  - name: Sunelevation
+    style: Float
+    label: Sun Elevation
+    default: 28
+    min: 5.0
+    max: 85.0
+    clampMin: true
+    clampMax: true
+    normMin: 5.0
+    normMax: 85.0
+    help: Sun height above the ground in degrees. Low sun means long shadows and strong relief.
+  - name: Relief
+    style: Float
+    default: 0.06
+    max: 0.2
+    clampMin: true
+    normMax: 0.2
+    help: Vertical exaggeration of the terrain for lighting and shadows.
+  - name: Vignette
+    style: Float
+    default: 0.35
+    clampMin: true
+    clampMax: true
+    help: Darkening of the outer third of the frame.
+  - name: Grain
+    style: Float
+    default: 0.07
+    max: 0.2
+    clampMin: true
+    normMax: 0.2
+    help: Film grain amount, applied last.
+  - name: Glow
+    style: Float
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Ember glow bleeding off the hot organism.
+  - name: Melt
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: How strongly the heat refracts and sags everything around the hot masses.
+  - name: Shimmer
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Fast heat-haze shimmer over the hot areas.
+  - name: Halation
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: 'Film halation: the tight hot bloom and the wide red bleed that bright light leaves in the dark.'
+  - name: Imperfections
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: 'Strength of the film and lens flaws: gate weave, flicker, chromatic fringing, edge softness, dust and the light leak.'
+  Sim:
+  - name: Resolution
+    style: Int
+    startSection: true
+    default: 2048
+    min: 256.0
+    max: 4096.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output height in pixels; the width is height x Aspect.
+    value: 2160
+  - name: Aspect
+    style: Float
+    default: 0.8
+    min: 0.4
+    max: 2.5
+    clampMin: true
+    clampMax: true
+    normMin: 0.5625
+    normMax: 1.7778
+    help: 'Frame width divided by height: 1 is square, 0.8 is Instagram''s 4:5 portrait, 0.5625 is 9:16. Resolution sets the height. Every shape stays round at any aspect; the frame widens or narrows around the suns.'
+  - name: Simresolution
+    style: Int
+    label: Sim Resolution
+    default: 384
+    min: 128.0
+    max: 1024.0
+    clampMin: true
+    clampMax: true
+    normMin: 128.0
+    normMax: 1024.0
+    help: Square resolution of the velocity solver. The flow is smooth, so it runs well below the output resolution.
+  - name: Pressureiterations
+    style: Int
+    label: Pressure Iterations
+    default: 16
+    min: 4.0
+    max: 120.0
+    clampMin: true
+    clampMax: true
+    normMin: 4.0
+    normMax: 120.0
+    help: Jacobi iterations per frame for the pressure solve. More keeps the water closer to incompressible.
+  Sound:
+  - name: Sound
+    style: Toggle
+    startSection: true
+    default: true
+    help: 'Play the ElevenLabs sound library: the loops, plus collisions, sparks and moon passes as they happen.'
+  - name: Volume
+    style: Float
+    default: 0.7
+    clampMin: true
+    help: Master volume of all sound.
+  - name: Beds
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    normMax: 2.0
+    help: Level of the three continuous loops (sun drone, plasma crackle, magnetic hum), relative to the master volume.
+  - name: Events
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    normMax: 2.0
+    help: Level of the event one-shots (collisions, sparks, moon passes), relative to the master volume.
+  - name: Watersfx
+    style: Float
+    label: Water
+    default: 0.5
+    clampMin: true
+    clampMax: true
+    help: Level of the water sounds (soft sloshes when a drop is shoved, a faint spray patter on the big hits), relative to the event level.
+parameters:
+  parentshortcut: Specimen
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+storage:
+  embed_dats_in_tdn: true
+  embed_storage_in_tdn: false
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  position: [8000, -800]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_finish
+- name: blur_heat
+  type: blurTOP
+  parameters:
+    size: 40
+  position: [5200, -2400]
+  inputs:
+  - glsl_heat
+- name: glsl_heat
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_heat_pixel
+    outputresolution: custom
+    resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect / 4
+    resolutionh: =parent.Specimen.par.Resolution // 4
+    format: rgba16float
+  sequences:
+    vec:
+    - {}
+    - name: uWin
+      valuex: 0
+      valuey: 0
+  position: [4800, -2400]
+  inputs:
+  - null_life
+  - null_pigment
+  - null_streaks
+- name: glsl_life
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_life_pixel
+    inputextenduv: hold
+    npasses: =parent.Specimen.par.Rdsteps + 1
+    format: rg32float
+  sequences:
+    vec:
+    - name: uLife
+      valuex: =parent.Specimen.par.Spores * 1.5
+      valuey: 140
+      valuez: =parent.Specimen.par.Sizerange * 0.45
+      valuew: =1.0 + 1.6 * parent.Specimen.par.Flares
+    - name: uRD
+      valuex: =parent.Specimen.par.Feed
+      valuey: =parent.Specimen.par.Kill
+      valuez: =parent.Specimen.par.Patternscale
+      valuew: 0
+    - name: uTime
+      valuex: =absTime.seconds
+      valuey: 0
+      valuez: 0
+      valuew: 0
+    - name: uWin
+      valuex: 0
+      valuey: 0
+      valuew: 0
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [4000, -2000]
+  inputs:
+  - feedback_life
+  - rselect_flow
+  - glsl_canopy
+- name: null_life
+  type: nullTOP
+  position: [4400, -2000]
+  inputs:
+  - glsl_life
+- name: audio_beds
+  type: audioplayCHOP
+  parameters:
+    datlist: table_sfx_beds
+  position: [2000, -4600]
+  inputs:
+  - null
+  - const_bed_levels
+- name: blur_bloom
+  type: blurTOP
+  parameters:
+    size: 5
+  position: [6800, -1200]
+  inputs:
+  - glsl_bright
+- name: geo_sparks
+  type: geometryCOMP
+  position: [2400, -4000]
+  children:
+  - name: grid_spark
+    type: gridPOP
+    parameters:
+      cols: 128
+      rows: 128
+  - name: glsl_sparks
+    type: glslPOP
+    parameters:
+      computedat: glsl_sparks_compute
+      outputattrs: P N Tex Age Color PointScale
+    sequences:
+      vec:
+      - name: uSpark
+        type: vec4
+        valuex: =parent.Specimen.par.Bursts
+        valuey: =absTime.seconds
+        valuez: =absTime.frame
+        valuew: =parent.Specimen.par.Aspect
+      sampler:
+      - name: sFlow
+        top: ../rselect_flow
+      - name: sOrbit
+        top: ../glsl_orbit
+        filter: nearest
+    position: [1200, 0]
+    inputs:
+    - feedback_sparks
+  - name: null_sparks
+    type: nullPOP
+    position: [1600, 0]
+    inputs:
+    - glsl_sparks
+  - name: feedback_sparks
+    type: feedbackPOP
+    parameters:
+      targetpop: null_sparks
+    position: [800, 0]
+    inputs:
+    - glsl_spark_seed
+  - name: glsl_spark_seed
+    type: glslPOP
+    parameters:
+      computedat: glsl_spark_seed_compute
+      outputattrs: P N Tex Age Color PointScale
+    sequences:
+      attr:
+      - customname: Age
+      - name: color
+      - name: pointscale
+    position: [400, 0]
+    inputs:
+    - grid_spark
+  - name: glsl_sparks_info
+    type: infoDAT
+    parameters:
+      op: glsl_sparks
+    position: [1275, -120]
+    dock: glsl_sparks
+    dat_read_only: true
+  - name: glsl_sparks_compute
+    type: textDAT
+    position: [1125, -120]
+    dock: glsl_sparks
+    dat_content: |
+      // electric light: sparks fired where the two suns collide, into each impact's own direction and
+      // spread (glsl_orbit), steering along the simulation's streamlines with a jagged sideways kick. Each spark
+      // rolls a heavily skewed reach: most burst out about a tenth of the frame and slow like embers, a rare few
+      // fly further -- faster, longer lived, less damped -- dimming as they go. Each spark is a chain of K consecutive points that all
+      // carry the same state -- Tex.xy position and N.xy velocity per frame (world units: height 1, width = aspect,
+      // uSpark.w), N.z reach, Age -- and
+      // draw themselves along the segment travelled this frame, so the streak buffer gets a line, not dots.
+      // sFlow: xy flow (uv per frame). sOrbit: texel 0 sun positions, 2 radii/touch/envelope, 3 direction/spread.
+      // uSpark: x strength, y seconds, z frame, w aspect
+      const uint K = 8u;
+
+      float hash1(uint n) {
+          n = (n << 13U) ^ n;
+          n = n * (n * n * 15731U + 789221U) + 1376312589U;
+          return float(n & 0x7fffffffU) / float(0x7fffffff);
+      }
+
+      void main() {
+          const uint id = TDIndex();
+          if (id >= TDNumElements())
+              return;
+          uint s = id / K;                     // the spark this point belongs to: every hash keys on it
+          uint k = id % K;
+          uint fr = uint(uSpark.z);
+          vec2 pos = TDIn_Tex().xy;
+          vec3 nv = TDIn_N();
+          vec2 vel = nv.xy;
+          float reach = nv.z;
+          float age = TDIn_Age();
+          vec2 prev = pos;
+          vec2 asp = vec2(uSpark.w, 1.0);
+
+          if (age < 0.0) {
+              vec4 sp = texelFetch(sOrbit, ivec2(0, 0), 0);
+              vec4 rd = texelFetch(sOrbit, ivec2(2, 0), 0);
+              vec4 ev = texelFetch(sOrbit, ivec2(3, 0), 0);
+              if (hash1(s * 7919U + fr * 104729U) >= uSpark.x * rd.w * 0.02) {
+                  P[id] = vec3(-9.0, -9.0, 0.0);
+                  N[id] = vec3(0.0);
+                  Tex[id] = vec3(0.0);
+                  Age[id] = -1.0;
+                  Color[id] = vec4(0.0);
+                  PointScale[id] = 1.0;
+                  return;
+              }
+              vec2 contact = mix(sp.xy, sp.zw, rd.x / (rd.x + rd.y));
+              float a = ev.x + (hash1(s * 31U + fr * 17U) - 0.5) * ev.y * 6.2831853;
+              vec2 dir = vec2(cos(a), sin(a));
+              reach = pow(hash1(s * 211U + fr * 3U), 5.0);
+              pos = contact + dir * 0.012;
+              prev = pos;
+              vel = dir * (0.0035 + 0.0025 * hash1(s * 53U + fr * 7U) + 0.006 * reach);
+              age = 0.0;
+          } else {
+              age += 1.0 / 60.0;
+              vec4 F = texture(sFlow, pos / asp);
+              float sp = length(vel);
+              if (length(F.xy) > 1e-7)
+                  vel = mix(vel, normalize(F.xy * asp) * sp, 0.02 * (1.0 - 0.6 * reach));   // long shots hold their line
+              // electricity seeks the water: steer up the wetness gradient, race along the channels,
+              // lose energy fast over dry land
+              const float E = 0.004;
+              vec2 gw = vec2(texture(sFlow, (pos + vec2(E, 0.0)) / asp).z - texture(sFlow, (pos - vec2(E, 0.0)) / asp).z,
+                             texture(sFlow, (pos + vec2(0.0, E)) / asp).z - texture(sFlow, (pos - vec2(0.0, E)) / asp).z);
+              vel += gw * sp * 0.03;
+              // strong drag: most sparks burst out about a tenth of the frame and slow like embers
+              vel *= mix(0.94, 0.985, reach) * mix(0.995, 1.0, F.z);
+              prev = pos;
+              vec2 side = vec2(-vel.y, vel.x) / max(sp, 1e-6);
+              pos += vel + side * (hash1(s * 13U + fr * 7919U) - 0.5) * 0.0011;   // electric: a jagged kick
+          }
+          float life = 0.6 + 0.8 * hash1(s * 97U + 11U) + 3.0 * reach;
+          bool dead = age > life || pos.x < -0.05 || pos.y < -0.05 || pos.x > asp.x + 0.05 || pos.y > 1.05;
+          float a = dead ? 0.0 : (1.0 - smoothstep(life * 0.6, life, age)) * mix(1.0, 0.5, age / life);
+          P[id] = vec3(mix(prev, pos, (float(k) + 0.5) / float(K)) - vec2(0.5 * asp.x, 0.5), 0.0);   // centred for the ortho camera
+          N[id] = vec3(vel, reach);
+          Tex[id] = vec3(pos, 0.0);
+          Age[id] = dead ? -1.0 : age;
+          Color[id] = vec4(a, a, a, a);
+          PointScale[id] = 1.0;
+      }
+    dat_content_format: text
+  - name: glsl_spark_seed_info
+    type: infoDAT
+    parameters:
+      op: glsl_spark_seed
+    position: [475, -120]
+    dock: glsl_spark_seed
+    dat_read_only: true
+  - name: glsl_spark_seed_compute
+    type: textDAT
+    position: [325, -120]
+    dock: glsl_spark_seed
+    dat_content: |
+      // every spark starts dead (Age < 0), waiting for the suns to touch (static: cooks once)
+      void main() {
+          const uint id = TDIndex();
+          if (id >= TDNumElements())
+              return;
+          P[id] = vec3(-9.0, -9.0, 0.0);
+          N[id] = vec3(0.0);
+          Tex[id] = vec3(0.0);
+          Age[id] = -1.0;
+          Color[id] = vec4(0.0);
+          PointScale[id] = 1.0;
+      }
+    dat_content_format: text
+- name: glsl_drops
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_drops_pixel
+    computedat: glsl_drops_compute
+    outputresolution: custom
+    resolutionw: 80
+    resolutionh: 3
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uDrops
+      valuex: =absTime.seconds
+      valuey: =parent.Specimen.par.Watersize
+      valuez: =parent.Specimen.par.Waterpull
+      valuew: =parent.Specimen.par.Waterfling
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [2400, -3600]
+  inputs:
+  - feedback_drops
+  - glsl_orbit
+  - rselect_flow
+- name: glsl_orbit
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_orbit_pixel
+    outputresolution: custom
+    resolutionw: 6
+    resolutionh: 1
+    inputfiltertype: nearest
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uOrbit
+      valuex: =absTime.seconds * parent.Specimen.par.Orbitspeed
+      valuey: =parent.Specimen.par.Orbitspeed
+      valuez: =parent.Specimen.par.Separation
+      valuew: =parent.Specimen.par.Sunsize
+    - name: uOrbit2
+      valuex: =parent.Specimen.par.Smallsun
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [400, -400]
+  inputs:
+  - feedback_orbit
+- name: glsl_spray
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_spray_pixel
+    computedat: glsl_spray_compute
+    outputresolution: custom
+    resolutionw: =96 * parent.Specimen.par.Aspect + 1
+    resolutionh: 192
+    inputfiltertype: nearest
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uSpray
+      valuex: =absTime.seconds
+      valuey: =parent.Specimen.par.Waterpull
+      valuez: =parent.Specimen.par.Waterspray
+      valuew: =parent.Specimen.par.Watersize
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [2800, -3200]
+  inputs:
+  - feedback_spray
+  - glsl_drops
+  - glsl_orbit
+- name: glsl_water
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_water_pixel
+    computedat: glsl_water_compute
+    outputresolution: custom
+    resolutionw: =1024 * parent.Specimen.par.Aspect
+    resolutionh: 1024
+    format: rgba16float
+  sequences:
+    vec:
+    - {}
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [2800, -3600]
+  inputs:
+  - glsl_drops
+- name: null_state
+  type: nullTOP
+  position: [2000, -1000]
+  inputs:
+  - glsl_project
+- name: null_water
+  type: nullTOP
+  position: [3200, -3600]
+  inputs:
+  - glsl_water
+- name: glsl_bright
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bright_pixel
+    outputresolution: half
+    format: rgba16float
+  position: [6400, -1200]
+  inputs:
+  - glsl_compose
+- name: glsl_canopy
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_canopy_pixel
+    outputresolution: custom
+    resolutionw: =512 * parent.Specimen.par.Aspect
+    resolutionh: 512
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uTime
+      valuex: =absTime.seconds
+    - name: uDisc
+      valuex: =parent.Specimen.par.Sunsize
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [3600, -400]
+  inputs:
+  - glsl_orbit
+- name: glsl_finish
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_finish_pixel
+    format: rgba8fixed
+  sequences:
+    vec:
+    - name: uFinish
+      valuex: =parent.Specimen.par.Exposure
+      valuey: =parent.Specimen.par.Vignette
+      valuez: =parent.Specimen.par.Grain
+      valuew: =absTime.seconds
+    - name: uHeat
+      valuex: =parent.Specimen.par.Melt
+      valuey: =parent.Specimen.par.Shimmer
+      valuez: =parent.Specimen.par.Glow
+      valuew: 1
+    - name: uFilm
+      valuex: =absTime.frame
+      valuey: =parent.Specimen.par.Halation
+      valuez: =parent.Specimen.par.Imperfections
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [7600, -800]
+  inputs:
+  - glsl_compose
+  - blur_heat
+  - blur_bloom
+  - blur_halation
+- name: glsl_ground
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_ground_pixel
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uSun
+      valuex: =parent.Specimen.par.Sunazimuth
+      valuey: =parent.Specimen.par.Sunelevation
+      valuez: =parent.Specimen.par.Relief
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [400, 0]
+  inputs:
+  - glsl_terrain
+- name: glsl_stream
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_stream_pixel
+    outputresolution: custom
+    resolutionw: =parent.Specimen.par.Simresolution * parent.Specimen.par.Aspect
+    resolutionh: =parent.Specimen.par.Simresolution
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uStream
+      valuex: =absTime.seconds
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [0, -600]
+- name: topto_drops
+  type: toptoCHOP
+  parameters:
+    top: glsl_drops
+    vstart: 0.8333333333
+  position: [800, -5200]
+- name: topto_orbit
+  type: toptoCHOP
+  parameters:
+    top: glsl_orbit
+  position: [800, -4800]
+- name: audio_events
+  type: audioplayCHOP
+  parameters:
+    datlist: table_sfx_events
+  flags:
+  - viewer
+  position: [2000, -5000]
+- name: blur_streaks
+  type: blurTOP
+  parameters:
+    size: 10
+    outputresolution: quarter
+  position: [4400, -4000]
+  inputs:
+  - null_streaks
+- name: cam_sediment
+  type: cameraCOMP
+  parameters:
+    projection: ortho
+    orthowidth: =parent.Specimen.par.Aspect
+  position: [2400, -2800]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: file1
+    type: fileinPOP
+    parameters:
+      file: =app.samplesFolder + '/Geo/defcam.tog'
+    flags:
+    - display
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+- name: geo_sediment
+  type: geometryCOMP
+  position: [2400, -2400]
+  children:
+  - name: glsl_seed
+    type: glslPOP
+    parameters:
+      computedat: glsl_seed_compute
+      outputattrs: P Age Color PointScale
+    sequences:
+      attr:
+      - customname: Age
+      - name: color
+      - name: pointscale
+      vec:
+      - {}
+      - name: uAspect
+        type: vec4
+        valuex: =parent.Specimen.par.Aspect
+    position: [400, 0]
+    inputs:
+    - grid_seed
+  - name: grid_seed
+    type: gridPOP
+    parameters:
+      cols: 512
+      rows: 512
+  - name: glsl_grains
+    type: glslPOP
+    parameters:
+      computedat: glsl_grains_compute
+      outputattrs: P N Age Color PointScale
+    sequences:
+      vec:
+      - name: uGrain
+        type: vec4
+        valuex: 1
+        valuey: =parent.Specimen.par.Trails * 0.3
+        valuez: =absTime.seconds
+        valuew: =absTime.frame
+      - name: uAspect
+        type: vec4
+        valuex: =parent.Specimen.par.Aspect
+      sampler:
+      - name: sFlow
+        top: ../rselect_flow
+    position: [1200, 0]
+    inputs:
+    - feedback_grains
+  - name: null_grains
+    type: nullPOP
+    position: [1600, 0]
+    inputs:
+    - glsl_grains
+  - name: glsl_seed_info
+    type: infoDAT
+    parameters:
+      op: glsl_seed
+    position: [475, -120]
+    dock: glsl_seed
+    dat_read_only: true
+  - name: feedback_grains
+    type: feedbackPOP
+    parameters:
+      targetpop: null_grains
+    position: [800, 0]
+    inputs:
+    - glsl_seed
+  - name: glsl_grains_info
+    type: infoDAT
+    parameters:
+      op: glsl_grains
+    position: [1275, -120]
+    dock: glsl_grains
+    dat_read_only: true
+  - name: glsl_seed_compute
+    type: textDAT
+    position: [325, -120]
+    dock: glsl_seed
+    dat_content: |
+      // scatter the grains over the frame with de-synced ages (static: cooks once)
+      // creates Age, Color, PointScale for the feedback loop downstream
+      float hash1(uint n) {
+          n = (n << 13U) ^ n;
+          n = n * (n * n * 15731U + 789221U) + 1376312589U;
+          return float(n & 0x7fffffffU) / float(0x7fffffff);
+      }
+
+      void main() {
+          const uint id = TDIndex();
+          if (id >= TDNumElements())
+              return;
+          P[id] = vec3((hash1(id * 3U) - 0.5) * uAspect.x, hash1(id * 3U + 1U) - 0.5, 0.0);   // world units, centred
+          Age[id] = hash1(id * 3U + 2U) * 20.0;
+          Color[id] = vec4(0.0);
+          PointScale[id] = 1.0;
+      }
+    dat_content_format: text
+  - name: glsl_grains_compute
+    type: textDAT
+    position: [1125, -120]
+    dock: glsl_grains
+    dat_content: |
+      // grains ride the flow field with a little inertia: downhill on land, carried by the currents in the
+      // water. They converge into the valleys, and their trails are the drainage tree.
+      // sFlow: xy = velocity (uv per frame), z = wet, w = speed. uGrain: x speed scale, y brightness, z seconds, w frame
+      // P is world units (height 1, width = uAspect.x) centred on the frame for the ortho camera
+      float hash1(uint n) {
+          n = (n << 13U) ^ n;
+          n = n * (n * n * 15731U + 789221U) + 1376312589U;
+          return float(n & 0x7fffffffU) / float(0x7fffffff);
+      }
+
+      void main() {
+          const uint id = TDIndex();
+          if (id >= TDNumElements())
+              return;
+          uint fr = uint(uGrain.w);
+          vec3 p = TDIn_P();
+          vec3 vel = TDIn_N();          // N carries the grain velocity (world units per frame) between frames
+          vec2 asp = vec2(uAspect.x, 1.0), org = vec2(0.5 * uAspect.x, 0.5);
+          float age = TDIn_Age() + 1.0 / 60.0;
+          float life = 6.0 + 14.0 * hash1(id * 7U + 3U);
+
+          vec4 F = texture(sFlow, (p.xy + org) / asp);
+          vec2 jitter = vec2(hash1(id * 13U + fr * 7919U), hash1(id * 17U + fr * 104729U)) - 0.5;
+          // inertia lets a grain roll through the small dips instead of pooling in them
+          vel.xy = mix(vel.xy, F.xy * asp * uGrain.x, 0.12) + jitter * 0.00012;
+          p.xy += vel.xy;
+
+          vec2 uv = (p.xy + org) / asp;
+          bool drained = length((uv - vec2(0.34, 0.31)) * asp) < 0.012;
+          if (age > life || drained || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+              p.xy = vec2(hash1(id * 5U + fr * 31U) * asp.x, hash1(id * 11U + fr * 57U)) - org;
+              vel = vec3(0.0);
+              age = 0.0;
+          }
+          float fade = smoothstep(0.0, 1.0, age) * (1.0 - smoothstep(life - 1.5, life, age));
+          float a = fade * uGrain.y;
+          P[id] = p;
+          N[id] = vec3(vel.xy, 0.0);
+          Age[id] = age;
+          Color[id] = vec4(a, a, a, a);
+          PointScale[id] = 1.0;
+      }
+    dat_content_format: text
+- name: glsl_compose
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_compose_pixel
+    outputresolution: custom
+    resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect
+    resolutionh: =parent.Specimen.par.Resolution
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uSun
+      valuex: =parent.Specimen.par.Sunazimuth
+      valuey: =parent.Specimen.par.Sunelevation
+      valuez: =parent.Specimen.par.Relief
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+      valuey: =parent.Specimen.par.Tiderange
+      valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
+      valuew: =parent.Specimen.par.Carve * 0.05
+    - name: uWin
+      valuex: 0
+      valuey: 0
+    - name: uTime
+      valuex: =absTime.seconds
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [6000, -800]
+  inputs:
+  - glsl_terrain
+  - glsl_ground
+  - null_pigment
+  - rselect_flow
+  - render_sediment
+  - null_life
+  - glsl_canopy
+  - null_water
+  - blur_heat
+  - null_streaks
+  - blur_streaks
+  - glsl_orbit
+  - glsl_spray
+- name: glsl_pigment
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_pigment_pixel
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uPig
+      valuex: =parent.Specimen.par.Silt * 0.01
+      valuey: =parent.Specimen.par.Trails * 0.08
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+      valuey: =parent.Specimen.par.Tiderange
+      valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
+      valuew: 0
+    - name: uWorld
+      valuex: 0
+      valuey: =parent.Specimen.par.Twist
+      valuez: =parent.Specimen.par.Collapse
+      valuew: 0
+    - name: uBurst
+      valuex: =parent.Specimen.par.Bursts
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [3200, -1600]
+  inputs:
+  - feedback_pigment
+  - rselect_flow
+  - glsl_terrain
+  - render_sediment
+  - null_state
+  - glsl_orbit
+- name: glsl_project
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_project_pixel
+    numcolorbufs: 2
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+      valuey: =parent.Specimen.par.Tiderange
+      valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
+      valuew: =parent.Specimen.par.Carve * 0.05
+    - name: uRun
+      valuex: =parent.Specimen.par.Runoff * 0.015
+      valuey: 0.6
+      valuez: 0
+      valuew: 0
+    - name: uWorld
+      valuex: 0
+      valuey: =parent.Specimen.par.Twist
+      valuez: =parent.Specimen.par.Collapse
+      valuew: 0
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [1600, -800]
+  inputs:
+  - glsl_pressure
+  - glsl_terrain
+  - feedback_pigment
+- name: glsl_streaks
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_streaks_pixel
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uStreak
+      valuex: =math.exp(-0.06 / parent.Specimen.par.Streaks)
+      valuey: =math.exp(-0.15 / parent.Specimen.par.Streaks)
+      valuez: =math.exp(-0.40 / parent.Specimen.par.Streaks)
+  position: [3600, -4000]
+  inputs:
+  - feedback_streaks
+  - render_sparks
+  - rselect_flow
+- name: glsl_terrain
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_terrain_pixel
+    outputresolution: custom
+    resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect / 2
+    resolutionh: =parent.Specimen.par.Resolution // 2
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uWorld
+      valuex: =absTime.seconds * parent.Specimen.par.Collapse
+      valuey: =parent.Specimen.par.Twist
+      valuez: =parent.Specimen.par.Warp
+      valuew: =absTime.seconds * parent.Specimen.par.Morph * 0.05
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+- name: null_pigment
+  type: nullTOP
+  position: [3600, -1600]
+  inputs:
+  - glsl_pigment
+- name: null_streaks
+  type: nullTOP
+  position: [4000, -4000]
+  inputs:
+  - glsl_streaks
+- name: rselect_flow
+  type: renderselectTOP
+  parameters:
+    top: glsl_project
+    bufferindex: 1
+    format: rgba32float
+  position: [2000, -600]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: sound_events
+  type: executeDAT
+  parameters:
+    fromop: =parent()
+    framestart: true
+  position: [2400, -4800]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dat_content: |
+    """Sound for the thermite_and_freon specimen.
+
+    Reads the suns' state from glsl_orbit through topto_orbit (one frame late, no GPU stall) and plays the
+    ElevenLabs library listed in table_sfx_beds / table_sfx_events. The three loops play continuously, with
+    levels that follow the dance through const_bed_levels (audio_beds' volume input). Collisions, sparks and
+    moon passes fire one-shots on audio_events, panned to where they happen, and the zero-g water answers
+    hits with soft sloshes and spray (topto_drops reads the drops' splash row). The loops are (re)started
+    whenever audio_beds reports silence, so a reload or a toggle never doubles them.
+    """
+    import math
+    import random
+
+    # event table rows: impacts 0-3, sparks 4-7, moon passes 8-10, water pushes 11-14, water spray 15-17
+    _IMPACT, _SPARKS, _MOON, _PUSH, _SPRAY = (0, 4), (4, 8), (8, 11), (11, 15), (15, 18)
+    _state = {'impacts': None, 'last_hit': -1.0, 'moons': {}, 'last_push': -1.0, 'last_spray': -1.0}
+    # offline render: while `capture` is a list the sound is logged there instead of played (the device stays
+    # silent), so a non-realtime render can mix a frame-exact soundtrack from the same files:
+    # ('beds', seconds, level0, level1, level2) every frame, ('event', seconds, row, volume, pan, delay) per one-shot
+    capture = None
+
+
+    def _play(player, row: int, **kw) -> None:
+        if capture is not None:
+            capture.append(('event', absTime.seconds, row, kw.get('volume', 1.0), kw.get('pan', 0.5), kw.get('delaySeconds', 0.0)))
+        else:
+            player.play(row, **kw)
+
+
+    def onFrameStart(frame: int) -> None:
+        comp = parent.Specimen
+        aspect = float(comp.par.Aspect.eval())    # positions are world units: x runs 0..aspect
+        o = op('topto_orbit')
+        if o.numSamples < 6:
+            return
+        on = bool(comp.par.Sound.eval())
+        master = float(comp.par.Volume.eval()) if on else 0.0
+        r, g, b, a = o['r'], o['g'], o['b'], o['a']
+        big, small = (r[0], g[0]), (b[0], a[0])
+        r1, r2, env = r[2], g[2], a[2]
+        impacts = b[3]
+        dist = math.hypot(big[0] - small[0], big[1] - small[1])
+        close = 1.0 - min(max((dist - (r1 + r2)) / 0.25, 0.0), 1.0)
+
+        # loops: the drone swells with each explosion, the crackle with heat and closeness, the hum only as the
+        # suns draw together
+        beds = float(comp.par.Beds.eval()) * master
+        lv = op('const_bed_levels').par
+        levels = (beds * (0.55 + 0.25 * env), beds * (0.2 + 0.6 * env + 0.2 * close), beds * (0.05 + 0.6 * close * close))
+        if capture is not None:
+            capture.append(('beds', absTime.seconds) + levels)
+            levels = (0.0, 0.0, 0.0)
+        lv.const0value, lv.const1value, lv.const2value = levels
+        audio_beds = op('audio_beds')
+        # the players run outside TouchDesigner (they keep going when this COMP stops cooking), so Sound off stops them
+        if not on and (audio_beds['state'][0] > 0.5 or op('audio_events')['state'][0] > 0.5):
+            audio_beds.stop()
+            op('audio_events').stop()
+        if on and audio_beds['state'][0] < 0.5:
+            for i in range(3):
+                audio_beds.play(i, loop=True, fadeSeconds=2.0)
+
+        events = op('audio_events')
+        ev = float(comp.par.Events.eval()) * master
+        now = absTime.seconds
+        if _state['impacts'] is None:
+            _state['impacts'] = impacts
+        if impacts > _state['impacts'] and on and now - _state['last_hit'] > 0.25:
+            _state['last_hit'] = now
+            cx = big[0] + (small[0] - big[0]) * r1 / (r1 + r2)
+            pan = min(max(cx / aspect, 0.0), 1.0)
+            _play(events, random.randrange(*_IMPACT), volume=ev * (0.45 + 0.55 * env), pan=pan)
+            _play(events, random.randrange(*_SPARKS), volume=ev * 0.55, pan=pan, delaySeconds=random.uniform(0.05, 0.2))
+        _state['impacts'] = impacts
+
+        # moon passes: a soft whoosh as each moon swings through its closest point to the large sun
+        moons = ((r[4], g[4]), (b[4], a[4]), (r[5], g[5]))
+        for k, (mx, my) in enumerate(moons):
+            d = math.hypot(mx - big[0], my - big[1])
+            prev = _state['moons'].get(k)
+            if prev is not None:
+                d0, falling, last = prev
+                rising = d > d0
+                if falling and rising and on and d < r1 * 2.3 and now - last > 3.0:
+                    _play(events, random.randrange(*_MOON), volume=ev * 0.35, pan=min(max(mx / aspect, 0.0), 1.0))
+                    last = now
+                _state['moons'][k] = (d, d < d0, last)
+            else:
+                _state['moons'][k] = (d, False, -10.0)
+
+        # water: a soft slosh when a drop is shoved hard, a faint spray patter on the big hits -- kept well under
+        # the fire. r = how hard each drop was hit this frame, a = its x
+        w = op('topto_drops')
+        if on and w.numSamples >= 80:
+            hits, xs = w['r'].vals, w['a'].vals
+            k = max(range(len(hits)), key=hits.__getitem__)
+            wl = ev * float(comp.par.Watersfx.eval())
+            pan = min(max(xs[k] / aspect, 0.0), 1.0)
+            # the drops jostle all the time; only the hardest ~2% of hits (flings, collisions, the small sun
+            # ploughing in) are worth a sound
+            if hits[k] > 0.3 and now - _state['last_push'] > 1.5:
+                _state['last_push'] = now
+                _play(events, random.randrange(*_PUSH), volume=wl * min(0.4 + 1.5 * (hits[k] - 0.3), 1.0) * 0.45, pan=pan)
+            if sum(hits) > 1.0 and now - _state['last_spray'] > 3.0:
+                _state['last_spray'] = now
+                _play(events, random.randrange(*_SPRAY), volume=wl * 0.3, pan=pan, delaySeconds=random.uniform(0.05, 0.15))
+        return
+  dat_content_format: text
+- name: blur_halation
+  type: blurTOP
+  parameters:
+    size: 26
+    outputresolution: half
+  position: [7200, -1200]
+  inputs:
+  - blur_bloom
+- name: feedback_flow
+  type: feedbackTOP
+  parameters:
+    top: null_state
+  position: [400, -1000]
+  inputs:
+  - const_flow_seed
+- name: feedback_life
+  type: feedbackTOP
+  parameters:
+    top: null_life
+  position: [400, -2000]
+  inputs:
+  - const_life_seed
+- name: glsl_pressure
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_pressure_pixel
+    npasses: =parent.Specimen.par.Pressureiterations
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+      valuey: =parent.Specimen.par.Tiderange
+      valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
+      valuew: =parent.Specimen.par.Carve * 0.05
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [1200, -800]
+  inputs:
+  - glsl_flow_step
+  - glsl_terrain
+- name: render_sparks
+  type: renderTOP
+  parameters:
+    geometry: geo_sparks
+  position: [2800, -4000]
+- name: feedback_drops
+  type: feedbackTOP
+  parameters:
+    top: glsl_drops
+  position: [400, -3600]
+  inputs:
+  - const_drops_seed
+- name: feedback_orbit
+  type: feedbackTOP
+  parameters:
+    top: glsl_orbit
+  position: [0, -400]
+  inputs:
+  - const_orbit_seed
+- name: feedback_spray
+  type: feedbackTOP
+  parameters:
+    top: glsl_spray
+  position: [400, -3200]
+  inputs:
+  - const_spray_seed
+- name: glsl_flow_step
+  type: glslmultiTOP
+  parameters:
+    pixeldat: glsl_flow_step_pixel
+    format: rgba32float
+  sequences:
+    vec:
+    - name: uFlow
+      valuex: =parent.Specimen.par.Swirl * 0.00004
+      valuey: =parent.Specimen.par.Jets * 0.00006
+      valuez: 0.99
+      valuew: =parent.Specimen.par.Vorticity * 2.0
+    - name: uTide
+      valuex: =parent.Specimen.par.Tidelevel
+      valuey: =parent.Specimen.par.Tiderange
+      valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
+      valuew: =parent.Specimen.par.Carve * 0.05
+    - name: uStir
+      valuex: 0.08
+    - name: uAspect
+      valuex: =parent.Specimen.par.Aspect
+  position: [800, -800]
+  inputs:
+  - feedback_flow
+  - glsl_stream
+  - glsl_terrain
+  - feedback_pigment
+  - glsl_orbit
+- name: glsl_heat_info
+  type: infoDAT
+  parameters:
+    op: glsl_heat
+  position: [4875, -2520]
+  dock: glsl_heat
+  dat_read_only: true
+- name: glsl_life_info
+  type: infoDAT
+  parameters:
+    op: glsl_life
+  position: [4075, -2120]
+  dock: glsl_life
+  dat_read_only: true
+- name: table_sfx_beds
+  type: tableDAT
+  position: [1200, -4600]
+  dat_content:
+  - - specimen_lab/thermite_and_freon_audio/bed_sun_drone.mp3
+  - - specimen_lab/thermite_and_freon_audio/bed_plasma_crackle.mp3
+  - - specimen_lab/thermite_and_freon_audio/bed_magnetic_hum.mp3
+  dat_content_format: table
+- name: const_flow_seed
+  type: constantTOP
+  parameters:
+    resolutionw: =parent.Specimen.par.Simresolution * parent.Specimen.par.Aspect
+    resolutionh: =parent.Specimen.par.Simresolution
+    format: rgba32float
+  position: [0, -1000]
+- name: const_life_seed
+  type: constantTOP
+  parameters:
+    resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect
+    resolutionh: =parent.Specimen.par.Resolution
+    format: rg32float
+  position: [0, -2000]
+- name: glsl_drops_info
+  type: infoDAT
+  parameters:
+    op: glsl_drops
+  position: [2475, -3720]
+  dock: glsl_drops
+  dat_read_only: true
+- name: glsl_heat_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [4725, -2520]
+  dock: glsl_heat
+  dat_content: |
+    // heat: how molten each spot is -- the speck layer plus the substrate it has eaten.
+    // blur_heat spreads it; the compose scorches with it, the finish glows and melts with it.
+    // in0: specks (r V, g eaten; see uWin), in1: pigment (g bursts), in2: light streaks
+    uniform vec4 uWin;    // the speck field's window: xy frame-uv origin, z size (matches glsl_life)
+    layout(location = 0) out vec4 fragColor;
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 lw = (uv - uWin.xy) / uWin.z;
+        float inWin = step(0.0, lw.x) * step(lw.x, 1.0) * step(0.0, lw.y) * step(lw.y, 1.0);
+        vec2 a = texture(sTD2DInputs[0], lw).rg * inWin;
+        float h = smoothstep(0.05, 0.3, a.r) + 0.15 * a.g;
+        h += 0.6 * texture(sTD2DInputs[1], uv).g;          // the colour explosions burn too
+        vec3 stk = texture(sTD2DInputs[2], uv).rgb;
+        h += 0.3 * max(stk.r, max(stk.g, stk.b));         // and the light streaks
+        fragColor = vec4(h, h, h, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_life_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [3925, -2120]
+  dock: glsl_life
+  dat_content: |
+    // the sun's flares: tiny filaments, sparks and granulation at full output density (uWin can window the field
+    // around the sun; 0,0,1 covers the whole frame).
+    // The core (canopy a < 1) is held molten and the Gray-Scott feed falls off with distance from it, so the
+    // only pattern that can grow is fingers erupting from the rim: flares, which the flow then drags into arcs
+    // and loops. Inside the core it boils as granulation.
+    // pass 0 advects with the flow (sharp Catmull-Rom backtrace), holds the core and sparks the rim;
+    // passes 1..N react and diffuse.
+    // r = V, g = substrate depletion S (U = 1 - S, so the black seed is clean substrate)
+    // in0: previous state, then the previous pass; in1: flow (xy uv/frame); in2: canopy (r limb activity,
+    // g / a distance from the small / large sun in its own radii, b log2 pattern scale)
+    uniform vec4 uLife;   // x rim sparks, y spark frequency, z scale-map amplitude, w flare reach (core radii)
+    uniform vec4 uRD;     // x feed bias, y kill bias, z stencil stretch (texels)
+    uniform vec4 uTime;   // x seconds
+    uniform vec4 uWin;    // xy frame-uv origin of this field, z its size in frame uv (0,0,1 = whole frame)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    vec2 catmullRom(vec2 uv, vec2 size) {
+        vec2 sp = uv * size;
+        vec2 p1 = floor(sp - 0.5) + 0.5;
+        vec2 f = sp - p1;
+        vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+        vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+        vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+        vec2 w3 = f * f * (-0.5 + 0.5 * f);
+        vec2 w12 = w1 + w2;
+        vec2 p0 = (p1 - 1.0) / size, p3 = (p1 + 2.0) / size, p12 = (p1 + w2 / w12) / size;
+        return (texture(sTD2DInputs[0], vec2(p0.x, p0.y)) * w0.x * w0.y
+              + texture(sTD2DInputs[0], vec2(p12.x, p0.y)) * w12.x * w0.y
+              + texture(sTD2DInputs[0], vec2(p3.x, p0.y)) * w3.x * w0.y
+              + texture(sTD2DInputs[0], vec2(p0.x, p12.y)) * w0.x * w12.y
+              + texture(sTD2DInputs[0], vec2(p12.x, p12.y)) * w12.x * w12.y
+              + texture(sTD2DInputs[0], vec2(p3.x, p12.y)) * w3.x * w12.y
+              + texture(sTD2DInputs[0], vec2(p0.x, p3.y)) * w0.x * w3.y
+              + texture(sTD2DInputs[0], vec2(p12.x, p3.y)) * w12.x * w3.y
+              + texture(sTD2DInputs[0], vec2(p3.x, p3.y)) * w3.x * w3.y).rg;
+    }
+
+    void main() {
+        vec2 uv = vUV.st;                                  // this field's own coordinates
+        vec2 g = uWin.xy + uv * uWin.z;                    // the same point in frame uv
+        vec2 gw = g * vec2(uAspect.x, 1.0);                // and in world units, for isotropic noise
+        vec2 size = uTD2DInfos[0].res.zw;
+        vec2 tx = uTD2DInfos[0].res.xy;
+        vec4 cn = texture(sTD2DInputs[2], g);
+        float rho = min(cn.a, cn.g);                       // the nearer sun, in its own radii
+        float reach = smoothstep(1.0, uLife.w, rho);       // 0 at the rim, 1 at the end of the flare zone
+
+        if (uTDPass == 0) {
+            vec2 adv = clamp(catmullRom(uv - texture(sTD2DInputs[1], g).xy / uWin.z, size), 0.0, 1.0);
+            // the core is re-lit through boiling cells, not a flat fill, so the reaction-diffusion has
+            // structure to work on and the surface reads as granulation
+            float cells = smoothstep(0.1, 0.45, TDSimplexNoise(vec3(gw * uLife.y * 0.9, uTime.x * 0.8)));
+            float core = (1.0 - smoothstep(0.75, 1.0, rho)) * cells;
+            float rim = smoothstep(0.85, 1.05, rho) * (1.0 - smoothstep(1.05, 1.9, rho)) * cn.r;   // active regions only
+            float spark = smoothstep(0.86 - 0.03 * uLife.x, 0.9 - 0.03 * uLife.x,
+                                     TDSimplexNoise(vec3(gw * uLife.y, uTime.x * 1.5))) * rim;
+            float V = max(adv.r, 0.38 * max(core, spark));
+            float S = max(adv.g, 0.55 * max(core, spark));
+            // nothing survives past the reach, nor at the edge of a windowed field
+            vec2 wd = min(uv, 1.0 - uv);
+            float fade = (1.0 - smoothstep(uLife.w, uLife.w + 0.6, rho)) * smoothstep(0.0, 0.04, min(wd.x, wd.y));
+            fragColor = vec4(V * fade, S * fade, 0.0, 1.0);
+            return;
+        }
+
+        // Gray-Scott step (Du = 1, Dv = 0.5, dt = 1); the stencil stretch varies across the field (canopy b),
+        // clamped to 1..4 texels: below one the stencil degenerates, above four it decouples into a grid
+        float sc = clamp(uRD.z * exp2(uLife.z * cn.b), 1.0, 4.0);
+        vec2 ox = vec2(tx.x * sc, 0.0), oy = vec2(0.0, tx.y * sc);
+        vec2 c = texture(sTD2DInputs[0], uv).rg;
+        vec2 edge = texture(sTD2DInputs[0], uv + ox).rg + texture(sTD2DInputs[0], uv - ox).rg
+                  + texture(sTD2DInputs[0], uv + oy).rg + texture(sTD2DInputs[0], uv - oy).rg;
+        vec2 corn = texture(sTD2DInputs[0], uv + ox + oy).rg + texture(sTD2DInputs[0], uv + ox - oy).rg
+                  + texture(sTD2DInputs[0], uv - ox + oy).rg + texture(sTD2DInputs[0], uv - ox - oy).rg;
+        vec2 lap = 0.2 * edge + 0.05 * corn - c;
+        float V = c.r, U = 1.0 - c.g;
+        // coral feed at the rim, starving toward the end of the reach: growth can only finger outward; in the
+        // quiet sectors of the limb it starves outright, so the corona breaks into separate eruptions
+        float feed = mix(0.026, mix(0.060, 0.026, reach), cn.r) + uRD.x;
+        float kill = 0.0615 + 0.004 * reach + uRD.y;
+        float uvv = U * V * V;
+        U += -lap.y - uvv + feed * (1.0 - U);
+        V += 0.5 * lap.x + uvv - (feed + kill) * V;
+        fragColor = vec4(clamp(V, 0.0, 1.0), clamp(1.0 - U, 0.0, 1.0), 0.0, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_orbit_info
+  type: infoDAT
+  parameters:
+    op: glsl_orbit
+  position: [475, -520]
+  dock: glsl_orbit
+  dat_read_only: true
+- name: glsl_spray_info
+  type: infoDAT
+  parameters:
+    op: glsl_spray
+  position: [2875, -3320]
+  dock: glsl_spray
+  dat_read_only: true
+- name: glsl_water_info
+  type: infoDAT
+  parameters:
+    op: glsl_water
+  position: [2875, -3720]
+  dock: glsl_water
+  dat_read_only: true
+- name: render_sediment
+  type: renderTOP
+  parameters:
+    geometry: geo_sediment
+  position: [2800, -2400]
+- name: sprite_sediment
+  type: pointspriteMAT
+  parameters:
+    pointsize: 1.5
+    skelrootpath: =parent()
+    blending: true
+    destblend: one
+    depthtest: false
+    depthwriting: false
+  position: [2000, -2400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: const_bed_levels
+  type: constantCHOP
+  parameters:
+    rate: =me.time.rate
+    autoexportroot: =parent()
+  sequences:
+    const:
+    - name: drone
+      value: 0.3850298799
+    - name: crackle
+      value: 0.2800717117
+    - name: hum
+      value: 0.455
+  position: [1600, -4800]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: const_drops_seed
+  type: constantTOP
+  parameters:
+    resolutionw: 80
+    resolutionh: 3
+    format: rgba32float
+  position: [0, -3600]
+- name: const_orbit_seed
+  type: constantTOP
+  parameters:
+    resolutionw: 6
+    resolutionh: 1
+    format: rgba32float
+  position: [-400, -400]
+- name: const_spray_seed
+  type: constantTOP
+  parameters:
+    resolutionw: =96 * parent.Specimen.par.Aspect + 1
+    resolutionh: 192
+    format: rgba32float
+  position: [0, -3200]
+- name: feedback_pigment
+  type: feedbackTOP
+  parameters:
+    top: null_pigment
+  position: [400, -1600]
+  inputs:
+  - const_pigment_seed
+- name: feedback_streaks
+  type: feedbackTOP
+  parameters:
+    top: null_streaks
+  position: [3200, -4200]
+  inputs:
+  - render_sparks
+- name: glsl_bright_info
+  type: infoDAT
+  parameters:
+    op: glsl_bright
+  position: [6475, -1320]
+  dock: glsl_bright
+  dat_read_only: true
+- name: glsl_canopy_info
+  type: infoDAT
+  parameters:
+    op: glsl_canopy
+  position: [3675, -520]
+  dock: glsl_canopy
+  dat_read_only: true
+- name: glsl_drops_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [2325, -3720]
+  dock: glsl_drops
+  dat_content: |
+    // zero-g water: N drops in a power-law spread of sizes, from globs two thirds of the large sun's radius down to
+    // fine droplets. Every drop falls toward the large sun and settles against its limb; drag keeps the fall
+    // overdamped, so drops creep home instead of orbiting. Now and then a drop at the sun is flung off (its own
+    // timer, or a collision between the suns throwing the water near the contact), drifts out on the currents and
+    // slowly finds its way back. The small sun ploughs through them; drops shoulder each other apart.
+    // row 0: xy position (world units: height 1, width = aspect), z radius, w wobble stretch -- all the field needs to cull, in one fetch
+    // row 1: xy velocity (world units per second), z wobble axis (radians), w fling epoch + 1 (0 = not seeded yet)
+    // row 2: x splash (summed |dv| from hits this frame), yz the direction the hits push the water, w x position
+    // (row 2 is read back by topto_drops for the water sounds)
+    // in0: previous state, in1: glsl_orbit (texel 0 positions, texel 2 radii/contact/env), in2: flow (xy uv/frame)
+    uniform vec4 uDrops;   // x seconds, y size scale, z pull, w fling rate
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    #define N 80
+    const float RMAX = 0.17, RMIN = 0.0016;
+
+    uint ih(uint x) { x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16; return x; }
+    float hash(int i, uint salt) { return float(ih(uint(i) * 747796405U + salt * 2891336453U) & 0xffffffU) / 16777215.0; }
+    // a few big globs, many fine droplets
+    float radiusOf(int i) { return RMAX * pow(RMIN / RMAX, pow(float(i) / float(N - 1), 0.6)) * uDrops.y; }
+
+    void main() {
+        int i = int(gl_FragCoord.x), row = int(gl_FragCoord.y);
+        float t = uDrops.x, dt = 1.0 / 60.0;
+        vec2 asp = vec2(uAspect.x, 1.0);
+        float r = radiusOf(i);
+        float big = smoothstep(0.005, 0.12, r);
+        // each drop's own fling clock: small drops come off more often than the big globs
+        float period = mix(10.0, 40.0, hash(i, 7U)) * mix(0.7, 2.0, big) / max(uDrops.w, 1e-3);
+        float epoch = floor(t / period + hash(i, 8U));
+        // area-preserving wobble along a slowly turning axis; small drops ring fast, big ones slosh slowly
+        float om = clamp(1.6 * sqrt(0.03 / r), 0.5, 8.0);
+        float wob = mix(0.05, 0.13, big) * sin(om * t + 6.28 * hash(i, 3U)) * (0.65 + 0.35 * sin(0.31 * om * t + 6.28 * hash(i, 4U)));
+        float axis = 6.28 * hash(i, 5U) + t * 0.15 * (hash(i, 6U) - 0.5);
+        vec4 S0 = texelFetch(sTD2DInputs[0], ivec2(i, 0), 0);
+        vec4 S1 = texelFetch(sTD2DInputs[0], ivec2(i, 1), 0);
+        float last = S1.w;
+        vec4 O0 = texelFetch(sTD2DInputs[1], ivec2(0, 0), 0);
+        vec4 O2 = texelFetch(sTD2DInputs[1], ivec2(2, 0), 0);
+        vec2 p1 = O0.xy, p2 = O0.zw;
+        float r1 = O2.x, r2 = O2.y, env = O2.w;
+        vec2 p = S0.xy, v = S1.xy;
+        if (last < 0.5) {                                // first frame: scatter them around the large sun
+            float a = 6.2831853 * hash(i, 1U);
+            p = p1 + (r1 + r * 0.6 + 0.03 + 0.3 * hash(i, 2U)) * vec2(cos(a), sin(a));
+            v = vec2(0.0);
+        }
+        vec2 dp = p - p1;
+        float d = length(dp) + 1e-5;
+        vec2 nr = dp / d, tg = vec2(-nr.y, nr.x);
+        float rest = r1 + r * 0.55;                      // it settles a little into the limb, wetting it
+        vec2 acc = -nr * 0.07 * uDrops.z;                // the pull home: constant, so far drops still return
+        float splash = 0.0;
+        vec2 sdir = vec2(0.0);
+        if (d < rest) {                                  // the limb holds them; inward speed is soaked up
+            acc += nr * (rest - d) * 60.0;
+            v -= nr * min(dot(v, nr), 0.0) * 0.25;
+        }
+        // at the sun each drop creeps along the limb its own way; everywhere a slow drift
+        float near = 1.0 - smoothstep(0.0, 0.06, d - rest);
+        acc += tg * 0.04 * TDSimplexNoise(vec2(float(i) * 1.37, t * 0.07)) * near;
+        acc += 0.025 * vec2(TDSimplexNoise(vec3(p * 3.0, t * 0.05)), TDSimplexNoise(vec3(p * 3.0 + 17.0, t * 0.05)));
+        if (last > 0.5 && epoch + 1.0 != last && near > 0.5) {
+            float sp = mix(0.08, 0.22, hash(i, uint(epoch) + 9U)) * mix(1.3, 0.6, big);
+            vec2 fd = normalize(nr + tg * (hash(i, uint(epoch) + 11U) - 0.5) * 1.2);
+            v += sp * fd;
+            splash += sp; sdir += fd * sp;
+        }
+        // a collision between the suns throws the water near the contact
+        vec2 dc = p - (p1 + normalize(p2 - p1 + 1e-5) * r1);
+        float kick = env * env * exp(-dot(dc, dc) / 0.03) * mix(1.3, 0.5, big);
+        acc += normalize(dc + 1e-5) * kick;
+        splash += kick * dt * 4.0; sdir += normalize(dc + 1e-5) * kick * dt * 4.0;
+        // the small sun ploughs through
+        vec2 d2v = p - p2;
+        float d2 = length(d2v) + 1e-5, rest2 = r2 + r * 0.8;
+        if (d2 < rest2) {
+            acc += d2v / d2 * (rest2 - d2) * 80.0;
+            float pl = (rest2 - d2) / rest2 * length(texelFetch(sTD2DInputs[1], ivec2(1, 0), 0).zw - v) * 0.3;
+            splash += pl; sdir += d2v / d2 * pl;
+        }
+        // drops shoulder each other apart, the heavier one moving less
+        for (int j = 0; j < N; j++) {
+            if (j == i) continue;
+            vec2 q = p - texelFetch(sTD2DInputs[0], ivec2(j, 0), 0).xy;
+            float rj = radiusOf(j);
+            float dd = length(q) + 1e-5, rr = (r + rj) * 0.85;
+            if (dd < rr) {
+                float mw = rj * rj / (r * r + rj * rj);
+                acc += q / dd * (rr - dd) * 25.0 * mw;
+                float slam = max(dot(texelFetch(sTD2DInputs[0], ivec2(j, 1), 0).xy - v, q / dd), 0.0) * mw * 0.4;
+                splash += slam; sdir += q / dd * slam;
+            }
+        }
+        acc += (texture(sTD2DInputs[2], p / asp).xy * 60.0 * asp - v) * 0.25;   // the currents carry them a little
+        acc += (clamp(p, vec2(-0.04), asp + 0.04) - p) * 6.0;                  // soft frame walls
+        v = (v + acc * dt) * exp(-1.3 * dt);
+        float spd = length(v);
+        if (spd > 0.6) v *= 0.6 / spd;
+        p += v * dt;
+        if (row == 0) fragColor = vec4(p, r, wob);
+        else if (row == 1) fragColor = vec4(v, axis, epoch + 1.0);
+        else fragColor = vec4(splash, sdir / max(length(sdir), 1e-5), p.x);
+    }
+  dat_content_format: text
+- name: glsl_finish_info
+  type: infoDAT
+  parameters:
+    op: glsl_finish
+  position: [7525, -920]
+  dock: glsl_finish
+  dat_read_only: true
+- name: glsl_ground_info
+  type: infoDAT
+  parameters:
+    op: glsl_ground
+  position: [475, -120]
+  dock: glsl_ground
+  dat_read_only: true
+- name: glsl_orbit_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [325, -520]
+  dock: glsl_orbit
+  dat_content: |
+    // the two suns as magnets: a two-body simulation integrated here every frame (state fed back through
+    // feedback_orbit), read by the canopy, flow step, pigment and sparks. Forces: a softened inverse-square
+    // pull, a stiff spring where the limbs overlap (they collide and bounce), a steer toward a circling speed
+    // that slowly breathes (so the pair keeps falling in and springing apart), a soft tether, soft frame walls.
+    // The large sun is heavy and anchored near the centre; the small one is light and free.
+    // Every impact fires an explosion: strength from the closing speed, sparks splashing out sideways from
+    // the contact, spread and decay randomized per impact. Constants were tuned offline (about 70 irregular
+    // impacts in three minutes at speed 3.5).
+    // texel 0: large sun xy, small sun xy (world units: height 1, width = aspect)
+    // texel 1: their velocities (world units per real second)
+    // texel 2: x large radius, y small radius, z in contact (0/1), w explosion envelope
+    // texel 3: x explosion direction (radians), y spread (0 jet .. 1 all round), z impact count
+    // texel 4: moon 1 xy, moon 2 xy; texel 5: moon 3 xy (three tiny suns orbiting the large one)
+    // in0: previous state (feedback_orbit; all zero on the first frame)
+    uniform vec4 uOrbit;    // x orbit time (seconds * speed), y speed, z separation scale, w large radius
+    uniform vec4 uOrbit2;   // x small radius relative to the large one
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const float G = 0.002, SWIRL = 0.6, VT = 0.2, BREATH = 0.6, K = 160.0, DAMPC = 3.0, DRAG = 0.999,
+                ANCHOR = 0.3, TETHER = 2.0, M1 = 6.0, M2 = 0.25;
+
+    float hash(float n, uint salt) {
+        uint x = uint(int(n)) * 4U + salt;
+        x = (x << 13U) ^ x;
+        x = x * (x * x * 15731U + 789221U) + 1376312589U;
+        return float(x & 0x7fffffffU) / float(0x7fffffff);
+    }
+
+    void main() {
+        int i = int(gl_FragCoord.x);
+        vec4 P = texelFetch(sTD2DInputs[0], ivec2(0, 0), 0);
+        vec4 Vr = texelFetch(sTD2DInputs[0], ivec2(1, 0), 0);
+        vec4 R = texelFetch(sTD2DInputs[0], ivec2(2, 0), 0);
+        vec4 E = texelFetch(sTD2DInputs[0], ivec2(3, 0), 0);
+        float t = uOrbit.x, speed = max(uOrbit.y, 1e-3), dt = speed / 60.0;
+        float r1 = uOrbit.w, r2 = uOrbit.w * uOrbit2.x;
+        vec2 p1 = P.xy, p2 = P.zw;
+        vec2 v1 = Vr.xy / speed, v2 = Vr.zw / speed;           // stored per real second, integrated per orbit second
+        float contact = R.z, env = R.w;
+        if (R.x <= 0.0) {                                       // first frame: place them and give them a spin
+            p1 = vec2(0.5 * uAspect.x - 0.08, 0.46); p2 = vec2(0.5 * uAspect.x + 0.17, 0.50);
+            v1 = vec2(0.0, -0.02); v2 = vec2(0.0, 0.10);
+            contact = 0.0; env = 0.0; E = vec4(0.0, 1.0, 0.0, 0.0);
+        }
+
+        vec2 d = p2 - p1;
+        float dist = length(d) + 1e-6;
+        vec2 n = d / dist, tg = vec2(-n.y, n.x);
+        vec2 rv = v2 - v1;
+        float vn = dot(rv, n), vt = dot(rv, tg);
+        float vtt = VT * (1.0 + BREATH * sin(t * 0.37) * sin(t * 0.13 + 1.0));
+        // the tether rests a fixed gap beyond contact, so the dance keeps its room at any sun size
+        vec2 F = (G / (dist * dist + 0.004) + TETHER * max(0.0, dist - (r1 + r2) * 0.97 - 0.14 * uOrbit.z)) * n;   // on the large sun
+        F -= 0.5 * SWIRL * (vtt - vt) * tg;
+        float ov = (r1 + r2) * 0.97 - dist;
+        bool impact = false;
+        if (ov > 0.0) {
+            F -= (K * ov - DAMPC * min(vn, 0.0)) * n;
+            impact = contact < 0.5;
+            contact = 1.0;
+        } else if (ov < -0.01) {
+            contact = 0.0;
+        }
+        // the heavy large sun is held near the centre by its own slow anchor and only drifts gently;
+        // the light small sun is free -- it orbits, falls in, bounces and springs away
+        vec2 tgt = vec2(0.5 * uAspect.x, 0.5) + 0.07 * vec2(sin(t * 0.038 + 0.4), sin(t * 0.029 + 1.7));
+        vec2 A1 = ANCHOR * (tgt - p1) - 2.0 * sqrt(ANCHOR) * v1;
+        vec2 w2 = 3.0 * (clamp(p2, vec2(0.08), vec2(uAspect.x - 0.08, 0.92)) - p2);         // soft frame walls for the small sun
+        v1 = (v1 + (F / M1 + A1) * dt) * DRAG;
+        v2 = (v2 + (-F / M2 + w2) * dt) * DRAG;
+        p1 += v1 * dt;
+        p2 += v2 * dt;
+
+        // explosions: each impact sets a new envelope; between impacts it decays at a per-impact rate
+        float id = E.z;
+        env *= exp(-(0.8 + 1.6 * hash(id, 3U)) / 60.0);
+        if (impact) {
+            id += 1.0;
+            env = max(env, clamp(-vn * 6.0, 0.35, 1.0));
+            float side = hash(id, 0U) > 0.5 ? 1.5707963 : -1.5707963;
+            E.xy = vec2(atan(n.y, n.x) + side + (hash(id, 1U) - 0.5) * 0.8, mix(0.15, 1.0, hash(id, 2U) * hash(id, 2U)));
+        }
+
+        // three tiny moons on tilted, eccentric orbits around the large sun (kinematic, from orbit time)
+        vec2 moon[3];
+        for (int k = 0; k < 3; k++) {
+            float fk = float(k);
+            // noise in speed and reach, so no moon ever repeats a clean cycle
+            float th = t * (fk == 1.0 ? -0.085 : (fk == 0.0 ? 0.12 : 0.06)) + fk * 2.1
+                     + 0.45 * TDSimplexNoise(vec2(t * 0.04, fk * 7.0));
+            float a = r1 * (1.7 + 0.25 * fk) * (1.0 + 0.12 * TDSimplexNoise(vec2(t * 0.03, fk * 3.0 + 1.0)));
+            vec2 e = vec2(a * cos(th), a * (0.62 + 0.12 * fk) * sin(th));
+            float tilt = 0.7 + 1.3 * fk;
+            moon[k] = p1 + mat2(cos(tilt), sin(tilt), -sin(tilt), cos(tilt)) * e;
+        }
+
+        vec4 outv;
+        if (i == 0) outv = vec4(p1, p2);
+        else if (i == 1) outv = vec4(v1, v2) * speed;
+        else if (i == 2) outv = vec4(r1, r2, contact, env);
+        else if (i == 3) outv = vec4(E.xy, id, 0.0);
+        else if (i == 4) outv = vec4(moon[0], moon[1]);
+        else outv = vec4(moon[2], 0.0, 0.0);
+        fragColor = outv;
+    }
+  dat_content_format: text
+- name: glsl_spray_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [2725, -3320]
+  dock: glsl_spray
+  dat_content: |
+    // spray: droplets thrown off the water wherever it is hit -- the small sun ploughing through a drop, the suns
+    // colliding beside it, a drop flung off the limb, two drops slamming together. They live on a grid, one droplet
+    // per cell (a droplet's kernel is capped at half a cell, so a pixel only reads the 2x2 cells around it): each
+    // cell gathers whichever neighbour's droplet lands in it, the largest winning a collision. Droplets fall back
+    // toward the large sun, shrink as they evaporate, sizzle out on its limb and are swallowed by a big drop.
+    // rows 0..G-1: xy position (world units: height 1, width = aspect), z radius (0 = empty), w seed.
+    // rows G..2G-1: xy velocity (world units per second). G cells per world unit; the width is the texture's.
+    // in0: previous spray, in1: glsl_drops (row 0 xy position z radius; row 1 xy velocity; row 2 x splash, yz dir),
+    // in2: glsl_orbit (texel 0 positions, texel 2 radii)
+    uniform vec4 uSpray;   // x seconds, y pull, z amount, w size
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+    #define G 96
+    #define N 80
+
+    uint ih(uint x) { x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16; return x; }
+    float hash(uint a, uint b) { return float(ih(a * 747796405U + b * 2891336453U + 12345U) & 0xffffffU) / 16777215.0; }
+
+    void main() {
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        bool velRow = px.y >= G;
+        ivec2 cell = ivec2(px.x, velRow ? px.y - G : px.y);
+        ivec2 gmax = ivec2(int(uTDOutputInfo.res.z), G);
+        float t = uSpray.x, dt = 1.0 / 60.0;
+        uint fr = uint(t * 60.0);
+        vec4 O0 = texelFetch(sTD2DInputs[2], ivec2(0, 0), 0);
+        vec4 O2 = texelFetch(sTD2DInputs[2], ivec2(2, 0), 0);
+        vec2 p1 = O0.xy, p2 = O0.zw;
+        float r1 = O2.x, r2 = O2.y;
+
+        // gather: step every droplet in the 3x3 neighbourhood; keep the largest that lands in this cell
+        vec4 best = vec4(0.0);
+        vec2 bestV = vec2(0.0);
+        for (int k = 0; k < 9; k++) {
+            ivec2 c = cell + ivec2(k % 3 - 1, k / 3 - 1);
+            if (any(lessThan(c, ivec2(0))) || any(greaterThanEqual(c, gmax))) continue;
+            vec4 A = texelFetch(sTD2DInputs[0], c, 0);
+            if (A.z <= 0.0) continue;
+            vec2 v = texelFetch(sTD2DInputs[0], c + ivec2(0, G), 0).xy;
+            vec2 p = A.xy;
+            vec2 dp = p - p1;
+            float d = length(dp) + 1e-5;
+            vec2 acc = -dp / d * 0.07 * uSpray.y;                              // falls home like the big drops
+            acc += 0.03 * vec2(TDSimplexNoise(vec3(p * 9.0, t * 0.2)), TDSimplexNoise(vec3(p * 9.0 + 31.0, t * 0.2)));
+            vec2 d2v = p - p2;
+            float d2 = length(d2v) + 1e-5;
+            if (d2 < r2 + A.z) acc += d2v / d2 * (r2 + A.z - d2) * 120.0;      // the small sun bats it away
+            v = (v + acc * dt) * exp(-0.8 * dt);
+            float sp = length(v);
+            if (sp > 0.55) v *= 0.55 / sp;                                     // under a cell per frame
+            p += v * dt;
+            float rad = A.z * exp(-dt / 8.0);                                  // evaporating
+            if (rad < 0.0005 * uSpray.w || d < r1 * 0.98) continue;            // gone, or sizzled on the limb
+            if (any(notEqual(ivec2(floor(p * float(G))), cell))) continue;     // it lands in another cell
+            if (rad > best.z) { best = vec4(p, rad, A.w); bestV = v; }
+        }
+        if (best.z > 0.0) {                                                    // swallowed by a big drop
+            for (int i = 0; i < N; i++) {
+                vec4 D = texelFetch(sTD2DInputs[1], ivec2(i, 0), 0);
+                if (length(best.xy - D.xy) < D.z * 0.7) { best = vec4(0.0); break; }
+            }
+        } else {
+            // spawn: an empty cell that a struck drop's surface passes through throws a droplet off it
+            vec2 cc = (vec2(cell) + 0.5) / float(G);
+            uint cid = uint(cell.y * gmax.x + cell.x);
+            for (int i = 0; i < N; i++) {
+                vec4 Sp = texelFetch(sTD2DInputs[1], ivec2(i, 2), 0);
+                if (Sp.x < 0.002) continue;
+                vec4 D = texelFetch(sTD2DInputs[1], ivec2(i, 0), 0);
+                vec2 nq = normalize(cc - D.xy + 1e-6);
+                vec2 at = D.xy + nq * D.z;
+                if (any(notEqual(ivec2(floor(at * float(G))), cell))) continue;   // its surface misses this cell
+                float side = 0.25 + 0.75 * max(dot(nq, Sp.yz), 0.0);              // mostly off the struck side
+                float chance = clamp(Sp.x * 20.0 * uSpray.z, 0.0, 0.9) * side;
+                if (hash(cid, fr * 131U + uint(i)) >= chance) continue;
+                float h = hash(cid, fr * 7U + 101U);
+                vec2 vd = texelFetch(sTD2DInputs[1], ivec2(i, 1), 0).xy;
+                best = vec4(at, min(mix(0.001, 0.004, h * h) * uSpray.w, 0.5 * 0.608 / float(G)), hash(cid, fr + 7U));
+                bestV = vd + nq * mix(0.12, 0.45, hash(cid, fr * 5U + 3U)) + Sp.yz * 0.12;
+                break;
+            }
+        }
+        fragColor = velRow ? vec4(bestV, 0.0, 0.0) : best;
+    }
+  dat_content_format: text
+- name: glsl_stream_info
+  type: infoDAT
+  parameters:
+    op: glsl_stream
+  position: [75, -720]
+  dock: glsl_stream
+  dat_read_only: true
+- name: glsl_water_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [2725, -3720]
+  dock: glsl_water
+  dat_content: |
+    // the zero-g water as one merged field: each drop is a compact metaball (1 - d^2/R^2)^3 stretched along its
+    // wobble axis, so drops that drift close bridge and merge like surface tension. A lone drop's surface sits at
+    // its radius at the iso level 0.25 (R = radius / 0.608).
+    // r = field, gb = gradient in units of each drop's own kernel radius (scale-free normals),
+    // a = blended kernel radius (sizes the lens in the compose)
+    // in0: glsl_drops (row 0 xy position, z radius, w stretch; row 1 z axis)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+    #define N 80
+
+    void main() {
+        vec2 p = vUV.st * vec2(uAspect.x, 1.0);              // world units, like the drops
+        float F = 0.0, rad = 0.0;
+        vec2 G = vec2(0.0);
+        for (int i = 0; i < N; i++) {
+            vec4 A = texelFetch(sTD2DInputs[0], ivec2(i, 0), 0);
+            float R = A.z / 0.608;
+            vec2 q = p - A.xy;
+            if (dot(q, q) > R * R * 1.4) continue;      // outside even the stretched kernel: one fetch, done
+            float ang = texelFetch(sTD2DInputs[0], ivec2(i, 1), 0).z;
+            vec2 ax = vec2(cos(ang), sin(ang)), ay = vec2(-ax.y, ax.x);
+            vec2 S = vec2(1.0 / (1.0 + A.w), 1.0 + A.w);
+            vec2 l = vec2(dot(q, ax), dot(q, ay)) * S;
+            float x2 = dot(l, l) / (R * R);
+            if (x2 >= 1.0) continue;
+            float w = 1.0 - x2, k = w * w * w;
+            vec2 g = -6.0 * w * w * l * S / R;
+            F += k;
+            G += g.x * ax + g.y * ay;
+            rad += k * R;
+        }
+        fragColor = vec4(F, G, rad / max(F, 1e-4));
+    }
+  dat_content_format: text
+- name: table_sfx_events
+  type: tableDAT
+  position: [1200, -5000]
+  dat_content:
+  - - specimen_lab/thermite_and_freon_audio/impact_01.mp3
+  - - specimen_lab/thermite_and_freon_audio/impact_02.mp3
+  - - specimen_lab/thermite_and_freon_audio/impact_03.mp3
+  - - specimen_lab/thermite_and_freon_audio/impact_04.mp3
+  - - specimen_lab/thermite_and_freon_audio/sparks_01.mp3
+  - - specimen_lab/thermite_and_freon_audio/sparks_02.mp3
+  - - specimen_lab/thermite_and_freon_audio/sparks_03.mp3
+  - - specimen_lab/thermite_and_freon_audio/sparks_04.mp3
+  - - specimen_lab/thermite_and_freon_audio/moon_pass_01.mp3
+  - - specimen_lab/thermite_and_freon_audio/moon_pass_02.mp3
+  - - specimen_lab/thermite_and_freon_audio/moon_pass_03.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_push_01.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_push_02.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_push_03.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_push_04.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_spray_01.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_spray_02.mp3
+  - - specimen_lab/thermite_and_freon_audio/water_spray_03.mp3
+  dat_content_format: table
+- name: glsl_bright_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [6325, -1320]
+  dock: glsl_bright
+  dat_content: |
+    // the light that blooms: whatever burns brighter than the threshold, at half resolution
+    layout(location = 0) out vec4 fragColor;
+    void main() {
+        vec3 c = texture(sTD2DInputs[0], vUV.st).rgb;
+        float l = max(c.r, max(c.g, c.b));
+        fragColor = TDOutputSwizzle(vec4(c * smoothstep(0.3, 0.9, l), 1.0));
+    }
+  dat_content_format: text
+- name: glsl_canopy_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [3525, -520]
+  dock: glsl_canopy
+  dat_content: |
+    // the two suns' fields, shared by the organism (it grows from the suns) and the compose (it draws them).
+    // Each sun is a noisy molten disc placed by glsl_orbit. Around each limb a slowly rotating noise picks a
+    // few active regions: only there can flares ignite and feed, so the corona breaks into separate eruptions.
+    // out: r = activity of the nearest body's limb at this angle (0 quiet .. 1 erupting), g = distance from the
+    //      nearest small body (the small sun or one of the three moons) in its own radii, b = log2 pattern
+    //      scale for the organism, a = distance from the large sun's centre in its radii
+    // in0: glsl_orbit (texel 0 positions, texel 2 radii, texels 4-5 moons)
+    uniform vec4 uTime;   // x = seconds
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    // distance from a sun's centre in units of its boiling, irregular limb
+    float limbDist(vec2 uv, vec2 c, float r, float tt, float seed) {
+        vec2 dv = uv - c;
+        vec2 dir = normalize(dv + 1e-6);
+        float edge = r * (1.0 + 0.035 * TDSimplexNoise(vec3(dir * 1.8 + seed, tt * 0.15))
+                              + 0.015 * TDSimplexNoise(vec3(dir * 6.0 + seed, tt * 0.5))
+                              + 0.007 * TDSimplexNoise(vec3(dir * 22.0 + seed, tt * 1.1)));
+        return length(dv) / edge;
+    }
+    // a few active sectors around a limb, rotating and reshaping slowly
+    float activity(vec2 uv, vec2 c, float tt, float seed) {
+        vec2 dir = normalize(uv - c + 1e-6);
+        return smoothstep(0.05, 0.4, TDSimplexNoise(vec3(dir * 1.6 + seed, tt * 0.07)));
+    }
+
+    void main() {
+        vec2 uv = vUV.st * vec2(uAspect.x, 1.0);           // world units: the discs stay round at any aspect
+        float tt = uTime.x;
+        vec4 pos = texelFetch(sTD2DInputs[0], ivec2(0, 0), 0);
+        vec4 rad = texelFetch(sTD2DInputs[0], ivec2(2, 0), 0);
+        float rhoL = limbDist(uv, pos.xy, rad.x, tt, 0.0);
+        float rhoS = limbDist(uv, pos.zw, rad.y, tt * 1.4, 7.3);
+        vec2 cS = pos.zw;
+        // the three tiny moons join the small-body channel: drawn, flaring and erupting like the small sun
+        vec4 m01 = texelFetch(sTD2DInputs[0], ivec2(4, 0), 0);
+        vec2 m2 = texelFetch(sTD2DInputs[0], ivec2(5, 0), 0).xy;
+        vec2 mc[3] = vec2[3](m01.xy, m01.zw, m2);
+        const float MR[3] = float[3](0.087, 0.067, 0.107);   // moon radii relative to the large sun
+        for (int k = 0; k < 3; k++) {
+            float rk = limbDist(uv, mc[k], rad.x * MR[k], tt * (1.6 + 0.3 * float(k)), 19.0 + 5.0 * float(k));
+            if (rk < rhoS) { rhoS = rk; cS = mc[k]; }
+        }
+        float act = rhoL < rhoS ? activity(uv, pos.xy, tt, 3.1) : activity(uv, cS, tt * 1.3, 11.7);
+        float sizes = 1.6 * TDSimplexNoise(vec3(uv * 1.7, tt * 0.012)) + 0.7 * TDSimplexNoise(vec3(uv * 6.5 + 3.0, tt * 0.02)) + 0.3;
+        fragColor = TDOutputSwizzle(vec4(act, rhoS, sizes, rhoL));
+    }
+  dat_content_format: text
+- name: glsl_compose_info
+  type: infoDAT
+  parameters:
+    op: glsl_compose
+  position: [5925, -920]
+  dock: glsl_compose
+  dat_read_only: true
+- name: glsl_finish_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [7675, -920]
+  dock: glsl_finish
+  dat_content: |
+    // film pass: the frame is treated as if it were shot on film through an imperfect lens. Gate weave and
+    // drift, slight barrel distortion, the heat refraction around the suns, chromatic fringing that grows
+    // toward the edges, edge softness, exposure flicker, halation (a tight hot bloom plus a wide bleed that
+    // turns red as it spreads into the dark), the ember glow, a slow warm light leak, a drifting irregular
+    // vignette, a soft highlight shoulder over near-black space, then clumped colour grain and dust.
+    // The inks upstream are display-referred.
+    // in0: compose, in1: blurred heat, in2: tight bloom, in3: wide halation
+    uniform vec4 uFinish;   // x exposure, y vignette strength, z grain amount, w seconds
+    uniform vec4 uHeat;     // x melt (refraction), y shimmer, z glow
+    uniform vec4 uFilm;     // x frame, y halation, z imperfections
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const vec3 VERM   = vec3(0.871, 0.069, 0.013);
+    const vec3 ORANGE = vec3(0.955, 0.188, 0.021);
+
+    float hash12(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.x + p3.y) * p3.z);
+    }
+    float hash11(float n) { return hash12(vec2(n, n * 0.618 + 17.0)); }
+    float vnoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
+                   mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+
+    void main() {
+        vec2 uv = vUV.st;
+        float t = uFinish.w, fr = uFilm.x, imp = uFilm.z;
+        vec2 res = uTD2DInfos[0].res.zw;
+
+        // gate weave: a sub-pixel jitter every frame plus a slow drift; slight barrel distortion
+        vec2 p = uv + (vec2(hash11(fr), hash11(fr + 3.1)) - 0.5) * 0.0009 * imp
+                    + vec2(sin(t * 0.7), cos(t * 0.53)) * 0.0012 * imp;
+        vec2 asp = vec2(uAspect.x, 1.0);
+        vec2 cc = (p - 0.5) * asp;                        // world units: the lens stays round at any aspect
+        float r2 = dot(cc, cc);
+        p = 0.5 + cc * (1.0 + 0.035 * imp * r2) / asp;
+
+        // heat refraction: dragged into the heat, dripping, and a haze that splits the inks
+        vec2 ht = 2.0 * uTD2DInfos[1].res.xy;
+        float h = texture(sTD2DInputs[1], p).r;
+        vec2 grad = vec2(texture(sTD2DInputs[1], p + vec2(ht.x, 0.0)).r - texture(sTD2DInputs[1], p - vec2(ht.x, 0.0)).r,
+                         texture(sTD2DInputs[1], p + vec2(0.0, ht.y)).r - texture(sTD2DInputs[1], p - vec2(0.0, ht.y)).r);
+        float hot = smoothstep(0.05, 0.6, h);
+        float core = smoothstep(0.9, 1.4, h);
+        vec2 shimmer = vec2(TDSimplexNoise(vec3(p * asp * 26.0, t * 2.3)), TDSimplexNoise(vec3(p * asp * 26.0 + 17.0, t * 2.3)));
+        vec2 off = (-grad * 0.035 * uHeat.x + vec2(0.0, 0.006) * hot * uHeat.x + shimmer * 0.0022 * uHeat.y * hot) * (1.0 - 0.6 * core);
+        vec2 split = shimmer.yx * 0.0012 * uHeat.y * hot;
+        vec2 q = p + off;
+
+        // chromatic fringing grows toward the edges
+        vec2 ca = cc * (0.002 + 0.008 * r2) * imp / asp;
+        vec3 c;
+        c.r = texture(sTD2DInputs[0], q + ca + split).r;
+        c.g = texture(sTD2DInputs[0], q).g;
+        c.b = texture(sTD2DInputs[0], q - ca - split).b;
+        // edge softness: the lens loses focus toward the corners
+        float soft = smoothstep(0.1, 0.42, r2) * min(imp, 1.5);
+        if (soft > 0.01) {
+            vec2 px = uTD2DInfos[0].res.xy * (1.0 + 3.0 * soft);
+            vec3 b = 0.25 * (texture(sTD2DInputs[0], q + px).rgb + texture(sTD2DInputs[0], q - px).rgb
+                           + texture(sTD2DInputs[0], q + vec2(px.x, -px.y)).rgb + texture(sTD2DInputs[0], q + vec2(-px.x, px.y)).rgb);
+            c = mix(c, b, soft * 0.8);
+        }
+
+        // exposure with a little flicker
+        c *= uFinish.x * (1.0 + (hash11(floor(fr * 0.5)) - 0.5) * 0.06 * imp + 0.015 * sin(t * 11.0) * imp);
+
+        // halation: a tight hot bloom, and a wide bleed that turns red as it spreads into the dark
+        vec3 bl = texture(sTD2DInputs[2], q).rgb;
+        float hl = dot(texture(sTD2DInputs[3], q).rgb, vec3(0.45, 0.4, 0.15));
+        c += uFilm.y * (bl * vec3(1.0, 0.8, 0.6) * 0.5 + hl * vec3(1.0, 0.2, 0.05) * 0.85);
+        // the ember glow from the heat, gentler now that halation carries the light
+        vec3 glow = mix(VERM, ORANGE, smoothstep(0.3, 1.0, h)) * pow(clamp(h, 0.0, 1.5), 1.8) * 0.14 * uHeat.z * (1.0 - 0.75 * core);
+        c += glow;
+        // a slow warm light leak drifting along the left edge
+        vec2 lk = vec2(-0.05 + 0.12 * sin(t * 0.05), 0.75 + 0.2 * sin(t * 0.031));
+        vec2 dl = (uv - lk) * vec2(1.7, 1.0);
+        c += exp(-dot(dl, dl) / 0.1) * (0.5 + 0.5 * sin(t * 0.13)) * vec3(1.0, 0.32, 0.07) * 0.09 * imp;
+        // an irregular vignette that wanders a little
+        float vg = length((uv - 0.5 - 0.03 * vec2(sin(t * 0.07), cos(t * 0.05))) * vec2(1.0, 1.08));
+        c *= 1.0 - uFinish.y * smoothstep(0.3, 0.8, vg + 0.05 * (vnoise(uv * 3.0 + t * 0.05) - 0.5));
+
+        // tone: a soft shoulder over near-black space, then display gamma
+        c = max(c, 0.0);
+        c = c / (1.0 + 0.3 * c) * 1.3;
+        c = vec3(0.0009, 0.0011, 0.0022) + clamp(c, 0.0, 1.0) * 0.99;
+        c = pow(c, vec3(1.0 / 2.2));
+
+        // grain: clumped and fine, mostly luminance with a little colour, strongest in the midtones
+        vec2 pxc = uv * res;
+        float sd = fract(fr * 0.1234) * 1000.0;
+        vec3 gn = vec3(vnoise(pxc * 0.55 + sd), vnoise(pxc * 0.55 + sd + 31.7), vnoise(pxc * 0.55 + sd + 63.1)) * 0.6
+                + vec3(hash12(pxc + sd), hash12(pxc + sd + 7.1), hash12(pxc + sd + 3.3)) * 0.4;
+        gn = mix(vec3(gn.g), gn, 0.35) - 0.5;
+        float lum = dot(c, vec3(0.3333));
+        c += gn * uFinish.z * (0.35 + 2.4 * lum * (1.0 - lum));
+
+        // dust: a few soft specks each frame, mostly dark, sometimes bright
+        vec2 uw = uv * asp;
+        vec2 cell = floor(uw * 28.0);
+        if (hash12(cell + fr * 7.13) > 1.0 - 0.01 * imp) {
+            vec2 dc = (cell + vec2(hash12(cell + 1.7 + fr), hash12(cell + 9.3 + fr))) / 28.0;
+            float dr = 0.0008 + 0.0024 * hash12(cell + 4.4 + fr);
+            float speck = 1.0 - smoothstep(dr * 0.5, dr, length((uw - dc) * vec2(1.0, 1.0 + hash12(cell + 2.2))));
+            c = mix(c, hash12(cell + 5.5 + fr) > 0.3 ? vec3(0.015) : vec3(0.88, 0.84, 0.78), speck * 0.85);
+        }
+        fragColor = TDOutputSwizzle(vec4(c, 1.0));
+    }
+  dat_content_format: text
+- name: glsl_ground_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [325, -120]
+  dock: glsl_ground
+  dat_content: |
+    // static ground material: mudflat albedo with baked cavity occlusion; a = soft sun visibility
+    // in0: glsl_terrain (r height, g ripple, b grain, a macro). noise is band-limited like the terrain's.
+    uniform vec4 uSun;    // x azimuth deg (ccw from the right edge), y elevation deg, z height scale
+    uniform vec4 uTide;   // x = mean water level (the intertidal band centres on it)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const mat2 OCT = mat2(1.6, 1.2, -1.2, 1.6);
+
+    float fbm(vec2 p, int oct, float fp) {
+        float a = 0.5, s = 0.0;
+        for (int i = 0; i < 8; i++) {
+            if (i >= oct) break;
+            s += a * TDSimplexNoise(p) * (1.0 - smoothstep(0.2, 0.45, fp));
+            p = OCT * p + 3.17;
+            a *= 0.5;
+            fp *= 2.0;
+        }
+        return s;
+    }
+    vec4 T(vec2 uv) { return texture(sTD2DInputs[0], uv); }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 px = uTD2DInfos[0].res.xy;
+        vec2 asp = vec2(uAspect.x, 1.0);               // offsets are world units; / asp turns them into uv
+        vec2 pw = uv * asp;
+        vec4 t = T(uv);
+        float hs = uSun.z;
+
+        // cavity occlusion at three radii (world units, so it holds its scale at any resolution and aspect)
+        float cav = 0.0;
+        for (int k = 0; k < 2; k++) {
+            float rad = 0.003 * pow(4.0, float(k));
+            float s = 0.0;
+            for (int i = 0; i < 6; i++) {
+                float a = float(i) * 1.0471976 + float(k) * 0.52;
+                s += T(uv + vec2(cos(a), sin(a)) * rad / asp).r;
+            }
+            cav += max(s / 6.0 - t.r, 0.0) / (1.0 + float(k));
+        }
+        float occl = clamp(1.0 - cav * 9.0, 0.0, 1.0);
+
+        // soft shadow: march toward the sun; a per-pixel jitter turns step banding into fine noise
+        float az = radians(uSun.x), el = radians(uSun.y);
+        vec3 L = vec3(cos(el) * cos(az), cos(el) * sin(az), sin(el));
+        vec2 dirD = normalize(L.xy);
+        float rise = L.z / length(L.xy);
+        float h0 = t.r * hs;
+        float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        float vis = 1.0;
+        for (int i = 1; i <= 24; i++) {
+            float fi = float(i) - jit * 0.9;
+            float d = 0.0018 * fi + 0.00028 * fi * fi;
+            float clear = h0 + d * rise - T(uv + dirD * d / asp).r * hs;
+            vis = min(vis, clamp(10.0 * (clear + 0.0003) / d, 0.0, 1.0));
+        }
+
+        float h = t.r + 0.06 * t.a;                     // band edges wander with the macro field
+        float n2 = fbm(pw * 40.0 + 7.0, 4, 40.0 * px.y);
+        float grain = t.b;
+
+        vec3 bed   = vec3(0.040, 0.042, 0.034);
+        vec3 silt  = vec3(0.150, 0.128, 0.096);
+        vec3 sand  = vec3(0.400, 0.350, 0.265);
+        vec3 salt  = vec3(0.600, 0.575, 0.510);
+        vec3 ochre = vec3(0.330, 0.180, 0.065);
+        vec3 algaD = vec3(0.050, 0.070, 0.028);
+        vec3 algaL = vec3(0.165, 0.205, 0.060);
+
+        vec3 col = mix(bed, silt, smoothstep(uTide.x - 0.12, uTide.x + 0.12, h));
+        col = mix(col, sand, smoothstep(0.45, 0.75, h + 0.1 * n2));
+        col = mix(col, salt, smoothstep(0.78, 0.95, h + 0.08 * n2) * smoothstep(0.1, 0.5, grain + 0.3 * n2));
+
+        // intertidal algae mats: patchy, densest just above the mean waterline
+        float band = exp(-pow((h - uTide.x - 0.06) / 0.09, 2.0));
+        float mats = smoothstep(-0.1, 0.35, fbm(pw * 9.0 + 2.0, 5, 9.0 * px.y) + 0.3 * t.a) * band;
+        col = mix(col, mix(algaD, algaL, smoothstep(0.3, 0.8, grain + 0.3 * n2)), mats * 0.9);
+
+        // iron oxide bleeding down the steeper banks
+        vec2 e5 = 4.0 * px;
+        float slope = length(vec2(T(uv + vec2(e5.x, 0.0)).r - T(uv - vec2(e5.x, 0.0)).r,
+                                  T(uv + vec2(0.0, e5.y)).r - T(uv - vec2(0.0, e5.y)).r) / (2.0 * e5 * asp));
+        col = mix(col, ochre * (0.7 + 0.6 * grain), smoothstep(1.2, 3.0, slope) * smoothstep(-0.3, 0.3, n2 + t.a) * 0.7);
+
+
+        // faint strata where the relief cuts the layers; fades before the bands get under a pixel
+        float phase = t.r * 140.0 + 6.0 * t.a;
+        float strata = (0.5 + 0.5 * sin(phase)) * (1.0 - smoothstep(0.6, 1.4, fwidth(phase)));
+        col *= 1.0 - 0.05 * strata * smoothstep(0.3, 0.9, h);
+
+        col *= mix(0.3, 1.0, occl);
+        fragColor = TDOutputSwizzle(vec4(col, vis));
+    }
+  dat_content_format: text
+- name: glsl_pigment_info
+  type: infoDAT
+  parameters:
+    op: glsl_pigment
+  position: [3275, -1720]
+  dock: glsl_pigment
+  dat_read_only: true
+- name: glsl_project_info
+  type: infoDAT
+  parameters:
+    op: glsl_project
+  position: [1675, -920]
+  dock: glsl_project
+  dat_read_only: true
+- name: glsl_streaks_info
+  type: infoDAT
+  parameters:
+    op: glsl_streaks
+  position: [3675, -4120]
+  dock: glsl_streaks
+  dat_read_only: true
+- name: glsl_stream_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [-75, -720]
+  dock: glsl_stream
+  dat_content: |
+    // stream function psi for the curl-noise stirring: two de-synced fbm layers that evolve in place
+    uniform vec4 uStream;   // x = seconds
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const mat2 OCT = mat2(1.6, 1.2, -1.2, 1.6);
+
+    float fbm3(vec3 p, int oct) {
+        float a = 0.5, s = 0.0;
+        for (int i = 0; i < 6; i++) {
+            if (i >= oct) break;
+            s += a * TDSimplexNoise(p);
+            p = vec3(OCT * p.xy, p.z * 1.7) + 3.17;
+            a *= 0.5;
+        }
+        return s;
+    }
+
+    void main() {
+        vec2 uv = vUV.st * vec2(uAspect.x, 1.0);            // world units: the stirring stays isotropic
+        float t = uStream.x;
+        float big = fbm3(vec3(uv * 2.5, t * 0.035), 3);
+        float small = fbm3(vec3(uv * 9.0 + 4.0, t * 0.11), 3);
+        fragColor = TDOutputSwizzle(vec4(big + 0.35 * small, 0.0, 0.0, 1.0));
+    }
+  dat_content_format: text
+- name: glsl_terrain_info
+  type: infoDAT
+  parameters:
+    op: glsl_terrain
+  position: [75, -120]
+  dock: glsl_terrain
+  dat_read_only: true
+- name: const_pigment_seed
+  type: constantTOP
+  parameters:
+    resolutionw: =parent.Specimen.par.Resolution * parent.Specimen.par.Aspect
+    resolutionh: =parent.Specimen.par.Resolution
+    format: rgba16float
+  position: [0, -1600]
+- name: glsl_compose_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [6075, -920]
+  dock: glsl_compose
+  dat_content: |
+    // Japanese retro screen print: the scene reduced to a handful of inks -- sumi (indigo-black), deep sage,
+    // sage, paper cream, vermilion and orange -- laid down as flat, soft-edged bands. Land is paper and sage
+    // with topographic contour lines; water is sage by depth with paper silt wisps. The organism is the one
+    // intense accent in two populations: large vermilion bodies with deep red cores and fine orange specks,
+    // keylined in sumi and printed a hair off register. Around the heat everything chars toward oxblood.
+    // The field is one uniform deep dark -- no light pool -- so the suns and their fire carry all the contrast.
+    // in0: terrain, in1: ground (a = sun visibility), in2: pigment (r silt, a trails), in3: flow,
+    // in4: rendered grains, in5: specks (r V, g eaten), in6: suns (g / a distance in small / large radii),
+    // in7: zero-g water (r field, gb gradient, a blended radius), in11: glsl_orbit (sun positions and radii),
+    // in12: glsl_spray (spray droplets, one per cell, 96 cells per world unit),
+    // positions are world units (height 1, width = aspect); textures are sampled in frame uv
+    // in8: blurred heat, in9: light streaks, in10: blurred streaks (their spilled light)
+    uniform vec4 uSun;    // x azimuth deg, y elevation deg, z relief
+    uniform vec4 uTide;   // x mean level, y range, z cycles, w carve depth
+    uniform vec4 uWin;    // the speck field's window: xy frame-uv origin, z size
+    uniform vec4 uTime;   // x seconds
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    // inks, linear (sRGB #1C1E26 #4A5E4C #96A884 #C4CEAC #F2E6CE #F04A1E #FA7828 #6E1A10 #B0260E)
+    const vec3 SUMI    = vec3(0.011, 0.013, 0.019);
+    const vec3 SAGE_D  = vec3(0.069, 0.111, 0.072);
+    const vec3 SAGE    = vec3(0.305, 0.392, 0.231);
+    const vec3 SAGE_L  = vec3(0.552, 0.617, 0.413);
+    const vec3 PAPER   = vec3(0.888, 0.791, 0.617);
+    const vec3 VERM    = vec3(0.871, 0.069, 0.013);
+    const vec3 ORANGE  = vec3(0.955, 0.188, 0.021);
+    const vec3 OXBLOOD = vec3(0.155, 0.010, 0.005);
+    const vec3 CORE    = vec3(0.431, 0.019, 0.004);
+    const vec3 HOT     = vec3(1.000, 0.716, 0.352);   // sRGB #FFDCA0, the large sun's white-hot centre
+    const vec3 LEMON   = vec3(1.000, 0.871, 0.456);   // sRGB #FFF0B4, the small sun's centre
+    const vec3 CITRUS  = vec3(1.000, 0.434, 0.000);   // sRGB #FFB000
+
+    float HC(vec2 uv) { return texture(sTD2DInputs[0], uv).r - uTide.w * texture(sTD2DInputs[2], uv).a; }
+
+    // n flat bands with anti-aliased steps
+    float bands(float x, float n) {
+        float y = clamp(x, 0.0, 1.0) * n;
+        float f = fract(y);
+        float w = fwidth(y) + 0.06;
+        return min((floor(y) + smoothstep(0.5 - w, 0.5 + w, f)) / n, 1.0);
+    }
+    vec3 ramp4(float x, vec3 a, vec3 b, vec3 c, vec3 d) {
+        x = clamp(x, 0.0, 1.0) * 3.0;
+        return x < 1.0 ? mix(a, b, x) : (x < 2.0 ? mix(b, c, x - 1.0) : mix(c, d, x - 2.0));
+    }
+    // a sun: rho is the distance from its centre in its own (boiling) radii; gran the speck granulation.
+    // The surface is never a smooth gradient: warped convection bands drift outward, cells boil, hot spots
+    // wander, and the speck field's low cells read as dark lanes
+    vec3 drawSun(vec3 col, float rho, float gran, vec2 uv, float t, float seed,
+                 vec3 hot, vec3 mid, vec3 limb, vec3 lanes) {
+        float fr = fwidth(rho);
+        vec3 outc = col;
+        if (rho < 1.25) {
+            float core = 1.0 - smoothstep(1.0 - 1.5 * fr, 1.0 + 1.5 * fr, rho);
+            float w = TDSimplexNoise(vec3(uv * 9.0 + seed, t * 0.25));
+            float cells = TDSimplexNoise(vec3(uv * 48.0 + seed, t * 0.6));
+            float bands = 0.5 + 0.5 * sin(rho * 13.0 + w * 4.5 - t * 0.8);
+            float r = clamp(rho + 0.18 * w, 0.0, 1.0);
+            vec3 s = mix(hot, mid, smoothstep(0.0, 0.6, r));
+            s = mix(s, limb, smoothstep(0.7, 1.0, rho));
+            s = mix(s, lanes, 0.35 * smoothstep(0.55, 0.95, bands) * smoothstep(0.15, 0.6, rho));
+            s *= 0.78 + 0.32 * smoothstep(-0.4, 0.6, cells);
+            // faculae: small, faint, warped flecks, strongest toward the limb
+            s = mix(s, hot * 1.08, 0.2 * smoothstep(0.6, 0.92, TDSimplexNoise(vec3(uv * 34.0 + w * 0.8 + seed + 5.0, t * 0.35)))
+                                 * (0.35 + 0.65 * smoothstep(0.3, 0.9, rho)));
+            s = mix(lanes, s, 0.4 + 0.6 * gran);
+            outc = mix(col, s, core);
+            outc = mix(outc, SUMI, (1.0 - smoothstep(0.5 * fr, 1.6 * fr, abs(rho - 1.0))) * 0.85);
+        }
+        return outc;
+    }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 asp = vec2(uAspect.x, 1.0);
+        vec2 pw = uv * asp;                               // world units
+        vec2 px = uTD2DInfos[2].res.xy;                   // output-resolution texel (pigment is full res)
+        float az = radians(uSun.x), el = radians(uSun.y);
+        vec3 L = vec3(cos(el) * cos(az), cos(el) * sin(az), sin(el));
+        float lv = uTide.x + uTide.y * sin(6.2831853 * uTide.z);
+
+        vec4 t  = texture(sTD2DInputs[0], uv);
+        vec4 g  = texture(sTD2DInputs[1], uv);
+        vec4 pg = texture(sTD2DInputs[2], uv);
+        vec4 gr = texture(sTD2DInputs[4], uv);
+        // the specks live in a window around the sun at full density (uWin matches glsl_life)
+        vec2 lw = (uv - uWin.xy) / uWin.z;
+        float inWin = step(0.0, lw.x) * step(lw.x, 1.0) * step(0.0, lw.y) * step(lw.y, 1.0);
+        vec2 sp = texture(sTD2DInputs[5], lw).rg * inWin;
+        float heat = texture(sTD2DInputs[8], uv).r;
+
+        vec2 e = 1.5 * px;
+        float hs = uSun.z * 1.2;
+        float hx = (HC(uv + vec2(e.x, 0.0)) - HC(uv - vec2(e.x, 0.0))) / (2.0 * e.x * asp.x);
+        float hy = (HC(uv + vec2(0.0, e.y)) - HC(uv - vec2(0.0, e.y))) / (2.0 * e.y);
+        vec3 N = normalize(vec3(-hx * hs, -hy * hs, 1.0));
+        float h = t.r - uTide.w * pg.a;
+        float depth = lv - h;
+        float inW = smoothstep(0.0, 0.004, depth);
+
+        // land: three printed tones from the relief lighting
+        float shade = max(dot(N, L), 0.0) * g.a * 0.9;
+        shade *= 0.85 + 0.3 * t.b;                        // paper tooth
+        vec3 land = ramp4(bands(shade * 1.25, 3.0), SUMI, SAGE_D, mix(SAGE_L, PAPER, 0.4), PAPER);
+        float ch = h * 34.0;
+        float contour = 1.0 - smoothstep(0.4 * fwidth(ch), 1.3 * fwidth(ch), abs(fract(ch + 0.5) - 0.5));
+        land = mix(land, SUMI, contour * 0.55);
+        land = mix(land, SUMI, smoothstep(0.15, 0.7, pg.a) * 0.55);               // drainage trails
+        land = mix(land, SUMI, clamp(gr.a * 1.6, 0.0, 1.0) * 0.6);                // running grains
+
+        // water: sage by depth, three bands, lifted by the pool; paper silt wisps
+        float wv = clamp(1.0 - depth * 5.0, 0.0, 1.0) * 0.75;
+        vec3 water = ramp4(bands(wv, 3.0), mix(SUMI, SAGE_D, 0.5), SAGE_D, SAGE, SAGE_L);
+        water = mix(water, mix(SAGE_L, PAPER, 0.7), (1.0 - exp(-pg.r * 0.9)) * 0.8);
+
+        // the field sits far back: almost black, deep blues. Land and water keep only their value structure,
+        // re-inked between space black and the faintest deep blue, so the suns and their fire carry everything
+        const vec3 NIGHT = vec3(0.0001, 0.00012, 0.0003);
+        const vec3 NAVY  = vec3(0.0018, 0.0036, 0.0140);
+        land  = mix(NIGHT, NAVY, clamp(dot(land,  vec3(0.3, 0.55, 0.15)) * 1.3, 0.0, 1.0));
+        water = mix(NIGHT, NAVY, clamp(dot(water, vec3(0.3, 0.55, 0.15)) * 1.3, 0.0, 1.0));
+        // the streaks' light spills on the world around them in their own colours; water scatters it more
+        vec3 spill = texture(sTD2DInputs[10], uv).rgb;
+        land += spill * (0.1 + 0.8 * land);
+        water += spill * (0.15 + 0.6 * water);
+
+        // the substrate the specks have eaten leaves only a faint dark-red warmth
+        water = mix(water, CORE * 0.6, smoothstep(0.12, 0.5, sp.y) * 0.2);
+
+        // small specks stay crisp and bright, over everything but the suns (laid down after the water)
+        vec2 mis = px * vec2(1.8, -1.3);
+        float sR = texture(sTD2DInputs[5], lw + mis / uWin.z).r * inWin;
+        vec3 speckInk = mix(ORANGE, mix(CITRUS, LEMON, 0.5), smoothstep(0.24, 0.36, sR));
+        float speckM = smoothstep(0.07, 0.10, sR) * inW;
+
+        vec3 col = mix(land, water, inW);
+        // charred halo: whatever sits near the heat burns toward oxblood (never the organism itself)
+        float scorch = smoothstep(0.15, 0.6, heat) * (1.0 - speckM);
+        col = mix(col, mix(col * vec3(0.5, 0.22, 0.16), OXBLOOD, 0.45), scorch * 0.4);
+        // the waterline as a keyline
+        col = mix(col, NIGHT, (1.0 - smoothstep(0.5 * fwidth(depth), 1.6 * fwidth(depth), abs(depth))) * 0.9);
+
+        // zero-g water (in7, the drops' merged field), lit by both suns as liquid: a deep sage body that swallows
+        // what is behind it, warm light soaking in from the sun side, a fresnel rim, a white-hot glint toward each
+        // sun, and the caustic crescent a lit drop focuses on its far side
+        vec4 wf = texture(sTD2DInputs[7], uv);
+        // the spray joins the field here at full resolution; a droplet's kernel never reaches past half a cell
+        // (glsl_spray caps it), so a pixel only needs the 2x2 cells whose centres surround it
+        float radSum = wf.a * wf.r;
+        ivec2 gc = ivec2(floor(pw * 96.0 - 0.5));
+        ivec2 gmax = ivec2(int(uTD2DInfos[12].res.z), 96);
+        for (int kk = 0; kk < 4; kk++) {
+            ivec2 c = gc + ivec2(kk & 1, kk >> 1);
+            if (any(lessThan(c, ivec2(0))) || any(greaterThanEqual(c, gmax))) continue;
+            vec4 A = texelFetch(sTD2DInputs[12], c, 0);
+            if (A.z <= 0.0) continue;
+            float R = A.z / 0.608;
+            vec2 q = pw - A.xy;
+            float x2 = dot(q, q) / (R * R);
+            if (x2 >= 1.0) continue;
+            float w = 1.0 - x2;
+            wf.r += w * w * w;
+            wf.gb -= 6.0 * w * w * q / R;
+            radSum += w * w * w * R;
+        }
+        wf.a = radSum / max(wf.r, 1e-4);
+        float fwW = fwidth(wf.r) + 1e-4;                   // derivatives outside the branch
+        float wm = smoothstep(0.25 - fwW, 0.25 + fwW, wf.r);
+        if (wf.r > 0.25 - 2.0 * fwW) {
+            vec4 O0 = texelFetch(sTD2DInputs[11], ivec2(0, 0), 0);
+            vec4 O2 = texelFetch(sTD2DInputs[11], ivec2(2, 0), 0);
+            float hh = sqrt(max(wf.r - 0.25, 0.0) + 2e-3);
+            vec3 n = normalize(vec3(-wf.gb * 0.3 / hh, 1.0));   // 0.3 keeps a lone drop's profile spherical
+            float nl = length(n.xy);
+            vec2 nd = n.xy / max(nl, 1e-4);
+            vec2 t1 = O0.xy - pw, t2 = O0.zw - pw;
+            float d1 = length(t1), d2 = length(t2);
+            vec2 l1 = t1 / max(d1, 1e-4), l2 = t2 / max(d2, 1e-4);
+            // the light falls off away from each limb
+            float I1 = 1.0 / (1.0 + pow(max(d1 - O2.x, 0.0) / (O2.x * 0.8), 2.0));
+            float I2 = 0.6 / (1.0 + pow(max(d2 - O2.y, 0.0) / (O2.y * 1.6), 2.0));
+            vec3 L1 = normalize(vec3(l1, 0.4)), L2 = normalize(vec3(l2, 0.4));
+            float thick = 1.0 - exp(-3.0 * max(wf.r - 0.25, 0.0));
+            // a sphere of water is a lens: what lies behind it shows through inverted and magnified -- the dark
+            // field, and the suns, moons and flares beside it. wf.a (the blended kernel radius) sizes the lens.
+            vec2 ru = uv - n.xy * 1.8 * wf.a / asp;
+            vec4 cr = texture(sTD2DInputs[6], ru);
+            vec3 seen = col * 0.7;
+            seen = mix(seen, mix(mix(HOT, ORANGE, 0.6), VERM, smoothstep(0.1, 1.0, cr.a)) * 0.55, 1.0 - smoothstep(0.96, 1.04, cr.a));   // dimmer than the sun itself
+            seen = mix(seen, mix(CITRUS, ORANGE, smoothstep(0.1, 1.0, cr.g)) * 0.55, 1.0 - smoothstep(0.96, 1.04, cr.g));
+            vec2 lr = (ru - uWin.xy) / uWin.z;
+            float sRr = texture(sTD2DInputs[5], lr).r * step(0.0, lr.x) * step(lr.x, 1.0) * step(0.0, lr.y) * step(lr.y, 1.0);
+            seen = mix(seen, mix(ORANGE, CITRUS, smoothstep(0.24, 0.36, sRr)), smoothstep(0.07, 0.10, sRr));
+            // clear water, a little sage in the thick of it
+            vec3 wc = seen * mix(vec3(0.85, 0.94, 0.96), vec3(0.5, 0.66, 0.68), thick) + SAGE_D * 0.04 * thick;
+            wc += mix(CORE, VERM, I1) * I1 * I1 * thick * 0.08 * (0.3 + 0.7 * max(dot(nd, l1), 0.0));   // light soaking in
+            wc += ORANGE * pow(max(dot(n, L1), 0.0), 4.0) * I1 * 0.07 + CITRUS * pow(max(dot(n, L2), 0.0), 4.0) * I2 * 0.06;
+            float fres = 0.02 + 0.98 * pow(1.0 - n.z, 5.0);     // Schlick: the rim, not the face
+            wc += fres * (SAGE_L * 0.05 + ORANGE * I1 * 1.1 * smoothstep(-0.3, 0.9, dot(nd, l1))
+                                        + CITRUS * I2 * 0.9 * smoothstep(-0.3, 0.9, dot(nd, l2)));
+            float band = smoothstep(0.55, 0.8, nl) * (1.0 - smoothstep(0.88, 0.98, nl));
+            wc += (mix(ORANGE, CITRUS, 0.6) * I1 * pow(max(dot(nd, -l1), 0.0), 6.0)
+                 + LEMON * I2 * pow(max(dot(nd, -l2), 0.0), 6.0)) * band * 0.6;
+            vec3 hv1 = normalize(L1 + vec3(0.0, 0.0, 1.0)), hv2 = normalize(L2 + vec3(0.0, 0.0, 1.0));
+            wc += HOT * pow(max(dot(n, hv1), 0.0), 140.0) * I1 * 2.5 + LEMON * pow(max(dot(n, hv2), 0.0), 140.0) * I2 * 2.0;
+            col = mix(col, wc, wm);
+        }
+        col = mix(col, speckInk, speckM);
+
+        // the two suns: the large one vermilion, the small one citrus. Each is white-hot at the centre with a
+        // darkened limb, boiling with the speck layer's granulation, keylined in sumi like everything else
+        vec4 cn = texture(sTD2DInputs[6], uv);
+        float gran = smoothstep(0.1, 0.36, sp.x);
+        col = drawSun(col, cn.a, gran, pw, uTime.x, 0.0, HOT, ORANGE, VERM, mix(VERM, CORE, 0.35));
+        col = drawSun(col, cn.g, gran, pw, uTime.x * 1.3, 9.0, LEMON, CITRUS, ORANGE, mix(ORANGE, VERM, 0.6));
+
+        // colour explosions where they collide, as plasma on the golden ramp: a soft deep-red front, vermilion,
+        // a citrus body, a lemon heart -- never screened
+        float E = pg.g;
+        vec3 burst = mix(CORE, VERM, smoothstep(0.03, 0.12, E));
+        burst = mix(burst, CITRUS, smoothstep(0.18, 0.35, E));
+        burst = mix(burst, LEMON, smoothstep(0.5, 0.85, E));
+        burst *= 0.7 + 0.55 * smoothstep(0.05, 0.3, sp.x);   // the fine field textures it from inside
+        col = mix(col, burst, smoothstep(0.02, 0.3, E) * 0.85);
+
+        // electric light streaks: their per-channel falloff (blue fades first, red last) picks the ink --
+        // lemon at the head, citrus gold, then orange and vermilion down the tail
+        // a slightly softened read of the streak buffer: fresh bright heads clear the threshold wide, fading
+        // tails only along their spine -- so every streak tapers from a fat head to a hairline tail
+        vec3 stk = 0.4 * texture(sTD2DInputs[9], uv).rgb
+                 + 0.15 * (texture(sTD2DInputs[9], uv + vec2(px.x, 0.0)).rgb + texture(sTD2DInputs[9], uv - vec2(px.x, 0.0)).rgb
+                         + texture(sTD2DInputs[9], uv + vec2(0.0, px.y)).rgb + texture(sTD2DInputs[9], uv - vec2(0.0, px.y)).rgb);
+        float sa = max(stk.r, max(stk.g, stk.b));
+        float sg = stk.g / max(stk.r, 1e-4), sb = stk.b / max(stk.r, 1e-4);
+        vec3 sInk = mix(mix(VERM, ORANGE, smoothstep(0.1, 0.4, sg)), CITRUS, smoothstep(0.45, 0.8, sg));
+        sInk = mix(sInk, LEMON, smoothstep(0.4, 0.9, sb));
+        col = mix(col, sInk, smoothstep(0.06, 0.35, sa) * 0.85);
+        fragColor = TDOutputSwizzle(vec4(col, 1.0));
+    }
+  dat_content_format: text
+- name: glsl_pigment_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [3125, -1720]
+  dock: glsl_pigment
+  dat_content: |
+    // full-resolution transport, one pass. r = silt: rides the water (sharp Catmull-Rom backtrace), clouds
+    // the shallow fringe where runoff grains arrive, lifts off the bed in eddy cores, settles out of still
+    // water. g = colour explosions released where the two suns touch. a = grain trails: engraved in the
+    // ground, so they ride the collapse, not the water. b unused.
+    // in0: previous pigment, in1: flow (xy uv/frame, z wet, w speed uv/s), in2: terrain, in3: rendered grains,
+    // in4: solver state (z = vorticity, > 1e5 on land), in5: glsl_orbit
+    uniform vec4 uPig;    // x silt pickup, y trail deposit
+    uniform vec4 uTide;   // x mean level, y range, z cycles
+    uniform vec4 uWorld;  // y twist (radians per octave), z collapse (octaves per second)
+    uniform vec4 uBurst;  // x colour-explosion strength
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const vec2 OUTLET_UV = vec2(0.34, 0.31);
+
+    float catmullRomR(vec2 uv, vec2 size) {
+        vec2 sp = uv * size;
+        vec2 p1 = floor(sp - 0.5) + 0.5;
+        vec2 f = sp - p1;
+        vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+        vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+        vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+        vec2 w3 = f * f * (-0.5 + 0.5 * f);
+        vec2 w12 = w1 + w2;
+        vec2 p0 = (p1 - 1.0) / size, p3 = (p1 + 2.0) / size, p12 = (p1 + w2 / w12) / size;
+        return texture(sTD2DInputs[0], vec2(p0.x, p0.y)).r * w0.x * w0.y
+             + texture(sTD2DInputs[0], vec2(p12.x, p0.y)).r * w12.x * w0.y
+             + texture(sTD2DInputs[0], vec2(p3.x, p0.y)).r * w3.x * w0.y
+             + texture(sTD2DInputs[0], vec2(p0.x, p12.y)).r * w0.x * w12.y
+             + texture(sTD2DInputs[0], vec2(p12.x, p12.y)).r * w12.x * w12.y
+             + texture(sTD2DInputs[0], vec2(p3.x, p12.y)).r * w3.x * w12.y
+             + texture(sTD2DInputs[0], vec2(p0.x, p3.y)).r * w0.x * w3.y
+             + texture(sTD2DInputs[0], vec2(p12.x, p3.y)).r * w12.x * w3.y
+             + texture(sTD2DInputs[0], vec2(p3.x, p3.y)).r * w3.x * w3.y;
+    }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 asp = vec2(uAspect.x, 1.0);
+        vec2 size = uTD2DInfos[0].res.zw;
+        vec4 F = texture(sTD2DInputs[1], uv);
+        float lv = uTide.x + uTide.y * sin(6.2831853 * uTide.z);
+        float depth = lv - texture(sTD2DInputs[2], uv).r;
+        float wet = F.z;
+        float speed = F.w;
+        float grains = texture(sTD2DInputs[3], uv).a;
+        float vz = texture(sTD2DInputs[4], uv).z;
+        float vort = vz > 1e3 ? 0.0 : abs(vz);
+
+        float fringe = wet * (1.0 - smoothstep(0.0, 0.03, depth));
+        float silt = max(catmullRomR(uv - F.xy, size), 0.0);
+        silt += uPig.x * (1.5 * grains * fringe + 0.6 * wet * smoothstep(6.0, 18.0, vort));
+        silt *= 0.99 - 0.006 * (1.0 - smoothstep(0.02, 0.1, speed));
+        silt *= mix(0.9, 1.0, wet);
+
+        vec2 dd = (uv - OUTLET_UV) * asp;
+        vec2 world = -uWorld.z * (0.6931472 * dd + uWorld.y * vec2(-dd.y, dd.x)) / 60.0 / asp;   // world velocity, as uv per frame
+        float trail = texture(sTD2DInputs[0], uv - world).a * 0.9985 + uPig.y * grains;
+
+        // colour explosions: each impact of the two suns releases a burst between them (glsl_orbit envelope);
+        // it grows outward by a decaying dilation (a slow-motion shock front, ~1.4 px a frame) and rides the flow
+        vec4 pos = texelFetch(sTD2DInputs[5], ivec2(0, 0), 0);
+        vec4 rad = texelFetch(sTD2DInputs[5], ivec2(2, 0), 0);
+        vec2 dc = uv * asp - mix(pos.xy, pos.zw, rad.x / (rad.x + rad.y));
+        float inject = uBurst.x * rad.w * exp(-dot(dc, dc) / (0.025 * 0.025)) * 0.12;
+        vec2 back = uv - F.xy;
+        float front = 0.0;
+        for (int k = 0; k < 8; k++) {
+            float a = float(k) * 0.7853982;
+            front = max(front, texture(sTD2DInputs[0], back + vec2(cos(a), sin(a)) * 1.4 / size).g);
+        }
+        float burst = max(texture(sTD2DInputs[0], back).g * 0.993, front * 0.982) + inject;
+
+        float drain = smoothstep(0.004, 0.05, length(dd));
+        fragColor = TDOutputSwizzle(vec4(min(silt, 3.0), min(burst, 2.0), 0.0, min(trail, 1.0)) * drain);
+    }
+  dat_content_format: text
+- name: glsl_pressure_info
+  type: infoDAT
+  parameters:
+    op: glsl_pressure
+  position: [1275, -920]
+  dock: glsl_pressure
+  dat_read_only: true
+- name: glsl_project_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [1525, -920]
+  dock: glsl_project
+  dat_content: |
+    // subtract the pressure gradient so the water stays incompressible, then publish the flow field:
+    // the incompressible current plus the downhill drift over the carved terrain (which converges into
+    // the valleys -- that convergence is what gathers the grains into a drainage tree).
+    // in0: pressure solve, in1: terrain, in2: previous pigment (a = grain trails)
+    // out0: solver state for the feedback; out1: flow = xy velocity in uv per frame (what samplers need),
+    // z wet, w speed (world units per second; height 1, width = aspect)
+    uniform vec4 uTide;   // x mean level, y range, z cycles, w carve depth
+    uniform vec4 uRun;    // x runoff speed (uv/s per unit slope), y runoff fraction on dry land
+    uniform vec4 uWorld;  // y twist (radians per octave), z collapse (octaves per second)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+
+    const vec2 OUTLET_UV = vec2(0.34, 0.31);
+    layout(location = 0) out vec4 fragState;
+    layout(location = 1) out vec4 fragFlow;
+
+    float lv;
+    float wet(vec2 uv) { return step(texture(sTD2DInputs[1], uv).r, lv); }
+    float H(vec2 uv) { return texture(sTD2DInputs[1], uv).r - uTide.w * texture(sTD2DInputs[2], uv).a; }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 tx = uTD2DInfos[0].res.xy;
+        vec2 dx = vec2(tx.x, 0.0), dy = vec2(0.0, tx.y);
+        vec2 asp = vec2(uAspect.x, 1.0);
+        vec2 tw = tx * asp;
+        lv = uTide.x + uTide.y * sin(6.2831853 * uTide.z);
+        vec4 c = texture(sTD2DInputs[0], uv);
+        float pL = mix(c.w, texture(sTD2DInputs[0], uv - dx).w, wet(uv - dx));
+        float pR = mix(c.w, texture(sTD2DInputs[0], uv + dx).w, wet(uv + dx));
+        float pB = mix(c.w, texture(sTD2DInputs[0], uv - dy).w, wet(uv - dy));
+        float pT = mix(c.w, texture(sTD2DInputs[0], uv + dy).w, wet(uv + dy));
+        float w = wet(uv);
+        vec2 u = (c.xy - vec2((pR - pL) / (2.0 * tw.x), (pT - pB) / (2.0 * tw.y))) * w;
+        fragState = vec4(u, c.z, c.w);
+
+        // two-scale slope: the coarse term steps over the small pits the fine noise leaves
+        vec2 e = 1.5 * tx, E = 8.0 * tx;
+        vec2 gf = vec2(H(uv + vec2(e.x, 0.0)) - H(uv - vec2(e.x, 0.0)),
+                       H(uv + vec2(0.0, e.y)) - H(uv - vec2(0.0, e.y))) / (2.0 * e * asp);
+        vec2 gc = vec2(H(uv + vec2(E.x, 0.0)) - H(uv - vec2(E.x, 0.0)),
+                       H(uv + vec2(0.0, E.y)) - H(uv - vec2(0.0, E.y))) / (2.0 * E * asp);
+        vec2 gh = 0.35 * gf + 0.65 * gc;
+        float soft = smoothstep(0.0, 0.006, lv - texture(sTD2DInputs[1], uv).r);
+        vec2 down = -gh * uRun.x * mix(uRun.y, 1.0, soft);
+        // the ground itself caves in along the log spiral; everything riding on it moves with it
+        vec2 dd = (uv - OUTLET_UV) * asp;
+        vec2 world = -uWorld.z * (0.6931472 * dd + uWorld.y * vec2(-dd.y, dd.x));
+        vec2 v = u + down + world;
+        fragFlow = vec4(v / asp / 60.0, soft, length(v));
+    }
+  dat_content_format: text
+- name: glsl_streaks_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [3525, -4120]
+  dock: glsl_streaks
+  dat_content: |
+    // the streak buffer: this frame's sparks are stamped in at full white, and the trails live in the world.
+    // Over water they ride the currents and bleed outward a little, and the water swallows red first, so a
+    // submerged trail dims a little faster; on land they burn in and stay put. Each channel fades at its own
+    // rate -- blue first, then green, red last -- so a streak cools white -> gold -> orange -> red; the
+    // compose maps that falloff onto the golden inks and lets its blurred light spill on the world.
+    // in0: previous streaks (feedback), in1: rendered sparks, in2: flow (xy uv/frame, z wet)
+    uniform vec4 uStreak;   // x red, y green, z blue decay per frame (red slowest)
+    layout(location = 0) out vec4 fragColor;
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 px = uTD2DInfos[0].res.xy;
+        vec4 F = texture(sTD2DInputs[2], uv);
+        float wet = F.z;
+        vec2 back = uv - F.xy * wet * 0.35;               // the water carries them, gently
+        vec3 c = texture(sTD2DInputs[0], back).rgb;
+        vec3 nb = 0.25 * (texture(sTD2DInputs[0], back + vec2(px.x, 0.0)).rgb + texture(sTD2DInputs[0], back - vec2(px.x, 0.0)).rgb
+                        + texture(sTD2DInputs[0], back + vec2(0.0, px.y)).rgb + texture(sTD2DInputs[0], back - vec2(0.0, px.y)).rgb);
+        c = mix(c, nb, 0.06 * wet);                       // a trace of bleed through the water
+        vec3 decay = mix(uStreak.xyz, uStreak.xyz * vec3(0.996, 0.997, 0.997), wet);   // the water dims them a little
+        c *= min(decay, vec3(0.9995));
+        float s = min(texture(sTD2DInputs[1], uv).a * 1.5, 1.0);
+        fragColor = TDOutputSwizzle(vec4(max(c, vec3(s)), 1.0));
+    }
+  dat_content_format: text
+- name: glsl_terrain_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [-75, -120]
+  dock: glsl_terrain
+  dat_content: |
+    // the world, re-evaluated every frame: a fractal heightfield that endlessly caves in toward the drain
+    // at OUTLET along a logarithmic spiral. Three zoom layers sample the same evolving, domain-warped fbm one
+    // octave apart; as the zoom phase advances each layer grows into the next (fade weights sum to 1.5 at
+    // every phase), so structure is born large at the edges, shrinks into the drain and dissolves, and the
+    // detail never blurs. Every octave is band-limited against the pixel footprint.
+    // out: r = height, g = fault creases, b = fine grain, a = macro variation
+    uniform vec4 uWorld;   // x zoom phase (octaves), y twist (radians per octave), z warp amount, w morph time
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const vec2 OUTLET_UV = vec2(0.34, 0.31);
+    const mat2 OCT = mat2(1.6, 1.2, -1.2, 1.6);
+    const float PI = 3.14159265;
+
+    float fbm(vec2 p, int oct, float fp) {
+        float a = 0.5, s = 0.0;
+        for (int i = 0; i < 6; i++) {
+            if (i >= oct) break;
+            s += a * TDSimplexNoise(p) * (1.0 - smoothstep(0.2, 0.45, fp));
+            p = OCT * p + 3.17;
+            a *= 0.5;
+            fp *= 2.0;
+        }
+        return s;
+    }
+    float fbm3(vec3 p, int oct, float fp) {
+        float a = 0.5, s = 0.0;
+        for (int i = 0; i < 4; i++) {
+            if (i >= oct) break;
+            s += a * TDSimplexNoise(p) * (1.0 - smoothstep(0.2, 0.45, fp));
+            p = vec3(OCT * p.xy + 3.17, p.z * 1.6 + 1.3);
+            a *= 0.5;
+            fp *= 2.0;
+        }
+        return s;
+    }
+
+    void main() {
+        vec2 uv = vUV.st;
+        float px = uTDOutputInfo.res.y;                       // one pixel in world units
+        vec2 d = (uv - OUTLET_UV) * vec2(uAspect.x, 1.0);     // world units: the world stays isotropic at any aspect
+        float ph = fract(uWorld.x);
+        float h = 0.0, crease = 0.0, grain = 0.0, macro = 0.0;
+        for (int j = 0; j < 3; j++) {
+            float lg = ph + float(j);                         // 0..3 across the three layers
+            float s = exp2(lg - 1.0) * 2.2;                   // world units per screen unit
+            float a = uWorld.y * (lg - 1.0);                  // log-spiral: rotation follows scale
+            vec2 w = mat2(cos(a), sin(a), -sin(a), cos(a)) * d * s;
+            float fp = px * s;                                // one pixel in world units
+            float fade = sin(PI * lg / 3.0);
+            fade *= fade;
+            float amp = exp2(-0.6 * lg);                      // finer layers carry less relief
+            vec2 warp = vec2(fbm3(vec3(w * 1.1 + 1.7, uWorld.w), 2, fp * 1.1),
+                             fbm3(vec3(w * 1.1 + 9.2, uWorld.w + 4.0), 2, fp * 1.1));
+            vec2 q = w + uWorld.z * 0.55 * warp;
+            float n = fbm(q * 1.3, 4, fp * 1.3);
+            float cr = 1.0 - smoothstep(0.0, 0.07, abs(fbm(q * 2.4 + 4.0, 3, fp * 2.4)));
+            cr *= 1.0 - smoothstep(0.15, 0.4, fp * 2.4 * 6.0);   // creases fade before they alias
+            h += fade * amp * (n - 0.10 * cr);
+            crease = max(crease, cr * fade);
+            grain += fade * fbm(w * 55.0, 2, fp * 55.0);
+            macro += fade * fbm(w * 0.9 + 3.3, 2, fp * 0.9);
+        }
+        h *= 1.1;
+        grain = 0.5 + 0.3 * grain;
+        macro *= 0.667;
+        // the drain is fixed on screen: everything slopes into it and sinks there
+        float r = length(d);
+        h += 0.75 * pow(r, 0.85) - 0.25 * exp(-r * r / (0.08 * 0.08));
+        fragColor = TDOutputSwizzle(vec4(h, crease, grain, macro));
+    }
+  dat_content_format: text
+- name: glsl_flow_step_info
+  type: infoDAT
+  parameters:
+    op: glsl_flow_step
+  position: [875, -920]
+  dock: glsl_flow_step
+  dat_read_only: true
+- name: glsl_pressure_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [1125, -920]
+  dock: glsl_pressure
+  dat_content: |
+    // Jacobi pressure iterations (one per pass, npasses per frame); land cells are walls (Neumann).
+    // wet/dry comes from the z sentinel the flow step writes (z > 1e5 = land), so a pass reads only
+    // the five state samples it needs -- no terrain fetches.
+    // in0: flow step, then the previous pass (xy velocity, z vorticity or land sentinel, w pressure)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    float wetOf(vec4 s) { return step(s.z, 1e5); }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 tx = uTD2DInfos[0].res.xy;
+        vec2 dx = vec2(tx.x, 0.0), dy = vec2(0.0, tx.y);
+        vec2 tw = tx * vec2(uAspect.x, 1.0);                // one texel in world units
+        vec4 c = texture(sTD2DInputs[0], uv);
+        if (c.z > 1e5) {
+            fragColor = vec4(c.xyz, 0.0);
+            return;
+        }
+        vec4 L = texture(sTD2DInputs[0], uv - dx), R = texture(sTD2DInputs[0], uv + dx);
+        vec4 B = texture(sTD2DInputs[0], uv - dy), T = texture(sTD2DInputs[0], uv + dy);
+        float pL = mix(c.w, L.w, wetOf(L)), pR = mix(c.w, R.w, wetOf(R));
+        float pB = mix(c.w, B.w, wetOf(B)), pT = mix(c.w, T.w, wetOf(T));
+        float div = (R.x - L.x) / (2.0 * tw.x) + (T.y - B.y) / (2.0 * tw.y);
+        float p = (pL + pR + pB + pT - div * tw.x * tw.y) * 0.25;
+        fragColor = vec4(c.xyz, p);
+    }
+  dat_content_format: text
+- name: glsl_flow_step_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [725, -920]
+  dock: glsl_flow_step
+  dat_content: |
+    // one solver step for the open water, velocity in world units per second (height 1, width = aspect):
+    // self-advection, curl-noise stirring, downhill jets where water meets slope, vorticity confinement.
+    // land is a wall. out: xy = velocity, z = vorticity (read next frame), w = pressure (warm start)
+    // in0: previous state, in1: stream function, in2: terrain, in3: previous pigment (a = grain trails),
+    // in4: glsl_orbit (sun positions, velocities, radii)
+    uniform vec4 uFlow;   // x swirl, y jets, z damping per frame, w vorticity confinement
+    uniform vec4 uTide;   // x mean level, y range, z cycles (seconds / period), w carve depth
+    uniform vec4 uStir;   // x how hard the moving suns drag the water (relaxation per frame)
+    uniform vec4 uAspect;   // x = frame width / height; world units have height 1 and width x
+    layout(location = 0) out vec4 fragColor;
+
+    const float DT = 1.0 / 60.0;
+
+    float WZ(vec4 s) { return s.z > 1e5 ? 0.0 : abs(s.z); }
+    float H(vec2 uv) { return texture(sTD2DInputs[2], uv).r - uTide.w * texture(sTD2DInputs[3], uv).a; }
+
+    void main() {
+        vec2 uv = vUV.st;
+        vec2 tx = uTD2DInfos[0].res.xy;
+        vec2 dx = vec2(tx.x, 0.0), dy = vec2(0.0, tx.y);
+        vec2 asp = vec2(uAspect.x, 1.0);
+        vec2 tw = tx * asp;                                    // one texel in world units
+        float lv = uTide.x + uTide.y * sin(6.2831853 * uTide.z);
+
+        vec4 s  = texture(sTD2DInputs[0], uv);
+        vec4 sL = texture(sTD2DInputs[0], uv - dx), sR = texture(sTD2DInputs[0], uv + dx);
+        vec4 sB = texture(sTD2DInputs[0], uv - dy), sT = texture(sTD2DInputs[0], uv + dy);
+
+        // semi-Lagrangian self-advection
+        vec2 u = texture(sTD2DInputs[0], uv - s.xy * DT / asp).xy * uFlow.z;
+
+        // curl-noise stirring (divergence-free by construction)
+        float pL = texture(sTD2DInputs[1], uv - dx).r, pR = texture(sTD2DInputs[1], uv + dx).r;
+        float pB = texture(sTD2DInputs[1], uv - dy).r, pT = texture(sTD2DInputs[1], uv + dy).r;
+        u += vec2((pT - pB) / (2.0 * tw.y), (pL - pR) / (2.0 * tw.x)) * uFlow.x;
+
+        // channels discharging downhill into the water set off jets
+        float wet = step(texture(sTD2DInputs[2], uv).r, lv);
+        vec2 gh = vec2(H(uv + dx) - H(uv - dx), H(uv + dy) - H(uv - dy)) / (2.0 * tw);
+        u -= gh * uFlow.y;
+
+        // vorticity confinement from last frame's curl (z > 1e5 marks land)
+        vec2 gw = vec2(WZ(sR) - WZ(sL), WZ(sT) - WZ(sB));
+        float gl = length(gw);
+        if (gl > 1e-6) {
+            vec2 N = gw / gl;
+            u += uFlow.w * tw.y * vec2(N.y, -N.x) * (s.z > 1e5 ? 0.0 : s.z);
+        }
+
+        // the suns drag the water they move through, leaving swirling wakes
+        vec4 sunPos = texelFetch(sTD2DInputs[4], ivec2(0, 0), 0);
+        vec4 sunVel = texelFetch(sTD2DInputs[4], ivec2(1, 0), 0);
+        vec4 sunRad = texelFetch(sTD2DInputs[4], ivec2(2, 0), 0);
+        float mL = 1.0 - smoothstep(sunRad.x * 0.8, sunRad.x * 1.8, length(uv * asp - sunPos.xy));
+        float mS = 1.0 - smoothstep(sunRad.y * 0.8, sunRad.y * 2.2, length(uv * asp - sunPos.zw));
+        u += uStir.x * (mL * (sunVel.xy - u) + mS * (sunVel.zw - u));
+
+        float omega = (sR.y - sL.y) / (2.0 * tw.x) - (sT.x - sB.x) / (2.0 * tw.y);
+        float sp = length(u);
+        if (sp > 0.2) u *= 0.2 / sp;            // CFL guard
+        u *= wet;
+        // land carries a sentinel in z so the pressure passes read wet/dry from samples they already take
+        fragColor = vec4(u, wet > 0.5 ? omega : 1e6, s.w);
+    }
+  dat_content_format: text

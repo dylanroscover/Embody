@@ -142,5 +142,23 @@
     "size": 455765,
     "content_type": "image/jpeg",
     "path": "specimens/generative/mandala.jpg"
+  },
+  {
+    "slug": "thermite-and-freon",
+    "kind": "tdxn",
+    "key": "a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28",
+    "sha256": "a175340e7553f7b78401b92496f2db56158c8532815eec4d35b6405afec34f28",
+    "size": 130026,
+    "content_type": "application/json",
+    "path": "specimens/simulation/thermite-and-freon.tdxn"
+  },
+  {
+    "slug": "thermite-and-freon",
+    "kind": "thumbnail",
+    "key": "thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99",
+    "sha256": "bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99",
+    "size": 212615,
+    "content_type": "image/jpeg",
+    "path": "specimens/simulation/thermite-and-freon.jpg"
   }
 ]
