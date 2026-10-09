@@ -2,9 +2,9 @@
   {
     "slug": "murmuration",
     "kind": "tdxn",
-    "key": "5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d",
-    "sha256": "5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d",
-    "size": 13697,
+    "key": "c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f",
+    "sha256": "c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f",
+    "size": 13631,
     "content_type": "application/json",
     "path": "specimens/simulation/murmuration.tdxn"
   },
@@ -20,9 +20,9 @@
   {
     "slug": "reaction-diffusion",
     "kind": "tdxn",
-    "key": "bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76",
-    "sha256": "bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76",
-    "size": 6850,
+    "key": "f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f",
+    "sha256": "f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f",
+    "size": 6784,
     "content_type": "application/json",
     "path": "specimens/generative/reaction-diffusion.tdxn"
   },
@@ -38,9 +38,9 @@
   {
     "slug": "kaleidoscope",
     "kind": "tdxn",
-    "key": "295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103",
-    "sha256": "295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103",
-    "size": 8005,
+    "key": "d5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1",
+    "sha256": "d5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1",
+    "size": 7939,
     "content_type": "application/json",
     "path": "specimens/compositing/kaleidoscope.tdxn"
   },
@@ -56,9 +56,9 @@
   {
     "slug": "noise-terrain",
     "kind": "tdxn",
-    "key": "12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5",
-    "sha256": "12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5",
-    "size": 23789,
+    "key": "aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533",
+    "sha256": "aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533",
+    "size": 23723,
     "content_type": "application/json",
     "path": "specimens/3d/noise-terrain.tdxn"
   },
@@ -74,9 +74,9 @@
   {
     "slug": "plasma-interference",
     "kind": "tdxn",
-    "key": "532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63",
-    "sha256": "532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63",
-    "size": 6980,
+    "key": "b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2",
+    "sha256": "b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2",
+    "size": 6914,
     "content_type": "application/json",
     "path": "specimens/generative/plasma-interference.tdxn"
   },
@@ -92,9 +92,9 @@
   {
     "slug": "mandelbulb-march",
     "kind": "tdxn",
-    "key": "9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d",
-    "sha256": "9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d",
-    "size": 10257,
+    "key": "bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080",
+    "sha256": "bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080",
+    "size": 10191,
     "content_type": "application/json",
     "path": "specimens/raymarching-sdf/mandelbulb-march.tdxn"
   },
@@ -110,8 +110,8 @@
   {
     "slug": "prismatic-strata",
     "kind": "tdxn",
-    "key": "381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b",
-    "sha256": "381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b",
+    "key": "3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd",
+    "sha256": "3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd",
     "size": 34243,
     "content_type": "application/json",
     "path": "specimens/generative/prismatic-strata.tdxn"
@@ -128,8 +128,8 @@
   {
     "slug": "mandala",
     "kind": "tdxn",
-    "key": "b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b",
-    "sha256": "b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b",
+    "key": "3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8",
+    "sha256": "3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8",
     "size": 89571,
     "content_type": "application/json",
     "path": "specimens/generative/mandala.tdxn"
@@ -146,8 +146,8 @@
   {
     "slug": "thermite-and-freon",
     "kind": "tdxn",
-    "key": "8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f",
-    "sha256": "8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f",
+    "key": "c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76",
+    "sha256": "c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76",
     "size": 130165,
     "content_type": "application/json",
     "path": "specimens/simulation/thermite-and-freon.tdxn"

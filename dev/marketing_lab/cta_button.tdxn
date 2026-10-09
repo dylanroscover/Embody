@@ -1,7 +1,7 @@
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 1
-generator: Embody/6.2.70
+generator: Embody/6.2.71
 td_build: 099.2025.33230
 network_path: /marketing_lab/cta_button
 options:

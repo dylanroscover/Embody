@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.2.72
+
+Convoy moves files and switches branches; TDXN 2.2 makes copies self-contained.
+
+- **Convoy git: branches and worktrees.** `switch_branch` (clean tree only) and optional sibling `<project>-wt-<name>` worktrees for every Git action; a pull now refuses a branch other than the one checked out instead of moving it. Upgraded and older hosts refuse each other's Convoy Git calls until the fleet updates.
+- **`convoy_send_file`.** Sends a project file to a node's inbox, a worktree, or (with `live=true` and Allow Execute TD Python on the target) its live project.
+- **TDXN format 2.2.** Each file rewrites its header once; an Embody older than 6.2.71 warns instead of mis-building.
+- **Self-contained clipboard copies.** Nested externalized COMPs and DAT text travel inline, so a paste can no longer revert the original's `.py`; a copy warns about locked operator data.
+- **Fixes.** Nested COMPs keep custom parameters through a strip-on-save; the Envoy highlight tint no longer leaks into exports; `ExportNetwork` drops `cleanup_protected` (breaking). +41 tests.
+
 ## v6.2.71
 
 Parent `.tdxn` files stop repeating their externalized children's parameters.

@@ -1,7 +1,7 @@
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 2
-generator: Embody/6.2.55
+generator: Embody/6.2.71
 td_build: 099.2025.33230
 network_path: /marketing_lab/bg_claude_inside
 options:

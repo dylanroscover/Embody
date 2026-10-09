@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.71-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.72-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-70-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **163 test suites** (5,597 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **163 test suites** (5,604 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -211,6 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.2.72** — Convoy switches branches, uses optional sibling worktrees and sends files to a node (`convoy_send_file`), and a pull no longer moves a different branch; TDXN format 2.2 and self-contained clipboard copies
 - **6.2.71** — parent `.tdxn` files stop repeating the custom parameters of children that have their own `.tdxn` (a 15-COMP lab's child entries shrink from 2,368 lines to 72); importing a COMP from its own `.tdxn` creates its custom parameters before its contents
 - **6.2.69** — a session whose TouchDesigner closes stops with `envoy.instance.unavailable` instead of drifting into another open project; saves that rename the `.toe` are followed, and `launch_td` / `restart_td` act on the session's own instance (issue #147)
 - **6.2.68** — a manual Check for Update offers Install Anyway when a release was built for a newer TouchDesigner than yours; unattended updates still stop at the floor (issue #145)
