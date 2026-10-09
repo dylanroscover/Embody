@@ -127,4 +127,6 @@ Set these on the Worker before going live (locally they live in `.dev.vars`):
 | `ENVIRONMENT` | yes (prod) | Set to `production` to enable the real Turnstile gate. Any other/unset value is treated as production by the server gate (fail-closed). |
 
 Apply migrations (including `0005_fts_triggers.sql`, which adds the FTS delete-orphan trigger) before
-serving traffic: `wrangler d1 migrations apply embody`.
+serving traffic. A push to `main` does this in CI: the Platform CI deploy job runs
+`wrangler d1 migrations apply embody --remote` before `wrangler deploy` (the
+`CLOUDFLARE_API_TOKEN` secret needs D1 Edit). By hand: `npm run migrate:prod`.
