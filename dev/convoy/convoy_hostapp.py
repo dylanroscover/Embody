@@ -856,7 +856,22 @@ def _validate_host_operation_arguments(operation, arguments):
         f"{operation!r} is not a host subprocess operation")
 
 
+def _lexically_within(root, path):
+    """Containment by path text alone; touches no filesystem or network."""
+    try:
+        root = os.path.normcase(os.path.abspath(root))
+        return os.path.normcase(os.path.commonpath(
+            [root, os.path.normcase(path)])) == root
+    except (TypeError, ValueError):
+        return False
+
+
 PUT_FILE_INBOX = (".embody", "convoy", "inbox")
+# An AI client started in the checkout runs what these name (MCP servers,
+# hooks), and .embody holds Embody's own project state: move them by git.
+_PUT_FILE_REFUSED_ROOTS = frozenset({
+    ".mcp.json", ".claude", ".codex", ".cursor", ".vscode", ".gemini",
+    ".embody"})
 
 
 def _validate_put_file_arguments(arguments):
@@ -888,7 +903,15 @@ def _validate_put_file_arguments(arguments):
         raise malformed(f"dest: {exc.detail or exc.reason}")
     if worktree is None and not live and len(parts) != 1:
         raise malformed("an inbox dest is a plain filename")
+    if (worktree is not None or live) and (
+            parts[0].lower() in _PUT_FILE_REFUSED_ROOTS):
+        raise malformed(f"{parts[0]} is AI client or Embody config; "
+                        "move it by git")
     return dest, worktree, live, overwrite
+
+
+_WORKTREE_IS_NODE = ("that worktree is a registered Convoy node's own "
+                     "project; target that node instead")
 
 
 def _validate_lifecycle_operation_arguments(operation, arguments):
@@ -7757,6 +7780,18 @@ class HostApp:
         try:
             timeout_s = arguments.get("timeout_s")
             output_limit = arguments.get("output_limit")
+            if (operation == "convoy_git"
+                    and arguments.get("operation") == "worktree_remove"):
+                try:
+                    doomed = hostops_mod.worktree_path(
+                        self._resolve_host_worktree(node_id),
+                        (arguments.get("arguments") or {}).get("name"))
+                except Exception:
+                    doomed = None       # run_git refuses the name itself
+                if doomed is not None and self._is_local_project_root(doomed):
+                    return {"ok": False, "code": "worktree_is_node",
+                            "detail": _WORKTREE_IS_NODE,
+                            "operation": operation, "target_id": node_id}
             if operation == "convoy_git":
                 return self.host_operations.run_git(
                     node_id, arguments.get("operation"),
@@ -7785,6 +7820,20 @@ class HostApp:
                 del self._hostop_context.expected_convoy_id
             except AttributeError:
                 pass
+
+    def _is_local_project_root(self, path):
+        """True when ``path`` is some local node's own registered project."""
+        with self.lock:
+            roots = [record.get("project_root")
+                     for record in self.directory.nodes()
+                     if record.get("host_id") == self.host_id
+                     and isinstance(record.get("project_root"), str)]
+        try:
+            key = os.path.normcase(os.path.realpath(path))
+            return any(os.path.normcase(os.path.realpath(root)) == key
+                       for root in roots)
+        except (OSError, TypeError, ValueError):
+            return True                 # unknowable: treat as live, refuse
 
     def _execute_put_file(self, node_id, convoy_id, job, arguments):
         """Write one uploaded artifact into the inbox, a worktree or the project.
@@ -7820,6 +7869,8 @@ class HostApp:
             del self._hostop_context.expected_convoy_id
         if root is None:
             return refused(code, "the destination checkout is unavailable")
+        if worktree is not None and self._is_local_project_root(root):
+            return refused("worktree_is_node", _WORKTREE_IS_NODE)
 
         relative = (dest if live or worktree is not None
                     else "/".join(PUT_FILE_INBOX + (dest,)))
@@ -12683,7 +12734,7 @@ class HostApp:
             source_path = text_field(body, "source_path", limit=4096)
             if not os.path.isabs(source_path):
                 raise Malformed("source_path must be an absolute local path")
-            source = os.path.realpath(source_path)
+            lexical = os.path.abspath(source_path)
         except (Malformed, identity.IdentityError, OSError, ValueError) as exc:
             detail = getattr(exc, "detail", str(exc))
             return self._refuse("relay", "malformed", detail, 400)
@@ -12706,17 +12757,28 @@ class HostApp:
                     and record.get("convoy_id") == convoy_id
                     and record.get("enabled", True) is True
                     and isinstance(record.get("project_root"), str))]
-        if not any(hostops_mod.path_within(root, source) for root in roots):
+        # Lexically first: resolving a UNC path would already contact that
+        # server.  Then again after links are followed.
+        source = None
+        if any(_lexically_within(root, lexical) for root in roots):
+            source = os.path.realpath(lexical)
+        if source is None or not any(
+                hostops_mod.path_within(root, source) for root in roots):
             return self._refuse(
                 "relay", "source_outside_project",
                 "the file is not inside an enabled local project in this "
                 "Convoy", 403)
         try:
+            # stat before open: opening a FIFO would block.
+            if not stat.S_ISREG(os.stat(source).st_mode):
+                raise OSError("not a regular file")
+            if os.stat(source).st_size > self.artifacts.max_artifact_bytes:
+                return self._refuse(
+                    "relay", "source_too_large",
+                    "the file exceeds this host's artifact size limit", 413)
             digest = hashlib.sha256()
             size = 0
             with open(source, "rb") as stream:
-                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                    raise OSError("not a regular file")
                 for block in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(block)
                     size += len(block)

@@ -83,7 +83,7 @@ class RecordingRunner:
             return result(stdout="\n".join(records))
 
         tail = self._tail(argv, "status")
-        if tail == ["status", "--porcelain", "--untracked-files=no"]:
+        if tail and tail[:2] == ["status", "--porcelain"]:
             return result(stdout=" M tracked.py\n" if self.dirty else "")
 
         tail = self._tail(argv, "config")
@@ -106,10 +106,12 @@ class RecordingRunner:
             return result(stdout=self.remote_url + "\n")
 
         tail = self._tail(argv, "symbolic-ref")
-        if tail == ["symbolic-ref", "--quiet", "--short", "HEAD"]:
+        if tail in (["symbolic-ref", "--quiet", "--short", "HEAD"],
+                    ["symbolic-ref", "--quiet", "HEAD"]):
             if self.head is None:
                 return result(False, exit_code=1)
-            return result(stdout=self.head + "\n")
+            prefix = "" if "--short" in tail else "refs/heads/"
+            return result(stdout=prefix + self.head + "\n")
 
         tail = self._tail(argv, "remote")
         if tail == ["remote"]:
@@ -118,8 +120,8 @@ class RecordingRunner:
 
         tail = self._tail(argv, "for-each-ref")
         if tail and tail[-1] == "refs/heads":
-            return result(stdout="\n".join(self.branches) +
-                           ("\n" if self.branches else ""))
+            prefix = "refs/heads/" if "--format=%(refname)" in tail else ""
+            return result(stdout="".join(prefix + b + "\n" for b in self.branches))
         if tail and tail[-1].startswith("refs/remotes/"):
             refs = ["refs/remotes/" + name for name in self.remote_branches
                     if "refs/remotes/" + name == tail[-1]]
@@ -528,7 +530,9 @@ def test_real_git_switch_and_worktree_round_trip(tmp_path):
     def run(operation, **arguments):
         return ops.run_git("node-1", operation, arguments)
 
+    setup("tag", "feature")             # a same-named tag must not confuse refs
     assert run("switch_branch", branch="feature")["ok"]
+    setup("tag", "-d", "feature")       # current_branch itself prints heads/<b>
     assert run("current_branch")["stdout"].strip() == "feature"
     (repo / "a.txt").write_text("two\n")
     assert run("switch_branch", branch="main")["code"] == "dirty_worktree"
@@ -550,6 +554,15 @@ def test_real_git_switch_and_worktree_round_trip(tmp_path):
     (sibling / "scratch.txt").write_text("unsaved\n")
     assert run("worktree_remove", name="review")["code"] == "dirty_worktree"
     (sibling / "scratch.txt").unlink()
+    # git's own remove check ignores ignored files and would delete them.
+    (sibling / "build").mkdir()
+    (sibling / "build" / "cache.bin").write_text("ignored\n")
+    setup("config", "core.excludesFile", str(tmp_path / "excludes"))
+    (tmp_path / "excludes").write_text("build/\n")
+    assert run("worktree_remove", name="review")["code"] == "dirty_worktree"
+    assert (sibling / "build" / "cache.bin").exists()
+    (sibling / "build" / "cache.bin").unlink()
+    (sibling / "build").rmdir()
     value = run("worktree_remove", name="review")
     assert value["ok"], value
     assert not sibling.exists()

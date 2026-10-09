@@ -223,7 +223,7 @@ Structured Git and GitHub actions use named, bounded operations rather than acce
 
 - **Pull** fast-forwards only the branch that is already checked out; naming another branch is refused (`branch_mismatch`) instead of moving the checked-out one.
 - **Switch branch** needs a clean tree. It switches to an existing local branch, or, when you name a `remote`, creates the branch to track `<remote>/<branch>`; it never guesses a remote.
-- **Worktrees** are a choice, not a requirement: `worktree_add` creates a sibling checkout named `<project>-wt-<name>` beside the node's project, `worktree_list` lists them, and `worktree_remove` removes one only when it has no local changes. Every other Git action takes an optional `worktree` name and runs there instead of in the live project, so a running TouchDesigner never sees the change.
+- **Worktrees** are a choice, not a requirement: `worktree_add` creates a sibling checkout named `<project>-wt-<name>` beside the node's project, `worktree_list` lists them, and `worktree_remove` removes one only when it holds no local, untracked or ignored files, and never when it is itself a registered node's project. Every other Git action takes an optional `worktree` name and runs there instead of in the live project, so a running TouchDesigner never sees the change.
 
 **Allow Execute TD Python** is effectively code execution as the user running TouchDesigner. TD Python can access files, the network, credentials available to TD, and process APIs. It is a separate gate from **Allow Full Shell**; leaving Full Shell off does not sandbox Python.
 
@@ -270,7 +270,7 @@ Those explicit copies are outside the runtime quota and are yours to retain, del
 | A path inside the node's `<project>-wt-<name>` worktree | `worktree=<name>`; `dest` defaults to the file's own project-relative path | none beyond **Enable Convoy** |
 | A path inside the node's live project | `live=true` | **Allow Execute TD Python**, because a synced `.py` written there reloads into TouchDesigner |
 
-Destinations are relative, `/`-separated paths; `..`, drives, links, Windows-reserved names and anything under `.git` are refused. An existing file is kept unless `overwrite=true`. Only the controller that uploaded a file can have it written.
+Destinations are relative, `/`-separated paths; `..`, drives, links, junctions, short-name aliases, Windows-reserved or invalid names, anything under `.git`, AI client config (`.mcp.json`, `.claude/`, `.codex/`, `.cursor/`, `.vscode/`, `.gemini/`) and `.embody/` are refused. A worktree that is itself a registered node's project is refused too: target that node instead. An existing file is kept unless `overwrite=true`. Only the controller that uploaded a file can have it written.
 
 ## Version and platform compatibility
 

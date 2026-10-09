@@ -7048,11 +7048,14 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
         with open(os.path.join(root, 'scripts', 'tool.py'), 'w') as out:
             out.write('x = 1\n')
         uploads, calls = [], []
-        staged = staged or {'ok': True, 'artifact': {'artifact_id': 'art_x'}}
+        staged = staged or {'ok': True, 'artifact': {
+            'artifact_id': 'art_x', 'sha256': 'x', 'size': 6,
+            'expires_at': 1.0, 'kind': 'convoy_artifact'}}
         base = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
                 'target_node_id': 'node-remote'}
         with patch.object(bridge, 'convoy_host_call',
-                          side_effect=lambda *a, **k: uploads.append(a) or staged),              patch.object(bridge, 'handle_convoy_call',
+                          side_effect=lambda *a, **k: uploads.append((a, k)) or staged), \
+             patch.object(bridge, 'handle_convoy_call',
                           side_effect=lambda call: calls.append(call) or {'ok': True}):
             result = bridge.handle_convoy_send_file(dict(base, **params), state)
         return root, result, uploads, calls
@@ -7061,13 +7064,18 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
         root, result, uploads, calls = self._send_file(
             {'path': 'scripts/tool.py', 'worktree': 'review'})
         self.assertTrue(result['ok'])
-        self.assertEqual(uploads[0][1], '/relay/artifact/send')
-        self.assertEqual(uploads[0][2]['source_path'], os.path.realpath(
+        (_method, route, body), options = uploads[0]
+        self.assertEqual(route, '/relay/artifact/send')
+        self.assertGreater(options['timeout'], body['timeout_s'])
+        self.assertEqual(body['source_path'], os.path.realpath(
             os.path.join(root, 'scripts', 'tool.py')))
         self.assertEqual(calls[0]['operation'], 'convoy_put_file')
+        # Only the stable identity rides the job: a re-upload refreshes
+        # expires_at, which would turn a same-key retry into a conflict.
         self.assertEqual(calls[0]['arguments'], {
-            'artifact': {'artifact_id': 'art_x'}, 'dest': 'scripts/tool.py',
-            'overwrite': False, 'worktree': 'review'})
+            'artifact': {'artifact_id': 'art_x', 'sha256': 'x', 'size': 6},
+            'dest': 'scripts/tool.py', 'overwrite': False,
+            'worktree': 'review'})
 
     def test_send_file_defaults_to_the_inbox_by_file_name(self):
         _root, _result, _uploads, calls = self._send_file(
@@ -7088,6 +7096,34 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
                 _root, result, uploads, calls = self._send_file(params)
                 self.assertEqual(result['reason'], 'invalid_arguments')
                 self.assertEqual((uploads, calls), ([], []))
+
+    def test_send_file_checks_dest_before_uploading(self):
+        _root, result, uploads, _calls = self._send_file(
+            {'path': 'scripts/tool.py', 'dest': 'nested/tool.py'})
+        self.assertEqual(result['reason'], 'invalid_arguments')
+        self.assertEqual(uploads, [])
+        _root, _result, _uploads, calls = self._send_file(
+            {'path': 'scripts/tool.py', 'dest': 'sub\\x.py',
+             'worktree': 'review'})
+        self.assertEqual(calls[0]['arguments']['dest'], 'sub/x.py')
+
+    def test_send_file_keeps_a_floor_for_the_write_after_a_slow_upload(self):
+        with patch.object(bridge.time, 'monotonic',
+                          side_effect=_monotonic_steps(0.0, 119.5)):
+            _root, _result, _uploads, calls = self._send_file(
+                {'path': 'scripts/tool.py'})
+        self.assertGreaterEqual(calls[0]['timeout_s'], 30.0)
+
+    def test_send_file_never_resolves_a_unc_source(self):
+        resolved = []
+        real = os.path.realpath
+        with patch.object(bridge.os.path, 'realpath',
+                          side_effect=lambda p, *a: resolved.append(p) or real(p, *a)):
+            _root, result, uploads, _calls = self._send_file(
+                {'path': '\\\\example.invalid\\share\\x.txt'})
+        self.assertEqual(result['reason'], 'invalid_arguments')
+        self.assertEqual(uploads, [])
+        self.assertFalse(any('example.invalid' in p for p in resolved))
 
     def test_send_file_stops_when_the_upload_is_refused(self):
         _root, result, _uploads, calls = self._send_file(

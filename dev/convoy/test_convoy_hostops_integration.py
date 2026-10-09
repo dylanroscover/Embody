@@ -374,3 +374,57 @@ def test_put_file_into_a_registered_worktree(tmp_path):
                       "put-missing")
     _code, body = app.dispatch_job(body["job"]["delivery_id"])
     assert body["job"]["result"]["code"] == "worktree_missing"
+
+
+def test_put_file_never_writes_ai_client_or_embody_config():
+    for dest in (".mcp.json", ".claude/settings.local.json", ".Claude/x",
+                 ".codex/config.toml", ".cursor/mcp.json", ".vscode/mcp.json",
+                 ".gemini/settings.json", ".embody/project.json"):
+        for mode in ({"worktree": "review"}, {"live": True}):
+            try:
+                hostapp.effective_operation_gating(
+                    hostapp.PHASE1_OPERATIONS, "convoy_put_file",
+                    dict({"artifact": {}, "dest": dest}, **mode))
+            except hostapp.OperationRegistryError as exc:
+                assert exc.reason == "malformed"
+            else:
+                raise AssertionError((dest, mode))
+
+
+def test_a_worktree_registered_as_its_own_node_is_never_a_side_door(tmp_path):
+    import shutil
+    import subprocess
+    import pytest
+    git = shutil.which("git")
+    if not git:
+        pytest.skip("git is not installed")
+    app, node, project, _f, _w = _app_and_node(tmp_path)
+    for args in (("init", "--quiet", "-b", "main"),
+                 ("commit", "--quiet", "--allow-empty", "-m", "init"),
+                 ("worktree", "add", "-b", "show",
+                  str(tmp_path / "project-wt-show"))):
+        subprocess.run([git, "-C", str(project), "-c", "user.name=t",
+                        "-c", "user.email=t@example.com", *args], check=True,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    code, _other = app.register_node({
+        "project_root": str(tmp_path / "project-wt-show"),
+        "convoy_id": "studio", "comp_path": "/Embody",
+        "runtime_id": "rt_show"})
+    assert code == 200
+    source = project / "a.txt"
+    source.write_text("x\n")
+    _code, staged = _send(app, node, source)
+    _code, body = _put(app, node, {"artifact": staged["artifact"],
+                                   "dest": "a.txt", "worktree": "show"},
+                       "put-node-wt")
+    _code, body = app.dispatch_job(body["job"]["delivery_id"])
+    assert body["job"]["result"]["code"] == "worktree_is_node"
+    assert not (tmp_path / "project-wt-show" / "a.txt").exists()
+
+    job = _create(app, node, "convoy_git", {
+        "operation": "worktree_remove", "arguments": {"name": "show"}},
+        key="rm-node-wt")
+    _code, body = app.dispatch_job(job["delivery_id"])
+    assert body["job"]["result"]["code"] == "worktree_is_node"
+    assert (tmp_path / "project-wt-show").is_dir()

@@ -192,21 +192,35 @@ def _filename(value, *, optional=False) -> str:
 
 
 _WINDOWS_RESERVED_RE = re.compile(
-    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?\Z", re.IGNORECASE)
+    r"^(?:con|prn|aux|nul|conin\$|conout\$|clock\$"
+    r"|com[0-9¹²³]|lpt[0-9¹²³])(?:\..*)?\Z",
+    re.IGNORECASE)
+# `git~1` is the NTFS short name of `.git` (git's own protectNTFS refuses it).
+_GIT_SHORT_NAME_RE = re.compile(r"^git~[0-9]+\Z", re.IGNORECASE)
+_WINDOWS_INVALID_CHARS = frozenset('<>"|?*')
+
+
+def _canonical(path) -> bool:
+    """True when ``path`` is already its own real path (no link, junction or
+    short-name alias anywhere in it)."""
+    return os.path.normcase(os.path.realpath(path)) == os.path.normcase(path)
 
 
 def relative_parts(value) -> list:
     """Validate a portable `/`-separated relative destination; return its parts.
 
-    Refuses `.`/`..`, drives, Windows-reserved or trailing-dot/space names,
-    and any `.git` segment (a file under .git/hooks runs as code).
+    Refuses `.`/`..`, drives, Windows-reserved, Windows-invalid or
+    trailing-dot/space names, and any `.git` segment or its short name (a
+    file under .git/hooks runs as code).
     """
     value = _bounded_text(value, "path", 1024)
     parts = value.split("/")
     for part in parts:
         _filename(part)
         if (part.endswith((".", " ")) or part.lower() == ".git"
-                or _WINDOWS_RESERVED_RE.match(part)):
+                or _GIT_SHORT_NAME_RE.match(part)
+                or _WINDOWS_RESERVED_RE.match(part)
+                or _WINDOWS_INVALID_CHARS.intersection(part)):
             raise ArtifactValidationError(
                 "path has a reserved or non-portable segment")
     return parts
@@ -1828,9 +1842,11 @@ class ArtifactStore:
                         "destination directory contains a symlink/non-directory")
             else:
                 os.mkdir(current, mode=mode)
-        # Catches Windows junctions, which lstat does not report as links.
-        if os.path.normcase(os.path.realpath(current)) != os.path.normcase(current):
-            raise ArtifactValidationError("destination directory escaped its root")
+            # Per segment, before descending: lstat misses Windows junctions
+            # and 8.3 short-name aliases; realpath does not.
+            if not _canonical(current):
+                raise ArtifactValidationError(
+                    "destination directory escaped its root")
         return current
 
     @classmethod
@@ -1888,8 +1904,12 @@ class ArtifactStore:
     def _write_export_locked(self, namespace, record, source, destination_dir,
                              chosen, overwrite) -> dict:
         destination = os.path.join(destination_dir, chosen)
+        if not _canonical(destination_dir):
+            raise ArtifactValidationError("destination directory changed")
         if os.path.lexists(destination):
-            if os.path.islink(destination) or not _regular_file(destination):
+            # A short-name alias (GIT~1) resolves to a different real file.
+            if (os.path.islink(destination) or not _regular_file(destination)
+                    or not _canonical(destination)):
                 raise ArtifactValidationError(
                     "export destination is not a regular file")
             if not overwrite:
@@ -1911,6 +1931,8 @@ class ArtifactStore:
                 os.fsync(writer.fileno())
             if digest.hexdigest() != record["sha256"] or total != record["size"]:
                 raise ArtifactCorrupt("artifact changed during project export")
+            if not _canonical(destination_dir):
+                raise ArtifactValidationError("destination directory changed")
             os.replace(temp, destination)
             temp = ""
             self._fsync_directory(destination_dir)

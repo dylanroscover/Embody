@@ -3105,23 +3105,36 @@ def handle_convoy_send_file(params, state):
     except ValueError as exc:
         return {"ok": False, "reason": "convoy_project_unavailable",
                 "detail": str(exc), "wakes_touchdesigner": False}
-    source = os.path.realpath(os.path.join(project_root, params["path"]))
-    try:
-        inside = os.path.normcase(os.path.commonpath(
-            [project_root, source])) == os.path.normcase(project_root)
-    except ValueError:
-        inside = False
-    if not inside or not os.path.isfile(source):
+    def inside(path):
+        try:
+            return os.path.normcase(os.path.commonpath(
+                [project_root, path])) == os.path.normcase(project_root)
+        except ValueError:
+            return False
+
+    # Lexically first: resolving a UNC path would already contact that server.
+    source = os.path.abspath(os.path.join(project_root, params["path"]))
+    if inside(source):
+        source = os.path.realpath(source)
+    if not inside(source) or not os.path.isfile(source):
         return _convoy_invalid_arguments(
             "path must name a file inside this project")
+    inbox = worktree is None and not live
     dest = params.get("dest")
     if dest is None:
-        dest = (os.path.basename(source) if worktree is None and not live
-                else os.path.relpath(source, project_root).replace(os.sep, "/"))
+        dest = (os.path.basename(source) if inbox
+                else os.path.relpath(source, project_root))
     if not isinstance(dest, str) or not dest:
         return _convoy_invalid_arguments("dest must be a relative path")
+    # The host validates fully; refuse the obvious before uploading the file.
+    dest = dest.replace("\\", "/")
+    if inbox and "/" in dest:
+        return _convoy_invalid_arguments(
+            "an inbox dest is a plain file name; pass worktree or live for "
+            "a path")
 
     started = time.monotonic()
+    # The host hashes the file before its own transfer budget starts.
     staged = convoy_host_call("POST", "/relay/artifact/send", {
         "target_host_id": params["target_host_id"],
         "convoy_id": params["convoy_id"],
@@ -3129,21 +3142,26 @@ def handle_convoy_send_file(params, state):
         "controller_id": _CONVOY_CONTROLLER_ID,
         "source_path": source,
         "timeout_s": float(timeout_s),
-    }, timeout=float(timeout_s))
+    }, timeout=float(timeout_s) + 30.0)
     if staged.get("ok") is not True:
         staged = _convoy_add_provenance(staged, params)
         staged["wakes_touchdesigner"] = False
         return staged
-    arguments = {"artifact": staged.get("artifact"), "dest": dest,
-                 "overwrite": overwrite}
+    # Stable identity only: a re-upload refreshes expires_at, which would
+    # turn a same-key retry into an idempotency conflict.
+    reference = staged.get("artifact") or {}
+    arguments = {"artifact": {name: reference.get(name) for name in (
+                     "artifact_id", "sha256", "size")},
+                 "dest": dest, "overwrite": overwrite}
     if worktree is not None:
         arguments["worktree"] = worktree
     if live:
         arguments["live"] = True
     call = {name: params[name] for name in (
         "target_host_id", "convoy_id", "target_node_id")}
+    # A slow upload must not starve the durable submit.
     call.update(operation="convoy_put_file", arguments=arguments,
-                timeout_s=max(0.1, float(timeout_s)
+                timeout_s=max(30.0, float(timeout_s)
                               - (time.monotonic() - started)))
     if params.get("idempotency_key") is not None:
         call["idempotency_key"] = params["idempotency_key"]

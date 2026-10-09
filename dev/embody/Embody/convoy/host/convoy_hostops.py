@@ -228,6 +228,7 @@ _PUBLIC_DETAILS = {
     "branch_in_use": "requested branch is checked out in another worktree",
     "worktree_missing": "named worktree is not registered with the repository",
     "worktree_exists": "a worktree directory with that name already exists",
+    "worktree_stale": "a deleted worktree is still registered; run git worktree prune on that host",
     "shell_disabled": "Allow Full Shell is disabled on the target host",
     "invalid_environment": "environment additions are invalid or unsafe",
     "busy": "host subprocess capacity is busy",
@@ -1314,10 +1315,12 @@ class HostOperations:
         return ref
 
     def _local_branches(self, executable, root, deadline, cancel_event):
-        return self._git_lines(
+        # Full refnames: %(refname:short) prints heads/<b> beside a same-named tag.
+        prefix = "refs/heads/"
+        return [line[len(prefix):] for line in self._git_lines(
             executable, root,
-            ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-            deadline, cancel_event)
+            ["for-each-ref", "--format=%(refname)", "refs/heads"],
+            deadline, cancel_event) if line.startswith(prefix)]
 
     def _require_local_branch(self, executable, root, branch, deadline,
                               cancel_event):
@@ -1366,6 +1369,7 @@ class HostOperations:
         path = worktree_path(root, name)
         if not _plain_directory(path):
             raise _Refusal("worktree_missing")
+        self._validate_repository(executable, root, deadline, cancel_event)
         listed = self._run_internal_git(
             executable, root, ["worktree", "list", "--porcelain"], deadline,
             cancel_event=cancel_event)
@@ -1430,9 +1434,10 @@ class HostOperations:
             branch = self._validate_ref(arguments.get("branch"))
             # git pull merges <branch> into whatever HEAD is, so a mismatch
             # would fast-forward the checked-out branch to another one.
+            # Full refnames: --short prints heads/<b> beside a same-named tag.
             if self._git_lines(executable, root,
-                               ["symbolic-ref", "--quiet", "--short", "HEAD"],
-                               deadline, cancel_event) != [branch]:
+                               ["symbolic-ref", "--quiet", "HEAD"],
+                               deadline, cancel_event) != ["refs/heads/" + branch]:
                 raise _Refusal("branch_mismatch")
             return ["pull", "--ff-only", "--no-rebase", "--no-recurse-submodules",
                     "--", remote, "refs/heads/" + branch]
@@ -1471,9 +1476,19 @@ class HostOperations:
             return ["worktree", "add", "--track", "-b", branch, path, start]
         if operation == "worktree_remove":
             self._reject_unknown(arguments, {"name"})
-            # Never --force: git itself refuses a worktree with local changes.
-            return ["worktree", "remove", self._resolve_worktree(
-                executable, root, arguments.get("name"), deadline, cancel_event)]
+            path = self._resolve_worktree(
+                executable, root, arguments.get("name"), deadline, cancel_event)
+            # Never --force.  git's own check skips IGNORED files and would
+            # delete them (Backup/*.toe, logs), so any leftover refuses.
+            listing = self._run_internal_git(
+                executable, path,
+                ["status", "--porcelain", "--ignored", "--untracked-files=normal"],
+                deadline, cancel_event=cancel_event)
+            if not listing.get("ok"):
+                raise _Refusal("command_failed")
+            if listing.get("truncated") or listing.get("stdout", "").strip():
+                raise _Refusal("dirty_worktree")
+            return ["worktree", "remove", path]
         raise _Refusal("unknown_operation")
 
     @staticmethod
@@ -1492,6 +1507,8 @@ class HostOperations:
         elif any(token in text for token in (
                 "is already used by worktree", "is already checked out at")):
             code = "branch_in_use"
+        elif "missing but already registered worktree" in text:
+            code = "worktree_stale"
         elif any(token in text for token in (
                 "would be overwritten by", "local changes to the following files",
                 "unstaged changes", "uncommitted changes",
@@ -1605,6 +1622,7 @@ class HostOperations:
             if worktree is None:
                 return root, None
             executable = self._resolve_executable(self._git_candidate)
+            self._require_structured_executable(executable, root)
             return self._resolve_worktree(
                 executable, root, worktree, deadline, None), None
         except _Refusal as exc:

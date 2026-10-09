@@ -692,7 +692,8 @@ def test_export_to_path_creates_directories_and_honors_overwrite(store, tmp_path
 @pytest.mark.parametrize("relative", [
     "", "../escape", "a/../../escape", "/abs", "C:/x", "a\\b", "a//b",
     "a/./b", ".git/hooks/post-checkout", "sub/.GIT/config", "CON",
-    "dir/nul.txt", "trailing.", "space ", "a:b",
+    "dir/nul.txt", "trailing.", "space ", "a:b", "GIT~1", "git~2/hooks/x",
+    "q?.txt", "a*b", 'x"y', "a|b", "<a>", "CONIN$", "clock$", "COM¹",
 ])
 def test_export_to_path_refuses_unportable_or_escaping_paths(
         store, tmp_path, relative):
@@ -719,6 +720,35 @@ def test_export_to_path_refuses_a_linked_directory(store, tmp_path):
     with pytest.raises(ca.ArtifactValidationError):
         store.export_to_path(str(root), "linked/x.bin", NS_A, ref["artifact_id"])
     assert not list(elsewhere.iterdir())
+
+
+def test_export_to_path_never_creates_anything_through_a_junction(
+        store, tmp_path):
+    winapi = pytest.importorskip("_winapi")
+    ref = put(store)
+    root = tmp_path / "checkout"
+    elsewhere = tmp_path / "elsewhere"
+    root.mkdir()
+    elsewhere.mkdir()
+    winapi.CreateJunction(str(elsewhere), str(root / "junc"))
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), "junc/new/deeper/x.bin", NS_A,
+                             ref["artifact_id"])
+    assert not list(elsewhere.iterdir())
+
+
+def test_export_to_path_refuses_a_short_name_alias_of_an_existing_file(
+        store, tmp_path):
+    ref = put(store)
+    root = tmp_path / "checkout"
+    root.mkdir()
+    (root / "longfilename.txt").write_bytes(b"keep")
+    if not (root / "LONGFI~1.TXT").exists():
+        pytest.skip("8.3 short names are disabled on this volume")
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), "LONGFI~1.TXT", NS_A,
+                             ref["artifact_id"], overwrite=True)
+    assert (root / "longfilename.txt").read_bytes() == b"keep"
 
 
 def test_managed_content_symlink_is_refused(tmp_path, clock):
