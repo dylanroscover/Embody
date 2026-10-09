@@ -4479,9 +4479,25 @@ class EmbodyExt:
         except Exception:
             pass
 
+    def authoredColor(self, oper: OP) -> tuple:
+        """oper.color without Envoy's 0.45 s highlight pulse on a node a tool
+        just touched. Every writer of a node colour reads this -- the TDXN
+        export and the table's node_color -- or the tint bakes into a file
+        (v6.2.71 release). The static fingerprint reads the live colour: a
+        pulse can only cost a no-op re-export or two. A no-op when Envoy is absent."""
+        try:
+            _envoy = getattr(self.my.ext, 'Envoy', None)
+            orig = (_envoy.vizPulseOriginalColor(oper.path)
+                    if _envoy is not None else None)
+        except Exception:
+            orig = None
+        return orig if orig is not None else tuple(oper.color)
+
     def Save(self, opPath: str, allow_empty: bool = False) -> bool:
-        """Save a TOX-strategy COMP and update tracking. Returns True
-        only when the .tox was actually written.
+        """Save a tracked COMP and update tracking: a TOX row writes the
+        .tox, a TDXN-only COMP re-exports its .tdxn (saveTDXN), and an
+        untracked COMP is refused untouched. Returns True only when the
+        file was written, or for TDXN found already current.
 
         allow_empty mirrors saveTDXN: an AUTOMATIC save of an
         operator-empty COMP over a substantial existing .tox is the
@@ -4498,6 +4514,14 @@ class EmbodyExt:
             oper = op(opPath)
             if not oper or oper.family != 'COMP':
                 self.Log(f"Save() requires a COMP, got {oper.family if oper else 'None'}: {opPath}", "ERROR")
+                return False
+            # the TOX path below on a COMP without a tox row switched External
+            # .tox on, bumped Build, wrote nothing and still returned True
+            if not self._getStrategyFilePath(opPath, 'tox'):
+                if self._getStrategyFilePath(opPath, 'tdn'):
+                    return self.saveTDXN(opPath, allow_empty=allow_empty)
+                self.Log(f"Save() needs a tracked COMP; {opPath} has no "
+                         f"externalization row", "ERROR")
                 return False
             # a tox row naming another file means the project repointed this
             # COMP: writing would overwrite a file Embody does not track
@@ -4779,7 +4803,29 @@ class EmbodyExt:
             self.Log(f'checkpoint failed for {opPath}', 'WARNING', str(e))
             return False
 
-    def _refusesEmptyTDXNOverwrite(self, oper, abs_path: str) -> bool:
+    # Embody's own About-page stamps; no .tdxn ever carries them (TDXNExt)
+    _ABOUT_PARS = frozenset({'Build', 'Date', 'Touchbuild'})
+
+    def hasUserCustomPars(self, oper: OP) -> bool:
+        """True when oper has custom pars beyond Embody's About-page stamps."""
+        return any(not (p.name in self._ABOUT_PARS
+                        and getattr(p.page, 'name', None) == 'About')
+                   for p in oper.customPars)
+
+    def _fileHasUserPars(self, custom_pars) -> bool:
+        """A .tdxn root's custom_pars hold more than an About-stamp page."""
+        if not custom_pars:
+            return False
+        try:
+            flat = self.my.ext.TDXN._flattenCustomPars(custom_pars)
+        except Exception:
+            return True
+        return any(not (d.get('page') == 'About'
+                        and d.get('name') in self._ABOUT_PARS)
+                   for d in flat if isinstance(d, dict))
+
+    def _refusesEmptyTDXNOverwrite(self, oper, abs_path: str,
+                                   log: bool = True) -> bool:
         """True when an AUTOMATIC export must not overwrite this .tdn.
 
         Empty COMP over a non-empty on-disk .tdn = transiently-emptied
@@ -4788,8 +4834,10 @@ class EmbodyExt:
         explicit Save still passes allow_empty=True. Polarity on doubt:
         missing file allows (nothing to destroy), unparseable file
         refuses (hand-repairable bytes are most valuable exactly then).
-        Annotate children don't count as content. Warned once per
-        (path, mtime, size).
+        Annotate children don't count as content. A file holding custom
+        pars counts when the COMP has none: a parameter-holder COMP rebuilt
+        as a bare tdn_ref shell has no children either (6.2.71). Warned
+        once per (path, mtime, size, has-pars).
         """
         try:
             if any(c.type != 'annotate' for c in oper.children):
@@ -4799,7 +4847,8 @@ class EmbodyExt:
             if not existing.is_file():
                 return False
             stat = existing.stat()
-            cache_key = (abs_path, stat.st_mtime_ns, stat.st_size)
+            has_pars = self.hasUserCustomPars(oper)
+            cache_key = (abs_path, stat.st_mtime_ns, stat.st_size, has_pars)
             cached = self._empty_guard_cache.get(abs_path)
             if cached is not None and cached[0] == cache_key:
                 return cached[1]
@@ -4811,10 +4860,16 @@ class EmbodyExt:
                 if isinstance(doc, dict):
                     refused = bool(doc.get('operators')
                                    or doc.get('annotations'))
+                    if refused:
+                        detail = 'holds a non-empty network'
+                    elif (not has_pars
+                          and self._fileHasUserPars(doc.get('custom_pars'))):
+                        refused = True
+                        detail = 'holds custom parameters the COMP has lost'
                 else:
                     refused = bool(doc)
-                if refused:
-                    detail = 'holds a non-empty network'
+                    if refused:
+                        detail = 'holds a non-empty network'
             except Exception:
                 if stat.st_size > 0:
                     refused = True
@@ -4825,11 +4880,12 @@ class EmbodyExt:
                 return False
         except Exception:
             return False
-        self.Log(
-            f'REFUSED auto-export of {oper.path}: the COMP is empty but '
-            f'its .tdn on disk {detail} -- overwriting would destroy '
-            f'the only good copy. If the empty state is intentional, '
-            f'use the manager Save button.', 'WARNING')
+        if log:
+            self.Log(
+                f'REFUSED auto-export of {oper.path}: the COMP is empty but '
+                f'its .tdn on disk {detail} -- overwriting would destroy '
+                f'the only good copy. If the empty state is intentional, '
+                f'use the manager Save button.', 'WARNING')
         return True
 
     def _reBaselineCheckpoint(self, opPath: str) -> None:
@@ -6301,7 +6357,7 @@ class EmbodyExt:
         their session values, so a status flip must not mark the COMP dirty
         and trigger a byte-identical main-thread re-export.
         """
-        skip = {'Build', 'Date', 'Touchbuild'}
+        skip = set(EmbodyExt._ABOUT_PARS)
         shortcut = EmbodyExt._registryShortcut(operator)
         if shortcut:
             skip |= set(EmbodyExt._TRANSIENT_STATUS_PARS.get(shortcut, ()))
@@ -6460,7 +6516,6 @@ class EmbodyExt:
                 parts.append((c.name, 'text', EmbodyExt._datContentFingerprint(c)))
             parts.append((c.name, 'storage', EmbodyExt._storageFingerprint(c)))
             if c.isCOMP:
-                parts.append((c.name, 'custom_defs', EmbodyExt._customDefsFingerprint(c)))
                 try:
                     parts.append((c.name, 'comp_in',
                                   tuple(o.name for o in c.inputCOMPs)))
@@ -6487,6 +6542,9 @@ class EmbodyExt:
             if not c.isCOMP or is_embedded_comp:
                 parts.append((c.name, 'pars', EmbodyExt._parFingerprint(c)))
             if is_embedded_comp:
+                # a referenced child's definitions live in its own file
+                parts.append((c.name, 'custom_defs',
+                              EmbodyExt._customDefsFingerprint(c)))
                 # Honor exclusion ONLY at the boundary's direct children
                 # (this top-level call). Nested excluded COMPs are serialized
                 # as normal content by the export, so the fingerprint must
@@ -7448,7 +7506,7 @@ class EmbodyExt:
             if oper is None:
                 continue          # missing ops are the restore path's job
             try:
-                c = oper.color
+                c = self.authoredColor(oper)
                 want = {'node_x': str(int(oper.nodeX)),
                         'node_y': str(int(oper.nodeY)),
                         'node_color': f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'}
@@ -7480,7 +7538,7 @@ class EmbodyExt:
         node_y = str(int(oper.nodeY)) if has_position_cols else ''
         node_color = ''
         if has_position_cols:
-            c = oper.color
+            c = self.authoredColor(oper)
             node_color = f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'
 
         # Check if row already exists for this operator + strategy
@@ -7524,7 +7582,7 @@ class EmbodyExt:
         if self.Externalizations is None or (
                 self.Externalizations[0, 'node_x'] is None):
             return {}
-        c = oper.color
+        c = self.authoredColor(oper)
         return {
             'node_x': str(int(oper.nodeX)),
             'node_y': str(int(oper.nodeY)),
@@ -9134,7 +9192,7 @@ class EmbodyExt:
             node_y = str(int(oper.nodeY)) if has_position_cols else ''
             node_color = ''
             if has_position_cols:
-                c = oper.color
+                c = self.authoredColor(oper)
                 node_color = f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'
 
             if has_strategy_col:

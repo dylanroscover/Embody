@@ -133,7 +133,7 @@ class MyFeatureExt:
 ```python
 # Promoted methods (uppercase) — called directly on the component:
 op.Embody.Update()
-op.Embody.Save('/path/to/comp')   # Save() requires a COMP path argument
+op.Embody.Save('/path/to/comp')   # a tracked COMP: writes its .tox or .tdxn
 
 # Non-promoted methods (lowercase) — through ext:
 op.Embody.ext.Embody.getExternalizedOps(COMP)

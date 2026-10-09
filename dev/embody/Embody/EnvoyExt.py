@@ -8279,6 +8279,12 @@ class EnvoyExt:
         """Retire Embot if he is inside a COMP about to be written -- see envoy_viz."""
         return mod.envoy_viz.vizRetireForWrite(self, path)
 
+    def vizPulseOriginalColor(self, path: str) -> Optional[tuple]:
+        """Pre-pulse colour of `path`, or None -- see envoy_viz.pulseOriginalColor."""
+        if not self._viz_pulse_op:
+            return None   # per-op on every export: skip the mod lookup
+        return mod.envoy_viz.pulseOriginalColor(self, path)
+
     def _get_logs(self, level=None, count=50, since_id=None, source=None):
         """Get filtered log entries from Embody's ring buffer -- see envoy_read."""
         return mod.envoy_read.get_logs(self, level, count, since_id, source)

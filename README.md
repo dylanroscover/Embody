@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **163 test suites** (5,587 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **163 test suites** (5,611 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -211,7 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
-- **6.2.71** — parent `.tdxn` files stop repeating the custom parameters of externalized children (a 15-COMP lab's child entries shrink from 2,368 lines to 72); import creates a COMP's custom parameters before its contents
+- **6.2.71** — parent `.tdxn` files stop repeating the custom parameters of children that have their own `.tdxn` (a 15-COMP lab's child entries shrink from 2,368 lines to 72); importing a COMP from its own `.tdxn` creates its custom parameters before its contents
 - **6.2.69** — a session whose TouchDesigner closes stops with `envoy.instance.unavailable` instead of drifting into another open project; saves that rename the `.toe` are followed, and `launch_td` / `restart_td` act on the session's own instance (issue #147)
 - **6.2.68** — a manual Check for Update offers Install Anyway when a release was built for a newer TouchDesigner than yours; unattended updates still stop at the floor (issue #145)
 - **6.2.65** — four new skills (`glsl-shaders`, `operator-gotchas`, `testing`, `/collab`) and skill reference files, with thanks to Derivative's TDMCPSkills; `describe_op_type` and `run_soak_test`; a user project's always-loaded guidance cut by 40%

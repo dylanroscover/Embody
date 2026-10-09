@@ -210,6 +210,7 @@ def onProjectPreSave():
 		# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
 		# within a single Ctrl+S cycle -- they have no meaning across sessions.
 		parent.Embody.unstore('_tdn_stripped_paths')
+		parent.Embody.unstore('_tdn_restore_extras')
 		parent.Embody.unstore('_tdn_pane_restore')
 		parent.Embody.unstore('_perform_state')
 
@@ -340,16 +341,22 @@ def _runPreSaveExternalization():
 	# noisy git diffs from volatile header fields (build, generator,
 	# td_build).
 	exported = []
+	not_landed = []   # tracked COMPs whose save-time export did not land
 	for comp_path, rel_tdxn_path in tdxn_comps:
 		comp = op(comp_path)
 		if not comp:
 			continue
-		# Skip empty COMPs - nothing to export or strip
+		# An empty COMP has nothing to strip, but its file must stay current:
+		# a stripped ancestor's restore re-imports it from that file
+		# (_postSaveRestoreExtras). The empty guard keeps a transiently
+		# emptied shell from overwriting a good file.
 		has_children = bool(comp.findChildren(depth=1, includeUtility=True))
-		if not has_children:
-			continue
 		try:
 			abs_path = str(parent.Embody.ext.Embody.buildAbsolutePath(rel_tdxn_path))
+			if not has_children and parent.Embody.ext.Embody._refusesEmptyTDXNOverwrite(
+					comp, abs_path, log=False):
+				not_landed.append(comp_path)
+				continue
 
 			# Export to dict only (no file write yet)
 			result = parent.Embody.ext.TDXN.ExportNetwork(
@@ -358,6 +365,7 @@ def _runPreSaveExternalization():
 				parent.Embody.ext.Embody.Log(
 					f'Pre-save export failed for {comp_path}: '
 					f'{result.get("error")}', 'ERROR')
+				not_landed.append(comp_path)
 				continue
 
 			new_tdxn = result['tdn']
@@ -366,7 +374,8 @@ def _runPreSaveExternalization():
 			existing_tdxn = parent.Embody.ext.TDXN._read_existing_tdxn(abs_path)
 			if existing_tdxn and parent.Embody.ext.TDXN._tdxn_content_equal(
 					new_tdxn, existing_tdxn):
-				exported.append((comp_path, rel_tdxn_path))
+				if has_children:
+					exported.append((comp_path, rel_tdxn_path))
 				continue
 
 			# Content changed (or first export) - write to disk
@@ -389,6 +398,7 @@ def _runPreSaveExternalization():
 				parent.Embody.ext.Embody.Log(
 					f'Pre-save write failed for {comp_path}: '
 					f'{write_result.get("error")}', 'ERROR')
+				not_landed.append(comp_path)
 				continue
 			# Rotation failed but the write landed -- that file has no
 			# recovery copy. Main thread here (TD's save handler).
@@ -413,10 +423,24 @@ def _runPreSaveExternalization():
 				build_num=new_tdxn.get('build'),
 				touch_build=f'{app.version}.{app.build}')
 			parent.Embody.ext.Embody._storeTDXNFingerprint(comp)
-			exported.append((comp_path, rel_tdxn_path))
+			if has_children:
+				exported.append((comp_path, rel_tdxn_path))
 		except Exception as e:
 			parent.Embody.ext.Embody.Log(
 				f'Pre-save export error for {comp_path}: {e}', 'ERROR')
+			not_landed.append(comp_path)
+
+	# A stripped root destroys every COMP inside it. One whose own export
+	# did not land would come back from a stale (or no) file, so its root
+	# stays unstripped this save: a larger .toe, nothing lost.
+	if not_landed:
+		kept = [p for p, _ in exported
+			if any(n.startswith(p.rstrip('/') + '/') for n in not_landed)]
+		if kept:
+			exported = [e for e in exported if e[0] not in kept]
+			parent.Embody.ext.Embody.Log(
+				f'Not stripping {", ".join(kept)} this save: a TDXN COMP '
+				f'inside did not export ({", ".join(not_landed)})', 'WARNING')
 
 	# Phase 2: Strip children from exported COMPs so the .toe stays small.
 	# Only strip COMPs whose export succeeded - stripping without a valid
@@ -468,11 +492,148 @@ def _runPreSaveExternalization():
 	# source of truth, so saved data is never lost -- but session integrity is).
 	if exported_by_depth:
 		parent.Embody.store('_tdn_stripped_paths', list(exported_by_depth))
+		extras = _postSaveRestoreExtras(tdxn_comps, exported_by_depth)
+		if extras:
+			parent.Embody.store('_tdn_restore_extras', extras)
 	for comp_path, rel_tdxn_path in exported_by_depth:
 		comp = op(comp_path)
 		if comp:
 			parent.Embody.ext.Embody.stripCompChildren(comp)
 	return
+
+def _postSaveRestoreExtras(tdxn_comps, exported):
+	"""(path, rel, op id) of every live tracked TDXN COMP under a stripped
+	one that was not stripped itself. The ancestor's strip destroys it and
+	the ancestor's file holds only its tdn_ref -- no custom pars since
+	6.2.71 -- so a rebuilt shell must be re-imported from its own file (a
+	childless parameter holder lost its pars on every Ctrl+S). The id tells
+	post-save whether the strip really destroyed it."""
+	roots = [p for p, _ in exported]
+	done = set(roots)
+	extras = []
+	for p, rel in tdxn_comps:
+		if p in done or not any(
+				p.startswith(r.rstrip('/') + '/') for r in roots):
+			continue
+		comp = op(p)
+		if comp is not None:
+			extras.append((p, rel, comp.id))
+	return extras
+
+def _restoreStrippedComp(comp_path, rel_path, expect_id=None):
+	"""Re-import one COMP from its .tdxn after the save. A failure,
+	including an {'error'} result, falls back to the newest backup -- only
+	while the COMP is still empty, so a late failure never swaps a built
+	network for an older file. expect_id (an extra): the op id before the
+	strip; the same op means the strip never destroyed it, so live work is
+	kept."""
+	abs_path = None
+	try:
+		if not rel_path:
+			parent.Embody.ext.Embody.Log(
+				f'Post-save restore: no TDXN file path for {comp_path}', 'WARNING')
+			return False
+		if expect_id is not None:
+			comp = op(comp_path)
+			if comp is None:
+				parent.Embody.ext.Embody.Log(
+					f'Post-save restore: {comp_path} is missing', 'WARNING')
+				return False
+			if comp.id == expect_id:
+				return False
+		abs_path = parent.Embody.ext.Embody.buildAbsolutePath(rel_path)
+		if not abs_path.is_file():
+			parent.Embody.ext.Embody.Log(
+				f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
+			return False
+		tdxn_doc = parent.Embody.ext.TDXN.tdxn_load(
+			abs_path.read_text(encoding='utf-8'))
+		# restore_tdxn_shells=False: _restoreStripped imports every COMP
+		# itself -- Phase 8.6 would double-import nested comps on every Ctrl+S.
+		result = parent.Embody.ext.TDXN.ImportNetwork(
+			target_path=comp_path, tdn=tdxn_doc, clear_first=True,
+			restore_file_links=True, restore_tdxn_shells=False)
+		if result.get('error'):
+			raise RuntimeError(result['error'])
+		return True
+	except Exception as e:
+		# print() as backup - Log may fail if extensions are reinitializing
+		print(f'Embody > Post-save restore failed for {comp_path}: {e}')
+		try:
+			parent.Embody.ext.Embody.Log(
+				f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
+		except Exception:
+			pass
+		if abs_path is None:
+			return False
+		comp = op(comp_path)
+		if comp is not None and any(
+				c.type != 'annotate' for c in comp.children):
+			parent.Embody.ext.Embody.Log(
+				f'Post-save restore of {comp_path} failed after building '
+				f'its network: kept it, no rollback to an older backup. '
+				f'Reload it from {abs_path.name} to be sure.', 'ERROR')
+			return False
+		# Attempt rollback from backup .tdn
+		try:
+			# Finder, not the raw path builder: falls back to .bak2
+			# and to the legacy .tdn_backup/ dir, so an upgraded
+			# project keeps its recovery net.
+			backup_path = parent.Embody.ext.TDXN._find_existing_backup_instance(
+				str(abs_path))
+			if backup_path is not None:
+				backup_tdxn = parent.Embody.ext.TDXN.tdxn_load(
+					backup_path.read_text(encoding='utf-8'))
+				rb = parent.Embody.ext.TDXN.ImportNetwork(
+					target_path=comp_path, tdn=backup_tdxn,
+					clear_first=True, restore_file_links=True,
+					restore_tdxn_shells=False)
+				if rb.get('error'):
+					raise RuntimeError(rb['error'])
+				# Name the file: the fallback chain can land on an
+				# older generation, and a silent revert to a stale
+				# network is its own data loss.
+				import datetime as _dt
+				when = _dt.datetime.fromtimestamp(
+					backup_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+				parent.Embody.ext.Embody.Log(
+					f'Rolled back {comp_path} from {backup_path} (saved '
+					f'{when})', 'ERROR')
+		except Exception as rb_e:
+			print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
+			try:
+				parent.Embody.ext.Embody.Log(
+					f'Rollback also failed for {comp_path}: {rb_e}', 'ERROR')
+			except Exception:
+				pass
+		return False
+
+def _restoreStripped():
+	"""Rebuild every COMP the pre-save strip emptied, plus the extras that
+	came back as bare shells, shallowest first: a parent recreates a nested
+	COMP's shell before that COMP's own import fills it. Returns whether
+	anything was stripped."""
+	stripped = parent.Embody.fetch('_tdn_stripped_paths', [], search=False)
+	extras = parent.Embody.fetch('_tdn_restore_extras', [], search=False)
+	parent.Embody.unstore('_tdn_stripped_paths')
+	parent.Embody.unstore('_tdn_restore_extras')
+	entries = [tuple(e) for e in extras]   # (path, rel, op id)
+	for entry in stripped:
+		# Stored (comp_path, rel_tdxn_path) pairs; a plain string is legacy.
+		if isinstance(entry, (list, tuple)) and len(entry) == 2:
+			comp_path, rel_path = entry
+		else:
+			comp_path = entry
+			try:
+				rel_path = parent.Embody.ext.Embody._getStrategyFilePath(
+					comp_path, 'tdn')
+			except Exception:
+				rel_path = None
+		entries.append((comp_path, rel_path, None))
+	for comp_path, rel_path, expect_id in sorted(
+			entries, key=lambda e: e[0].count('/')):
+		_restoreStrippedComp(comp_path, rel_path, expect_id)
+	return bool(stripped)
 
 def onProjectPostSave():
 	# Lift the save-time dialog suppression once the post-save restore AND the
@@ -498,75 +659,12 @@ def onProjectPostSave():
 	# Re-import from the just-exported .tdn files to keep the session intact.
 	# In Export/Off modes no strip runs, so stripped is empty -- but we still
 	# need to re-store _init_complete and restart Envoy below.
-	stripped = parent.Embody.fetch('_tdn_stripped_paths', [], search=False)
-	if stripped:
-		parent.Embody.unstore('_tdn_stripped_paths')
-		# Sort shallowest-first so parent COMPs (e.g. /META) are restored
-		# before their nested children (/META/geo1). The parent import
-		# recreates the child COMP shell; the child import then replaces
-		# its default contents (e.g. Torus) with the correct .tdn state.
-		def _depth_key(entry):
-			p = entry[0] if isinstance(entry, (list, tuple)) else entry
-			return p.count('/')
-		stripped = sorted(stripped, key=_depth_key)
-		for entry in stripped:
-			# Unpack stored (comp_path, rel_tdxn_path) tuples.
-			# Fall back to legacy format (plain string) for safety.
-			if isinstance(entry, (list, tuple)) and len(entry) == 2:
-				comp_path, rel_path = entry
-			else:
-				comp_path = entry
-				try:
-					rel_path = parent.Embody.ext.Embody._getStrategyFilePath(comp_path, 'tdn')
-				except Exception:
-					rel_path = None
-			try:
-				if not rel_path:
-					parent.Embody.ext.Embody.Log(
-						f'Post-save restore: no TDXN file path for {comp_path}', 'WARNING')
-					continue
-				abs_path = parent.Embody.ext.Embody.buildAbsolutePath(rel_path)
-				if not abs_path.is_file():
-					parent.Embody.ext.Embody.Log(
-						f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
-					continue
-				tdxn_doc = parent.Embody.ext.TDXN.tdxn_load(
-					abs_path.read_text(encoding='utf-8'))
-				# restore_tdxn_shells=False: this restore loop imports every
-				# stripped TDXN COMP itself -- Phase 8.6 would double-import
-				# nested comps on every Ctrl+S.
-				parent.Embody.ext.TDXN.ImportNetwork(
-					target_path=comp_path, tdn=tdxn_doc, clear_first=True,
-					restore_file_links=True, restore_tdxn_shells=False)
-			except Exception as e:
-				# print() as backup - Log may fail if extensions are reinitializing
-				print(f'Embody > Post-save restore failed for {comp_path}: {e}')
-				try:
-					parent.Embody.ext.Embody.Log(
-						f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
-				except Exception:
-					pass
-				# Attempt rollback from backup .tdn
-				try:
-					# Finder, not the raw path builder: falls back to .bak2
-					# and to the legacy .tdn_backup/ dir, so an upgraded
-					# project keeps its recovery net.
-					backup_path = parent.Embody.ext.TDXN._find_existing_backup_instance(
-						str(abs_path))
-					if backup_path is not None:
-						backup_tdxn = parent.Embody.ext.TDXN.tdxn_load(
-							backup_path.read_text(encoding='utf-8'))
-						parent.Embody.ext.TDXN.ImportNetwork(
-							target_path=comp_path, tdn=backup_tdxn,
-							clear_first=True, restore_file_links=True,
-							restore_tdxn_shells=False)
-						# Name the file: the fallback chain can land on an
-						# older generation, and a silent revert to a stale
-						# network is its own data loss.
-						print(f'Embody > Rolled back {comp_path} from '
-							  f'{backup_path}')
-				except Exception as rb_e:
-					print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
+	try:
+		stripped = _restoreStripped()
+	except Exception as e:
+		# never skip _init_complete or the Envoy restart below
+		print(f'Embody > Post-save restore failed: {e}')
+		stripped = True
 	# Restore pane owners that were orphaned during strip
 	pane_restore = parent.Embody.fetch('_tdn_pane_restore', {}, search=False)
 	if pane_restore:

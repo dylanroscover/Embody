@@ -1103,6 +1103,31 @@ class TestEnvoyVizGates(EmbodyTestCase):
         self.assertNotIn('/a/b', ext._viz_bot_pending_cleanup,
                          'the pending entry inside the written COMP is drained')
 
+    def test_retire_for_write_restores_a_pulse_inside_with_the_bot_elsewhere(self):
+        """The pulse tints a node wherever Embot stands, so a write of the
+        subtree holding the pulsing node restores it even with Embot away;
+        a mid-fade accent colour would otherwise serialize."""
+        ext = _stub_ext(embot=True)
+        node = self.sandbox.create(textDAT, 'pulsed')
+        node.color = (0.2, 0.7333, 0.7667)
+        ext._viz_pulse_op = node.path
+        ext._viz_pulse_orig = (0.3, 0.5, 0.9)
+        ext._viz_bot_net = '/elsewhere'
+        viz.vizRetireForWrite(ext, node.path)
+        self.assertEqual([round(c, 4) for c in node.color], [0.3, 0.5, 0.9])
+        self.assertIsNone(ext._viz_pulse_op)
+        self.assertEqual(ext._viz_bot_net, '/elsewhere',
+                         'restoring the colour leaves the bot alone')
+
+    def test_pulse_original_color_only_for_the_pulsing_op(self):
+        ext = _stub_ext()
+        ext._viz_pulse_op = '/a/b'
+        ext._viz_pulse_orig = (0.3, 0.5, 0.9)
+        self.assertEqual(viz.pulseOriginalColor(ext, '/a/b'), (0.3, 0.5, 0.9))
+        self.assertIsNone(viz.pulseOriginalColor(ext, '/a/c'))
+        ext._viz_pulse_op = None
+        self.assertIsNone(viz.pulseOriginalColor(ext, '/a/b'))
+
     def test_highlight_op_skips_redundant_write(self):
         """trackActive runs every frame while following, so re-asserting
         selection + current is a per-frame editor write on a displayed node.

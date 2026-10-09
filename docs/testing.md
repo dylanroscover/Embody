@@ -269,7 +269,7 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_extensions` | 6 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
 | `test_tool_permissions` | 15 | Tool-permissions posture writer (EnvoyExt) |
-| `test_envoy_viz_gates` | 47 | Issue-57 viz activation gates in `envoy_viz` |
+| `test_envoy_viz_gates` | 52 | Issue-57 viz activation gates in `envoy_viz` |
 | `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 | `test_data_readers` | 22 | `get_chop_data` / `get_pop_data`: reduced reads (per-channel stats, channel globs and caps, relational diffs), never a raw dump |
 | `test_mcp_capture_op` | 9 | `capture_op`: any operator through a transient OP Viewer TOP, waiting out the empty frames a freshly aimed viewer returns |
@@ -280,7 +280,7 @@ AI-client connectivity tier, listed separately under
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdxn_reconstruction` | 236 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdxn_file_io` | 102 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdxn_file_io` | 124 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
 | `test_tdxn_helpers` | 120 | TDXN serialization utility functions, locked-content source classification and Switch to TOX |
 | `test_tdxn_export_import` | 65 | Network export/import + storage round-trip |
 | `test_tdxn_crash_safety` | 48 | Atomic writes, backup rotation, validation |

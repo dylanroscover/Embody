@@ -867,6 +867,15 @@ def restorePulse(ext) -> None:
     ext._viz_pulse_orig = None
 
 
+def pulseOriginalColor(ext, path: str):
+    """The colour `path` had before the pulse tinted it, or None when it is not
+    mid-pulse. Every writer of a node colour reads through this (see
+    EmbodyExt.authoredColor) so a 0.45 s tint never reaches a file."""
+    if path and ext._viz_pulse_op == path and ext._viz_pulse_orig is not None:
+        return tuple(ext._viz_pulse_orig)
+    return None
+
+
 # --- the dancing builder-bot (ephemeral annotation) ---
 
 def placeBot(ext, net: 'COMP', target: 'OP', now: float) -> None:
@@ -1828,11 +1837,13 @@ def vizRetireForWrite(ext, path: str) -> bool:
                 matched = True
                 removed += destroyPartsIn(ext, netpath)
                 ext._viz_bot_pending_cleanup.discard(netpath)
+        # A mid-fade accent colour would serialize. The pulse tints a node
+        # wherever Embot stands, so this is not gated on him being inside.
+        if ext._viz_pulse_op and pathInsideSubtree(ext._viz_pulse_op, path):
+            restorePulse(ext)
         # The live bot, only when he is genuinely inside.
         if ext._viz_bot_net and pathInsideSubtree(ext._viz_bot_net, path):
             matched = True
-            if ext._viz_pulse_op and pathInsideSubtree(ext._viz_pulse_op, path):
-                restorePulse(ext)   # a mid-fade accent colour would serialize
             removed += destroyPartsIn(ext, ext._viz_bot_net)
             destroyBot(ext)
     except Exception:

@@ -1208,6 +1208,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 			if o['name'] == 'child_comp'][0]
 		self.assertIn('tdn_ref', child_entry)
 		self.assertNotIn('custom_pars', child_entry)
+		self._dropTrackingRows(child.path)
 
 	def test_validateTDXNRefs_happy_path(self):
 		"""Valid tdn_refs matching table entries and disk files produce no warnings."""
@@ -1421,6 +1422,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 			parent.tags.discard(tdxn_tag)
 			child1.tags.discard(tdxn_tag)
 			child2.tags.discard(tdxn_tag)
+			self._dropTrackingRows(child1.path, child2.path)
 
 	def test_cascade_off_no_children_tagged(self):
 		"""With cascade OFF, tagging a parent should not tag children."""
@@ -1434,6 +1436,24 @@ class TestTDXNFileIO(EmbodyTestCase):
 			self.assertNotIn(tdxn_tag, child.tags)
 		finally:
 			self.embody.par.Tdxncascade = orig_cascade
+			self._dropTrackingRows(parent.path)
+
+	def _dropTrackingRows(self, *paths):
+		"""Remove the tracking rows a test created; a destroyed sandbox
+		leaves them behind otherwise (autosave then chases them)."""
+		table = self.embody_ext.Externalizations
+		tdn = self.embody_ext._normalizeStrategy('tdn')
+		for path in paths:
+			for _ in range(3):
+				row = next((i for i in range(1, table.numRows)
+					if table[i, 'path'].val == path), None)
+				if row is None:
+					break
+				if self.embody_ext._rowStrategy(row, table) == tdn:
+					self.embody_ext.removeTDXNEntry(path, delete_file=False)
+				else:
+					self.embody_ext.removeListerRow(
+						path, table[row, 'rel_file_path'].val, delete_file=False)
 
 	def test_large_tdxn_warning_suppressed(self):
 		"""Tdxncascadewarn='quiet' should prevent the dialog from showing."""
@@ -1524,3 +1544,484 @@ class TestTDXNFileIO(EmbodyTestCase):
 		self.assertTrue(seen, '_createOps never ran on the target')
 		self.assertIn('Speed', seen[0])
 		self.assertEqual(target.par.Speed.eval(), 3)
+
+	# =================================================================
+	# v6.2.71 follow-ups: pulse colour, Save() on TDXN, ad-hoc cleanup,
+	# tox_ref custom_pars
+	# =================================================================
+
+	def _tracked_tdxn_child(self, parent, name='child_comp'):
+		"""A TDXN-tagged child with its own .tdxn on disk and a table row."""
+		child = parent.create(baseCOMP, name)
+		child.create(textDAT, 'leaf')
+		child.tags.add(self.embody.par.Tdxntag.val)
+		rel = self.embody_ext._buildTDXNRelPath(child)
+		abs_path = self.embody_ext.buildAbsolutePath(rel)
+		abs_path.parent.mkdir(parents=True, exist_ok=True)
+		self._auto_files.append(str(abs_path))
+		self.embody.ext.TDXN.ExportNetwork(
+			root_path=child.path, output_file=str(abs_path))
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, str(rel), timestamp,
+			False, 1, str(app.build), 'tdn')
+		return child, abs_path
+
+	def test_export_writes_the_colour_from_before_envoys_pulse(self):
+		"""Envoy's highlight pulse tints a node for ~0.5 s after a tool
+		touches it; an export, a table row or a fingerprint taken in that
+		window records the authored colour, not the tint."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		node = parent.create(baseCOMP, 'node')
+		saved = (self.embody.ext.Envoy._viz_pulse_op,
+			self.embody.ext.Envoy._viz_pulse_orig)
+		try:
+			self.embody.ext.Envoy._viz_pulse_op = node.path
+			self.embody.ext.Envoy._viz_pulse_orig = (0.3, 0.5, 0.9)
+			node.color = (0.2, 0.7333, 0.7667)   # mid-fade tint
+			res = self.embody.ext.TDXN.ExportNetwork(root_path=parent.path)
+			entry = [o for o in res['tdn']['operators']
+				if o['name'] == 'node'][0]
+			self.assertEqual(entry.get('color'), [0.3, 0.5, 0.9])
+			root = self.embody.ext.TDXN.ExportNetwork(root_path=node.path)
+			self.assertEqual(root['tdn'].get('color'), [0.3, 0.5, 0.9])
+			self.assertEqual(
+				self.embody_ext._positionCells(node).get('node_color'),
+				'0.3000,0.5000,0.9000')
+		finally:
+			(self.embody.ext.Envoy._viz_pulse_op,
+				self.embody.ext.Envoy._viz_pulse_orig) = saved
+
+	def test_save_on_a_tdxn_comp_reexports_its_tdxn(self):
+		"""op.Embody.Save on a TDXN COMP re-exports its .tdxn; it used to run
+		the TOX save, write nothing and still report success."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child, child_abs = self._tracked_tdxn_child(parent)
+		child.create(textDAT, 'added')
+		try:
+			self.assertTrue(self.embody.Save(child.path))
+			with open(child_abs, 'r', encoding='utf-8') as f:
+				names = [o['name'] for o in yaml.safe_load(f)['operators']]
+			self.assertIn('added', names)
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_save_refuses_an_untracked_comp_untouched(self):
+		"""Save on a COMP with no tracked file returns False and changes
+		nothing; it used to switch External .tox on and bump Build."""
+		comp = self.sandbox.create(baseCOMP, 'loose')
+		comp.par.enableexternaltox = False
+		self.assertFalse(self.embody.Save(comp.path))
+		self.assertFalse(comp.par.enableexternaltox.eval())
+		self.assertEqual(comp.par.externaltox.eval(), '')
+
+	def test_adhoc_export_keeps_nested_tracked_tdxn_files(self):
+		"""An ad-hoc export of an untracked COMP never deletes the tracked
+		.tdxn of a TDXN COMP inside it, even without cleanup_protected."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child, child_abs = self._tracked_tdxn_child(parent)
+		try:
+			self.assertTrue(child_abs.is_file())
+			fp = str(Path(self._temp_dir) / 'adhoc.tdxn')
+			self.embody.ext.TDXN.ExportNetwork(
+				root_path=parent.path, output_file=fp)
+			self.assertTrue(child_abs.is_file(),
+				"the nested COMP's tracked .tdxn was deleted")
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_tox_ref_shell_omits_custom_pars(self):
+		"""A tox_ref entry carries no custom_pars: the .tox owns them."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'tox_child')
+		child.appendCustomPage('Ctl').appendFloat('Speed')
+		child.par.Speed = 3
+		child.tags.add(self.embody.par.Toxtag.val)
+		rel = Path(str(self.embody_ext._buildTDXNRelPath(child))).with_suffix(
+			'.tox').as_posix()
+		tox_abs = self.embody_ext.buildAbsolutePath(rel)
+		tox_abs.parent.mkdir(parents=True, exist_ok=True)
+		self._auto_files.append(str(tox_abs))
+		child.save(str(tox_abs))
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, rel,
+			timestamp, False, 1, str(app.build), 'tox')
+		try:
+			fp = str(Path(self._temp_dir) / 'parent_tox.tdxn')
+			self.embody.ext.TDXN.ExportNetwork(
+				root_path=parent.path, output_file=fp)
+			with open(fp, 'r', encoding='utf-8') as f:
+				entry = [o for o in yaml.safe_load(f)['operators']
+					if o['name'] == 'tox_child'][0]
+			self.assertIn('tox_ref', entry)
+			self.assertNotIn('custom_pars', entry)
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_tox_reload_replaces_a_shells_custom_pars(self):
+		"""The TD behaviour that makes dropping them safe (2025.33230): a
+		.tox reload replaces the COMP's custom parameters and values, so a
+		copy applied to the shell beforehand never survives the reload."""
+		src = self.sandbox.create(baseCOMP, 'tox_src')
+		src.appendCustomPage('Ctl').appendFloat('Speed')
+		src.par.Speed = 7
+		tox = (Path(self._temp_dir) / 'src.tox').as_posix()
+		src.save(tox)
+		shell = self.sandbox.create(baseCOMP, 'tox_shell')
+		shell.appendCustomPage('Ctl').appendFloat('Speed')
+		shell.appendCustomPage('Ctl').appendFloat('Extra')
+		shell.par.Speed = 3
+		shell.par.externaltox = tox
+		self.embody_ext._reloadTox(shell)
+		self.assertEqual([p.name for p in shell.customPars], ['Speed'])
+		self.assertEqual(shell.par.Speed.eval(), 7)
+
+	def _track_tdxn(self, comp):
+		"""Tag comp TDXN with a table row; returns (path, rel)."""
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		comp.tags.add(self.embody.par.Tdxntag.val)
+		rel = str(self.embody_ext._buildTDXNRelPath(comp))
+		abs_path = self.embody_ext.buildAbsolutePath(rel)
+		abs_path.parent.mkdir(parents=True, exist_ok=True)
+		self._auto_files.append(str(abs_path))
+		self.embody_ext._addToTable(comp, rel, timestamp,
+			False, 1, str(app.build), 'tdn')
+		return comp.path, rel
+
+	def test_save_cycle_restores_a_childless_nested_comp(self):
+		"""Full-mode save through the real pre-save export/strip and the
+		post-save restore: a childless nested TDXN COMP (a parameter holder)
+		comes back with its CURRENT custom pars and flags. Since 6.2.71 its
+		parent's file holds only its tdn_ref, so it came back bare."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		parent.create(textDAT, 'leaf')
+		holder = parent.create(baseCOMP, 'holder')
+		holder.appendCustomPage('Ctl').appendFloat('Speed')
+		holder.par.Speed = 5
+		rows = [self._track_tdxn(parent), self._track_tdxn(holder)]
+		for path, rel in rows:
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=str(self.embody_ext.buildAbsolutePath(rel)))
+		# a live edit after the files were written: the save must keep it
+		holder.par.Speed = 7
+		embody = self.embody
+		ext_class = type(self.embody_ext)
+		saved = (embody.par.Tdxnmode.eval(),
+			bool(embody.par.Tdxnstriponsave.eval()), ext_class.Update,
+			ext_class._getTDXNStrategyComps, ext_class._checkTDXNContentSafety)
+		embody.par.Tdxnmode = 'full'
+		embody.par.Tdxnstriponsave = True
+		ext_class.Update = lambda self_, suppress_refresh=False: None
+		ext_class._getTDXNStrategyComps = lambda self_: list(rows)
+		ext_class._checkTDXNContentSafety = lambda self_: None
+		execute = embody.op('execute').module
+		try:
+			# a lost patch here would strip the whole live project
+			self.assertEqual(self.embody_ext._getTDXNStrategyComps(), rows)
+			execute._runPreSaveExternalization()
+			self.assertIsNone(parent.op('holder'), 'the strip destroys it')
+			self.assertTrue(execute._restoreStripped())
+			restored = parent.op('holder')
+			self.assertIsNotNone(restored)
+			self.assertEqual(restored.par.Speed.eval(), 7)
+		finally:
+			(ext_class.Update, ext_class._getTDXNStrategyComps,
+				ext_class._checkTDXNContentSafety) = saved[2:]
+			embody.par.Tdxnmode, embody.par.Tdxnstriponsave = saved[:2]
+			for _, rel in rows:
+				bak = self.embody.ext.TDXN._find_existing_backup_instance(
+					str(self.embody_ext.buildAbsolutePath(rel)))
+				if bak is not None:
+					self._auto_files.append(str(bak))
+			for key in ('_tdn_stripped_paths', '_tdn_restore_extras',
+					'_tdn_pane_restore'):
+				embody.unstore(key)
+			self._dropTrackingRows(*[path for path, _ in rows])
+
+
+	def test_auto_export_refuses_to_drop_custom_pars_from_disk(self):
+		"""An automatic save of a COMP that lost its custom pars must not
+		overwrite a file that still holds them -- the shell signature."""
+		comp = self.sandbox.create(baseCOMP, 'holder')
+		comp.appendCustomPage('Ctl').appendFloat('Speed')
+		fp = str(Path(self._temp_dir) / 'holder.tdxn')
+		self.embody.ext.TDXN.ExportNetwork(root_path=comp.path, output_file=fp)
+		self.assertFalse(self.embody_ext._refusesEmptyTDXNOverwrite(comp, fp))
+		comp.destroyCustomPars()
+		self.assertTrue(self.embody_ext._refusesEmptyTDXNOverwrite(comp, fp))
+
+	def test_ref_entries_omit_custom_sequences(self):
+		"""A ref entry carries no custom sequence blocks: they belong to the
+		custom pars its own file owns, and a shell without those pars logs
+		'Sequence not found' on every import."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child, _ = self._tracked_tdxn_child(parent)
+		page = child.appendCustomPage('Items')
+		page.appendSequence('Items')
+		page.appendFloat('Itemweight')
+		child.seq.Items.blockSize = 1
+		child.seq.Items.numBlocks = 3
+		try:
+			res = self.embody.ext.TDXN.ExportNetwork(root_path=parent.path)
+			entry = [o for o in res['tdn']['operators']
+				if o['name'] == 'child_comp'][0]
+			self.assertIn('tdn_ref', entry)
+			self.assertNotIn('Items', entry.get('sequences', {}))
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_import_skips_phase0_when_the_target_has_its_pars(self):
+		"""Phase 0 is for bare shells: a target that already carries custom
+		pars (a stripped COMP restored after save) is not re-created twice."""
+		target = self.sandbox.create(baseCOMP, 'import_target')
+		target.appendCustomPage('Ctl').appendFloat('Speed')
+		doc = {
+			'type': 'baseCOMP',
+			'custom_pars': {'Ctl': [
+				{'name': 'Speed', 'style': 'Float', 'value': 3}]},
+			'operators': [{'name': 'leaf', 'type': 'textDAT'}],
+		}
+		calls = []
+		orig = self.embody.ext.TDXN._createCustomParsOnOp
+		def spy(op_, defs):
+			if op_.path == target.path:
+				calls.append(1)
+			return orig(op_, defs)
+		self.embody.ext.TDXN._createCustomParsOnOp = spy
+		try:
+			self.embody.ext.TDXN.ImportNetwork(
+				target_path=target.path, tdn=doc, clear_first=True)
+		finally:
+			try:
+				del self.embody.ext.TDXN._createCustomParsOnOp
+			except AttributeError:
+				pass
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(target.par.Speed.eval(), 3)
+
+	def test_child_custom_defs_do_not_dirty_the_parent(self):
+		"""The parent file no longer carries a referenced child's custom
+		pars, so a change to them must not move the parent's fingerprint."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child, _ = self._tracked_tdxn_child(parent)
+		try:
+			fp = type(self.embody_ext)._computeTDXNFingerprint
+			args = (self.embody_ext._getTDXNPaths(), None,
+				self.embody_ext._extBoundaryTags())
+			before = fp(parent, *args)
+			child.appendCustomPage('Ctl').appendFloat('Speed')
+			self.assertEqual(fp(parent, *args), before)
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_post_save_restore_rolls_back_when_the_import_fails(self):
+		"""A restore whose import returns {'error'} (not only one that raises)
+		falls back to the newest backup instead of leaving the COMP empty."""
+		comp = self.sandbox.create(baseCOMP, 'rollback_comp')
+		comp.create(textDAT, 'leaf')
+		path, rel = self._track_tdxn(comp)
+		abs_path = str(self.embody_ext.buildAbsolutePath(rel))
+		try:
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=abs_path)
+			comp.create(textDAT, 'leaf2')   # a second write rotates a backup
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=abs_path)
+			# bypass the safe write, which would validate and undo this
+			Path(abs_path).write_text('operators:\n- not a mapping\n',
+				encoding='utf-8')
+			backup = self.embody.ext.TDXN._find_existing_backup_instance(
+				abs_path)
+			self.assertIsNotNone(backup)
+			self._auto_files.append(str(backup))
+			self.embody_ext.stripCompChildren(comp)
+			self.assertIsNone(comp.op('leaf'))
+			execute = self.embody.op('execute').module
+			self.assertFalse(execute._restoreStrippedComp(path, rel))
+			self.assertIsNotNone(comp.op('leaf'), 'rolled back from backup')
+		finally:
+			self._dropTrackingRows(path)
+
+	def test_post_save_extra_skips_a_comp_the_strip_kept(self):
+		"""An extra that survived the strip (it still has children, e.g.
+		inside an excluded COMP) is not re-imported: that would revert live
+		work to its file."""
+		comp = self.sandbox.create(baseCOMP, 'kept_comp')
+		comp.create(textDAT, 'live')
+		execute = self.embody.op('execute').module
+		self.assertFalse(execute._restoreStrippedComp(
+			comp.path, 'any/kept_comp.tdxn', expect_id=comp.id))
+		self.assertIsNotNone(comp.op('live'))
+
+	def test_ref_entry_keeps_custom_pars_while_the_childs_file_is_missing(self):
+		"""Until the child's own file exists the parent copy is the only
+		one, so a ref entry keeps it."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.appendCustomPage('Ctl').appendFloat('Speed')
+		child.tags.add(self.embody.par.Tdxntag.val)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'nonexistent/child_comp.tdxn',
+			timestamp, False, 1, str(app.build), 'tdn')
+		try:
+			res = self.embody.ext.TDXN.ExportNetwork(root_path=parent.path)
+			entry = [o for o in res['tdn']['operators']
+				if o['name'] == 'child_comp'][0]
+			self.assertIn('tdn_ref', entry)
+			self.assertIn('custom_pars', entry)
+		finally:
+			self._dropTrackingRows(child.path)
+
+	def test_import_creates_only_missing_custom_pars_before_children(self):
+		"""Phase 0 creates the pars the target lacks (a reload that adds one)
+		before its children, and leaves the ones it has to Phase 9."""
+		target = self.sandbox.create(baseCOMP, 'import_target')
+		target.appendCustomPage('Ctl').appendFloat('Speed')
+		target.appendCustomPage('About').appendInt('Build')
+		doc = {
+			'type': 'baseCOMP',
+			'custom_pars': {'Ctl': [
+				{'name': 'Speed', 'style': 'Float', 'value': 3},
+				{'name': 'Gain', 'style': 'Float', 'value': 2}]},
+			'operators': [{'name': 'leaf', 'type': 'textDAT'}],
+		}
+		seen = []
+		orig = self.embody.ext.TDXN._createOps
+		def spy(parent, *args, **kwargs):
+			if parent.path == target.path:
+				seen.append([p.name for p in parent.customPars])
+			return orig(parent, *args, **kwargs)
+		self.embody.ext.TDXN._createOps = spy
+		try:
+			self.embody.ext.TDXN.ImportNetwork(
+				target_path=target.path, tdn=doc, clear_first=True)
+		finally:
+			try:
+				del self.embody.ext.TDXN._createOps
+			except AttributeError:
+				pass
+		self.assertTrue(seen)
+		self.assertIn('Gain', seen[0])
+		self.assertEqual(target.par.Gain.eval(), 2)
+		self.assertEqual(target.par.Speed.eval(), 3)
+
+	def test_empty_guard_ignores_embodys_about_stamps(self):
+		"""Build/Date/Touchbuild are Embody's, never in a .tdxn: a COMP left
+		with only them has still lost its custom pars."""
+		comp = self.sandbox.create(baseCOMP, 'holder')
+		comp.appendCustomPage('Ctl').appendFloat('Speed')
+		fp = str(Path(self._temp_dir) / 'holder.tdxn')
+		self.embody.ext.TDXN.ExportNetwork(root_path=comp.path, output_file=fp)
+		comp.destroyCustomPars()
+		comp.appendCustomPage('About').appendInt('Build')
+		self.assertTrue(self.embody_ext._refusesEmptyTDXNOverwrite(comp, fp))
+
+	def test_post_save_extra_rebuilt_with_default_children_is_restored(self):
+		"""A shell the strip destroyed and its parent's import rebuilt can
+		carry the default children its type auto-creates (a Geometry COMP's
+		torus). Identity, not contents, decides: a new op is restored."""
+		holder = self.sandbox.create(geometryCOMP, 'geo_holder')
+		holder.appendCustomPage('Ctl').appendFloat('Speed')
+		holder.par.Speed = 4
+		path, rel = self._track_tdxn(holder)
+		try:
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=str(self.embody_ext.buildAbsolutePath(rel)))
+			old_id = holder.id
+			holder.destroy()
+			rebuilt = self.sandbox.create(geometryCOMP, 'geo_holder')
+			self.assertNotEqual(rebuilt.id, old_id)
+			execute = self.embody.op('execute').module
+			self.assertTrue(execute._restoreStrippedComp(path, rel, old_id))
+			self.assertEqual(self.sandbox.op('geo_holder').par.Speed.eval(), 4)
+		finally:
+			self._dropTrackingRows(path)
+
+	def test_post_save_does_not_roll_back_over_a_built_network(self):
+		"""An import that fails after the COMP was built keeps it: rolling
+		back would swap it for an older backup the next save writes out."""
+		comp = self.sandbox.create(baseCOMP, 'built_comp')
+		comp.create(textDAT, 'leaf')
+		path, rel = self._track_tdxn(comp)
+		abs_path = str(self.embody_ext.buildAbsolutePath(rel))
+		try:
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=abs_path)
+			comp.create(textDAT, 'leaf2')
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=abs_path)
+			backup = self.embody.ext.TDXN._find_existing_backup_instance(
+				abs_path)
+			if backup is not None:
+				self._auto_files.append(str(backup))
+			Path(abs_path).write_text('operators:\n- not a mapping\n',
+				encoding='utf-8')
+			execute = self.embody.op('execute').module
+			self.assertFalse(execute._restoreStrippedComp(path, rel))
+			self.assertIsNotNone(comp.op('leaf2'), 'not rolled back')
+		finally:
+			self._dropTrackingRows(path)
+
+	def test_pre_save_keeps_a_root_unstripped_when_a_nested_export_fails(self):
+		"""A nested COMP whose export is refused (an emptied shell over a
+		file with a network) would come back stale from a strip, so its
+		root is not stripped that save."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		parent.create(textDAT, 'leaf')
+		inner = parent.create(baseCOMP, 'inner')
+		inner.create(textDAT, 'content')
+		rows = [self._track_tdxn(parent), self._track_tdxn(inner)]
+		for path, rel in rows:
+			self.embody.ext.TDXN.ExportNetwork(root_path=path,
+				output_file=str(self.embody_ext.buildAbsolutePath(rel)))
+		inner.op('content').destroy()   # inner's file still holds it
+		embody = self.embody
+		ext_class = type(self.embody_ext)
+		saved = (embody.par.Tdxnmode.eval(),
+			bool(embody.par.Tdxnstriponsave.eval()), ext_class.Update,
+			ext_class._getTDXNStrategyComps, ext_class._checkTDXNContentSafety)
+		embody.par.Tdxnmode = 'full'
+		embody.par.Tdxnstriponsave = True
+		ext_class.Update = lambda self_, suppress_refresh=False: None
+		ext_class._getTDXNStrategyComps = lambda self_: list(rows)
+		ext_class._checkTDXNContentSafety = lambda self_: None
+		execute = embody.op('execute').module
+		try:
+			self.assertEqual(self.embody_ext._getTDXNStrategyComps(), rows)
+			execute._runPreSaveExternalization()
+			self.assertIsNotNone(parent.op('leaf'), 'the root was stripped')
+			self.assertIsNotNone(parent.op('inner'))
+			self.assertNotIn(parent.path, [e[0] for e in embody.fetch(
+				'_tdn_stripped_paths', [], search=False)])
+		finally:
+			(ext_class.Update, ext_class._getTDXNStrategyComps,
+				ext_class._checkTDXNContentSafety) = saved[2:]
+			embody.par.Tdxnmode, embody.par.Tdxnstriponsave = saved[:2]
+			for key in ('_tdn_stripped_paths', '_tdn_restore_extras',
+					'_tdn_pane_restore'):
+				embody.unstore(key)
+			self._dropTrackingRows(*[path for path, _ in rows])
+
+	def test_user_custom_pars_ignore_only_about_page_stamps(self):
+		"""Build on Embody's About page is a stamp; a user par named Build
+		on another page is the user's."""
+		comp = self.sandbox.create(baseCOMP, 'stamps')
+		comp.appendCustomPage('About').appendInt('Build')
+		self.assertFalse(self.embody_ext.hasUserCustomPars(comp))
+		comp.appendCustomPage('Ctl').appendInt('Date')
+		self.assertTrue(self.embody_ext.hasUserCustomPars(comp))
+
+	def test_about_par_sets_agree(self):
+		"""EmbodyExt and TDXNExt each name Embody's About stamps."""
+		tdxn_mod = self.embody.op('TDXNExt').module
+		self.assertEqual(set(type(self.embody_ext)._ABOUT_PARS),
+			set(tdxn_mod._EMBODY_ABOUT_PARS))
+
+	def test_restore_stripped_reports_whether_anything_was_stripped(self):
+		execute = self.embody.op('execute').module
+		self.embody.unstore('_tdn_stripped_paths')
+		self.embody.unstore('_tdn_restore_extras')
+		self.assertFalse(execute._restoreStripped())

@@ -294,7 +294,8 @@ SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
 
 # Storage keys to skip during TDXN export (runtime/transient state)
 SKIP_STORAGE_KEYS = {
-	'_tdn_stripped_paths', '_git_root',
+	'_tdn_stripped_paths', '_tdn_restore_extras', '_tdn_pane_restore',
+	'_git_root',
 	# Live server flags -- 'claudius_running' is the exact counterpart of
 	# 'envoy_running' and was simply missed; both describe a server running
 	# in THIS session and are meaningless (actively misleading) on disk.
@@ -1572,9 +1573,9 @@ class TDXNExt:
 			output_file: File path to write JSON to. 'auto' generates a name.
 						 None returns the dict without writing to disk.
 			max_depth: Maximum recursion depth (None = unlimited)
-			cleanup_protected: List of absolute .tdn file paths that must NOT
-				be deleted by stale-file cleanup. Used by SaveTDXN to protect
-				.tdn files belonging to other independently-tracked TDXN COMPs.
+			cleanup_protected: Extra absolute .tdn file paths that must NOT
+				be deleted by stale-file cleanup. Files of every other
+				tracked TDXN COMP are protected regardless.
 			interactive: False for programmatic callers (MCP export_network):
 				the locked-content warning is logged instead of raised as a
 				modal that would pin the main thread waiting for a click.
@@ -1677,7 +1678,7 @@ class TDXNExt:
 			root_flags = self._exportFlags(root_op)
 			if root_flags:
 				tdn['flags'] = root_flags
-			root_color = tuple(root_op.color)
+			root_color = self._authoredColor(root_op)
 			if self._colorsDiffer(root_color, DEFAULT_COLOR):
 				tdn['color'] = [round(c, 4) for c in root_color]
 			# sorted: see the tags note in _exportSingleOp
@@ -1773,6 +1774,17 @@ class TDXNExt:
 						protected.append(tracked_abs)
 					if cleanup_protected:
 						protected.extend(cleanup_protected)
+					# Other tracked COMPs' files, as the async path does: a
+					# direct call without cleanup_protected deleted every
+					# nested TDXN COMP's .tdxn (v6.2.71 release). Unknown
+					# tracking -> delete nothing.
+					if cleanup_protected is None:
+						try:
+							protected.extend(
+								self.ownerComp.ext.Embody._getAllTrackedTDXNFiles(
+									exclude_path=root_path))
+						except Exception:
+							before_tdxn = set()
 					stale = TDXNExt._cleanupStaleTDXNFiles(
 						before_tdxn, protected, scan_folder,
 						resolve_cache=resolve_cache)
@@ -2319,7 +2331,7 @@ class TDXNExt:
 					root_flags = self._exportFlags(root_op)
 					if root_flags:
 						root_meta['flags'] = root_flags
-					root_color = tuple(root_op.color)
+					root_color = self._authoredColor(root_op)
 					if self._colorsDiffer(root_color, DEFAULT_COLOR):
 						root_meta['color'] = [
 							round(c, 4) for c in root_color]
@@ -2767,15 +2779,18 @@ class TDXNExt:
 				set() if clear_first
 				else {c.name for c in dest.children})
 
-			# Phase 0: the target's own custom pars, before its children, so
-			# an extension or expression inside finds them mid-build. A
-			# tdn_ref shell gets none from its parent file. Phase 9
-			# re-applies the values after any extension reinit.
+			# Phase 0: the target's own custom pars it does not have yet,
+			# before its children, so an extension or expression inside finds
+			# them mid-build: all of them on a tdn_ref shell (its parent file
+			# carries none), new ones on a reload. Pars the target kept (a
+			# stripped COMP restored after save) are left to Phase 9.
 			target_custom = (
 				self._flattenCustomPars(tdn.get('custom_pars') or {})
 				if isinstance(tdn, dict) else [])
+			created_early = self._missingCustomParDefs(dest, target_custom)
+			if created_early:
+				self._createCustomParsOnOp(dest, created_early)
 			if target_custom:
-				self._createCustomParsOnOp(dest, target_custom)
 				self._setCustomParValues(dest, target_custom)
 
 			# Phase 1: Create all operators (depth-first)
@@ -2872,9 +2887,15 @@ class TDXNExt:
 						f'Type mismatch: TDXN expects {tdxn_type} but '
 						f'destination is {dest.OPType}', 'WARNING')
 
-				# Custom parameters
+				# Custom parameters: the ones the target already had are
+				# re-created (replace=True keeps their page position); the
+				# ones Phase 0 made are not, so Par objects an extension
+				# cached from them while the children built stay valid.
+				# Values win either way.
 				if target_custom:
-					self._createCustomParsOnOp(dest, target_custom)
+					early = {id(d) for d in created_early}
+					self._createCustomParsOnOp(dest, [
+						d for d in target_custom if id(d) not in early])
 					self._setCustomParValues(dest, target_custom)
 
 				# Built-in parameters
@@ -3185,6 +3206,47 @@ class TDXNExt:
 
 		return result
 
+	def _missingCustomParDefs(self, dest, defs: list) -> list:
+		"""The flat custom-par defs whose group `dest` lacks. A sequence's
+		template pars go with their header: present when the header is."""
+		if not defs:
+			return []
+		have = {pg.name for pg in dest.customParGroups}
+		return [d for d in defs
+				if (d.get('sequence') or d.get('name')) not in have]
+
+	def _authoredColor(self, target) -> tuple:
+		"""Node colour to serialize: EmbodyExt.authoredColor, the live colour
+		when Embody cannot answer (an export must never fail on a colour)."""
+		try:
+			return self.ownerComp.ext.Embody.authoredColor(target)
+		except Exception:
+			return tuple(target.color)
+
+	def _dropChildOwnedPars(self, data: dict, target: 'COMP',
+							ref: str) -> None:
+		"""A tdn_ref/tox_ref entry is placement only. The child's own file owns
+		its custom pars (import Phase 0 creates them before its children) and a
+		.tox reload replaces them (verified TD 2025.33230), so a copy here only
+		doubled the parent and churned on every value. Their sequences go too:
+		a shell without the pars logs 'Sequence not found' for each block.
+		While the child's file is missing the copy stays: it is the only one."""
+		try:
+			if not self.ownerComp.ext.Embody.buildAbsolutePath(ref).is_file():
+				return
+		except Exception:
+			return
+		data.pop('custom_pars', None)
+		seqs = data.get('sequences')
+		if not seqs:
+			return
+		custom = {p.name for p in target.customPars if p.style == 'Sequence'}
+		kept = {k: v for k, v in seqs.items() if k not in custom}
+		if kept:
+			data['sequences'] = kept
+		else:
+			del data['sequences']
+
 	def _exportSingleOp(self, target, options, depth, recurse=True):
 		"""Export a single operator to a dict."""
 		# Backstop for the depth-0 exclusion rule (see _exportChildren for
@@ -3227,7 +3289,7 @@ class TDXNExt:
 			data['size'] = [target.nodeWidth, target.nodeHeight]
 
 		# Color (only if non-default)
-		color = tuple(target.color)
+		color = self._authoredColor(target)
 		if self._colorsDiffer(color, DEFAULT_COLOR):
 			data['color'] = [round(c, 4) for c in color]
 
@@ -3336,10 +3398,7 @@ class TDXNExt:
 				tdn_ref = self._resolveTDXNRef(target)
 				if tdn_ref:
 					data['tdn_ref'] = tdn_ref
-					# the child's file owns its custom pars (import Phase 0
-					# creates them before its children); a copy here only
-					# doubled the parent's size and churned on every value
-					data.pop('custom_pars', None)
+					self._dropChildOwnedPars(data, target, tdn_ref)
 			elif self._hasTOXTag(target) and not options.get('embed_all'):
 				# Child's network managed by its own .tox file.
 				# Write a tox_ref pointer for cross-validation.
@@ -3352,6 +3411,7 @@ class TDXNExt:
 				tox_ref = self._resolveTOXRef(target)
 				if tox_ref:
 					data['tox_ref'] = tox_ref
+					self._dropChildOwnedPars(data, target, tox_ref)
 			elif recurse:
 				max_depth = options.get('max_depth')
 				if max_depth is None or depth < max_depth:

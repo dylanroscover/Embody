@@ -87,7 +87,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (the `tdxn_exclude` tag) are preserved, not destroyed. |
-| 0 | **Create target custom parameters** | The target COMP's own custom parameters, created before any child so an extension or expression inside finds them. A `tdn_ref` shell gets none from its parent file. |
+| 0 | **Create target custom parameters** | The target COMP's own custom parameters it does not have yet (all of them on a bare `tdn_ref` shell, new ones on a reload), created before any child so an extension or expression inside finds them. |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |

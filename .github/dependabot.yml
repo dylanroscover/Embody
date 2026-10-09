@@ -36,8 +36,10 @@ updates:
         update-types:
           - minor
           - patch
-    # typescript held at 6: astro check refuses TS 7.0 and Astro's replacement
-    # checker needs 7.1+ (#150 closed 2026-10-08). Lift once Astro supports TS 7.
+    # typescript majors ignored: apps/web stays on 6 because astro check refuses
+    # TS 7.0 and Astro's replacement checker needs 7.1+ (#150 closed 2026-10-08).
+    # Also stops major bumps for the workspaces already on 7. Lift once Astro
+    # supports TS 7.
     ignore:
       - dependency-name: typescript
         update-types:

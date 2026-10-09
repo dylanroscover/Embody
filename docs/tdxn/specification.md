@@ -123,7 +123,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
 | `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
 | `tdn_ref` | string | No | Only for COMPs with their own TDXN externalization. Relative file path to the child's `.tdxn` file. Mutually exclusive with `children`; the entry also carries no `custom_pars`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
-| `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
+| `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`; the entry also carries no `custom_pars`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
 
 ### Compact Formatting
 
@@ -153,10 +153,12 @@ save and nothing read them. The schema therefore no longer requires `exported_at
 required either field, so there is no format version bump. A vendored copy of
 `docs/tdxn.schema.yaml` from before this change rejects new tracked files -- refresh it.
 
-### `tdn_ref` entries dropped `custom_pars` (within 2.1)
+### `tdn_ref` and `tox_ref` entries dropped `custom_pars` (within 2.1)
 
-A parent's `tdn_ref` entry no longer repeats the child's custom parameters; the child's own file
-already carries them at its root (see [COMP References](#comp-references-tdn_ref)). `custom_pars`
+A parent's `tdn_ref` entry (v6.2.71) and `tox_ref` entry (after v6.2.71) no longer repeat the
+child's custom parameters; the child's own `.tdxn` carries them at its root and a `.tox` reload
+replaces them (see [COMP References](#comp-references-tdn_ref) and
+[TOX References](#tox-references-tox_ref)). `custom_pars`
 was always optional, so the schema is unchanged and there is no version bump. Older files keep
 their copy and still import. An older Embody reading a new parent file creates the child's custom
 parameters only at the end of the child's import (Phase 9), so an extension inside that child that
@@ -1137,7 +1139,7 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 
 **Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
 
-**Placement only**: the entry records how the COMP sits in its parent (name, type, built-in parameters, flags, position, size, color, tags, wires, dock) and carries **no `custom_pars`**. The child's own file holds them at its root, and import [Phase 0](#import-process) creates them before the child's operators, so anything inside the COMP finds them while it builds. A second copy in the parent was overwritten on every import and changed the parent file whenever a value changed.
+**Placement only**: the entry records how the COMP sits in its parent (name, type, built-in parameters and sequences, flags, position, size, color, comment, tags, storage, wires, dock) and carries **no `custom_pars`** and no custom-parameter sequences. The child's own file holds them at its root, and import [Phase 0](#import-process) creates them before the child's operators, so anything inside the COMP finds them while it builds. While the referenced file is missing from disk the entry keeps the copy, since it is the only one. A second copy in the parent was overwritten on every import and changed the parent file whenever a value changed.
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdxn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdxn` -> `B.tdxn` -> `A.tdxn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdxn`.
 
@@ -1178,6 +1180,8 @@ The same ownership principle applies when a child COMP is externalized as `.tox`
 **Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdxn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdxn`'s parameter dict (it's an Embody-managed parameter, excluded from TDXN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import — both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `ext.Embody.restoreTOXComps` (frame 45) still handles the case where the parent `.tdxn` is not re-imported and the table is the only source.
+
+**No `custom_pars`**: like a `tdn_ref` entry, a `tox_ref` entry records only placement. Reloading a `.tox` with Reload Custom Parameters on (the default, and TDXN never exports it, so a rebuilt shell always has it) replaces the COMP's custom parameters and their values with the file's own (verified on TouchDesigner 2025.33230), so a copy in the parent was overwritten.
 
 **TOX vs TDXN, when to use which**:
 
@@ -1323,7 +1327,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). Stale entries matching a preserved excluded COMP, and children of nested TDXN/TOX-externalized COMPs, are dropped so their own files stay authoritative. |
-| 0 | **Create target custom parameters** | The target COMP's own root-level `custom_pars` are created and their values set before any child exists, so an extension or expression inside the COMP finds them mid-build. A `tdn_ref` shell gets none from its parent file. Phase 9 re-applies the values. |
+| 0 | **Create target custom parameters** | The target COMP's own root-level `custom_pars` that it does not have yet (all of them on a bare shell created from a `tdn_ref`, new ones on a reload) are created and their values set before any child exists, so an extension or expression inside the COMP finds them mid-build. Parameters it already has are left to Phase 9, and Phase 9 does not re-create the ones Phase 0 made. A COMP nested inline in the same file still gets its parameters in Phase 2. |
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
 | 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
@@ -1362,9 +1366,9 @@ The importer accepts either a full `.tdxn` document (with metadata) or just the 
 
 | Step | What happens |
 |------|--------------|
-| 1 | Pre-save: children stripped from TDXN COMPs |
+| 1 | Pre-save: every TDXN COMP is exported (a childless one too, unless the empty-overwrite guard refuses), then children are stripped from the COMPs that have them. A COMP is not stripped that save when a TDXN COMP inside it did not export |
 | 2 | `.toe` saved without TDXN children |
-| 3 | Post-save: `ImportNetwork` re-imports children from `.tdxn` |
+| 3 | Post-save: `ImportNetwork` re-imports children from `.tdxn`, shallowest first; a nested TDXN COMP the strip destroyed is re-imported from its own file. A failed import rolls back to the newest backup only while the COMP is still empty |
 | 4 | Extensions may reinitialize during restore |
 
 **Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDXN COMPs **and** extensions whose ownerComp is a TDXN-strategy COMP.
