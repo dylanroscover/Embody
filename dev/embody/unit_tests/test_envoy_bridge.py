@@ -7115,6 +7115,9 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
         self.assertGreaterEqual(calls[0]['timeout_s'], 30.0)
 
     def test_send_file_never_resolves_a_unc_source(self):
+        if sys.platform != 'win32':
+            self.skipTest('the hazard exists only on a win32 host: on POSIX '
+                          'a backslash path is a plain local file name')
         resolved = []
         real = os.path.realpath
         with patch.object(bridge.os.path, 'realpath',
