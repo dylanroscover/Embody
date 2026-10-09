@@ -275,16 +275,19 @@ PHASE1_OPERATIONS = {
     # Host-native repository/CLI work.  These deliberately use the same
     # durable delivery path as TD operations while never crossing Envoy or
     # waking TouchDesigner.  `convoy_git` is call-shape-sensitive: inspection
-    # is read-only, while fetch/pull/push acquire the normal writer lease.
+    # is read-only, while fetch/pull/push/switch and worktree add/remove
+    # acquire the normal writer lease.
     "convoy_git": _operation(
         {"operation": "status|remotes|branches|current_branch|revision|"
-                      "upstream|divergence|fetch|pull_ff_only|push_branch",
+                      "upstream|divergence|fetch|pull_ff_only|push_branch|"
+                      "switch_branch|worktree_list|worktree_add|"
+                      "worktree_remove",
          "arguments": "object?", "timeout_s": "number?",
          "output_limit": "int?"},
         mutating=False, executes_arbitrary_code=False,
         remote_exposed=True, runtime_required=False, batch_eligible=False,
         side_effects={"execution_locus": "host_subprocess",
-                      "mutating_when": "fetch_or_pull_or_push",
+                      "mutating_when": "catalog_action_mutating",
                       "capability": hostops_mod.HOST_GIT_CAPABILITY}),
     "convoy_gh": _operation(
         {"operation": "auth_status|repo_view|pr_list|pr_view|pr_checks|"

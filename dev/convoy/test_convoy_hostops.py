@@ -40,9 +40,12 @@ class RecordingRunner:
     def __init__(self, root, *, config_names=(), helpers=(),
                  scoped_helpers=(), remote_url=None,
                  remotes=("origin",), branches=("main",), gh_json=None,
-                 head="main"):
+                 head="main", worktrees=(), dirty=False, remote_branches=()):
         self.root = str(root)
         self.head = head                       # None == detached HEAD
+        self.worktrees = tuple(os.path.realpath(str(p)) for p in worktrees)
+        self.dirty = dirty
+        self.remote_branches = tuple(remote_branches)   # "origin/topic"
         self.config_names = tuple(config_names)
         self.helpers = tuple(helpers)
         # (name, value) records for URL-scoped credential.<url>.helper keys,
@@ -68,7 +71,20 @@ class RecordingRunner:
 
         tail = self._tail(argv, "rev-parse")
         if tail == ["rev-parse", "--show-toplevel"]:
+            cwd = argv[argv.index("-C") + 1] if "-C" in argv else None
+            if cwd and os.path.realpath(cwd) in self.worktrees:
+                return result(stdout=cwd + "\n")
             return result(stdout=self.root + "\n")
+
+        tail = self._tail(argv, "worktree")
+        if tail == ["worktree", "list", "--porcelain"]:
+            records = ["worktree %s\nbranch refs/heads/main\n" % path.replace("\\", "/")
+                       for path in (self.root,) + self.worktrees]
+            return result(stdout="\n".join(records))
+
+        tail = self._tail(argv, "status")
+        if tail == ["status", "--porcelain", "--untracked-files=no"]:
+            return result(stdout=" M tracked.py\n" if self.dirty else "")
 
         tail = self._tail(argv, "config")
         if tail == ["config", "--null", "--name-only", "--list"]:
@@ -104,6 +120,10 @@ class RecordingRunner:
         if tail and tail[-1] == "refs/heads":
             return result(stdout="\n".join(self.branches) +
                            ("\n" if self.branches else ""))
+        if tail and tail[-1].startswith("refs/remotes/"):
+            refs = ["refs/remotes/" + name for name in self.remote_branches
+                    if "refs/remotes/" + name == tail[-1]]
+            return result(stdout="".join(ref + "\n" for ref in refs))
 
         # A gh structured command is the only path without the Git prefix.
         if argv and argv[0] in {"auth", "repo", "pr", "workflow", "run"}:
@@ -219,11 +239,114 @@ def test_pull_of_another_branch_is_refused_before_git_runs(root, head):
                    for call in runner.calls)
 
 
+def test_switch_branch_needs_a_clean_tree_and_never_guesses(root):
+    runner = RecordingRunner(root, branches=("main", "feature"))
+    ops, _ = make_ops(root, runner=runner)
+    value = ops.run_git("node-1", "switch_branch", {"branch": "feature"})
+    assert value["ok"], value
+    assert final_call(runner)["argv"][-3:] == ["switch", "--no-guess", "feature"]
+
+    runner = RecordingRunner(root, branches=("main", "feature"), dirty=True)
+    ops, _ = make_ops(root, runner=runner)
+    assert ops.run_git("node-1", "switch_branch", {
+        "branch": "feature"})["code"] == "dirty_worktree"
+    assert not any("switch" in call["argv"] for call in runner.calls)
+
+
+def test_switch_branch_creates_a_tracking_branch_only_from_a_named_remote(root):
+    runner = RecordingRunner(root, remote_branches=("origin/topic",))
+    ops, _ = make_ops(root, runner=runner)
+    assert ops.run_git("node-1", "switch_branch", {
+        "branch": "topic"})["code"] == "ref_missing"
+    value = ops.run_git("node-1", "switch_branch", {
+        "branch": "topic", "remote": "origin"})
+    assert value["ok"], value
+    assert final_call(runner)["argv"][-6:] == [
+        "switch", "--no-guess", "--track", "-c", "topic",
+        "refs/remotes/origin/topic"]
+    assert ops.run_git("node-1", "switch_branch", {
+        "branch": "other", "remote": "origin"})["code"] == "ref_missing"
+
+
+def test_worktree_add_places_a_host_derived_sibling(root):
+    runner = RecordingRunner(root, branches=("main", "feature"))
+    ops, _ = make_ops(root, runner=runner)
+    value = ops.run_git("node-1", "worktree_add", {
+        "name": "review", "branch": "feature"})
+    assert value["ok"], value
+    sibling = os.path.join(os.path.realpath(str(root.parent)), "repo-wt-review")
+    assert final_call(runner)["argv"][-4:] == [
+        "worktree", "add", sibling, "feature"]
+
+    (root.parent / "repo-wt-review").mkdir()
+    assert ops.run_git("node-1", "worktree_add", {
+        "name": "review", "branch": "feature"})["code"] == "worktree_exists"
+
+
+def test_worktree_add_can_track_a_remote_branch(root):
+    runner = RecordingRunner(root, remote_branches=("origin/topic",))
+    ops, _ = make_ops(root, runner=runner)
+    value = ops.run_git("node-1", "worktree_add", {
+        "name": "topic", "branch": "topic", "remote": "origin"})
+    assert value["ok"], value
+    sibling = os.path.join(os.path.realpath(str(root.parent)), "repo-wt-topic")
+    assert final_call(runner)["argv"][-7:] == [
+        "worktree", "add", "--track", "-b", "topic", sibling,
+        "refs/remotes/origin/topic"]
+
+
+def test_git_operations_run_inside_a_named_registered_worktree(root):
+    sibling = root.parent / "repo-wt-review"
+    sibling.mkdir()
+    runner = RecordingRunner(root, worktrees=(sibling,), head="main")
+    ops, _ = make_ops(root, runner=runner)
+    value = ops.run_git("node-1", "pull_ff_only", {
+        "remote": "origin", "branch": "main", "worktree": "review"})
+    assert value["ok"], value
+    call = final_call(runner)
+    assert call["cwd"] == os.path.realpath(str(sibling))
+    assert call["argv"][call["argv"].index("-C") + 1] == os.path.realpath(str(sibling))
+
+    value = ops.run_git("node-1", "worktree_remove", {"name": "review"})
+    assert value["ok"], value
+    assert final_call(runner)["argv"][-3:] == [
+        "worktree", "remove", os.path.realpath(str(sibling))]
+
+
+def test_unregistered_or_missing_worktrees_are_refused(root):
+    stray = root.parent / "repo-wt-stray"           # a directory, not a worktree
+    stray.mkdir()
+    ops, runner = make_ops(root)
+    assert ops.run_git("node-1", "status", {
+        "worktree": "stray"})["code"] == "worktree_missing"
+    assert ops.run_git("node-1", "status", {
+        "worktree": "absent"})["code"] == "worktree_missing"
+    assert ops.run_git("node-1", "worktree_remove", {
+        "name": "stray"})["code"] == "worktree_missing"
+    assert not any("status" in call["argv"][-4:] or "remove" in call["argv"]
+                   for call in runner.calls)
+
+
+@pytest.mark.parametrize("name", [
+    "../x", "a/b", "a\\b", "", ".x", "x.", "C:", "a b", "-x", 7])
+def test_worktree_names_are_plain_slugs(root, name):
+    ops, runner = make_ops(root)
+    assert ops.run_git("node-1", "worktree_add", {
+        "name": name, "branch": "main"})["code"] == "invalid_arguments"
+    assert ops.run_git("node-1", "status", {
+        "worktree": name})["code"] == "invalid_arguments"
+    assert not any("add" in call["argv"] for call in runner.calls)
+
+
 @pytest.mark.parametrize("operation,arguments", [
     ("fetch", {"remote": "origin", "force": True}),
     ("push_branch", {"remote": "origin", "branch": "main", "force": True}),
     ("pull_ff_only", {"remote": "origin", "branch": "main", "rebase": True}),
     ("status", {"porcelain": False}),
+    ("switch_branch", {"branch": "main", "force": True}),
+    ("worktree_add", {"name": "x", "branch": "main", "path": "C:/tmp/x"}),
+    ("worktree_remove", {"name": "x", "force": True}),
+    ("worktree_list", {"worktree": "x"}),
 ])
 def test_unknown_git_fields_are_fail_closed(root, operation, arguments):
     ops, runner = make_ops(root)
@@ -369,6 +492,67 @@ def test_real_git_status_and_config_preflight_work_end_to_end(tmp_path):
                     "not-a-real-filter --serve"], check=True, shell=False)
     assert ops.run_git("node-1", "status")["code"] == "unsafe_repository_config"
     assert ops.run_git("node-1", "revision")["code"] == "command_failed"
+
+
+def test_real_git_switch_and_worktree_round_trip(tmp_path):
+    git = __import__("shutil").which("git")
+    if not git:
+        pytest.skip("git is not installed")
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {"PATH": os.environ.get("PATH", os.defpath),
+                   "HOME": str(home), "USERPROFILE": str(home)}
+    for key in ("SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP"):
+        if key in os.environ:
+            environment[key] = os.environ[key]
+    repo = tmp_path / "proj"
+    repo.mkdir()
+
+    def setup(*args):
+        subprocess.run([git, "-C", str(repo), "-c", "user.name=t",
+                        "-c", "user.email=t@example.com", *args],
+                       check=True, env=environment, shell=False,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+
+    setup("init", "--quiet", "-b", "main")
+    (repo / "a.txt").write_text("one\n")
+    setup("add", "a.txt")
+    setup("commit", "--quiet", "-m", "init")
+    setup("branch", "feature")
+    ops = hostops.HostOperations(
+        lambda target: str(repo) if target == "node-1" else None,
+        git_executable=git, environment=environment,
+        safe_state_dir=str(tmp_path / "state"))
+
+    def run(operation, **arguments):
+        return ops.run_git("node-1", operation, arguments)
+
+    assert run("switch_branch", branch="feature")["ok"]
+    assert run("current_branch")["stdout"].strip() == "feature"
+    (repo / "a.txt").write_text("two\n")
+    assert run("switch_branch", branch="main")["code"] == "dirty_worktree"
+    setup("checkout", "--", "a.txt")
+
+    value = run("worktree_add", name="review", branch="main")
+    assert value["ok"], value
+    sibling = tmp_path / "proj-wt-review"
+    assert (sibling / "a.txt").is_file()
+    assert run("current_branch", worktree="review")["stdout"].strip() == "main"
+    assert run("worktree_add", name="review", branch="main")["code"] == "worktree_exists"
+    assert run("switch_branch", branch="main")["code"] == "branch_in_use"
+
+    setup("remote", "add", "origin", "https://example.invalid/r.git")
+    setup("update-ref", "refs/remotes/origin/topic", "HEAD")
+    assert run("switch_branch", branch="topic", remote="origin")["ok"]
+    assert run("upstream")["stdout"].strip() == "origin/topic"
+
+    (sibling / "scratch.txt").write_text("unsaved\n")
+    assert run("worktree_remove", name="review")["code"] == "dirty_worktree"
+    (sibling / "scratch.txt").unlink()
+    value = run("worktree_remove", name="review")
+    assert value["ok"], value
+    assert not sibling.exists()
 
 
 def _fake_lfs_dir(base, name="lfs-standalone"):
