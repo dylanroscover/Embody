@@ -196,6 +196,7 @@ _PUBLIC_DETAILS = {
     "unsafe_remote": "configured remote is outside the reviewed transport policy",
     "remote_missing": "configured remote was not found",
     "ref_missing": "requested local branch was not found",
+    "branch_mismatch": "requested branch is not the checked-out branch",
     "shell_disabled": "Allow Full Shell is disabled on the target host",
     "invalid_environment": "environment additions are invalid or unsafe",
     "busy": "host subprocess capacity is busy",
@@ -1323,6 +1324,12 @@ class HostOperations:
                 executable, root, arguments.get("remote"), operation,
                 deadline, cancel_event)
             branch = self._validate_ref(arguments.get("branch"))
+            # git pull merges <branch> into whatever HEAD is, so a mismatch
+            # would fast-forward the checked-out branch to another one.
+            if self._git_lines(executable, root,
+                               ["symbolic-ref", "--quiet", "--short", "HEAD"],
+                               deadline, cancel_event) != [branch]:
+                raise _Refusal("branch_mismatch")
             return ["pull", "--ff-only", "--no-rebase", "--no-recurse-submodules",
                     "--", remote, "refs/heads/" + branch]
         if operation == "push_branch":

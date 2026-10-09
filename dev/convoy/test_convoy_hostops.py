@@ -39,8 +39,10 @@ class RecordingRunner:
 
     def __init__(self, root, *, config_names=(), helpers=(),
                  scoped_helpers=(), remote_url=None,
-                 remotes=("origin",), branches=("main",), gh_json=None):
+                 remotes=("origin",), branches=("main",), gh_json=None,
+                 head="main"):
         self.root = str(root)
+        self.head = head                       # None == detached HEAD
         self.config_names = tuple(config_names)
         self.helpers = tuple(helpers)
         # (name, value) records for URL-scoped credential.<url>.helper keys,
@@ -86,6 +88,12 @@ class RecordingRunner:
             return result(False, exit_code=1)
         if tail and tail[:3] == ["config", "--get-all", "remote.origin.url"]:
             return result(stdout=self.remote_url + "\n")
+
+        tail = self._tail(argv, "symbolic-ref")
+        if tail == ["symbolic-ref", "--quiet", "--short", "HEAD"]:
+            if self.head is None:
+                return result(False, exit_code=1)
+            return result(stdout=self.head + "\n")
 
         tail = self._tail(argv, "remote")
         if tail == ["remote"]:
@@ -186,6 +194,29 @@ def test_push_is_same_branch_without_force_or_delete(root):
                     "refs/heads/main:refs/heads/main"]
     assert all("force" not in arg for arg in tail)
     assert not tail[-1].startswith(":")
+
+
+def test_pull_merges_only_into_the_same_checked_out_branch(root):
+    ops, runner = make_ops(root)
+    value = ops.run_git("node-1", "pull_ff_only", {
+        "remote": "origin", "branch": "main"})
+    assert value["ok"]
+    assert final_call(runner)["argv"][-7:] == [
+        "pull", "--ff-only", "--no-rebase", "--no-recurse-submodules",
+        "--", "origin", "refs/heads/main"]
+
+
+@pytest.mark.parametrize("head", ["dev", None])
+def test_pull_of_another_branch_is_refused_before_git_runs(root, head):
+    # `git pull --ff-only origin refs/heads/feature` merges into whatever is
+    # checked out, so pulling feature on a node sitting on dev would move dev.
+    runner = RecordingRunner(root, head=head)
+    ops, _ = make_ops(root, runner=runner)
+    value = ops.run_git("node-1", "pull_ff_only", {
+        "remote": "origin", "branch": "main"})
+    assert value["code"] == "branch_mismatch"
+    assert not any(call["argv"] and "pull" in call["argv"]
+                   for call in runner.calls)
 
 
 @pytest.mark.parametrize("operation,arguments", [
