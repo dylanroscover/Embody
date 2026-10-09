@@ -289,6 +289,19 @@ PHASE1_OPERATIONS = {
         side_effects={"execution_locus": "host_subprocess",
                       "mutating_when": "catalog_action_mutating",
                       "capability": hostops_mod.HOST_GIT_CAPABILITY}),
+    # Host-native file landing: the bytes arrive first as an uploaded
+    # artifact, then this writes them into the project's .embody/convoy/inbox
+    # (default), a named sibling worktree, or the live project.  A live write
+    # can replace a synced .py DAT, so it is gated like set_dat_content.
+    "convoy_put_file": _operation(
+        {"artifact": "object", "dest": "relative-path",
+         "worktree": "worktree-name?", "live": "bool?", "overwrite": "bool?"},
+        mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False,
+        side_effects={"execution_locus": "host_native",
+                      "writes_files": True,
+                      "arbitrary_code_when": "live",
+                      "capability": "host.files/v1"}),
     "convoy_gh": _operation(
         {"operation": "auth_status|repo_view|pr_list|pr_view|pr_checks|"
                       "workflow_list|run_list|run_view",
@@ -701,9 +714,10 @@ HOST_SUBPROCESS_OPERATIONS = frozenset(
     {"convoy_git", "convoy_gh", "convoy_shell"})
 HOST_LIFECYCLE_OPERATIONS = frozenset(
     {"convoy_start_node", "convoy_restart_node"})
+HOST_FILE_OPERATIONS = frozenset({"convoy_put_file"})
 HOST_NATIVE_OPERATIONS = frozenset(
     set(HOST_SUBPROCESS_OPERATIONS) | set(HOST_LIFECYCLE_OPERATIONS)
-    | {"convoy_ping"})
+    | set(HOST_FILE_OPERATIONS) | {"convoy_ping"})
 HOST_CANCELABLE_OPERATIONS = frozenset(
     set(HOST_SUBPROCESS_OPERATIONS) | set(HOST_LIFECYCLE_OPERATIONS))
 
@@ -842,6 +856,41 @@ def _validate_host_operation_arguments(operation, arguments):
         f"{operation!r} is not a host subprocess operation")
 
 
+PUT_FILE_INBOX = (".embody", "convoy", "inbox")
+
+
+def _validate_put_file_arguments(arguments):
+    """Return (dest, worktree, live, overwrite) for one convoy_put_file call."""
+    def malformed(detail):
+        return OperationRegistryError("malformed", detail, 400)
+
+    if not isinstance(arguments, dict):
+        raise malformed("convoy_put_file arguments must be an object")
+    unknown = sorted(set(arguments) - {
+        "artifact", "dest", "worktree", "live", "overwrite"})
+    if unknown:
+        raise malformed(f"convoy_put_file has unknown field {unknown[0]!r}")
+    if not isinstance(arguments.get("artifact"), dict):
+        raise malformed("convoy_put_file.artifact must be an object")
+    dest = arguments.get("dest")
+    worktree = arguments.get("worktree")
+    live = arguments.get("live", False)
+    overwrite = arguments.get("overwrite", False)
+    if not isinstance(live, bool) or not isinstance(overwrite, bool):
+        raise malformed("live and overwrite must be true or false")
+    if worktree is not None and not isinstance(worktree, str):
+        raise malformed("worktree must be a name")
+    if live and worktree is not None:
+        raise malformed("choose live or worktree, not both")
+    try:
+        parts = artifacts_mod.relative_parts(dest)
+    except artifacts_mod.ArtifactError as exc:
+        raise malformed(f"dest: {exc.detail or exc.reason}")
+    if worktree is None and not live and len(parts) != 1:
+        raise malformed("an inbox dest is a plain filename")
+    return dest, worktree, live, overwrite
+
+
 def _validate_lifecycle_operation_arguments(operation, arguments):
     """Validate the small exact-node lifecycle surface before admission.
 
@@ -928,6 +977,9 @@ def effective_operation_gating(registry, operation, arguments=None,
                 hostops_mod.GIT_CATALOG[action]["mutating"])
     elif operation in HOST_LIFECYCLE_OPERATIONS:
         _validate_lifecycle_operation_arguments(operation, arguments)
+    elif operation in HOST_FILE_OPERATIONS:
+        gating["executes_arbitrary_code"] = _validate_put_file_arguments(
+            arguments)[2]
 
     if operation != "batch_operations":
         return gating
@@ -7590,6 +7642,11 @@ class HostApp:
                 host_outcome = self._materialize_host_operation_result(
                     host_outcome, job)
                 outcome = host_outcome
+            elif operation in HOST_FILE_OPERATIONS:
+                host_outcome = self._execute_put_file(
+                    node.get("node_id"), job.get("convoy_id"), job,
+                    arguments)
+                outcome = host_outcome
             elif operation in HOST_LIFECYCLE_OPERATIONS:
                 host_outcome = self._execute_lifecycle_operation(
                     operation, node.get("node_id"), job.get("convoy_id"),
@@ -7728,6 +7785,94 @@ class HostApp:
                 del self._hostop_context.expected_convoy_id
             except AttributeError:
                 pass
+
+    def _execute_put_file(self, node_id, convoy_id, job, arguments):
+        """Write one uploaded artifact into the inbox, a worktree or the project.
+
+        Only an artifact this job's own origin host and controller uploaded
+        (the upload's owner claim) is written; the store owns path
+        validation, link refusal and the atomic verified write.
+        """
+        def refused(code, detail):
+            return {"ok": False, "code": code, "detail": detail,
+                    "operation": "convoy_put_file", "target_id": node_id}
+
+        try:
+            dest, worktree, live, overwrite = _validate_put_file_arguments(
+                arguments)
+        except OperationRegistryError as exc:
+            return refused("invalid_arguments", exc.detail)
+        with self.lock:
+            current = self.directory.lookup(node_id)
+            target_ok = bool(
+                current is not None
+                and current.get("host_id") == self.host_id
+                and current.get("convoy_id") == convoy_id
+                and current.get("enabled", True) is True)
+        if not target_ok:
+            return refused("target_changed",
+                           "target registration changed before execution")
+        self._hostop_context.expected_convoy_id = convoy_id
+        try:
+            root, code = self.host_operations.resolve_checkout(
+                node_id, worktree)
+        finally:
+            del self._hostop_context.expected_convoy_id
+        if root is None:
+            return refused(code, "the destination checkout is unavailable")
+
+        relative = (dest if live or worktree is not None
+                    else "/".join(PUT_FILE_INBOX + (dest,)))
+        reference = arguments["artifact"]
+        owner = {key: value for key, value
+                 in self._artifact_owner_for_job(job).items()
+                 if key != "job_id"}
+        protection_id = "put:" + secrets.token_hex(16)
+        if not self.begin_artifact_transfer():
+            return refused("artifact_transfer_busy",
+                           "artifact transfer capacity is busy")
+        try:
+            try:
+                cached = self.artifacts.describe_for_owner(
+                    convoy_id, reference.get("artifact_id"), owner,
+                    verify=True, touch=True, protection_id=protection_id,
+                    protection_kind="active_transfer")
+            except artifacts_mod.ArtifactError as exc:
+                return refused(exc.reason,
+                               exc.detail or "the uploaded file is unavailable")
+            try:
+                if any(reference.get(name) != cached.get(name)
+                       for name in ("artifact_id", "sha256", "size")):
+                    return refused("artifact_corrupt",
+                                   "artifact reference does not match the "
+                                   "uploaded content")
+                self.artifacts.export_to_path(
+                    root, relative, convoy_id, cached["artifact_id"],
+                    overwrite=overwrite)
+            except artifacts_mod.ArtifactError as exc:
+                return refused(exc.reason,
+                               exc.detail or "the file could not be written")
+            except OSError:
+                return refused("artifact_local_io",
+                               "the destination refused the write")
+            finally:
+                try:
+                    self.artifacts.release(
+                        convoy_id, cached["artifact_id"], protection_id,
+                        expected_kind="active_transfer")
+                except artifacts_mod.ArtifactError:
+                    pass
+        finally:
+            self.end_artifact_transfer()
+        mode = "live" if live else ("worktree" if worktree else "inbox")
+        self._audit_best_effort("file_put", {
+            "convoy_id": convoy_id, "node_id": node_id, "mode": mode,
+            "artifact_id": cached["artifact_id"], "size": cached["size"],
+            "overwrite": overwrite})
+        return {"ok": True, "code": "ok", "detail": "file written",
+                "operation": "convoy_put_file", "target_id": node_id,
+                "mode": mode, "worktree": worktree, "path": relative,
+                "sha256": cached["sha256"], "size": cached["size"]}
 
     def _execute_lifecycle_operation(self, operation, node_id, convoy_id,
                                      expected_runtime_id, operation_id,
@@ -12520,6 +12665,133 @@ class HostApp:
                 except artifacts_mod.ArtifactError:
                     pass
 
+    def relay_send_file(self, body):
+        """Upload one local project file to the host that owns a target node.
+
+        The source must resolve (links followed) inside an enabled local
+        node's registered project in the same Convoy, so a confused caller
+        cannot ship files from elsewhere on this machine.  The target stores
+        it under this controller's owner claim and convoy_put_file writes it.
+        Uploads are content-addressed, so a retried one is harmless.
+        """
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            target_node_id = text_field(body, "target_node_id")
+            controller_id = text_field(body, "controller_id")
+            source_path = text_field(body, "source_path", limit=4096)
+            if not os.path.isabs(source_path):
+                raise Malformed("source_path must be an absolute local path")
+            source = os.path.realpath(source_path)
+        except (Malformed, identity.IdentityError, OSError, ValueError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("relay", "malformed", detail, 400)
+        timeout_s = body.get(
+            "timeout_s", peerclient.DEFAULT_ARTIFACT_TIMEOUT_S)
+        if (isinstance(timeout_s, bool)
+                or not isinstance(timeout_s, (int, float))
+                or not math.isfinite(float(timeout_s))
+                or not 0.1 <= float(timeout_s)
+                <= protocol.MAX_DEADLINE_HORIZON_S):
+            return self._refuse(
+                "relay", "malformed",
+                f"timeout_s must be within [0.1, "
+                f"{protocol.MAX_DEADLINE_HORIZON_S:.0f}]", 400)
+
+        with self.lock:
+            roots = [
+                record.get("project_root") for record in self.directory.nodes()
+                if (record.get("host_id") == self.host_id
+                    and record.get("convoy_id") == convoy_id
+                    and record.get("enabled", True) is True
+                    and isinstance(record.get("project_root"), str))]
+        if not any(hostops_mod.path_within(root, source) for root in roots):
+            return self._refuse(
+                "relay", "source_outside_project",
+                "the file is not inside an enabled local project in this "
+                "Convoy", 403)
+        try:
+            digest = hashlib.sha256()
+            size = 0
+            with open(source, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise OSError("not a regular file")
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+                    size += len(block)
+        except OSError:
+            return self._refuse(
+                "relay", "source_unavailable",
+                "the file is not a readable regular file", 400)
+        name = os.path.basename(source)
+        metadata = {
+            "node_id": target_node_id, "controller_id": controller_id,
+            "expected_size": size, "expected_sha256": digest.hexdigest(),
+            "mime_type": "application/octet-stream",
+            # The peer header is latin-1; an unencodable name just goes hintless.
+            "filename_hint": (name if name.isascii() and len(name) <= 255
+                              else None)}
+
+        if not self.begin_artifact_transfer():
+            return 429, {"ok": False, "reason": "artifact_transfer_busy",
+                         "wakes_touchdesigner": False}
+        try:
+            if peer_host_id == self.host_id:
+                with open(source, "rb") as stream:
+                    return self.artifact_upload(convoy_id, stream, metadata)
+            with self.lock:
+                record = self.peers.get(peer_host_id)
+                decision = self.peers.authorize_peer(
+                    peer_host_id,
+                    record.get("fingerprint") if record else None,
+                    convoy_id=convoy_id)
+                if not decision.allowed:
+                    return self._refuse(
+                        "relay", decision.reason, decision.detail,
+                        _REFUSAL_HTTP.get(decision.reason, 403))
+                targets, target_error = self._peer_targets_from_record(record)
+                if not targets:
+                    return self._refuse(
+                        "relay", "peer_endpoint_unknown", target_error, 409)
+                keys = self.hostkeys
+            if keys is None:
+                return self._identity_unavailable()
+
+            def upload(candidate, remaining):
+                with open(source, "rb") as stream:
+                    return peerclient.upload_peer_artifact(
+                        candidate, keys, convoy_id, target_node_id,
+                        controller_id, stream,
+                        expected_size=metadata["expected_size"],
+                        expected_sha256=metadata["expected_sha256"],
+                        filename_hint=metadata["filename_hint"],
+                        timeout_s=remaining)
+
+            _target, result = self._call_peer_targets(
+                targets, upload, float(timeout_s), retry_ambiguous=True)
+            if result is peerclient.UNREACHABLE:
+                return 503, {"ok": False, "reason": "peer_unreachable",
+                             "target_host_id": peer_host_id,
+                             "wakes_touchdesigner": False}
+            if isinstance(result, peerclient._PinMismatch):
+                return 409, result.as_dict()
+            if result is None:
+                return 502, {"ok": False, "reason": "peer_bad_response",
+                             "target_host_id": peer_host_id,
+                             "wakes_touchdesigner": False}
+            result = dict(result)
+            result.setdefault("target_host_id", peer_host_id)
+            result.setdefault("wakes_touchdesigner", False)
+            if result.get("ok") is True:
+                self._audit_best_effort("file_sent_to_peer", {
+                    "peer_host_id": peer_host_id, "convoy_id": convoy_id,
+                    "node_id": target_node_id, "size": size})
+                return 200, result
+            return self._artifact_relay_status(result), result
+        finally:
+            self.end_artifact_transfer()
+
     def release_relay_artifact(self, body):
         """Release one authenticated local relay handoff, idempotently."""
         try:
@@ -13532,6 +13804,8 @@ def make_handler(app):
                     code, payload = app.relay_artifact(body)
                 elif self.path == "/relay/artifact/release":
                     code, payload = app.release_relay_artifact(body)
+                elif self.path == "/relay/artifact/send":
+                    code, payload = app.relay_send_file(body)
                 elif self.path == "/artifact/export":
                     code, payload = app.export_artifact_to_project(body)
                 elif self.path == "/relay/cancel":

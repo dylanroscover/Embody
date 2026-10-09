@@ -430,3 +430,37 @@ def test_queued_td_delivery_can_be_cancelled_before_wake(tmp_path):
             "cancelled_before_dispatch"
     finally:
         app.db.close()
+
+
+def test_send_file_uploads_to_the_peer_then_puts_into_its_inbox(
+        mesh, tmp_path):
+    a_project = tmp_path / "a-show"
+    b_project = tmp_path / "b-show"
+    a_project.mkdir()
+    b_project.mkdir()
+    code, _local = mesh.a.register_node({
+        "project_root": str(a_project), "comp_path": "/Embody",
+        "convoy_id": CONVOY, "runtime_id": "rt_sender"})
+    assert code == 200
+    code, remote = mesh.b.register_node({
+        "project_root": str(b_project), "comp_path": "/Embody",
+        "convoy_id": CONVOY, "runtime_id": "rt_receiver"})
+    assert code == 200
+    source = a_project / "notes.txt"
+    source.write_bytes(b"cue list v2\n")
+
+    code, staged = mesh.a.relay_send_file({
+        "target_host_id": mesh.b.host_id, "convoy_id": CONVOY,
+        "target_node_id": remote["node_id"], "controller_id": "bridge-test",
+        "source_path": str(source), "timeout_s": 30.0})
+    assert code == 200 and staged["ok"] is True, staged
+
+    code, accepted = mesh.a.relay_submit(relay_body(
+        mesh, target_node_id=remote["node_id"], operation="convoy_put_file",
+        arguments={"artifact": staged["artifact"], "dest": "notes.txt"},
+        idempotency_key="send-file-1"))
+    assert code == 200 and accepted["ok"] is True, accepted
+    code, dispatched = mesh.b.dispatch_job(accepted["job"]["delivery_id"])
+    assert dispatched["job"]["state"] == "succeeded", dispatched
+    landed = b_project / ".embody" / "convoy" / "inbox" / "notes.txt"
+    assert landed.read_bytes() == b"cue list v2\n"

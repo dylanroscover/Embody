@@ -6142,7 +6142,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
                  'convoy_ping', 'convoy_start_node',
                  'convoy_restart_node', 'convoy_call', 'convoy_batch',
                  'convoy_get_job', 'convoy_ack_job', 'convoy_get_artifact',
-                 'convoy_save_artifact',
+                 'convoy_save_artifact', 'convoy_send_file',
                  'convoy_cancel_job', 'convoy_forget_node',
                  'convoy_update_embody'}
         self.assertTrue(names.issubset(bridge.BRIDGE_TOOL_NAMES))
@@ -6167,6 +6167,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
             ('convoy_ack_job', 'handle_convoy_ack_job'),
             ('convoy_get_artifact', 'handle_convoy_get_artifact'),
             ('convoy_save_artifact', 'handle_convoy_save_artifact'),
+            ('convoy_send_file', 'handle_convoy_send_file'),
             ('convoy_cancel_job', 'handle_convoy_cancel_job'),
             ('convoy_forget_node', 'handle_convoy_forget_node'),
             ('convoy_update_embody', 'handle_convoy_update_embody'),
@@ -7040,6 +7041,60 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
         self.assertEqual(result['reason'], 'convoy_project_unavailable')
         materialize.assert_not_called()
         export.assert_not_called()
+
+    def _send_file(self, params, staged=None):
+        root, state = self._artifact_project_state()
+        os.makedirs(os.path.join(root, 'scripts'))
+        with open(os.path.join(root, 'scripts', 'tool.py'), 'w') as out:
+            out.write('x = 1\n')
+        uploads, calls = [], []
+        staged = staged or {'ok': True, 'artifact': {'artifact_id': 'art_x'}}
+        base = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'target_node_id': 'node-remote'}
+        with patch.object(bridge, 'convoy_host_call',
+                          side_effect=lambda *a, **k: uploads.append(a) or staged),              patch.object(bridge, 'handle_convoy_call',
+                          side_effect=lambda call: calls.append(call) or {'ok': True}):
+            result = bridge.handle_convoy_send_file(dict(base, **params), state)
+        return root, result, uploads, calls
+
+    def test_send_file_uploads_then_puts_at_the_project_relative_path(self):
+        root, result, uploads, calls = self._send_file(
+            {'path': 'scripts/tool.py', 'worktree': 'review'})
+        self.assertTrue(result['ok'])
+        self.assertEqual(uploads[0][1], '/relay/artifact/send')
+        self.assertEqual(uploads[0][2]['source_path'], os.path.realpath(
+            os.path.join(root, 'scripts', 'tool.py')))
+        self.assertEqual(calls[0]['operation'], 'convoy_put_file')
+        self.assertEqual(calls[0]['arguments'], {
+            'artifact': {'artifact_id': 'art_x'}, 'dest': 'scripts/tool.py',
+            'overwrite': False, 'worktree': 'review'})
+
+    def test_send_file_defaults_to_the_inbox_by_file_name(self):
+        _root, _result, _uploads, calls = self._send_file(
+            {'path': 'scripts/tool.py'})
+        self.assertEqual(calls[0]['arguments']['dest'], 'tool.py')
+        self.assertNotIn('worktree', calls[0]['arguments'])
+        self.assertNotIn('live', calls[0]['arguments'])
+
+    def test_send_file_refuses_files_outside_the_project_before_uploading(self):
+        outside = tempfile.NamedTemporaryFile(delete=False)
+        outside.close()
+        self.addCleanup(os.unlink, outside.name)
+        for params in ({'path': outside.name}, {'path': '../escape.txt'},
+                       {'path': 'scripts'},
+                       {'path': 'scripts/tool.py', 'live': True,
+                        'worktree': 'review'}):
+            with self.subTest(params=params):
+                _root, result, uploads, calls = self._send_file(params)
+                self.assertEqual(result['reason'], 'invalid_arguments')
+                self.assertEqual((uploads, calls), ([], []))
+
+    def test_send_file_stops_when_the_upload_is_refused(self):
+        _root, result, _uploads, calls = self._send_file(
+            {'path': 'scripts/tool.py'},
+            staged={'ok': False, 'reason': 'peer_unreachable'})
+        self.assertEqual(result['reason'], 'peer_unreachable')
+        self.assertEqual(calls, [])
 
     def test_artifact_renderer_returns_native_verified_image_content(self):
         data = b'\x89PNG\r\n\x1a\nsmall-image'

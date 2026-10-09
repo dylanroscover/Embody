@@ -719,6 +719,48 @@ BRIDGE_TOOLS = [
         },
     },
     {
+        "name": "convoy_send_file",
+        "description": (
+            "Send one file from this bridge's project to a Convoy node. The "
+            "source must resolve inside this project. By default it lands in "
+            "the target project's .embody/convoy/inbox/; with worktree=<name> "
+            "at dest inside the target's sibling <project>-wt-<name> worktree "
+            "(create one with convoy_call convoy_git worktree_add); with "
+            "live=true at dest inside the live project, which needs Allow "
+            "Execute TD Python on the target because a synced .py reloads "
+            "into TouchDesigner. dest defaults to the file name for the inbox "
+            "and to the file's own project-relative path otherwise. Existing "
+            "files are kept unless overwrite is true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_host_id": {"type": "string", "minLength": 1},
+                "convoy_id": {"type": "string", "minLength": 1},
+                "target_node_id": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1,
+                         "description": "Local file inside this project: "
+                                        "relative to its root, or absolute."},
+                "dest": {"type": "string", "minLength": 1, "maxLength": 1024,
+                         "description": "Relative '/'-separated destination; "
+                                        "a plain file name for the inbox."},
+                "worktree": {"type": "string", "minLength": 1,
+                             "maxLength": 64,
+                             "description": "Write into the target's "
+                                            "<project>-wt-<name> worktree."},
+                "live": {"type": "boolean", "default": False,
+                         "description": "Write into the target's live "
+                                        "project."},
+                "overwrite": {"type": "boolean", "default": False},
+                "idempotency_key": {"type": "string", "minLength": 1},
+                "timeout_s": {"type": "number", "minimum": 0.1,
+                              "maximum": 3600, "default": 120},
+            },
+            "required": ["target_host_id", "convoy_id", "target_node_id",
+                         "path"],
+        },
+    },
+    {
         "name": "convoy_cancel_job",
         "description": (
             "Request cancellation from the exact host that owns a durable "
@@ -3035,6 +3077,79 @@ def handle_convoy_save_artifact(params, state):
             result["cache_release_reason"] = released.get("reason")
 
 
+def handle_convoy_send_file(params, state):
+    """Upload one project file to a node's host, then write it there."""
+    invalid = _convoy_required_text(
+        params, ("target_host_id", "convoy_id", "target_node_id", "path"))
+    if invalid:
+        return _convoy_invalid_arguments(invalid)
+    worktree = params.get("worktree")
+    live = params.get("live", False)
+    overwrite = params.get("overwrite", False)
+    if not isinstance(live, bool) or not isinstance(overwrite, bool):
+        return _convoy_invalid_arguments(
+            "live and overwrite must be true or false")
+    if worktree is not None and (not isinstance(worktree, str) or not worktree):
+        return _convoy_invalid_arguments("worktree must be a name")
+    if live and worktree is not None:
+        return _convoy_invalid_arguments("choose live or worktree, not both")
+    timeout_s = params.get("timeout_s", 120.0)
+    if (isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or not math.isfinite(float(timeout_s))
+            or not 0.1 <= float(timeout_s) <= 3600.0):
+        return _convoy_invalid_arguments(
+            "timeout_s must be finite and within [0.1, 3600]")
+    try:
+        project_root = _convoy_bridge_project_root(state)
+    except ValueError as exc:
+        return {"ok": False, "reason": "convoy_project_unavailable",
+                "detail": str(exc), "wakes_touchdesigner": False}
+    source = os.path.realpath(os.path.join(project_root, params["path"]))
+    try:
+        inside = os.path.normcase(os.path.commonpath(
+            [project_root, source])) == os.path.normcase(project_root)
+    except ValueError:
+        inside = False
+    if not inside or not os.path.isfile(source):
+        return _convoy_invalid_arguments(
+            "path must name a file inside this project")
+    dest = params.get("dest")
+    if dest is None:
+        dest = (os.path.basename(source) if worktree is None and not live
+                else os.path.relpath(source, project_root).replace(os.sep, "/"))
+    if not isinstance(dest, str) or not dest:
+        return _convoy_invalid_arguments("dest must be a relative path")
+
+    started = time.monotonic()
+    staged = convoy_host_call("POST", "/relay/artifact/send", {
+        "target_host_id": params["target_host_id"],
+        "convoy_id": params["convoy_id"],
+        "target_node_id": params["target_node_id"],
+        "controller_id": _CONVOY_CONTROLLER_ID,
+        "source_path": source,
+        "timeout_s": float(timeout_s),
+    }, timeout=float(timeout_s))
+    if staged.get("ok") is not True:
+        staged = _convoy_add_provenance(staged, params)
+        staged["wakes_touchdesigner"] = False
+        return staged
+    arguments = {"artifact": staged.get("artifact"), "dest": dest,
+                 "overwrite": overwrite}
+    if worktree is not None:
+        arguments["worktree"] = worktree
+    if live:
+        arguments["live"] = True
+    call = {name: params[name] for name in (
+        "target_host_id", "convoy_id", "target_node_id")}
+    call.update(operation="convoy_put_file", arguments=arguments,
+                timeout_s=max(0.1, float(timeout_s)
+                              - (time.monotonic() - started)))
+    if params.get("idempotency_key") is not None:
+        call["idempotency_key"] = params["idempotency_key"]
+    return handle_convoy_call(call)
+
+
 def _convoy_inline_image_valid(mime_type, data):
     mime_type = mime_type.lower()
     if mime_type == "image/png":
@@ -5297,6 +5412,8 @@ def handle_bridge_tool(name, params, state):
         result = handle_convoy_get_artifact(params)
     elif name == "convoy_save_artifact":
         result = handle_convoy_save_artifact(params, state)
+    elif name == "convoy_send_file":
+        result = handle_convoy_send_file(params, state)
     elif name == "convoy_cancel_job":
         result = handle_convoy_cancel_job(params)
     elif name == "convoy_forget_node":

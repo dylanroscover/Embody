@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **70 MCP tools** across 17 categories, plus 23 bridge meta-tools that run on the local STDIO bridge -- 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
+Envoy exposes **70 MCP tools** across 17 categories, plus 24 bridge meta-tools that run on the local STDIO bridge -- 6 TD-lifecycle tools and 18 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
 
 ### Operator Management
 

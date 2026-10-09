@@ -368,7 +368,7 @@ def _paths_same(left, right):
             return False
 
 
-def _path_within(root, candidate):
+def path_within(root, candidate):
     try:
         common = os.path.commonpath([os.path.realpath(root), os.path.realpath(candidate)])
     except (OSError, ValueError, TypeError):
@@ -933,7 +933,7 @@ class HostOperations:
         return os.path.realpath(resolved)
 
     def _require_structured_executable(self, executable, root):
-        if _path_within(root, executable):
+        if path_within(root, executable):
             raise _Refusal("command_refused")
         if self.platform == "win32" and ntpath.splitext(executable)[1].lower() in {
                 ".cmd", ".bat"}:
@@ -1059,8 +1059,8 @@ class HostOperations:
 
     def _git_prefix(self, root):
         try:
-            if (_path_within(root, self._hooks_dir) or
-                    _path_within(root, self._attributes_file)):
+            if (path_within(root, self._hooks_dir) or
+                    path_within(root, self._attributes_file)):
                 raise _Refusal("unsafe_repository_config")
             if os.listdir(self._hooks_dir):
                 raise _Refusal("unsafe_repository_config")
@@ -1218,7 +1218,7 @@ class HostOperations:
         if not lfs:
             return False
         lfs = os.path.realpath(lfs)
-        if _path_within(root, lfs):
+        if path_within(root, lfs):
             return False
         return os.path.isfile(lfs)
 
@@ -1596,6 +1596,20 @@ class HostOperations:
             for lock in reversed(held):
                 lock.release()
 
+    def resolve_checkout(self, target_id, worktree=None, *, timeout_s=None):
+        """(path, None) for the project or a registered named worktree, else
+        (None, code).  The same resolution run_git uses, for file writers."""
+        try:
+            deadline = time.monotonic() + _validate_timeout(timeout_s)
+            root = self._resolve_root(target_id)
+            if worktree is None:
+                return root, None
+            executable = self._resolve_executable(self._git_candidate)
+            return self._resolve_worktree(
+                executable, root, worktree, deadline, None), None
+        except _Refusal as exc:
+            return None, exc.code
+
     @staticmethod
     def _bounded_int(value, *, minimum=1, maximum=100):
         if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
@@ -1753,7 +1767,7 @@ class HostOperations:
         if ntpath.isabs(relative) or posixpath.isabs(relative) or ntpath.splitdrive(relative)[0]:
             raise _Refusal("worktree_escape")
         candidate = os.path.realpath(os.path.join(root, relative))
-        if not _path_within(root, candidate):
+        if not path_within(root, candidate):
             raise _Refusal("worktree_escape")
         if not os.path.isdir(candidate):
             raise _Refusal("worktree_unavailable")

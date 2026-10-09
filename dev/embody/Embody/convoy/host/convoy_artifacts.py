@@ -191,6 +191,27 @@ def _filename(value, *, optional=False) -> str:
     return value
 
 
+_WINDOWS_RESERVED_RE = re.compile(
+    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?\Z", re.IGNORECASE)
+
+
+def relative_parts(value) -> list:
+    """Validate a portable `/`-separated relative destination; return its parts.
+
+    Refuses `.`/`..`, drives, Windows-reserved or trailing-dot/space names,
+    and any `.git` segment (a file under .git/hooks runs as code).
+    """
+    value = _bounded_text(value, "path", 1024)
+    parts = value.split("/")
+    for part in parts:
+        _filename(part)
+        if (part.endswith((".", " ")) or part.lower() == ".git"
+                or _WINDOWS_RESERVED_RE.match(part)):
+            raise ArtifactValidationError(
+                "path has a reserved or non-portable segment")
+    return parts
+
+
 def _mime_type(value: str) -> str:
     value = _bounded_text(value, "mime_type", 255)
     if "/" not in value or any(char.isspace() for char in value):
@@ -1790,26 +1811,32 @@ class ArtifactStore:
             }
 
     @staticmethod
-    def _safe_project_artifact_dir(project_root: str) -> str:
-        if not isinstance(project_root, str) or not project_root:
-            raise ArtifactValidationError("project_root must be a path")
-        project_root = os.path.realpath(os.path.abspath(project_root))
-        if not os.path.isdir(project_root):
-            raise ArtifactValidationError("project_root is not a directory")
-        current = project_root
-        for segment in (".embody", "convoy", "artifacts"):
+    def _safe_directory_chain(root: str, segments, mode=0o777) -> str:
+        """Create or check each directory under root; never through a link."""
+        if not isinstance(root, str) or not root:
+            raise ArtifactValidationError("destination root must be a path")
+        root = os.path.realpath(os.path.abspath(root))
+        if not os.path.isdir(root):
+            raise ArtifactValidationError("destination root is not a directory")
+        current = root
+        for segment in segments:
             current = os.path.join(current, segment)
             if os.path.lexists(current):
-                mode = os.lstat(current).st_mode
-                if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+                st_mode = os.lstat(current).st_mode
+                if stat.S_ISLNK(st_mode) or not stat.S_ISDIR(st_mode):
                     raise ArtifactValidationError(
-                        "project artifact directory contains a symlink/non-directory")
+                        "destination directory contains a symlink/non-directory")
             else:
-                os.mkdir(current, mode=0o700)
-        expected = os.path.join(project_root, ".embody", "convoy", "artifacts")
-        if os.path.realpath(current) != os.path.realpath(expected):
-            raise ArtifactValidationError("project artifact directory escaped project")
+                os.mkdir(current, mode=mode)
+        # Catches Windows junctions, which lstat does not report as links.
+        if os.path.normcase(os.path.realpath(current)) != os.path.normcase(current):
+            raise ArtifactValidationError("destination directory escaped its root")
         return current
+
+    @classmethod
+    def _safe_project_artifact_dir(cls, project_root: str) -> str:
+        return cls._safe_directory_chain(
+            project_root, (".embody", "convoy", "artifacts"), mode=0o700)
 
     def export_to_project(self, project_root: str, namespace: str,
                           artifact_id: str, *, filename: Optional[str] = None,
@@ -1833,51 +1860,77 @@ class ArtifactStore:
                 extension = mimetypes.guess_extension(record["mime_type"]) or ""
                 chosen = artifact_id + extension
             chosen = _filename(chosen)
-            destination_dir = self._safe_project_artifact_dir(project_root)
-            destination = os.path.join(destination_dir, chosen)
-            if os.path.lexists(destination):
-                if os.path.islink(destination) or not _regular_file(destination):
-                    raise ArtifactValidationError(
-                        "export destination is not a regular file")
-                if not overwrite:
-                    raise ArtifactExists(chosen)
-            temp = os.path.join(
-                destination_dir, ".export-%s.tmp" % secrets.token_hex(16))
-            digest = hashlib.sha256()
-            total = 0
-            try:
-                with open(source, "rb") as reader, open(temp, "xb") as writer:
-                    while True:
-                        block = reader.read(DEFAULT_STREAM_CHUNK_BYTES)
-                        if not block:
-                            break
-                        writer.write(block)
-                        digest.update(block)
-                        total += len(block)
-                    writer.flush()
-                    os.fsync(writer.fileno())
-                if digest.hexdigest() != record["sha256"] or total != record["size"]:
-                    raise ArtifactCorrupt("artifact changed during project export")
-                os.replace(temp, destination)
-                temp = ""
-                self._fsync_directory(destination_dir)
-                self._touch_locked(record, self._clock())
-                self._save_state_locked()
-                return {
-                    "kind": "local_project_artifact",
-                    "saved_path": os.path.abspath(destination),
-                    "artifact_id": artifact_id,
-                    "convoy_id": namespace,
-                    "sha256": record["sha256"],
-                    "size": record["size"],
-                    "mime_type": record["mime_type"],
-                }
-            finally:
-                if temp:
-                    try:
-                        os.unlink(temp)
-                    except FileNotFoundError:
-                        pass
+            return self._write_export_locked(
+                namespace, record, source,
+                self._safe_project_artifact_dir(project_root), chosen,
+                overwrite)
+
+    def export_to_path(self, root: str, relative: str, namespace: str,
+                       artifact_id: str, *, overwrite=False) -> dict:
+        """Save verified bytes at a validated relative path under ``root``.
+
+        The caller owns the choice of root; this store owns path validation,
+        link refusal, overwrite and the atomic verified write.
+        """
+        namespace = _namespace(namespace)
+        artifact_id = _artifact_id(artifact_id)
+        if not isinstance(overwrite, bool):
+            raise ArtifactValidationError("overwrite must be boolean")
+        parts = relative_parts(relative)
+        with self._lock:
+            record = self._record_locked(namespace, artifact_id)
+            source = self._verify_record_locked(namespace, record)
+            return self._write_export_locked(
+                namespace, record, source,
+                self._safe_directory_chain(root, parts[:-1]), parts[-1],
+                overwrite)
+
+    def _write_export_locked(self, namespace, record, source, destination_dir,
+                             chosen, overwrite) -> dict:
+        destination = os.path.join(destination_dir, chosen)
+        if os.path.lexists(destination):
+            if os.path.islink(destination) or not _regular_file(destination):
+                raise ArtifactValidationError(
+                    "export destination is not a regular file")
+            if not overwrite:
+                raise ArtifactExists(chosen)
+        temp = os.path.join(
+            destination_dir, ".export-%s.tmp" % secrets.token_hex(16))
+        digest = hashlib.sha256()
+        total = 0
+        try:
+            with open(source, "rb") as reader, open(temp, "xb") as writer:
+                while True:
+                    block = reader.read(DEFAULT_STREAM_CHUNK_BYTES)
+                    if not block:
+                        break
+                    writer.write(block)
+                    digest.update(block)
+                    total += len(block)
+                writer.flush()
+                os.fsync(writer.fileno())
+            if digest.hexdigest() != record["sha256"] or total != record["size"]:
+                raise ArtifactCorrupt("artifact changed during project export")
+            os.replace(temp, destination)
+            temp = ""
+            self._fsync_directory(destination_dir)
+            self._touch_locked(record, self._clock())
+            self._save_state_locked()
+            return {
+                "kind": "local_project_artifact",
+                "saved_path": os.path.abspath(destination),
+                "artifact_id": record["artifact_id"],
+                "convoy_id": namespace,
+                "sha256": record["sha256"],
+                "size": record["size"],
+                "mime_type": record["mime_type"],
+            }
+        finally:
+            if temp:
+                try:
+                    os.unlink(temp)
+                except FileNotFoundError:
+                    pass
 
 
 __all__ = [

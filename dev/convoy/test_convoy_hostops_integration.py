@@ -246,3 +246,131 @@ def test_secret_safe_host_audit_drops_command_environment_and_output(tmp_path):
     assert secret not in audit
     assert "echo " not in audit
 
+
+
+def test_put_file_gating_makes_only_live_writes_code_equivalent():
+    def gate(**arguments):
+        return hostapp.effective_operation_gating(
+            hostapp.PHASE1_OPERATIONS, "convoy_put_file",
+            dict({"artifact": {}}, **arguments))
+
+    assert gate(dest="a.py")["executes_arbitrary_code"] is False
+    assert gate(dest="scripts/a.py", worktree="review")[
+        "executes_arbitrary_code"] is False
+    assert gate(dest="scripts/a.py", live=True)["executes_arbitrary_code"] is True
+    assert gate(dest="a.py")["mutating"] is True
+    assert "convoy_put_file" in hostapp.HOST_NATIVE_OPERATIONS
+    for bad in ({"dest": "nested/a.py"}, {"dest": "../a.py", "live": True},
+                {"dest": "a.py", "live": True, "worktree": "review"},
+                {"dest": "a.py", "path": "C:/x"}, {"dest": ".git/hooks/x",
+                                                    "live": True}):
+        try:
+            gate(**bad)
+        except hostapp.OperationRegistryError as exc:
+            assert exc.reason == "malformed"
+        else:
+            raise AssertionError(bad)
+
+
+def _send(app, node, source, controller="ctl-send"):
+    return app.relay_send_file({
+        "target_host_id": app.host_id, "convoy_id": node["convoy_id"],
+        "target_node_id": node["node_id"], "controller_id": controller,
+        "source_path": str(source)})
+
+
+def _put(app, node, arguments, key, controller="ctl-send"):
+    code, body = app.create_job({
+        "idempotency_key": key, "node_id": node["node_id"],
+        "operation": "convoy_put_file", "arguments": arguments,
+        "controller_id": controller})
+    return code, body
+
+
+def test_send_file_lands_in_the_inbox_without_waking_td(tmp_path):
+    app, node, project, forwarded, woken = _app_and_node(tmp_path, perform=True)
+    source = project / "scripts" / "tool.py"
+    source.parent.mkdir()
+    source.write_bytes(b"print('tool')\n")
+    code, staged = _send(app, node, source)
+    assert code == 200 and staged["ok"], staged
+
+    code, body = _put(app, node, {"artifact": staged["artifact"],
+                                  "dest": "tool.py"}, "put-inbox")
+    assert code == 200, body
+    code, body = app.dispatch_job(body["job"]["delivery_id"])
+    assert code == 200 and body["job"]["state"] == "succeeded", body
+    landed = project / ".embody" / "convoy" / "inbox" / "tool.py"
+    assert landed.read_bytes() == b"print('tool')\n"
+    assert forwarded == [] and woken == []
+
+
+def test_send_file_refuses_a_source_outside_registered_projects(tmp_path):
+    app, node, _project, _f, _w = _app_and_node(tmp_path)
+    outside = tmp_path / "secret.txt"
+    outside.write_text("not for the fleet")
+    code, body = _send(app, node, outside)
+    assert code == 403 and body["reason"] == "source_outside_project"
+
+
+def test_live_put_file_needs_allow_execute_td_python(tmp_path):
+    app, node, project, _f, _w = _app_and_node(tmp_path)
+    source = project / "a.py"
+    source.write_text("x = 1\n")
+    _code, staged = _send(app, node, source)
+    code, body = _put(app, node, {"artifact": staged["artifact"],
+                                  "dest": "b.py", "live": True}, "put-live")
+    assert code == 403 and body["reason"] == "td_python_not_approved", body
+    assert not (project / "b.py").exists()
+
+
+def test_put_file_writes_only_the_callers_own_upload(tmp_path):
+    app, node, project, _f, _w = _app_and_node(tmp_path)
+    source = project / "a.txt"
+    source.write_text("mine\n")
+    _code, staged = _send(app, node, source, controller="ctl-a")
+    code, body = _put(app, node, {"artifact": staged["artifact"],
+                                  "dest": "a.txt"}, "put-other",
+                      controller="ctl-b")
+    assert code == 200, body
+    _code, body = app.dispatch_job(body["job"]["delivery_id"])
+    assert body["job"]["state"] == "failed"
+    assert body["job"]["result"]["code"] == "artifact_not_found"
+    assert not (project / ".embody" / "convoy" / "inbox").exists()
+
+
+def test_put_file_into_a_registered_worktree(tmp_path):
+    import shutil
+    import subprocess
+    git = shutil.which("git")
+    if not git:
+        import pytest
+        pytest.skip("git is not installed")
+    app, node, project, _f, _w = _app_and_node(tmp_path)
+
+    def setup(*args):
+        subprocess.run([git, "-C", str(project), "-c", "user.name=t",
+                        "-c", "user.email=t@example.com", *args], check=True,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+
+    setup("init", "--quiet", "-b", "main")
+    (project / "keep.txt").write_text("keep\n")
+    setup("add", "keep.txt")
+    setup("commit", "--quiet", "-m", "init")
+    setup("worktree", "add", "-b", "review", str(tmp_path / "project-wt-review"))
+    source = project / "keep.txt"
+    _code, staged = _send(app, node, source)
+    code, body = _put(app, node, {"artifact": staged["artifact"],
+                                  "dest": "docs/keep.txt",
+                                  "worktree": "review"}, "put-wt")
+    assert code == 200, body
+    _code, body = app.dispatch_job(body["job"]["delivery_id"])
+    assert body["job"]["state"] == "succeeded", body
+    assert (tmp_path / "project-wt-review" / "docs" / "keep.txt").read_text() == "keep\n"
+
+    code, body = _put(app, node, {"artifact": staged["artifact"],
+                                  "dest": "keep.txt", "worktree": "absent"},
+                      "put-missing")
+    _code, body = app.dispatch_job(body["job"]["delivery_id"])
+    assert body["job"]["result"]["code"] == "worktree_missing"

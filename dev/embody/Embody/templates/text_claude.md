@@ -57,7 +57,7 @@ Envoy replaces that with the stdio bridge entry on its next start, which adds `g
 ## Envoy, Convoy, permissions
 
 - Envoy runs on the port it allocates (**Envoy Port**, 9870 by default, or the next free port above it) and writes `.mcp.json` when it starts.
-- With **Enable Convoy** on, `convoy_*` tools relay work to other Convoy-enabled machines on the trusted LAN. Every lifecycle action needs a unique `idempotency_key` and the node's CURRENT runtime id; fetch remote results only through `convoy_get_artifact` / `convoy_save_artifact` (a remote path in a result is text, never a local file).
+- With **Enable Convoy** on, `convoy_*` tools relay work to other Convoy-enabled machines on the trusted LAN. Every lifecycle action needs a unique `idempotency_key` and the node's CURRENT runtime id; fetch remote results only through `convoy_get_artifact` / `convoy_save_artifact` (a remote path in a result is text, never a local file). Reach remote nodes through Convoy, not SSH; move code by git (push here, `convoy_git` fetch/pull/switch there, optionally in a worktree) and single files with `convoy_send_file` (the "Choosing the channel" section of the mcp-tools-reference coordination file).
 - Embody deploys `.claude/settings.local.json` once (never overwriting yours) pre-allowing the Envoy tools per the **Tool Permissions** posture; edit its `permissions.allow` to tighten or loosen.
 
 ## Python files and packages
