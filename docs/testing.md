@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **163 test suites** and **5,542 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **163 test suites** and **5,528 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -200,12 +200,12 @@ The tables below cover 151 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
-### Core Embody (42 suites, 783 tests)
+### Core Embody (42 suites, 780 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_startup_progress` | 111 | The status readout's signals: the state each subsystem's status string maps to (including the idle states that used to read as work in progress), the age an auto-save stamp becomes, the elapsed clock a wedged step must show, and the rows `viz_status` renders -- including the predicate that decides whether the panel may re-arm a tick at all, and the mutation guard over the removed publish machinery. Pure module, so it also runs under plain pytest on the CI matrix |
-| `test_duplicate_handling` | 43 | Duplicate / clone / replicant resolution |
+| `test_duplicate_handling` | 44 | Duplicate / clone / replicant resolution |
 | `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDXN controls, Logs, Envoy) |
 | `test_tag_management` | 29 | Tagging operators for externalization |
 | `test_rename_move_lifecycle` | 28 | Rename and move tracking |
@@ -244,10 +244,10 @@ AI-client connectivity tier, listed separately under
 | `test_promoted_surface` | 14 | Promoted-surface census: every capitalized extension member is deliberate public API, and every documented `op.Embody` method still resolves (issue #94) |
 | `test_pardef` | 15 | Get-or-create custom pages and parameters: an extension reinit never replaces a parameter the user set (issue #94) |
 | `test_save_path_contracts` | 20 | Save-path write contracts: `_updateRowCells` is the sole writer of the build, timestamp, dirty and position cells |
-| `test_no_console_window` | 7 | No stray console windows when Embody spawns console programs (git, uv, pip, schtasks) on Windows, plus save-path de-duplication |
+| `test_no_console_window` | 3 | No stray console windows when Embody spawns console programs (git, uv, pip, schtasks) on Windows |
 | `test_thread_safety_guards` | 7 | Runtime guards from the 2026-08-17 Derivative threading advisory; TD-import-free, so they also run on the pytest matrix |
 
-### MCP Tools (23 suites, 426 tests)
+### MCP Tools (23 suites, 433 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -269,26 +269,26 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_extensions` | 6 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
 | `test_tool_permissions` | 15 | Tool-permissions posture writer (EnvoyExt) |
-| `test_envoy_viz_gates` | 47 | Issue-57 viz activation gates in `envoy_viz` |
+| `test_envoy_viz_gates` | 54 | Issue-57 viz activation gates in `envoy_viz` |
 | `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 | `test_data_readers` | 22 | `get_chop_data` / `get_pop_data`: reduced reads (per-channel stats, channel globs and caps, relational diffs), never a raw dump |
 | `test_mcp_capture_op` | 9 | `capture_op`: any operator through a transient OP Viewer TOP, waiting out the empty frames a freshly aimed viewer returns |
 | `test_shader_diagnostics` | 16 | GLSL compile failures surfaced on `get_op_errors` (TD only warns; the details live in the Info DAT) |
 
-### TDXN Format (24 suites, 894 tests)
+### TDXN Format (24 suites, 902 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdxn_reconstruction` | 236 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdxn_file_io` | 102 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdxn_file_io` | 107 | TDXN file output, per-comp splitting, tdn_ref / tox_ref pointers, the save cycle |
 | `test_tdxn_helpers` | 120 | TDXN serialization utility functions, locked-content source classification and Switch to TOX |
 | `test_tdxn_export_import` | 65 | Network export/import + storage round-trip |
-| `test_tdxn_crash_safety` | 48 | Atomic writes, backup rotation, validation |
+| `test_tdxn_crash_safety` | 50 | Atomic writes, backup rotation, validation |
 | `test_tdxn_sequences` | 31 | Parameter / operator sequence round-trip |
 | `test_tdxn_diff_engine` | 25 | TDXN structural diff engine |
 | `test_tdxn_palette_catalog` | 34 | Palette-clone detection and handling |
 | `test_tdxn_exclude` | 27 | `tdxn_exclude` tag (app-managed subtree invisibility) |
-| `test_tdxn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
+| `test_tdxn_stability_hardening` | 20 | Import validation, DAT editability capture, flag defaults, orphan shell recovery |
 | `test_tdxn_mode` | 16 | Tdxnmode gating (off / export / full) |
 | `test_dat_restoration` | 20 | DAT restoration from disk on startup |
 | `test_tdxn_safety_guards` | 35 | Save-time TDXN content report: storage severity per mode, the DAT tripwire, deferred filing, managed-type filters |
@@ -304,11 +304,11 @@ AI-client connectivity tier, listed separately under
 | `test_tdxn_schema` | 2 | Every committed TDXN document validates against the shipped `docs/tdxn.schema.yaml` (contract C7) |
 | `test_tdxn_op_refs` | 16 | Constant OP references written as authored (sequence blocks, custom pars, unresolved names, patterns); absolute in-root values repaired owner-relative on export and on import; clone re-sync and rename (issue #132) |
 
-### Community & Collection (7 suites, 129 tests)
+### Community & Collection (7 suites, 132 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_clipboard_paste` | 42 | Clipboard auto-paste import flow |
+| `test_clipboard_paste` | 45 | Clipboard auto-paste import flow |
 | `test_collection_scanner` | 22 | Capability scanner verdicts (clean / flagged / blocked) |
 | `test_specimen_publish` | 19 | Specimen publish hook |
 | `test_collection_safe_import` | 18 | Safe-import `make_inert` disarming |

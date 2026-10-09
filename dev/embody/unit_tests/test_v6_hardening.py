@@ -115,12 +115,13 @@ class TestTDXNLoadMalformedJSON(EmbodyTestCase):
         The literal below is a deliberate tripwire: bumping TDXN_VERSION must
         be a conscious act, so update it here in the same commit. The test
         NAME is version-agnostic so only the literal churns (2.0 -> 2.1 on
-        2026-09-04, when per-component definition fields widened).
+        2026-09-04, when per-component definition fields widened; 2.1 -> 2.2
+        when ref entries stopped carrying custom_pars).
         """
         # Resolve the module-level TDXN_VERSION constant from the TDXNExt source.
         tdxn_version = self.embody.op('TDXNExt').module.TDXN_VERSION
-        self.assertEqual(tdxn_version, '2.1',
-            'precondition: TDXNExt.TDXN_VERSION should be the v2.1 format')
+        self.assertEqual(tdxn_version, '2.2',
+            'precondition: TDXNExt.TDXN_VERSION should be the v2.2 format')
 
         self.sandbox.create(baseCOMP, 'ver_check')
         # In-memory result.

@@ -105,8 +105,15 @@ The MCP workflow is explicit about where work runs:
 6. `convoy_get_job` checks durable work that outlives the original tool call or reconnect; `convoy_ack_job` acknowledges a finished delivery you have safely observed, letting the target release its protected result artifacts (verified artifact downloads and saves acknowledge automatically); `convoy_cancel_job` requests cancellation from the exact owning host.
 7. `convoy_get_artifact` retrieves a large JSON, text, or file result from its artifact reference and verifies it into a temporary local file. Relayed screenshots are normally retrieved automatically.
 8. `convoy_save_artifact` verifies an artifact and saves it into the current client's Embody project. An optional plain filename can be supplied; existing files are preserved unless `overwrite=true` is explicit.
-9. `convoy_list_controllers` shows live client sessions, selected targets, leases, and active work without waking TouchDesigner.
-10. `convoy_start_node` can reopen a previously registered, currently offline node; `convoy_restart_node` safely replaces one exact running TouchDesigner process.
+9. `convoy_send_file` sends one file from the current project to a node (see [Sending files to a node](#sending-files-to-a-node)).
+10. `convoy_list_controllers` shows live client sessions, selected targets, leases, and active work without waking TouchDesigner.
+11. `convoy_start_node` can reopen a previously registered, currently offline node; `convoy_restart_node` safely replaces one exact running TouchDesigner process.
+
+### Choosing the channel
+
+- **Reach a remote node through Convoy, not SSH.** Convoy carries the node's own permission gates, writer lease and audit trail; SSH carries none of them. Fall back to SSH only when Convoy cannot reach the node and `convoy_start_node` has failed.
+- **Code and project content move by git:** commit and push from one machine, then fetch and pull (or switch branches) on the other through the structured Git actions below. A pull into a node's live project changes files under its open TouchDesigner; use a worktree when the live project must not change during a show.
+- **A single file that is not in git** goes with `convoy_send_file`; **results come back** with `convoy_get_artifact` / `convoy_save_artifact`.
 
 You can usually ask in plain language. For example:
 
@@ -212,7 +219,11 @@ Convoy's ordinary registered TouchDesigner tools are available when the node is 
 
 Self-updating Embody on a node (`update_embody`, the operation behind `convoy_update_embody`) is a registered operation, not TD Python: it installs only the sha256-verified official release and refuses downgrades, so patching a fleet never requires the dangerous grant.
 
-Structured Git and GitHub actions use named, bounded operations rather than accepting an arbitrary command line. The initial catalog focuses on repository status, remotes, branches/revision, safe fetch/pull/push, and read-only GitHub inspection; destructive Git history rewrites and force operations are not part of the default surface.
+Structured Git and GitHub actions use named, bounded operations rather than accepting an arbitrary command line. The catalog covers repository status, remotes, branches/revision, fetch, fast-forward pull, push, branch switching, sibling worktrees, and read-only GitHub inspection; destructive Git history rewrites and force operations are not part of the default surface. Network Git is HTTPS-only.
+
+- **Pull** fast-forwards only the branch that is already checked out; naming another branch is refused (`branch_mismatch`) instead of moving the checked-out one.
+- **Switch branch** needs a clean tree. It switches to an existing local branch, or, when you name a `remote`, creates the branch to track `<remote>/<branch>`; it never guesses a remote.
+- **Worktrees** are a choice, not a requirement: `worktree_add` creates a sibling checkout named `<project>-wt-<name>` beside the node's project, `worktree_list` lists them, and `worktree_remove` removes one only when it holds no local, untracked or ignored files, and never when it is itself a registered node's project. Every other Git action takes an optional `worktree` name and runs there instead of in the live project, so a running TouchDesigner never sees the change.
 
 **Allow Execute TD Python** is effectively code execution as the user running TouchDesigner. TD Python can access files, the network, credentials available to TD, and process APIs. It is a separate gate from **Allow Full Shell**; leaving Full Shell off does not sandbox Python.
 
@@ -248,6 +259,18 @@ When you explicitly save or export an artifact into a project, it goes under:
 ```
 
 Those explicit copies are outside the runtime quota and are yours to retain, delete, ignore, or commit. Convoy never treats a path on another computer as though it were a local path; remote data must arrive as a verified artifact or a normal structured result. A remote `C:\...` or `/Users/...` path is descriptive target-side information only and must never be opened as a local result.
+
+### Sending files to a node
+
+`convoy_send_file` sends one file the other way. The source must resolve inside the sending client's own project, so a file elsewhere on that computer can never be sent. The local host app uploads it as a verified artifact to the host that owns the target node, then a durable `convoy_put_file` job writes it:
+
+| Destination | How | Gate on the target |
+|---|---|---|
+| `.embody/convoy/inbox/<name>` in the node's project (default) | `dest` is a plain file name, defaulting to the source's | none beyond **Enable Convoy** |
+| A path inside the node's `<project>-wt-<name>` worktree | `worktree=<name>`; `dest` defaults to the file's own project-relative path | none beyond **Enable Convoy** |
+| A path inside the node's live project | `live=true` | **Allow Execute TD Python**, because a synced `.py` written there reloads into TouchDesigner |
+
+Destinations are relative, `/`-separated paths; `..`, drives, links, junctions, short-name aliases, Windows-reserved or invalid names, anything under `.git`, AI client config (`.mcp.json`, `.claude/`, `.codex/`, `.cursor/`, `.vscode/`, `.gemini/`) and `.embody/` are refused. A worktree that is itself a registered node's project is refused too: target that node instead. An existing file is kept unless `overwrite=true`. Only the controller that uploaded a file can have it written.
 
 ## Version and platform compatibility
 

@@ -1,6 +1,6 @@
 format: tdxn
-version: '2.1'
-build: 22
+version: '2.2'
+build: 23
 generator: Embody/6.2.71
 td_build: 099.2025.33230
 network_path: /specimen_lab/thermite_and_freon

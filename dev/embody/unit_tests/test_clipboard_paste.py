@@ -330,6 +330,106 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         self.assertEqual(env['sha256'], m.tdn_sha256(env['tdn']))
         self.assertTrue(m.verify_envelope_integrity(env))
 
+    def test_copy_embeds_nested_externalized_children(self):
+        """A clipboard envelope is portable: a nested TDXN COMP travels with
+        its network and custom pars, not as a tdn_ref to this project's file
+        (which, since 6.2.71, carries none of its custom pars)."""
+        import os
+        import tempfile
+        from datetime import datetime
+        from pathlib import Path
+        host = self.sandbox.create(baseCOMP, 'copy_host')
+        child = host.create(baseCOMP, 'tracked_child')
+        child.create(textDAT, 'inside')
+        child.appendCustomPage('Ctl').appendFloat('Speed')
+        child.tags.add(self.embody.par.Tdxntag.val)
+        # the child's own file exists, so a ref entry would drop its pars
+        ref_dir = tempfile.mkdtemp()
+        ref = Path(ref_dir, 'tracked_child.tdxn')
+        ref.write_text('format: tdxn\n', encoding='utf-8')
+        stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        self.embody.ext.Embody._addToTable(child, ref.as_posix(),
+            stamp, False, 1, str(app.build), 'tdn')
+        try:
+            plain = self.tdxn_ext.ExportNetwork(root_path=host.path,
+                                                include_dat_content=True)
+            control = [o for o in plain['tdn']['operators']
+                       if o['name'] == 'tracked_child'][0]
+            self.assertIn('tdn_ref', control)
+            self.assertNotIn('custom_pars', control,
+                             'control: a ref entry carries no pars')
+            self._copy_verified(host)
+            env = _tdxn_module().unwrap_clipboard(ui.clipboard)
+            entry = [o for o in env['tdn']['operators']
+                     if o['name'] == 'tracked_child'][0]
+            self.assertNotIn('tdn_ref', entry)
+            self.assertIn('inside', [c['name'] for c in entry['children']])
+            self.assertIn('custom_pars', entry)
+        finally:
+            self.embody.ext.Embody.removeTDXNEntry(child.path, delete_file=False)
+            os.remove(ref)
+            os.rmdir(ref_dir)
+
+    def test_copy_drops_the_file_link_of_a_dat_whose_content_travels(self):
+        """Pasted, a DAT linked to the original's file shares it, and the
+        paste's content write reverts any edit made there since the copy
+        (probed live 2026-10-08): the envelope carries the content, not the
+        link, at any depth."""
+        import os
+        import tempfile
+        from pathlib import Path
+        d = tempfile.mkdtemp()
+        host = self.sandbox.create(baseCOMP, 'copy_links')
+        inner = host.create(baseCOMP, 'inner')
+        files = []
+        for i, owner in enumerate((host, inner)):
+            f = Path(d, 'linked%d.py' % i)
+            f.write_text('X = %d\n' % i, encoding='utf-8')
+            files.append(f)
+            dat = owner.create(textDAT, 'linked')
+            dat.par.file = f.as_posix()
+            dat.par.syncfile = True
+        try:
+            self._copy_verified(host)
+            ops_ = _tdxn_module().unwrap_clipboard(ui.clipboard)['tdn']['operators']
+            top = [o for o in ops_ if o['name'] == 'linked'][0]
+            nested = [c for c in [o for o in ops_ if o['name'] == 'inner'][0]
+                      ['children'] if c['name'] == 'linked'][0]
+            for entry in (top, nested):
+                self.assertIn('dat_content', entry)
+                pars = entry.get('parameters', {})
+                self.assertNotIn('file', pars)
+                self.assertNotIn('syncfile', pars)
+        finally:
+            host.destroy()
+            for f in files:
+                os.remove(f)
+            os.rmdir(d)
+
+    def test_copy_warns_that_locked_data_stays_behind(self):
+        """A copy keeps a locked op's lock flag but not its frozen data, inside
+        a nested externalized COMP too (embed_all inlines it), so it says so."""
+        from datetime import datetime
+        host = self.sandbox.create(baseCOMP, 'copy_locked')
+        child = host.create(baseCOMP, 'tracked_child')
+        frozen = child.create(noiseTOP, 'frozen')
+        frozen.lock = True
+        child.tags.add(self.embody.par.Tdxntag.val)
+        stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        self.embody.ext.Embody._addToTable(child, 'fake/locked_child.tdxn',
+            stamp, False, 1, str(app.build), 'tdn')
+        log = self.embody.ext.Embody._log_buffer
+        before = max((e['id'] for e in log), default=0)
+        try:
+            self._copy_verified(host)
+        finally:
+            self.embody.ext.Embody.removeTDXNEntry(child.path, delete_file=False)
+        warns = [e['message'] for e in log
+                 if e['id'] > before and e['level'] == 'WARNING']
+        self.assertTrue(
+            any(m.startswith('Clipboard copy of %s' % host.path)
+                and frozen.path in m for m in warns), warns)
+
     def test_copy_rejects_non_comp(self):
         top = self.sandbox.create(noiseTOP, 'lonely_top')
         res = self.tdxn_ext.copyNetworkToClipboard(top)

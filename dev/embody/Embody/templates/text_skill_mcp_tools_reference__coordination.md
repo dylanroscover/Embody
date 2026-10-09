@@ -41,14 +41,22 @@ Served by the local STDIO bridge, so they work while TD is down or frozen.
 
 ## Convoy tools (LAN work relay)
 
-Seventeen more meta-tools relay work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls (`get_convoy_status`, `convoy_list_nodes`, `convoy_list_controllers`, `convoy_ping`) never wake TouchDesigner.
+Eighteen more meta-tools relay work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls (`get_convoy_status`, `convoy_list_nodes`, `convoy_list_controllers`, `convoy_ping`) never wake TouchDesigner.
 
 - `convoy_select_node` pins THIS session to one exact node; ordinary Envoy tools then run there until `convoy_select_node` with `clear=true`.
 - `convoy_call` / `convoy_batch` run registered operations on explicit one-off targets; pass a unique `idempotency_key` per intended action so a retry reconciles instead of double-running.
 - `convoy_get_job` / `convoy_ack_job` / `convoy_cancel_job` reconcile durable deliveries; acknowledge a finished delivery you have safely observed so the target can release its protected result artifacts.
 - `convoy_forget_node` deletes a stale node row on THIS machine's host app. It refuses only while the node has a delivery that has not FINISHED, and names the blocking delivery ids; dead and long-unseen rows are also evicted by the host's retention sweep.
 - `convoy_get_artifact` / `convoy_save_artifact` fetch results BY ARTIFACT REFERENCE and verify them locally; never open a remote `C:\...` or `/Users/...` path as if it were local.
+- `convoy_send_file` sends one file from THIS project to a node: by default into its `.embody/convoy/inbox/`, with `worktree=<name>` into the node's sibling `<project>-wt-<name>` checkout, or with `live=true` into the live project (needs **Allow Execute TD Python** on the target, since a synced `.py` reloads into TD). The source must resolve inside this project; existing files are kept unless `overwrite=true`; AI client config (`.mcp.json`, `.claude/`, ...) and `.embody/` are never written (move them by git).
+- Git on a node is `convoy_call` with `operation="convoy_git"` and `arguments={"operation": <action>, "arguments": {...}}`: `status`, `remotes`, `branches`, `current_branch`, `revision`, `upstream`, `divergence`, `fetch`, `pull_ff_only` (only into the branch already checked out), `push_branch`, `switch_branch` (clean tree only; `remote` creates a missing branch from `<remote>/<branch>`), and `worktree_add` / `worktree_list` / `worktree_remove` (sibling `<project>-wt-<name>`; remove refuses any local, untracked or ignored file and never forces). Every other action takes an optional `worktree` name. Network git is HTTPS-only.
 - `convoy_start_node` / `convoy_restart_node` manage node lifecycle; restarts require the node's CURRENT runtime id (from `convoy_list_nodes`) plus a unique `idempotency_key`, and the default policy refuses dirty or unverifiable project state.
 - `convoy_update_embody` self-updates Embody on one node (`node=<id|name|hostname>`) or the whole fleet (`all=true`) as durable per-node jobs; offline, disabled and Perform Mode nodes are skipped by name.
 - `convoy_owlette` is an optional read-mostly site bridge that fails closed without credentials.
 - `convoy_lifecycle_state` / `convoy_lifecycle_quit` are reserved for the Convoy host's own lifecycle session; any other session gets `Convoy lifecycle host session required`. Use `convoy_restart_node` instead.
+
+### Choosing the channel
+
+- **Reach a remote node through Convoy, not SSH.** Convoy carries the node's own permission gates, writer lease and audit trail; SSH carries none of them and is often closed. Fall back to SSH only when Convoy cannot reach the node and `convoy_start_node` has failed.
+- **Code and project content move by git:** commit and push here, then `fetch` and `pull_ff_only` or `switch_branch` there. A pull into a node's live project changes files under its open TouchDesigner; work in a `worktree` when the live project must not change under a running show.
+- **A single file that is not in git** (a capture, a config, a media asset) goes with `convoy_send_file`; **results come back** with `convoy_get_artifact` / `convoy_save_artifact`.

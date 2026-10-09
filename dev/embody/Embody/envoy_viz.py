@@ -816,27 +816,35 @@ def highlightOp(ext, target: 'OP') -> None:
 
 # --- colour pulse on the active op ---
 
+def _pulseOp(ext):
+    """The pulsing op, resolved by id: a rename keeps it (a path lookup lost
+    it and stranded the tint), and an op recreated at its path is not it."""
+    i = ext._viz_pulse_id
+    o = op(i) if i is not None else None
+    return o if o is not None and o.valid else None
+
+
 def pulseStart(ext, target: 'OP', now: float) -> None:
     """Begin a colour pulse on `target` (snapshot its colour first). No-op if
     we are already pulsing this op."""
-    if ext._viz_pulse_op == target.path:
+    if ext._viz_pulse_id is not None and ext._viz_pulse_id == target.id:
         return
     restorePulse(ext)
     try:
         ext._viz_pulse_orig = tuple(target.color)
-        ext._viz_pulse_op = target.path
+        ext._viz_pulse_id = target.id
         ext._viz_pulse_start = now
     except Exception:
-        ext._viz_pulse_op = None
+        ext._viz_pulse_id = None
 
 
 def pulseTick(ext, now: float) -> None:
     """Fade the active pulse from the accent colour back to the op's original."""
-    if not ext._viz_pulse_op:
+    if ext._viz_pulse_id is None:
         return
-    o = op(ext._viz_pulse_op)
-    if not o or not o.valid:
-        ext._viz_pulse_op = None
+    o = _pulseOp(ext)
+    if o is None:
+        ext._viz_pulse_id = None
         return
     t = (now - ext._viz_pulse_start) / _VIZ_PULSE_S
     if t >= 1.0:
@@ -855,16 +863,25 @@ def pulseTick(ext, now: float) -> None:
 
 def restorePulse(ext) -> None:
     """Restore the pulsing op's original colour and clear pulse state."""
-    p = ext._viz_pulse_op
-    if p and ext._viz_pulse_orig is not None:
-        o = op(p)
-        if o and o.valid:
+    if ext._viz_pulse_orig is not None:
+        o = _pulseOp(ext)
+        if o is not None:
             try:
                 o.color = ext._viz_pulse_orig
             except Exception:
                 pass
-    ext._viz_pulse_op = None
+    ext._viz_pulse_id = None
     ext._viz_pulse_orig = None
+
+
+def pulseOriginalColor(ext, op_id: int):
+    """The colour op `op_id` had before the pulse tinted it, or None when it is
+    not mid-pulse. Every writer of a node colour reads through this (see
+    EmbodyExt.authoredColor) so a 0.45 s tint never reaches a file."""
+    if (op_id is not None and ext._viz_pulse_id == op_id
+            and ext._viz_pulse_orig is not None):
+        return tuple(ext._viz_pulse_orig)
+    return None
 
 
 # --- the dancing builder-bot (ephemeral annotation) ---
@@ -1828,11 +1845,14 @@ def vizRetireForWrite(ext, path: str) -> bool:
                 matched = True
                 removed += destroyPartsIn(ext, netpath)
                 ext._viz_bot_pending_cleanup.discard(netpath)
+        # A mid-fade accent colour would serialize. The pulse tints a node
+        # wherever Embot stands, so this is not gated on him being inside.
+        pulsing = _pulseOp(ext)
+        if pulsing is not None and pathInsideSubtree(pulsing.path, path):
+            restorePulse(ext)
         # The live bot, only when he is genuinely inside.
         if ext._viz_bot_net and pathInsideSubtree(ext._viz_bot_net, path):
             matched = True
-            if ext._viz_pulse_op and pathInsideSubtree(ext._viz_pulse_op, path):
-                restorePulse(ext)   # a mid-fade accent colour would serialize
             removed += destroyPartsIn(ext, ext._viz_bot_net)
             destroyBot(ext)
     except Exception:

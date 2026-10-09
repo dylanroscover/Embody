@@ -1,7 +1,7 @@
 format: tdxn
-version: '2.1'
-build: 3
-generator: Embody/6.2.56
+version: '2.2'
+build: 5
+generator: Embody/6.2.72
 td_build: 099.2025.33230
 network_path: /specimen_lab/mandala
 options:

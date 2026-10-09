@@ -30,7 +30,7 @@ WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WH
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'flocking', 'particles', 'generative')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -54,7 +54,7 @@ WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('feedback', 'glsl', 'generative', 'simulation', 'texture')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -78,7 +78,7 @@ WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile W
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'glsl', 'mirror', 'symmetry', 'effect')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -102,7 +102,7 @@ WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('3d', 'glsl', 'terrain', 'geometry', 'procedural')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -126,7 +126,7 @@ WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_pr
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'plasma', 'palette', 'vj', 'texture')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -150,7 +150,7 @@ WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('raymarching', 'sdf', 'glsl', 'fractal', '3d', 'mandelbulb')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -174,7 +174,7 @@ WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'strata', 'displace', 'chromatic', 'streaks', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -198,7 +198,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -222,7 +222,7 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -262,23 +262,23 @@ INSERT OR IGNORE INTO tags (id, name, slug) VALUES
   ('tag-mandala', 'mandala', 'mandala'),
   ('tag-line', 'line', 'line');
 
--- murmuration: specimens/simulation/murmuration.tdxn sha256=5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d size=13697
+-- murmuration: specimens/simulation/murmuration.tdxn sha256=c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f size=13631
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-murmuration-5c956da2481bc86b', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d', '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d', 13697, 18, 'scan-murmuration-5c956da2481bc86b', NULL, 'First-party sync of specimens/simulation/murmuration.tdxn'
+SELECT 'ver-murmuration-c580b2523a3c8936', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f', 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f', 13631, 18, 'scan-murmuration-c580b2523a3c8936', NULL, 'First-party sync of specimens/simulation/murmuration.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-murmuration-5c956da2481bc86b', 'ver-murmuration-5c956da2481bc86b', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-murmuration-5c956da2481bc86b') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-murmuration-5c956da2481bc86b');
+SELECT 'scan-murmuration-c580b2523a3c8936', 'ver-murmuration-c580b2523a3c8936', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-murmuration-c580b2523a3c8936') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-murmuration-c580b2523a3c8936');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Murmuration', description = 'A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.', category = 'simulation', level = 'advanced', requires = '[]', op_count = 18, family_summary = 'POP,MAT', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f')
   AND (
       s.title IS NOT 'Murmuration'
    OR s.description IS NOT 'A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.'
@@ -291,7 +291,7 @@ WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WH
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '5c956da2481bc86bda301d7dd6fc3ec237790f30d33a2f2bb589a4ddc1547d3d'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'flocking', 'particles', 'generative')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -303,23 +303,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('simulation');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'simulation' FROM specimens AS s WHERE s.slug = 'murmuration' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- reaction-diffusion: specimens/generative/reaction-diffusion.tdxn sha256=bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76 size=6850
+-- reaction-diffusion: specimens/generative/reaction-diffusion.tdxn sha256=f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f size=6784
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-reaction-diffusion-bfbbf6a07197e1a3', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76', 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76', 6850, 14, 'scan-reaction-diffusion-bfbbf6a07197e1a3', NULL, 'First-party sync of specimens/generative/reaction-diffusion.tdxn'
+SELECT 'ver-reaction-diffusion-f13b413e61f31cc5', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f', 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f', 6784, 14, 'scan-reaction-diffusion-f13b413e61f31cc5', NULL, 'First-party sync of specimens/generative/reaction-diffusion.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-reaction-diffusion-bfbbf6a07197e1a3', 'ver-reaction-diffusion-bfbbf6a07197e1a3', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-reaction-diffusion-bfbbf6a07197e1a3') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-reaction-diffusion-bfbbf6a07197e1a3');
+SELECT 'scan-reaction-diffusion-f13b413e61f31cc5', 'ver-reaction-diffusion-f13b413e61f31cc5', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-reaction-diffusion-f13b413e61f31cc5') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-reaction-diffusion-f13b413e61f31cc5');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Reaction-Diffusion (Gray-Scott)', description = 'A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.', category = 'generative', level = 'intermediate', requires = '[]', op_count = 14, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f')
   AND (
       s.title IS NOT 'Reaction-Diffusion (Gray-Scott)'
    OR s.description IS NOT 'A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.'
@@ -332,7 +332,7 @@ WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bfbbf6a07197e1a3dbd712cbcf5524344c4f6b8f6b47b95bf89cae519c110b76'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('feedback', 'glsl', 'generative', 'simulation', 'texture')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -344,23 +344,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'reaction-diffusion' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- kaleidoscope: specimens/compositing/kaleidoscope.tdxn sha256=295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103 size=8005
+-- kaleidoscope: specimens/compositing/kaleidoscope.tdxn sha256=d5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1 size=7939
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-kaleidoscope-295f25faf270440a', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103', '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103', 8005, 11, 'scan-kaleidoscope-295f25faf270440a', NULL, 'First-party sync of specimens/compositing/kaleidoscope.tdxn'
+SELECT 'ver-kaleidoscope-d5c2d9fba5c73b85', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1', 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1', 7939, 11, 'scan-kaleidoscope-d5c2d9fba5c73b85', NULL, 'First-party sync of specimens/compositing/kaleidoscope.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-kaleidoscope-295f25faf270440a', 'ver-kaleidoscope-295f25faf270440a', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-kaleidoscope-295f25faf270440a') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-kaleidoscope-295f25faf270440a');
+SELECT 'scan-kaleidoscope-d5c2d9fba5c73b85', 'ver-kaleidoscope-d5c2d9fba5c73b85', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-kaleidoscope-d5c2d9fba5c73b85') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-kaleidoscope-d5c2d9fba5c73b85');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Kaleidoscope', description = 'A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.', category = 'compositing', level = 'intermediate', requires = '[]', op_count = 11, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1')
   AND (
       s.title IS NOT 'Kaleidoscope'
    OR s.description IS NOT 'A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.'
@@ -373,7 +373,7 @@ WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile W
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '295f25faf270440a15c38067dc6f1c25906a1a18680870d0d5c516a65ccfb103'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'glsl', 'mirror', 'symmetry', 'effect')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -385,23 +385,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('compositing');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'compositing' FROM specimens AS s WHERE s.slug = 'kaleidoscope' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- noise-terrain: specimens/3d/noise-terrain.tdxn sha256=12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5 size=23789
+-- noise-terrain: specimens/3d/noise-terrain.tdxn sha256=aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533 size=23723
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-noise-terrain-12d74dd5e88d6276', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5', '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5', 23789, 20, 'scan-noise-terrain-12d74dd5e88d6276', NULL, 'First-party sync of specimens/3d/noise-terrain.tdxn'
+SELECT 'ver-noise-terrain-aa66136a6d59ec3e', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533', 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533', 23723, 20, 'scan-noise-terrain-aa66136a6d59ec3e', NULL, 'First-party sync of specimens/3d/noise-terrain.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-noise-terrain-12d74dd5e88d6276', 'ver-noise-terrain-12d74dd5e88d6276', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-noise-terrain-12d74dd5e88d6276') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-noise-terrain-12d74dd5e88d6276');
+SELECT 'scan-noise-terrain-aa66136a6d59ec3e', 'ver-noise-terrain-aa66136a6d59ec3e', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-noise-terrain-aa66136a6d59ec3e') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-noise-terrain-aa66136a6d59ec3e');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Ridged Mountain Terrain', description = 'A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.', category = '3d', level = 'advanced', requires = '[]', op_count = 20, family_summary = 'POP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533')
   AND (
       s.title IS NOT 'Ridged Mountain Terrain'
    OR s.description IS NOT 'A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.'
@@ -414,7 +414,7 @@ WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '12d74dd5e88d627653e2e973291b41a704cde968d0a8e61b6ef9ca19bb9025c5'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('3d', 'glsl', 'terrain', 'geometry', 'procedural')) <> 5
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -426,23 +426,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('3d');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, '3d' FROM specimens AS s WHERE s.slug = 'noise-terrain' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- plasma-interference: specimens/generative/plasma-interference.tdxn sha256=532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63 size=6980
+-- plasma-interference: specimens/generative/plasma-interference.tdxn sha256=b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2 size=6914
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-plasma-interference-532989ed224f716a', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63', 6980, 5, 'scan-plasma-interference-532989ed224f716a', NULL, 'First-party sync of specimens/generative/plasma-interference.tdxn'
+SELECT 'ver-plasma-interference-b6e2814e8e8b230b', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2', 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2', 6914, 5, 'scan-plasma-interference-b6e2814e8e8b230b', NULL, 'First-party sync of specimens/generative/plasma-interference.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-plasma-interference-532989ed224f716a', 'ver-plasma-interference-532989ed224f716a', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-plasma-interference-532989ed224f716a') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-plasma-interference-532989ed224f716a');
+SELECT 'scan-plasma-interference-b6e2814e8e8b230b', 'ver-plasma-interference-b6e2814e8e8b230b', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-plasma-interference-b6e2814e8e8b230b') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-plasma-interference-b6e2814e8e8b230b');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Plasma (Sine Interference)', description = 'A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.', category = 'generative', level = 'intermediate', requires = '[]', op_count = 5, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2')
   AND (
       s.title IS NOT 'Plasma (Sine Interference)'
    OR s.description IS NOT 'A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.'
@@ -455,7 +455,7 @@ WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_pr
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '532989ed224f716ac444048d76b037e38381e8ac172924bc4f1713d036151d63'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'plasma', 'palette', 'vj', 'texture')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -467,23 +467,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'plasma-interference' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- mandelbulb-march: specimens/raymarching-sdf/mandelbulb-march.tdxn sha256=9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d size=10257
+-- mandelbulb-march: specimens/raymarching-sdf/mandelbulb-march.tdxn sha256=bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080 size=10191
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-mandelbulb-march-9ef1afa22149ebc3', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d', 10257, 5, 'scan-mandelbulb-march-9ef1afa22149ebc3', NULL, 'First-party sync of specimens/raymarching-sdf/mandelbulb-march.tdxn'
+SELECT 'ver-mandelbulb-march-bbb8fd3067e2e283', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080', 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080', 10191, 5, 'scan-mandelbulb-march-bbb8fd3067e2e283', NULL, 'First-party sync of specimens/raymarching-sdf/mandelbulb-march.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-mandelbulb-march-9ef1afa22149ebc3', 'ver-mandelbulb-march-9ef1afa22149ebc3', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandelbulb-march-9ef1afa22149ebc3') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandelbulb-march-9ef1afa22149ebc3');
+SELECT 'scan-mandelbulb-march-bbb8fd3067e2e283', 'ver-mandelbulb-march-bbb8fd3067e2e283', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandelbulb-march-bbb8fd3067e2e283') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandelbulb-march-bbb8fd3067e2e283');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Mandelbulb March', description = 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.', category = 'raymarching-sdf', level = 'advanced', requires = '[]', op_count = 5, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080')
   AND (
       s.title IS NOT 'Mandelbulb March'
    OR s.description IS NOT 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.'
@@ -496,7 +496,7 @@ WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9ef1afa22149ebc38e9a5611099c00d979f3f17e2ab8f2d253fa9b8b3947803d'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('raymarching', 'sdf', 'glsl', 'fractal', '3d', 'mandelbulb')) <> 6
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -508,23 +508,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('raymarching-sdf');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'raymarching-sdf' FROM specimens AS s WHERE s.slug = 'mandelbulb-march' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- prismatic-strata: specimens/generative/prismatic-strata.tdxn sha256=381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b size=34243
+-- prismatic-strata: specimens/generative/prismatic-strata.tdxn sha256=3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd size=34243
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-prismatic-strata-381c27de97a267e4', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b', 34243, 18, 'scan-prismatic-strata-381c27de97a267e4', NULL, 'First-party sync of specimens/generative/prismatic-strata.tdxn'
+SELECT 'ver-prismatic-strata-3bdb820e01dbdb5e', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', 34243, 18, 'scan-prismatic-strata-3bdb820e01dbdb5e', NULL, 'First-party sync of specimens/generative/prismatic-strata.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-prismatic-strata-381c27de97a267e4', 'ver-prismatic-strata-381c27de97a267e4', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-prismatic-strata-381c27de97a267e4') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-prismatic-strata-381c27de97a267e4');
+SELECT 'scan-prismatic-strata-3bdb820e01dbdb5e', 'ver-prismatic-strata-3bdb820e01dbdb5e', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-prismatic-strata-3bdb820e01dbdb5e') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-prismatic-strata-3bdb820e01dbdb5e');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Prismatic Strata', description = 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.', category = 'generative', level = 'advanced', requires = '[]', op_count = 18, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd')
   AND (
       s.title IS NOT 'Prismatic Strata'
    OR s.description IS NOT 'Stacked jagged strata lit from above and wrapped in iridescent fog, a soft pulse of light rolling down through them once per loop, split into orange and azure fringes by a per-channel displacement, with light streaks that rise along the curved layers and bloom. The classic animated-ramp-displaced-by-animated-noise look rebuilt on the GPU: a Ramp TOP, three GLSL TOPs (one writing three color buffers), two Render Select TOPs and a Bloom TOP, looping seamlessly.'
@@ -537,7 +537,7 @@ WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profi
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/394150ea06ef4684c215cecaa389956bdac50cc3d6c36dac975a655e112d020a'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '381c27de97a267e4f953dfac09c7aeeac4d37bfef321ddae91e07e23a500890b'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'strata', 'displace', 'chromatic', 'streaks', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -549,23 +549,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'prismatic-strata' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- mandala: specimens/generative/mandala.tdxn sha256=b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b size=89571
+-- mandala: specimens/generative/mandala.tdxn sha256=3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8 size=89571
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-mandala-b721e10ce05b6d41', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b', 89571, 461, 'scan-mandala-b721e10ce05b6d41', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
+SELECT 'ver-mandala-3788fde3c9e2217d', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', 89571, 461, 'scan-mandala-3788fde3c9e2217d', NULL, 'First-party sync of specimens/generative/mandala.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-mandala-b721e10ce05b6d41', 'ver-mandala-b721e10ce05b6d41', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-b721e10ce05b6d41') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-b721e10ce05b6d41');
+SELECT 'scan-mandala-3788fde3c9e2217d', 'ver-mandala-3788fde3c9e2217d', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-mandala-3788fde3c9e2217d') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-mandala-3788fde3c9e2217d');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Serenity and Beauty', description = 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.', category = 'generative', level = 'advanced', requires = '[]', op_count = 461, family_summary = 'POP,CHOP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8')
   AND (
       s.title IS NOT 'Serenity and Beauty'
    OR s.description IS NOT 'A Tibetan-thangka mandala. Thirty-two parameterised layers of POP geometry merge into three streams that three GLSL POPs draw in one pass each, reading every layer''s settings from a CHOP texture buffer, so the whole image costs about a millisecond a frame. A GLSL scrollwork texture grows outward beneath the elements on a quad inside the render, and a final GLSL pass ages it with patchy wear and shimmering specks; Loop mode snaps every rate so renders repeat exactly.'
@@ -578,7 +578,7 @@ WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE 
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b3e7e3629a617404002926c520dbc6f865b7a28f5a6fa327229755461adf5463'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b721e10ce05b6d410d82ca02b6fe164ab83fb679ea12f207c4384cc30c3fe52b'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 8
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'pop', 'glsl', 'mandala', 'geometry', 'line', 'loop', 'vj')) <> 8
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -590,23 +590,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f size=130165
+-- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76 size=130165
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-thermite-and-freon-8f7f1a53cc29813a', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f', 130165, 111, 'scan-thermite-and-freon-8f7f1a53cc29813a', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
+SELECT 'ver-thermite-and-freon-c38e47875edb31ac', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 130165, 111, 'scan-thermite-and-freon-c38e47875edb31ac', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-thermite-and-freon-8f7f1a53cc29813a', 'ver-thermite-and-freon-8f7f1a53cc29813a', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-8f7f1a53cc29813a') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-8f7f1a53cc29813a');
+SELECT 'scan-thermite-and-freon-c38e47875edb31ac', 'ver-thermite-and-freon-c38e47875edb31ac', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-c38e47875edb31ac') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-c38e47875edb31ac');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Thermite and Freon', description = 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.', category = 'simulation', level = 'advanced', requires = '[]', op_count = 111, family_summary = 'TOP,POP,CHOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76')
   AND (
       s.title IS NOT 'Thermite and Freon'
    OR s.description IS NOT 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.'
@@ -619,7 +619,7 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '8f7f1a53cc29813a677532845e0351593af75179aa5d197e500d706d0aeeba3f'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

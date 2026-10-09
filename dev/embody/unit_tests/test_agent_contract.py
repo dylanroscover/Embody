@@ -115,6 +115,7 @@ EXPECTED_BRIDGE_TOOLS = [
     'convoy_restart_node',
     'convoy_save_artifact',
     'convoy_select_node',
+    'convoy_send_file',
     'convoy_start_node',
     'convoy_update_embody',
     'dismiss_dialog',

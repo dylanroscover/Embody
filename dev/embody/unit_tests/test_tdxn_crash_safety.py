@@ -817,6 +817,38 @@ class TestTDXNCrashSafety(EmbodyTestCase):
 		self.assertEqual(bak.read_bytes(), bak_before,
 						 'a skipped write still rotated the backups')
 
+	def test_G05_header_only_rewrite_keeps_both_backup_generations(self):
+		"""A format/version-only rewrite (the one-time 2.2 sweep) holds the
+		same network, so rotating would push the oldest real generation out
+		of .bak2 for nothing."""
+		for n in (1, 2, 3):
+			self.assertTrue(self._write(_make_valid_tdxn(n)).get('success'))
+		bak = self.tdn._get_backup_path(
+			self._tdxn_path, self._proj_folder, '.bak')
+		bak2 = self.tdn._get_backup_path(
+			self._tdxn_path, self._proj_folder, '.bak2')
+		before = (bak.read_bytes(), bak2.read_bytes())
+
+		res = self._write(dict(_make_valid_tdxn(3), version='2.2'))
+		self.assertTrue(res.get('success'), res)
+		self.assertFalse(res.get('skipped'), 'the version bump must be written')
+		self.assertEqual(
+			self.tdn._read_existing_tdxn(self._tdxn_path).get('version'), '2.2')
+		self.assertEqual((bak.read_bytes(), bak2.read_bytes()), before,
+						 'a header-only rewrite rotated the backups')
+
+	def test_G06_failed_header_only_rewrite_puts_the_file_back(self):
+		"""Nothing rotated, so .bak holds an OLDER network: a header-only
+		write that fails validation restores the file as it was, not .bak."""
+		self.assertTrue(self._write(_make_valid_tdxn(1)).get('success'))
+		self.assertTrue(self._write(_make_valid_tdxn(2)).get('success'))
+		current = open(self._tdxn_path, 'rb').read()
+
+		res = self._write(dict(_make_valid_tdxn(2), format='bogus'))
+		self.assertIn('error', res)
+		self.assertNotIn('restored_from', res)
+		self.assertEqual(open(self._tdxn_path, 'rb').read(), current)
+
 	def test_F03_1000_operator_corrupt_and_rollback(self):
 		"""1000 ops: export, corrupt .tdn, rollback from saved content."""
 		expected = self._buildStressNetwork(self.sandbox, 1000)

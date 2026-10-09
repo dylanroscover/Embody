@@ -667,6 +667,26 @@ export async function updateUserProfile(
   return { ok: true, handle: v.handle };
 }
 
+// The rendered-result panel's size on specimen pages, as a multiple of its
+// default (aspect-matched, same area as a 16:9 cover). Null = never resized.
+export const RESULT_PANEL_SCALE_MIN = 0.5;
+export const RESULT_PANEL_SCALE_MAX = 3;
+
+export async function getResultPanelScale(db: D1Database, userId: string): Promise<number | null> {
+  const row = await db
+    .prepare("SELECT result_panel_scale AS scale FROM users_profile WHERE id = ?")
+    .bind(userId)
+    .first<{ scale: number | null }>();
+  return typeof row?.scale === "number" ? row.scale : null;
+}
+
+export async function setResultPanelScale(db: D1Database, userId: string, scale: number | null): Promise<void> {
+  await db
+    .prepare("UPDATE users_profile SET result_panel_scale = ? WHERE id = ?")
+    .bind(scale, userId)
+    .run();
+}
+
 function fallbackSpecimensByAuthor(handle: string): SpecimenSummary[] {
   return fixtureSummaries.filter((summary) => summary.author_handle === handle);
 }

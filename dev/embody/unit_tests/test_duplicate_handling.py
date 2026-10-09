@@ -47,6 +47,29 @@ class TestDuplicateHandling(EmbodyTestCase):
         # Row count should be same or less (never more)
         self.assertLessEqual(table.numRows, initial_rows)
 
+    def test_cleanup_merges_tdn_and_tdxn_rows_for_one_comp(self):
+        """'tdn' is the pre-6.2.30 spelling of the 'tdxn' strategy, so a row of
+        each at one path is a duplicate: the newer survives, alone."""
+        table = self.embody_ext.Externalizations
+        path = self.sandbox.path + '/dup_strategy'
+        cols = [c.val for c in table.row(0)]
+        for rel, stamp, strategy in (
+                ('fake/dup_old.tdn', '2026-01-01 00:00:00 UTC', 'tdn'),
+                ('fake/dup_new.tdxn', '2026-02-01 00:00:00 UTC', 'tdxn')):
+            vals = {'path': path, 'type': 'base', 'strategy': strategy,
+                    'rel_file_path': rel, 'timestamp': stamp}
+            table.appendRow([vals.get(c, '') for c in cols])
+        try:
+            self.embody_ext.cleanupDuplicateRows(path)
+            rels = [table[i, 'rel_file_path'].val
+                    for i in range(1, table.numRows)
+                    if table[i, 'path'].val == path]
+            self.assertEqual(rels, ['fake/dup_new.tdxn'])
+        finally:
+            for i in range(table.numRows - 1, 0, -1):
+                if table[i, 'path'].val == path:
+                    table.deleteRow(i)
+
     # --- _buildPathGroups ---
 
     def test_build_path_groups_returns_dict(self):

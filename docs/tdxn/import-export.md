@@ -44,7 +44,7 @@ Use the `export_network` tool with these options:
 |-----------|---------|-------------|
 | `root_path` | `"/"` | Starting COMP path |
 | `include_dat_content` | Toggle setting | Also include file-backed DAT text/table content (content saved nowhere else is always included) |
-| `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only). A path other than the COMP's tracked file writes a **snapshot**: the tracked file and its table row are left untouched, and no stale-file cleanup runs. A relative path is anchored at the project folder. |
+| `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only). A path other than the COMP's tracked file writes a **snapshot**: the tracked file and its table row are left untouched. A relative path is anchored at the project folder. |
 | `max_depth` | `null` (unlimited) | Maximum recursion depth |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export |
 
@@ -87,7 +87,7 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (the `tdxn_exclude` tag) are preserved, not destroyed. |
-| 0 | **Create target custom parameters** | The target COMP's own custom parameters, created before any child so an extension or expression inside finds them. A `tdn_ref` shell gets none from its parent file. |
+| 0 | **Create target custom parameters** | The target COMP's own custom parameters it does not have yet (all of them on a bare `tdn_ref` shell, new ones on a reload), created before any child so an extension or expression inside finds them. |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
@@ -155,7 +155,9 @@ my-project/
             └── bar.tdxn.bak2  ← the one before that
 ```
 
-After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ext.Embody.reconstructTDXNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
+A rewrite that changes only the header's `format` or `version` (a format bump re-saving an unchanged network) skips the rotation, so it never pushes an older network out of `.bak2`.
+
+After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from (a header-only rewrite puts the previous file back instead). `ext.Embody.reconstructTDXNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
 
 The folder holds backups of **both** `.tdxn` and `.tdn` files — a COMP externalized before v6.1.0 keeps writing `.tdn` forever — which is why the name carries no format token.
 

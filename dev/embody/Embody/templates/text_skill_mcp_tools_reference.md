@@ -127,7 +127,7 @@ Reduced reads, never a blind dump: a 4x600 CHOP is 2,400 raw floats; these retur
 | `launch_td` / `restart_td` | `timeout?` | Launch or gracefully relaunch TD with the project's `.toe` |
 | `list_dialogs` / `dismiss_dialog` | `instance?`, `screenshot?` / `instance?`, `dialog?`, `action?` | See and clear the modal dialog that is freezing TD; call `list_dialogs` FIRST when every tool times out |
 | `switch_instance` | `instance?`, `all_sessions?` | List TD instances or re-pin this session; pass `instance=<name>` on any tool for a single call (`/multi-instance`) |
-| `convoy_*` | see `references/coordination.md` | Seventeen LAN work-relay tools: pin a node with `convoy_select_node`, then ordinary tools run there |
+| `convoy_*` | see `references/coordination.md` | Eighteen LAN work-relay tools: pin a node with `convoy_select_node`, then ordinary tools run there |
 
 ## Batch Operations
 

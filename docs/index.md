@@ -95,7 +95,7 @@ You describe what you want. The AI works with your live network — operators, c
 | :material-file-document: | **TDXN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
-| :material-test-tube: | **163 Test Suites** | Comprehensive automated testing framework (5,542 tests) |
+| :material-test-tube: | **163 Test Suites** | Comprehensive automated testing framework (5,604 tests) |
 | :material-note-text: | **Structured Logging** | Multi-destination logging with file rotation, ring buffer, and MCP access |
 
 ---

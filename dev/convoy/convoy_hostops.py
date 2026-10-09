@@ -67,6 +67,8 @@ _SIGKILL = getattr(signal, "SIGKILL", 9)
 _TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 _REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}\Z")
+# No dots: Windows silently strips a trailing one from a directory name.
+_WORKTREE_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,62}[A-Za-z0-9])?\Z")
 # Windows defines standard variables such as ``ProgramFiles(x86)``.  Parentheses
 # are therefore valid in an inherited environment name; ``=`` and NUL remain
 # forbidden by the explicit validation below.
@@ -96,28 +98,54 @@ _URL_CREDENTIAL_RE = re.compile(
 
 # Exact reviewed catalogs.  The values are capability metadata, not command
 # fragments supplied by a controller.  Changing these is a schema change.
+# `worktree` names a sibling <project>-wt-<name> checkout (see worktree_path);
+# omitted, an operation runs in the registered project itself.
+_IN_WORKTREE = {"worktree": "worktree-name?"}
 GIT_CATALOG = {
-    "status": {"mutating": False, "network": False, "arguments": {}},
-    "remotes": {"mutating": False, "network": False, "arguments": {}},
-    "branches": {"mutating": False, "network": False, "arguments": {}},
-    "current_branch": {"mutating": False, "network": False, "arguments": {}},
-    "revision": {"mutating": False, "network": False, "arguments": {}},
-    "upstream": {"mutating": False, "network": False, "arguments": {}},
-    "divergence": {"mutating": False, "network": False, "arguments": {}},
+    "status": {"mutating": False, "network": False, "arguments": dict(_IN_WORKTREE)},
+    "remotes": {"mutating": False, "network": False, "arguments": dict(_IN_WORKTREE)},
+    "branches": {"mutating": False, "network": False, "arguments": dict(_IN_WORKTREE)},
+    "current_branch": {"mutating": False, "network": False,
+                       "arguments": dict(_IN_WORKTREE)},
+    "revision": {"mutating": False, "network": False, "arguments": dict(_IN_WORKTREE)},
+    "upstream": {"mutating": False, "network": False, "arguments": dict(_IN_WORKTREE)},
+    "divergence": {"mutating": False, "network": False,
+                   "arguments": dict(_IN_WORKTREE)},
     "fetch": {
         "mutating": True, "network": True,
         "arguments": {"remote": "string", "prune": "bool?",
-                      "tags": "bool?"},
+                      "tags": "bool?", **_IN_WORKTREE},
     },
     "pull_ff_only": {
         "mutating": True, "network": True,
-        "arguments": {"remote": "string", "branch": "string"},
+        "arguments": {"remote": "string", "branch": "checked-out-branch",
+                      **_IN_WORKTREE},
     },
     "push_branch": {
         "mutating": True, "network": True,
-        "arguments": {"remote": "string", "branch": "existing-local-branch"},
+        "arguments": {"remote": "string", "branch": "existing-local-branch",
+                      **_IN_WORKTREE},
+    },
+    # `remote` only creates a missing local branch from <remote>/<branch>.
+    "switch_branch": {
+        "mutating": True, "network": False,
+        "arguments": {"branch": "string", "remote": "string?", **_IN_WORKTREE},
+    },
+    "worktree_list": {"mutating": False, "network": False, "arguments": {}},
+    "worktree_add": {
+        "mutating": True, "network": False,
+        "arguments": {"name": "worktree-name", "branch": "string",
+                      "remote": "string?"},
+    },
+    "worktree_remove": {
+        "mutating": True, "network": False,
+        "arguments": {"name": "clean-worktree-name"},
     },
 }
+WORKTREE_OPERATIONS = frozenset({"worktree_list", "worktree_add", "worktree_remove"})
+# Operations which write checkout content, so may run clean/smudge filters.
+_CHECKOUT_OPERATIONS = frozenset({
+    "status", "pull_ff_only", "switch_branch", "worktree_add", "worktree_remove"})
 
 GH_CATALOG = {
     "auth_status": {"mutating": False, "arguments": {}},
@@ -196,6 +224,11 @@ _PUBLIC_DETAILS = {
     "unsafe_remote": "configured remote is outside the reviewed transport policy",
     "remote_missing": "configured remote was not found",
     "ref_missing": "requested local branch was not found",
+    "branch_mismatch": "requested branch is not the checked-out branch",
+    "branch_in_use": "requested branch is checked out in another worktree",
+    "worktree_missing": "named worktree is not registered with the repository",
+    "worktree_exists": "a worktree directory with that name already exists",
+    "worktree_stale": "a deleted worktree is still registered; run git worktree prune on that host",
     "shell_disabled": "Allow Full Shell is disabled on the target host",
     "invalid_environment": "environment additions are invalid or unsafe",
     "busy": "host subprocess capacity is busy",
@@ -336,12 +369,32 @@ def _paths_same(left, right):
             return False
 
 
-def _path_within(root, candidate):
+def path_within(root, candidate):
     try:
         common = os.path.commonpath([os.path.realpath(root), os.path.realpath(candidate)])
     except (OSError, ValueError, TypeError):
         return False
     return _paths_same(common, root)
+
+
+def _plain_directory(path):
+    """A real directory at exactly this path, not a link or junction to one."""
+    return (os.path.isdir(path) and
+            os.path.normcase(os.path.realpath(path)) == os.path.normcase(path))
+
+
+def worktree_path(root, name):
+    """The sibling `<project>-wt-<name>` checkout of a registered project.
+
+    Host-derived from a plain name, never a caller path.  The `-wt-` sibling
+    is the pattern Envoy's generated settings already authorize.
+    """
+    if not isinstance(name, str) or not _WORKTREE_RE.fullmatch(name):
+        raise _Refusal("invalid_arguments")
+    parent, base = os.path.split(os.path.realpath(root))
+    if not base:
+        raise _Refusal("worktree_unavailable")
+    return os.path.join(parent, base + "-wt-" + name)
 
 
 def _normalize_secret_values(values):
@@ -881,7 +934,7 @@ class HostOperations:
         return os.path.realpath(resolved)
 
     def _require_structured_executable(self, executable, root):
-        if _path_within(root, executable):
+        if path_within(root, executable):
             raise _Refusal("command_refused")
         if self.platform == "win32" and ntpath.splitext(executable)[1].lower() in {
                 ".cmd", ".bat"}:
@@ -1007,8 +1060,8 @@ class HostOperations:
 
     def _git_prefix(self, root):
         try:
-            if (_path_within(root, self._hooks_dir) or
-                    _path_within(root, self._attributes_file)):
+            if (path_within(root, self._hooks_dir) or
+                    path_within(root, self._attributes_file)):
                 raise _Refusal("unsafe_repository_config")
             if os.listdir(self._hooks_dir):
                 raise _Refusal("unsafe_repository_config")
@@ -1166,7 +1219,7 @@ class HostOperations:
         if not lfs:
             return False
         lfs = os.path.realpath(lfs)
-        if _path_within(root, lfs):
+        if path_within(root, lfs):
             return False
         return os.path.isfile(lfs)
 
@@ -1178,7 +1231,7 @@ class HostOperations:
         # `git status` may hash a racily-clean worktree entry through its
         # configured clean/process filter.  It therefore needs the same
         # executable-filter refusal as a checkout-producing pull.
-        touches_worktree = operation in {"status", "pull_ff_only"}
+        touches_worktree = operation in _CHECKOUT_OPERATIONS
         executable_filters = [
             name for name in names
             if name.startswith("filter.") and name.rsplit(".", 1)[-1] in {
@@ -1261,16 +1314,72 @@ class HostOperations:
             raise _Refusal("invalid_arguments")
         return ref
 
+    def _local_branches(self, executable, root, deadline, cancel_event):
+        # Full refnames: %(refname:short) prints heads/<b> beside a same-named tag.
+        prefix = "refs/heads/"
+        return [line[len(prefix):] for line in self._git_lines(
+            executable, root,
+            ["for-each-ref", "--format=%(refname)", "refs/heads"],
+            deadline, cancel_event) if line.startswith(prefix)]
+
     def _require_local_branch(self, executable, root, branch, deadline,
                               cancel_event):
         branch = self._validate_ref(branch)
-        branches = self._git_lines(
-            executable, root,
-            ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-            deadline, cancel_event)
-        if branch not in branches:
+        if branch not in self._local_branches(
+                executable, root, deadline, cancel_event):
             raise _Refusal("ref_missing")
         return branch
+
+    def _branch_start(self, executable, root, branch, remote, deadline,
+                      cancel_event):
+        """(branch, None) for a local branch, else (branch, tracking ref).
+
+        A missing local branch is created only from an explicitly named
+        remote's tracking ref; never from git's own remote guessing.
+        """
+        branch = self._validate_ref(branch)
+        if branch in self._local_branches(
+                executable, root, deadline, cancel_event):
+            return branch, None
+        if remote is None:
+            raise _Refusal("ref_missing")
+        if not isinstance(remote, str) or not _REMOTE_RE.fullmatch(remote):
+            raise _Refusal("invalid_arguments")
+        if remote not in self._git_lines(
+                executable, root, ["remote"], deadline, cancel_event):
+            raise _Refusal("remote_missing")
+        ref = "refs/remotes/%s/%s" % (remote, branch)
+        if ref not in self._git_lines(
+                executable, root, ["for-each-ref", "--format=%(refname)", ref],
+                deadline, cancel_event):
+            raise _Refusal("ref_missing")
+        return branch, ref
+
+    def _require_clean(self, executable, root, deadline, cancel_event):
+        result = self._run_internal_git(
+            executable, root, ["status", "--porcelain", "--untracked-files=no"],
+            deadline, cancel_event=cancel_event)
+        if not result.get("ok") or result.get("truncated"):
+            raise _Refusal("command_failed")
+        if result.get("stdout", "").strip():
+            raise _Refusal("dirty_worktree")
+
+    def _resolve_worktree(self, executable, root, name, deadline, cancel_event):
+        """The named sibling, only while git lists it as this repo's worktree."""
+        path = worktree_path(root, name)
+        if not _plain_directory(path):
+            raise _Refusal("worktree_missing")
+        self._validate_repository(executable, root, deadline, cancel_event)
+        listed = self._run_internal_git(
+            executable, root, ["worktree", "list", "--porcelain"], deadline,
+            cancel_event=cancel_event)
+        if not listed.get("ok") or listed.get("truncated"):
+            raise _Refusal("worktree_unavailable")
+        if not any(_paths_same(path, line[len("worktree "):])
+                   for line in listed.get("stdout", "").splitlines()
+                   if line.startswith("worktree ")):
+            raise _Refusal("worktree_missing")
+        return path
 
     @staticmethod
     def _reject_unknown(arguments, allowed):
@@ -1323,6 +1432,13 @@ class HostOperations:
                 executable, root, arguments.get("remote"), operation,
                 deadline, cancel_event)
             branch = self._validate_ref(arguments.get("branch"))
+            # git pull merges <branch> into whatever HEAD is, so a mismatch
+            # would fast-forward the checked-out branch to another one.
+            # Full refnames: --short prints heads/<b> beside a same-named tag.
+            if self._git_lines(executable, root,
+                               ["symbolic-ref", "--quiet", "HEAD"],
+                               deadline, cancel_event) != ["refs/heads/" + branch]:
+                raise _Refusal("branch_mismatch")
             return ["pull", "--ff-only", "--no-rebase", "--no-recurse-submodules",
                     "--", remote, "refs/heads/" + branch]
         if operation == "push_branch":
@@ -1334,6 +1450,45 @@ class HostOperations:
                 executable, root, arguments.get("branch"), deadline, cancel_event)
             ref = "refs/heads/%s:refs/heads/%s" % (branch, branch)
             return ["push", "--porcelain", "--", remote, ref]
+        if operation == "switch_branch":
+            self._reject_unknown(arguments, {"branch", "remote"})
+            branch, start = self._branch_start(
+                executable, root, arguments.get("branch"),
+                arguments.get("remote"), deadline, cancel_event)
+            # git switch carries uncommitted edits across; refuse instead.
+            self._require_clean(executable, root, deadline, cancel_event)
+            if start is None:
+                return ["switch", "--no-guess", branch]
+            return ["switch", "--no-guess", "--track", "-c", branch, start]
+        if operation == "worktree_list":
+            self._reject_unknown(arguments, set())
+            return ["worktree", "list", "--porcelain"]
+        if operation == "worktree_add":
+            self._reject_unknown(arguments, {"name", "branch", "remote"})
+            path = worktree_path(root, arguments.get("name"))
+            if os.path.lexists(path):
+                raise _Refusal("worktree_exists")
+            branch, start = self._branch_start(
+                executable, root, arguments.get("branch"),
+                arguments.get("remote"), deadline, cancel_event)
+            if start is None:
+                return ["worktree", "add", path, branch]
+            return ["worktree", "add", "--track", "-b", branch, path, start]
+        if operation == "worktree_remove":
+            self._reject_unknown(arguments, {"name"})
+            path = self._resolve_worktree(
+                executable, root, arguments.get("name"), deadline, cancel_event)
+            # Never --force.  git's own check skips IGNORED files and would
+            # delete them (Backup/*.toe, logs), so any leftover refuses.
+            listing = self._run_internal_git(
+                executable, path,
+                ["status", "--porcelain", "--ignored", "--untracked-files=normal"],
+                deadline, cancel_event=cancel_event)
+            if not listing.get("ok"):
+                raise _Refusal("command_failed")
+            if listing.get("truncated") or listing.get("stdout", "").strip():
+                raise _Refusal("dirty_worktree")
+            return ["worktree", "remove", path]
         raise _Refusal("unknown_operation")
 
     @staticmethod
@@ -1350,8 +1505,14 @@ class HostOperations:
                 "http 403", "permission denied (publickey)")):
             code = "authentication_required"
         elif any(token in text for token in (
+                "is already used by worktree", "is already checked out at")):
+            code = "branch_in_use"
+        elif "missing but already registered worktree" in text:
+            code = "worktree_stale"
+        elif any(token in text for token in (
                 "would be overwritten by", "local changes to the following files",
-                "unstaged changes", "uncommitted changes")):
+                "unstaged changes", "uncommitted changes",
+                "contains modified or untracked files")):
             code = "dirty_worktree"
         elif any(token in text for token in (
                 "non-fast-forward", "not possible to fast-forward", "fetch first")):
@@ -1367,38 +1528,58 @@ class HostOperations:
     def run_git(self, target_id, operation, arguments=None, *, timeout_s=None,
                 output_limit=None, cancel_event=None):
         started = time.monotonic()
-        lock = None
-        acquired = False
+        held = []
         try:
             _validate_target_id(target_id)
             if operation not in GIT_CATALOG:
                 raise _Refusal("unknown_operation")
             arguments = {} if arguments is None else arguments
+            if not isinstance(arguments, dict):
+                raise _Refusal("invalid_arguments")
+            requested = dict(arguments)
+            arguments = dict(arguments)
+            name = (None if operation in WORKTREE_OPERATIONS
+                    else arguments.pop("worktree", None))
             timeout = _validate_timeout(timeout_s)
             limit = _validate_output_limit(output_limit)
             deadline = started + timeout
             executable = self._resolve_executable(self._git_candidate)
             root = self._resolve_root(target_id)
             self._require_structured_executable(executable, root)
+            work = root if name is None else worktree_path(root, name)
+            # Worktree add/remove change the repository's worktree list, so
+            # they serialize on the project; remove also waits for its target.
+            lock_paths = [work]
+            if operation in WORKTREE_OPERATIONS:
+                lock_paths = [root]
+                if operation == "worktree_remove":
+                    lock_paths.append(worktree_path(root, arguments.get("name")))
             if GIT_CATALOG[operation]["mutating"]:
-                lock = self._worktree_lock(root)
-                self._acquire_lock(lock, deadline, cancel_event)
-                acquired = True
-            self._validate_repository(executable, root, deadline, cancel_event)
+                for path in lock_paths:
+                    lock = self._worktree_lock(path)
+                    self._acquire_lock(lock, deadline, cancel_event)
+                    held.append(lock)
+            if name is not None:
+                work = self._resolve_worktree(
+                    executable, root, name, deadline, cancel_event)
+                self._require_structured_executable(executable, work)
+            self._validate_repository(executable, work, deadline, cancel_event)
             self._preflight_executable_config(
-                executable, root, operation, deadline, cancel_event)
+                executable, work, operation, deadline, cancel_event)
             argv = self._build_git_args(
-                executable, root, operation, arguments, deadline, cancel_event)
+                executable, work, operation, arguments, deadline, cancel_event)
             self._revalidate_root(target_id, root)
+            if name is not None and not _plain_directory(work):
+                raise _Refusal("target_changed")
             self._audit("host_operation_started", capability=HOST_GIT_CAPABILITY,
                         operation=operation, target_id=target_id,
                         mutating=GIT_CATALOG[operation]["mutating"],
-                        arguments=dict(arguments))
+                        arguments=requested)
             result = self._runner.run(
                 executable=executable,
-                argv=self._git_prefix(root) + argv,
-                cwd=root,
-                environment=self._structured_environment(root, [executable]),
+                argv=self._git_prefix(work) + argv,
+                cwd=work,
+                environment=self._structured_environment(work, [executable]),
                 timeout_s=self._remaining(deadline),
                 output_limit=limit,
                 cancel_event=cancel_event,
@@ -1429,8 +1610,23 @@ class HostOperations:
             return _public_result(False, "internal_error", capability=HOST_GIT_CAPABILITY,
                                   duration_ms=int((time.monotonic() - started) * 1000))
         finally:
-            if acquired:
+            for lock in reversed(held):
                 lock.release()
+
+    def resolve_checkout(self, target_id, worktree=None, *, timeout_s=None):
+        """(path, None) for the project or a registered named worktree, else
+        (None, code).  The same resolution run_git uses, for file writers."""
+        try:
+            deadline = time.monotonic() + _validate_timeout(timeout_s)
+            root = self._resolve_root(target_id)
+            if worktree is None:
+                return root, None
+            executable = self._resolve_executable(self._git_candidate)
+            self._require_structured_executable(executable, root)
+            return self._resolve_worktree(
+                executable, root, worktree, deadline, None), None
+        except _Refusal as exc:
+            return None, exc.code
 
     @staticmethod
     def _bounded_int(value, *, minimum=1, maximum=100):
@@ -1589,7 +1785,7 @@ class HostOperations:
         if ntpath.isabs(relative) or posixpath.isabs(relative) or ntpath.splitdrive(relative)[0]:
             raise _Refusal("worktree_escape")
         candidate = os.path.realpath(os.path.join(root, relative))
-        if not _path_within(root, candidate):
+        if not path_within(root, candidate):
             raise _Refusal("worktree_escape")
         if not os.path.isdir(candidate):
             raise _Refusal("worktree_unavailable")

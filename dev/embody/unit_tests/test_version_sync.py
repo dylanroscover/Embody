@@ -87,8 +87,10 @@ class TestVersionSync(EmbodyTestCase):
             return ''.join(handle.readline() for _ in range(14))
 
     def test_tdxn_files_carry_the_current_version(self):
-        """Both Embody-covering .tdn files must stamp the version that is
-        actually shipping.
+        """Embody's own .tdxn must stamp the version that is actually
+        shipping. Since 6.2.71 it is the only file holding par.Version: the
+        parent's tdn_ref (embody.tdxn) carries no custom_pars, so that file
+        is unchanged at release and its generator line rightly stays put.
 
         A single project.save fires onProjectPreSave on two Execute DATs.
         The Embody COMP's own DAT exports every dirty TDXN row FIRST,
@@ -101,12 +103,11 @@ class TestVersionSync(EmbodyTestCase):
         after the bump.
         """
         version = str(self.embody.par.Version.eval())
-        for rel in ('embody/Embody.tdxn', 'embody.tdxn'):
-            head = self._tdxn_head(rel)
-            self.assertIn(
-                'generator: Embody/%s' % version, head,
-                '%s is stamped with a stale version (the pre-save export '
-                'ran before the bump): %r' % (rel, head[:200]))
+        head = self._tdxn_head('embody/Embody.tdxn')
+        self.assertIn(
+            'generator: Embody/%s' % version, head,
+            'Embody.tdxn is stamped with a stale version (the pre-save '
+            'export ran before the bump): %r' % head[:200])
 
     def test_the_post_save_version_sync_hook_is_enabled(self):
         """The fix reaches production through ONE toggle. Without it the
@@ -120,9 +121,10 @@ class TestVersionSync(EmbodyTestCase):
         self.assertTrue(hasattr(dat.module, 'syncVersionIntoTDXN'))
 
     def test_the_version_sync_selects_only_embody_covering_tdxn_rows(self):
-        """It must re-export the rows that CONTAIN the Embody COMP, and
-        never '/' -- re-exporting the whole project root on every save
-        would be a far larger write than this warrants.
+        """It must re-export Embody's own row only: that file alone holds
+        par.Version (an ancestor's tdn_ref carries no custom_pars since
+        6.2.71), and never '/' -- re-exporting the whole project root on
+        every save would be a far larger write than this warrants.
 
         Drives the REAL syncVersionIntoTDXN and records what it asks to be
         written. Re-implementing the row filter here instead would pass
@@ -145,13 +147,8 @@ class TestVersionSync(EmbodyTestCase):
             del ext.saveTDXN
             del ext.buildAbsolutePath
         picked = [path for path, _bump in calls]
-        self.assertIn(embody_path, picked,
-                      'the row holding the Embody COMP must be re-exported')
-        self.assertNotIn('/', picked, "'/' must never be re-exported here")
-        for path in picked:
-            self.assertTrue(
-                path == embody_path or embody_path.startswith(path + '/'),
-                f'{path} does not contain the Embody COMP')
+        self.assertEqual(picked, [embody_path],
+                         'only the row holding par.Version is re-exported')
 
     def test_the_version_sync_never_bumps_the_build(self):
         """The sync runs AFTER the release manifest recorded par.Build, so

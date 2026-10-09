@@ -2485,6 +2485,18 @@ body.is-app-shell .footer {
 .tdxn-yaml__com { color: var(--text-faint); font-style: italic; }
 .tdxn-yaml__punct { color: var(--text-muted); }
 .tdxn-yaml__plain { color: var(--text); }
+/* The language a dat_content block is highlighted in, beside its `dat_content: |`. */
+.tdxn-yaml__lang {
+  margin-left: 0.9em;
+  padding: 0 0.45em;
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  user-select: none;
+}
 .tdxn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
 
 /* ---- Editable TDXN editor (contribute + edit forms) ----

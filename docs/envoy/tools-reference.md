@@ -1,8 +1,8 @@
 # Tools Reference
 
-Envoy exposes 70 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 70 MCP tools for interacting with TouchDesigner, plus 24 bridge meta-tools: 6 TD-lifecycle tools and 18 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
-Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
+Two of the 70 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -140,7 +140,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `read_tdxn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDXN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDXN-tagged COMPs instead of skipping their children (self-contained export) |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` plus file I/O. Set `embed_all=True` to recurse into TDXN-tagged COMPs instead of skipping their children (self-contained export) |
 | `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdxn` file. Nested externalized-TDXN children are rebuilt from their own `.tdxn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op`. `clear_first` into the Embody COMP, an ancestor or `/` is refused (`envoy.embody.host_destroy_refused`) |
 | `diff_tdxn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDXN networks** -- the live in-memory network vs the on-disk `.tdxn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDXN COMP, which changed + counts); pass a COMP path OR a `.tdxn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff`. Read-only, non-interactive |
 
@@ -217,7 +217,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 ### Convoy Tools (LAN work relay)
 
-The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls never wake TouchDesigner.
+The remaining 18 meta-tools drive [Convoy](../convoy/index.md), relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls never wake TouchDesigner.
 
 | Tool | Description |
 |------|-------------|
@@ -234,6 +234,7 @@ The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 | `convoy_forget_node` | Delete a stale node row on THIS machine's host app (refuses only while a delivery has not FINISHED, naming the blocking delivery ids; a finished result never holds a row); dead and long-unseen rows are also evicted automatically |
 | `convoy_get_artifact` | Retrieve and verify a large result into a temporary local file by artifact reference |
 | `convoy_save_artifact` | Verify an artifact and save it into the current project (`overwrite=true` required to replace) |
+| `convoy_send_file` | Send one file from the current project to a node: its `.embody/convoy/inbox/` by default, a sibling `<project>-wt-<name>` worktree with `worktree`, or the live project with `live=true` (needs Allow Execute TD Python there). See [Sending files to a node](../convoy/index.md#sending-files-to-a-node) |
 | `convoy_start_node` | Reopen a previously registered, currently offline node |
 | `convoy_restart_node` | Safely replace one exact running TouchDesigner process (requires the current runtime id and an idempotency key) |
 | `convoy_update_embody` | Self-update Embody on Convoy nodes to the latest release -- one node (`node=<id\|name\|hostname>`) or the whole fleet (`all=true`) -- by dispatching the bounded `update_embody` operation as a durable per-node job (no TD Python grant involved). Skips offline, disabled, and Perform Mode nodes by name; poll the returned delivery handles with `convoy_get_job`. See [Fleet Updates](../convoy/fleet-updates.md) |

@@ -63,6 +63,7 @@ navigated, no bot is spawned in a live network, nothing outside the sandbox
 is touched. NOT destructive.
 """
 
+import threading
 from types import SimpleNamespace
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -107,9 +108,9 @@ def _stub_ext(embot=False, follow=True):
         _viz_speech_t0=0.0,
         _viz_last_skin=None,
         _viz_last_paint=0.0,
-        _viz_pulse_op=None,
         _viz_pulse_orig=None,
         _viz_pulse_start=0.0,
+        _viz_pulse_id=None,
         _viz_bot_net=None,
         _viz_bot_pos=None,
         _viz_bot_from=None,
@@ -271,7 +272,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
                          'cold hold starts on the first tracked frame')
         self.assertFalse(ext._viz_session_warm,
                          'still cold within the hold window')
-        self.assertEqual(ext._viz_pulse_op, target.path,
+        self.assertEqual(ext._viz_pulse_id, target.id,
                          'cold activation DOES ping the node colour')
         self.assertIsNone(ext._viz_selected_op,
                           'cold activation must NOT select/highlight')
@@ -741,7 +742,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
             ext._viz_bot_net = '/viz_elsewhere'
             ext._viz_home = ('/viz_elsewhere', t0)
             viz.trackActive(ext, t0 + 0.5, False, True)   # under the dwell
-            self.assertEqual(ext._viz_pulse_op, target.path,
+            self.assertEqual(ext._viz_pulse_id, target.id,
                              'a refusal still pings the active node')
             self.assertIsNone(ext._viz_target_op,
                               'queue empty -> release, or the node strobes '
@@ -1102,6 +1103,59 @@ class TestEnvoyVizGates(EmbodyTestCase):
                          'the bot in an unrelated net was never at risk')
         self.assertNotIn('/a/b', ext._viz_bot_pending_cleanup,
                          'the pending entry inside the written COMP is drained')
+
+    def test_retire_for_write_restores_a_pulse_inside_with_the_bot_elsewhere(self):
+        """The pulse tints a node wherever Embot stands, so a write of the
+        subtree holding the pulsing node restores it even with Embot away;
+        a mid-fade accent colour would otherwise serialize."""
+        ext = _stub_ext(embot=True)
+        node = self.sandbox.create(textDAT, 'pulsed')
+        node.color = (0.2, 0.7333, 0.7667)
+        ext._viz_pulse_id = node.id
+        ext._viz_pulse_orig = (0.3, 0.5, 0.9)
+        ext._viz_bot_net = '/elsewhere'
+        viz.vizRetireForWrite(ext, node.path)
+        self.assertEqual([round(c, 4) for c in node.color], [0.3, 0.5, 0.9])
+        self.assertIsNone(ext._viz_pulse_id)
+        self.assertEqual(ext._viz_bot_net, '/elsewhere',
+                         'restoring the colour leaves the bot alone')
+
+    def test_pulse_original_color_only_for_the_pulsing_op(self):
+        ext = _stub_ext()
+        ext._viz_pulse_id = 101
+        ext._viz_pulse_orig = (0.3, 0.5, 0.9)
+        self.assertEqual(viz.pulseOriginalColor(ext, 101), (0.3, 0.5, 0.9))
+        self.assertIsNone(viz.pulseOriginalColor(ext, 102))
+        ext._viz_pulse_id = None
+        self.assertIsNone(viz.pulseOriginalColor(ext, 101))
+
+    def test_pulse_follows_its_node_through_a_rename(self):
+        """The pulse resolves its node by op id: a rename mid-fade still
+        gets the original colour back instead of keeping the tint for good."""
+        ext = _stub_ext()
+        node = self.sandbox.create(textDAT, 'pulsed')
+        node.color = (0.3, 0.5, 0.9)
+        viz.pulseStart(ext, node, 10.0)
+        viz.pulseTick(ext, 10.1)
+        node.name = 'pulsed_renamed'
+        viz.pulseTick(ext, 10.0 + viz._VIZ_PULSE_S + 0.1)
+        self.assertEqual([round(c, 4) for c in node.color], [0.3, 0.5, 0.9])
+        self.assertIsNone(ext._viz_pulse_id)
+
+    def test_reinit_mid_fade_restores_the_colour(self):
+        """The next Envoy instance knows nothing of a pulse in flight, so the
+        old one hands its node the colour back as it goes; a tint left behind
+        would stay and reach the next export."""
+        ext = _stub_ext()
+        ext.shutdown_event = threading.Event()
+        node = self.sandbox.create(textDAT, 'pulsed')
+        node.color = (0.3, 0.5, 0.9)
+        viz.pulseStart(ext, node, 10.0)
+        viz.pulseTick(ext, 10.1)
+        type(op.Embody.ext.Envoy).onDestroyTD(ext)
+        self.assertEqual([round(c, 4) for c in node.color], [0.3, 0.5, 0.9])
+        self.assertIsNone(ext._viz_pulse_id)
+        self.assertTrue(ext.shutdown_event.is_set())
 
     def test_highlight_op_skips_redundant_write(self):
         """trackActive runs every frame while following, so re-asserting

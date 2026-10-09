@@ -15,9 +15,8 @@ Pins the fixes from the TDXN stability/data-resiliency audit:
   D. _trackTDXNExport only APPENDS a table row for TDXN-tagged COMPs --
      an ad-hoc file export no longer silently enrolls an untagged COMP
      in the save-strip/reconstruction lifecycle.
-  E. Stale-file cleanup deletion candidates are restricted to files the
-     externalizations table tracks -- untracked strays are never
-     Embody's to delete.
+  E. An export never deletes an untracked stray -- it is never Embody's
+     to delete.
   F. RecoverOrphanShells restores TDXN-tagged empty COMPs whose table
      row was lost, via the _tdn_rel_path storage pointer or the
      mirror-path convention.
@@ -296,19 +295,8 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
                          '_tdn_rel_path leaked into the .tdn document')
 
     # =================================================================
-    # E. Tracked-only stale-cleanup candidates
+    # E. Exports never delete an untracked stray
     # =================================================================
-
-    def test_E01_restrict_to_tracked_drops_strays(self):
-        from pathlib import Path
-        tracked_files = self.embody_ext._getAllTrackedTDXNFiles()
-        self.assertTrue(tracked_files, 'live project has no tracked .tdn')
-        stray = str(Path(project.folder) / 'embody' / 'unit_tests'
-                    / '_stray_never_tracked.tdn')
-        kept = self.tdn._restrictToTrackedTDXN({tracked_files[0], stray})
-        self.assertIn(tracked_files[0], kept)
-        self.assertNotIn(stray, kept,
-                         'untracked stray survived into deletion candidates')
 
     def test_E02_export_does_not_delete_untracked_stray(self):
         from pathlib import Path
@@ -326,7 +314,7 @@ class TestTDXNStabilityHardening(EmbodyTestCase):
             root_path=comp.path, output_file=str(out))
         self.assertTrue(result.get('success'))
         self.assertTrue(stray.is_file(),
-                        'stale cleanup deleted an untracked stray .tdn')
+                        'an export deleted an untracked stray .tdn')
 
     # =================================================================
     # F. Orphan-shell recovery (lost table row)

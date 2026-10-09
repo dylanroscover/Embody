@@ -494,7 +494,7 @@ Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 20 bridge me
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Return the live network as a TDXN dict (in-memory, never written to disk). ~20-90x fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus file I/O |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdxn` document |
 
 ## TOP Capture
@@ -586,7 +586,7 @@ A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
@@ -613,7 +613,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | `"tdxn"` as of Embody 6.1; `"tdn"` in files written by 6.0 and earlier. Both are read forever. |
-| `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
+| `version` | string | Yes | Format version. Currently `2.2`. Files `<2.0` are JSON; `>=2.0` are YAML. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. Omitted when the COMP has no build tracking. A tracked file (with `build`) omits `source_file` and `exported_at`; an untracked one carries those two instead. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -1801,7 +1801,7 @@ A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'

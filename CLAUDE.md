@@ -67,7 +67,7 @@ Dual-thread design: worker thread runs MCP server (no TD imports), main thread e
 
 ### TDXN Network Format
 
-YAML-based on-disk format (v2.1; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdxn/specification.md`
+YAML-based on-disk format (v2.2; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdxn/specification.md`
 
 ## Extension Referencing
 

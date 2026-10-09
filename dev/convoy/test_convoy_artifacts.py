@@ -671,6 +671,86 @@ def test_project_export_refuses_symlinked_artifact_directory(store, tmp_path):
     assert not list(elsewhere.iterdir())
 
 
+def test_export_to_path_creates_directories_and_honors_overwrite(store, tmp_path):
+    ref = put(store, b"print('hi')\n")
+    root = tmp_path / "checkout"
+    root.mkdir()
+    result = store.export_to_path(
+        str(root), "scripts/tools/hello.py", NS_A, ref["artifact_id"])
+    target = root / "scripts" / "tools" / "hello.py"
+    assert target.read_bytes() == b"print('hi')\n"
+    assert result["saved_path"] == str(target.resolve())
+    with pytest.raises(ca.ArtifactExists):
+        store.export_to_path(str(root), "scripts/tools/hello.py", NS_A,
+                             ref["artifact_id"])
+    target.write_bytes(b"old")
+    store.export_to_path(str(root), "scripts/tools/hello.py", NS_A,
+                         ref["artifact_id"], overwrite=True)
+    assert target.read_bytes() == b"print('hi')\n"
+
+
+@pytest.mark.parametrize("relative", [
+    "", "../escape", "a/../../escape", "/abs", "C:/x", "a\\b", "a//b",
+    "a/./b", ".git/hooks/post-checkout", "sub/.GIT/config", "CON",
+    "dir/nul.txt", "trailing.", "space ", "a:b", "GIT~1", "git~2/hooks/x",
+    "q?.txt", "a*b", 'x"y', "a|b", "<a>", "CONIN$", "clock$", "COM¹",
+])
+def test_export_to_path_refuses_unportable_or_escaping_paths(
+        store, tmp_path, relative):
+    ref = put(store)
+    root = tmp_path / "checkout"
+    root.mkdir()
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), relative, NS_A, ref["artifact_id"])
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "checkout", "private-cache"]
+    assert not list(root.iterdir())
+
+
+def test_export_to_path_refuses_a_linked_directory(store, tmp_path):
+    ref = put(store)
+    root = tmp_path / "checkout"
+    elsewhere = tmp_path / "elsewhere"
+    root.mkdir()
+    elsewhere.mkdir()
+    try:
+        (root / "linked").symlink_to(elsewhere, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are unavailable for this test user")
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), "linked/x.bin", NS_A, ref["artifact_id"])
+    assert not list(elsewhere.iterdir())
+
+
+def test_export_to_path_never_creates_anything_through_a_junction(
+        store, tmp_path):
+    winapi = pytest.importorskip("_winapi")
+    ref = put(store)
+    root = tmp_path / "checkout"
+    elsewhere = tmp_path / "elsewhere"
+    root.mkdir()
+    elsewhere.mkdir()
+    winapi.CreateJunction(str(elsewhere), str(root / "junc"))
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), "junc/new/deeper/x.bin", NS_A,
+                             ref["artifact_id"])
+    assert not list(elsewhere.iterdir())
+
+
+def test_export_to_path_refuses_a_short_name_alias_of_an_existing_file(
+        store, tmp_path):
+    ref = put(store)
+    root = tmp_path / "checkout"
+    root.mkdir()
+    (root / "longfilename.txt").write_bytes(b"keep")
+    if not (root / "LONGFI~1.TXT").exists():
+        pytest.skip("8.3 short names are disabled on this volume")
+    with pytest.raises(ca.ArtifactValidationError):
+        store.export_to_path(str(root), "LONGFI~1.TXT", NS_A,
+                             ref["artifact_id"], overwrite=True)
+    assert (root / "longfilename.txt").read_bytes() == b"keep"
+
+
 def test_managed_content_symlink_is_refused(tmp_path, clock):
     cache = ca.ArtifactStore(
         str(tmp_path / "cache"), quota_mb=4, free_space_floor_bytes=0,

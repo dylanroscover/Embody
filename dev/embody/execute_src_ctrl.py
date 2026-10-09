@@ -446,13 +446,10 @@ def syncVersionIntoTDXN(attempt=0):
             # the sync silently re-exported no rows at all.
             if _norm_strategy(table[r, strategy_col].val) != 'tdn':
                 continue
-            # Only the rows that CONTAIN the Embody COMP carry its Version.
-            # '/' is excluded deliberately: re-exporting the whole project
-            # root here would be a far larger write than this warrants.
-            if not row_path or row_path == '/':
-                continue
-            if not (row_path == embody.path
-                    or embody.path.startswith(row_path + '/')):
+            # only embody's own row carries its Version: since 6.2.71 an
+            # ancestor's tdn_ref holds no custom_pars, so that file is unchanged
+            # at release and the no-op write guard rightly leaves it alone
+            if row_path != embody.path:
                 continue
             try:
                 rel = str(table[r, headers.index('rel_file_path')].val or '')

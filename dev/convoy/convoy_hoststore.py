@@ -143,7 +143,7 @@ _EXECUTION_VERDICT_SOURCES = _NODE_VERDICT_SOURCES + (
     "host_operation", "host_operation_recovery")
 _HOST_VERDICT_OPERATIONS = frozenset({
     "convoy_ping", "convoy_git", "convoy_gh", "convoy_shell",
-    "convoy_start_node", "convoy_restart_node",
+    "convoy_start_node", "convoy_restart_node", "convoy_put_file",
 })
 
 # A small backwards wall-clock adjustment is common during time sync.  A
