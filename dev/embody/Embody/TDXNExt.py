@@ -938,10 +938,11 @@ class TDXNExt:
 		"""Write a .tdn file with full crash safety.
 
 		0. Skip the write entirely when the file already holds this network
-		1. Rotate backups (.bak, .bak2)
+		1. Rotate backups (.bak, .bak2), unless only format/version changed
 		2. Atomic write (temp file + rename + fsync)
 		3. Post-write validation (read back + TDXN parse)
-		4. If validation fails, restore from the newest surviving backup
+		4. If validation fails, restore from the newest surviving backup (or,
+		   when nothing rotated, put the previous file back)
 
 		Returns {'success': True} or {'error': '...'}; a skipped no-op adds
 		'skipped': True.
@@ -953,6 +954,7 @@ class TDXNExt:
 		# header (_TDXN_VOLATILE_KEYS) but NOT format or version, so the
 		# one-time tdn->tdxn convergence still writes. onProjectPreSave has
 		# always done this; here it covers all paths.
+		previous = None
 		try:
 			existing = TDXNExt._read_existing_tdxn(tdxn_path)
 			if existing is not None:
@@ -960,6 +962,11 @@ class TDXNExt:
 				if isinstance(incoming, dict) and TDXNExt._tdxn_content_equal(
 						incoming, existing):
 					return {'success': True, 'skipped': True}
+				# same network under a new format/version (the one-time 2.2
+				# sweep): rotating would push a real generation out of .bak2
+				if isinstance(incoming, dict) and TDXNExt._tdxn_content_equal(
+						incoming, existing, ignore=frozenset({'format', 'version'})):
+					previous = Path(tdxn_path).read_text(encoding='utf-8')
 		except Exception:
 			# Never let the optimization block a real write.
 			pass
@@ -967,7 +974,8 @@ class TDXNExt:
 		# Step 1: Backup rotation (only if file already exists)
 		backup_error = None
 		try:
-			TDXNExt._rotate_backups(tdxn_path, backup_root)
+			if previous is None:
+				TDXNExt._rotate_backups(tdxn_path, backup_root)
 		except Exception as e:
 			# Rotation failure must not BLOCK the write (that write is still
 			# atomic), but it must not be silent either -- this write ran
@@ -994,6 +1002,15 @@ class TDXNExt:
 
 		# Step 4: Validation failed -- attempt restore from backup
 		error_msg = validation.get('error', 'unknown')
+		if previous is not None:
+			# nothing rotated, so .bak is an older network: put the file back
+			try:
+				TDXNExt._atomic_write(tdxn_path, previous)
+			except Exception as e:
+				return {'error': f'Validation failed ({error_msg}) and putting '
+								 f'the previous file back failed: {e}'}
+			return {'error': f'Validation failed ({error_msg}), previous file '
+							 f'put back'}
 		bak = TDXNExt._find_existing_backup(tdxn_path, backup_root)
 		if bak is not None:
 			try:
@@ -1079,19 +1096,22 @@ class TDXNExt:
 			tdn.pop('exported_at', None)
 
 	@staticmethod
-	def _tdxn_content_equal(new_tdxn: dict, existing_tdxn: dict) -> bool:
+	def _tdxn_content_equal(new_tdxn: dict, existing_tdxn: dict,
+							ignore: frozenset = frozenset()) -> bool:
 		"""Compare two TDXN dicts ignoring volatile header metadata.
 
 		Returns True if all non-volatile keys (operators, parameters,
 		connections, annotations, custom_pars, options, etc.) are identical.
+		`ignore` names further top-level keys to skip.
 		"""
+		skip = TDXNExt._TDXN_VOLATILE_KEYS | ignore
 		for key in new_tdxn:
-			if key in TDXNExt._TDXN_VOLATILE_KEYS:
+			if key in skip:
 				continue
 			if new_tdxn[key] != existing_tdxn.get(key):
 				return False
 		for key in existing_tdxn:
-			if key in TDXNExt._TDXN_VOLATILE_KEYS:
+			if key in skip:
 				continue
 			if key not in new_tdxn:
 				return False

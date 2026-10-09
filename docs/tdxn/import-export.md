@@ -155,7 +155,9 @@ my-project/
             └── bar.tdxn.bak2  ← the one before that
 ```
 
-After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ext.Embody.reconstructTDXNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
+A rewrite that changes only the header's `format` or `version` (a format bump re-saving an unchanged network) skips the rotation, so it never pushes an older network out of `.bak2`.
+
+After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from (a header-only rewrite puts the previous file back instead). `ext.Embody.reconstructTDXNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
 
 The folder holds backups of **both** `.tdxn` and `.tdn` files — a COMP externalized before v6.1.0 keeps writing `.tdn` forever — which is why the name carries no format token.
 

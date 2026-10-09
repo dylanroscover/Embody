@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **163 test suites** and **5,526 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **163 test suites** and **5,528 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -275,7 +275,7 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_capture_op` | 9 | `capture_op`: any operator through a transient OP Viewer TOP, waiting out the empty frames a freshly aimed viewer returns |
 | `test_shader_diagnostics` | 16 | GLSL compile failures surfaced on `get_op_errors` (TD only warns; the details live in the Info DAT) |
 
-### TDXN Format (24 suites, 900 tests)
+### TDXN Format (24 suites, 902 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -283,7 +283,7 @@ AI-client connectivity tier, listed separately under
 | `test_tdxn_file_io` | 107 | TDXN file output, per-comp splitting, tdn_ref / tox_ref pointers, the save cycle |
 | `test_tdxn_helpers` | 120 | TDXN serialization utility functions, locked-content source classification and Switch to TOX |
 | `test_tdxn_export_import` | 65 | Network export/import + storage round-trip |
-| `test_tdxn_crash_safety` | 48 | Atomic writes, backup rotation, validation |
+| `test_tdxn_crash_safety` | 50 | Atomic writes, backup rotation, validation |
 | `test_tdxn_sequences` | 31 | Parameter / operator sequence round-trip |
 | `test_tdxn_diff_engine` | 25 | TDXN structural diff engine |
 | `test_tdxn_palette_catalog` | 34 | Palette-clone detection and handling |
