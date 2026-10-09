@@ -1,6 +1,6 @@
 # TDXN Specification
 
-**Version 2.0**
+**Version 2.2**
 
 TDXN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional — you generate, and you're stuck with what you got. With it, every step of the loop — generate, compare, revert, branch — runs at the speed of typing.
 
@@ -19,7 +19,7 @@ A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
@@ -45,7 +45,7 @@ annotations: [ ... ]
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | `"tdxn"` as of Embody 6.1; `"tdn"` in files written by 6.0 and earlier, and by any older Embody that re-exports one. Both are permanently valid on read. |
-| `version` | string | Yes | Format version. Currently `2.0`. See [Back-compatibility](#back-compatibility) for how older versions are read. |
+| `version` | string | Yes | Format version. Currently `2.2`. See [Back-compatibility](#back-compatibility) for how older versions are read. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. Whether `build` is written also decides the provenance fields: a tracked file carries `build` and omits `source_file` / `exported_at`; an untracked one carries those two instead. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -153,16 +153,20 @@ save and nothing read them. The schema therefore no longer requires `exported_at
 required either field, so there is no format version bump. A vendored copy of
 `docs/tdxn.schema.yaml` from before this change rejects new tracked files -- refresh it.
 
-### `tdn_ref` and `tox_ref` entries dropped `custom_pars` (within 2.1)
+### v2.2: reference entries carry no `custom_pars`
 
-A parent's `tdn_ref` entry (v6.2.71) and `tox_ref` entry (after v6.2.71) no longer repeat the
-child's custom parameters; the child's own `.tdxn` carries them at its root and a `.tox` reload
-replaces them (see [COMP References](#comp-references-tdn_ref) and
-[TOX References](#tox-references-tox_ref)). `custom_pars`
-was always optional, so the schema is unchanged and there is no version bump. Older files keep
-their copy and still import. An older Embody reading a new parent file creates the child's custom
-parameters only at the end of the child's import (Phase 9), so an extension inside that child that
-reads them in `__init__` can miss them on that older build.
+A parent's `tdn_ref` and `tox_ref` entries no longer repeat the child's custom parameters or
+their sequences; the child's own `.tdxn` carries them at its root and a `.tox` reload replaces
+them (see [COMP References](#comp-references-tdn_ref) and
+[TOX References](#tox-references-tox_ref)). `custom_pars` was always optional, so the schema is
+unchanged and older files, which keep their copy, still import. The version is bumped anyway
+because an Embody older than v6.2.71 mis-builds such a file: it creates a nested COMP's custom
+parameters only at the end of that COMP's import, so an extension inside it that reads them in
+`__init__` fails. With the bump, such a build logs `TDXN file is v2.2, newer than this build` on
+open instead of failing silently (v6.2.71 builds these files correctly and logs the same line).
+Files written by v6.2.71 itself still say `2.1` with bare `tdn_ref` entries; an older build
+misreads those silently until they are next saved. Every `.tdxn` is rewritten once, on its next
+save, to carry the new version, and a team mixing builds rewrites the version back and forth.
 
 ### v2.1: widened definition fields
 
@@ -1516,7 +1520,7 @@ A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'
@@ -1632,3 +1636,5 @@ Key observations:
 | 1.4 | 2026-05-XX | Added `tox_ref` for COMPs with their own TOX externalization (relative path to the child's `.tox`, mutually exclusive with `children`). |
 | 1.5 | 2026-06-10 | A text DAT's `dat_content` may now be an **array of line-strings** (multi-line) as well as a plain string (single-line), rejoined with `\n` on import. Keeps `.tdxn` files readable and git-diffable line-by-line. Import is fully back-compatible with the v1.x string form. The version-mismatch warning now fires only when the file is newer than the running build. |
 | 2.0 | 2026-06-10 | The on-disk format is now **YAML** (a strict JSON superset). Multi-line `dat_content` reverts to a **plain string** rendered as a YAML literal block scalar (`|`), preserving exact trailing newlines via `\|`/`\|-`/`\|+` chomping. Importers parse json-first (BOM/whitespace-stripped), so legacy tab-indented JSON `.tdn` (v1.x/v1.5) still load losslessly with no migration gate. Auto-created default docked compute DATs are no longer serialized (TD recreates them on import). Files are roughly 17% smaller and read top-to-bottom without escaped newlines. MIME type is now `application/yaml`. |
+| 2.1 | 2026-09-04 | Several custom-parameter definition fields (`default`, `min`, `max`, `readOnly`, `enable`, ...) may be a per-component array when a tuplet's components disagree. No structural change. |
+| 2.2 | 2026-10-08 | `tdn_ref` and `tox_ref` entries no longer carry the child's `custom_pars` or their sequences: the child's own file owns them. No structural change. |

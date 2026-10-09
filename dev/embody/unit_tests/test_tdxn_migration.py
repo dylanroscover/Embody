@@ -171,7 +171,7 @@ class TestTdxnMigration(EmbodyTestCase):
 
     def test_old_files_are_gone_not_copied(self):
         """A rename, not a copy -- a leftover .tdn would be an untracked
-        orphan that stale-file cleanup can never reclaim."""
+        orphan that nothing ever reclaims."""
         paths = self._buildLegacyProject()
         before = {k: self._rel(p) for k, p in paths.items()}
         self._migrate()

@@ -2,7 +2,7 @@
 Test suite: Auto-save / crash checkpoint engine.
 
 Covers the synchronous checkpoint path and its supporting machinery:
-- ExportNetwork skip_cleanup (TDXNExt) -- skips the rglob stale-scan
+- ExportNetwork skip_cleanup (TDXNExt) -- skips the save-time warnings
 - EmbodyExt.checkpoint() -- frame-cheap synchronous .tdn write + clean mark
 - the touched-boundary recorder (NoteCheckpointTouch walk-up resolution)
 - the idle-settle drain queue (_pending_checkpoint_roots)

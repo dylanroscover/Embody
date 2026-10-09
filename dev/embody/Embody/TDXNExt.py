@@ -103,12 +103,15 @@ def tdxn_load(text):
 	return yaml.load(text, Loader=_TDXN_BaseLoader)
 
 
-TDXN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
+TDXN_VERSION = '2.2'  # was '2.1'; 2.1 was '2.0'; 2.0 was '1.5'
 # 2.1 widened readOnly/help/enable/enableExpr/default/min/max/clamp*/norm*
 # from scalar to scalar-or-per-component-list. New KEYS need no bump (readers
 # ignore unknown fields), but a widened TYPE does: a pre-2.1 reader treats a
 # truthy list as True and forces the whole tuplet (2026-09-04). The bump makes
 # those builds log 'newer than this build' instead of failing silently.
+# 2.2: tdn_ref/tox_ref entries carry no custom_pars (6.2.71), so a pre-6.2.71
+# reader builds a nested COMP's children before its custom pars exist and an
+# extension reading them in __init__ fails; the bump makes it say so.
 
 # --- Format identity (v6.1.0: TDXN -> TDXN) -------------------------------
 # The format is "TDXN" (TouchDesigner eXternal Network). Only a FIRST
@@ -1559,7 +1562,6 @@ class TDXNExt:
 
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
-					  cleanup_protected: Optional[list[str]] = None,
 					  embed_all: bool = False,
 					  include_storage: Optional[bool] = None,
 					  skip_cleanup: bool = False,
@@ -1573,9 +1575,9 @@ class TDXNExt:
 			output_file: File path to write JSON to. 'auto' generates a name.
 						 None returns the dict without writing to disk.
 			max_depth: Maximum recursion depth (None = unlimited)
-			cleanup_protected: Extra absolute .tdn file paths that must NOT
-				be deleted by stale-file cleanup. Files of every other
-				tracked TDXN COMP are protected regardless.
+			skip_cleanup: Skip the save-time warnings (locked content, a
+				large file). Autosave checkpoints pass it; an ad-hoc export
+				gets it implicitly.
 			interactive: False for programmatic callers (MCP export_network):
 				the locked-content warning is logged instead of raised as a
 				modal that would pin the main thread waiting for a click.
@@ -1710,49 +1712,19 @@ class TDXNExt:
 
 			# Write to file if requested
 			if output_file:
-				# Scan from project folder -- TDXN paths mirror TD hierarchy.
-				# scan_folder and backup_root are the SAME value but must
-				# stay separate names: scan_folder is _cleanupStaleTDXNFiles'
-				# delete-safety boundary, backup_root is where rotation
-				# mirrors copies. One variable serving both meant a change
-				# to the backup root would silently widen a DELETE scope
-				# (the 2026-07-01 18-specimen shape).
-				scan_folder = str(project.folder)
 				backup_root = str(project.folder)
 				filepath = self._resolveOutputPath(output_file, root_op)
 				content = TDXNExt._compact_json_dumps(tdn)
 
 				# An AD-HOC export (output_file is not this COMP's tracked
-				# file) neither reclaims files nor moves the row. The
-				# cleanup's protected set excluded the root's own tracked
-				# file and _trackTDXNExport repointed the row at the
-				# snapshot, so export_network(output_file=...) on a tracked
-				# COMP deleted its canonical file (TDXN review 2026-08-30).
+				# file) never moves the row -- _trackTDXNExport repointing it
+				# at the snapshot once cost a COMP its canonical file (TDXN
+				# review 2026-08-30) -- and skips the save-time warnings.
 				tracked_abs = self._trackedTDXNFileFor(root_path)
 				adhoc = bool(tracked_abs) and not TDXNExt._samePath(
 					tracked_abs, filepath)
 				if adhoc:
 					skip_cleanup = True
-
-				# Stale-file cleanup scans the whole project folder with rglob,
-				# which is hundreds of ms (the dominant checkpoint cost). Autosave
-				# checkpoints pass skip_cleanup=True: a checkpoint re-writes ONE
-				# COMP's .tdn and orphans nothing, so the scan is unnecessary on the
-				# main thread. Orphans (from a removed child COMP) are reclaimed by
-				# the continuity sweep / next full save; recovery is tsv-driven, so a
-				# no-row orphan .tdn is ignored -- never resurrected.
-				before_tdxn = set()
-				# One resolve() cache for BOTH cleanup passes of this export:
-				# they otherwise resolve the same ~65 tracked paths twice.
-				# Operation-scoped, so nothing is cached across saves.
-				resolve_cache = {}
-				if not skip_cleanup:
-					before_tdxn = TDXNExt._collectExistingTDXNFiles(
-						scan_folder, root_path)
-					# Only files Embody tracks are deletion candidates --
-					# never reclaim a stray the user placed themselves.
-					before_tdxn = self._restrictToTrackedTDXN(
-						before_tdxn, resolve_cache=resolve_cache)
 
 				write_result = TDXNExt._safe_write_tdxn(
 					filepath, content, backup_root)
@@ -1767,31 +1739,6 @@ class TDXNExt:
 						f'Backup rotation FAILED for {filepath} '
 						f'({write_result["backup_error"]}) -- the write '
 						f'succeeded but had no recovery copy', 'WARNING')
-
-				if not skip_cleanup:
-					protected = [filepath]
-					if tracked_abs:
-						protected.append(tracked_abs)
-					if cleanup_protected:
-						protected.extend(cleanup_protected)
-					# Other tracked COMPs' files, as the async path does: a
-					# direct call without cleanup_protected deleted every
-					# nested TDXN COMP's .tdxn (v6.2.71 release). Unknown
-					# tracking -> delete nothing.
-					if cleanup_protected is None:
-						try:
-							protected.extend(
-								self.ownerComp.ext.Embody._getAllTrackedTDXNFiles(
-									exclude_path=root_path))
-						except Exception:
-							before_tdxn = set()
-					stale = TDXNExt._cleanupStaleTDXNFiles(
-						before_tdxn, protected, scan_folder,
-						resolve_cache=resolve_cache)
-					if stale:
-						self._log(
-							f'Cleaned up {len(stale)} stale .tdn file(s)',
-							'INFO')
 
 				result['file'] = filepath
 				# Surface the no-op so callers can undo work they did in
@@ -1898,12 +1845,9 @@ class TDXNExt:
 			'source_file': project.name,
 			'build': self._getBuildNumber(root_op),
 			'project_name': project.name.removesuffix('.toe'),
-			'project_folder': str(project.folder),
-			# Same value as project_folder, separate key on purpose: the
-			# worker uses project_folder as _cleanupStaleTDXNFiles' DELETE
-			# boundary and backup_root as the rotation root. Resolved here
-			# on the main thread and carried as a plain string -- the
-			# worker must never touch project/par/storage to get it.
+			# The rotation root, resolved here on the main thread and
+			# carried as a plain string -- the worker must never touch
+			# project/par/storage to get it.
 			'backup_root': str(project.folder),
 			'ext_folder': self.ownerComp.ext.Embody.externalizationsFolder,
 		}
@@ -1925,30 +1869,6 @@ class TDXNExt:
 
 		done_event = Event()
 
-		# Pre-collect existing .tdn files on the main thread.
-		# rglob/scandir suffers extreme GIL contention when called from a
-		# background thread (~30s vs ~70ms), so we do it here.
-		before_tdxn = set()
-		protected_files = []
-		if resolved_path:
-			proj_folder = metadata['project_folder']
-			before_tdxn = TDXNExt._collectExistingTDXNFiles(
-				proj_folder, root_path)
-			# Only files Embody tracks are deletion candidates -- never
-			# reclaim a stray the user placed themselves. Computed on the
-			# main thread, BEFORE the write/track step, so a re-pathed
-			# row's OLD file is still reclaimed.
-			before_tdxn = self._restrictToTrackedTDXN(before_tdxn)
-			# Protect .tdn files belonging to other tracked TDXN COMPs
-			# so the stale-file cleanup doesn't delete them.
-			protected_files = list(
-				self.ownerComp.ext.Embody._getAllTrackedTDXNFiles(
-					exclude_path=root_path))
-			# The root's OWN tracked file is never a deletion candidate,
-			# and a snapshot export leaves the row alone (see ExportNetwork).
-			tracked_abs = self._trackedTDXNFileFor(root_path)
-			if tracked_abs:
-				protected_files.append(tracked_abs)
 		adhoc = bool(resolved_path) and bool(
 			self._trackedTDXNFileFor(root_path)) and not TDXNExt._samePath(
 			self._trackedTDXNFileFor(root_path), resolved_path)
@@ -1970,8 +1890,6 @@ class TDXNExt:
 			'root_path': root_op.path,
 			'output_file': resolved_path,
 			'metadata': metadata,
-			'before_tdxn': before_tdxn,
-			'protected_files': protected_files,
 			'done_event': done_event,
 			'done': False,
 			'error': None,
@@ -1982,11 +1900,7 @@ class TDXNExt:
 		state = self._export_state
 
 		def worker():
-			"""Worker thread: wait for batches, then assemble and write file.
-
-			File scanning (rglob) is done on the main thread before this
-			starts -- scandir suffers extreme GIL contention from bg threads.
-			"""
+			"""Worker thread: wait for batches, then assemble and write file."""
 			done_event.wait(timeout=300)  # 5 minute safety timeout
 
 			if not done_event.is_set():
@@ -2073,10 +1987,6 @@ class TDXNExt:
 
 			# Write to file (file I/O is fine in worker thread)
 			if state['output_file']:
-				# Use pre-collected .tdn files (collected on main thread
-				# to avoid GIL contention with rglob/scandir)
-				before_tdxn = state.get('before_tdxn', set())
-				base_folder = state['metadata']['project_folder']
 				backup_root = state['metadata']['backup_root']
 
 				content = TDXNExt._compact_json_dumps(tdn)
@@ -2088,19 +1998,10 @@ class TDXNExt:
 								 f'{write_result.get("error")}'}
 					return
 
-				protected = [state['output_file']] + state.get(
-					'protected_files', [])
-				stale = []
-				if not state.get('adhoc'):
-					stale = TDXNExt._cleanupStaleTDXNFiles(
-						before_tdxn, protected,
-						base_folder)
-
 				state['result'] = {
 					'success': True,
 					'op_count': op_count,
 					'file': state['output_file'],
-					'cleaned_up': len(stale) if stale else 0,
 					# Voiced by _onExportSuccess on the main thread.
 					'backup_error': write_result.get('backup_error'),
 				}
@@ -2393,10 +2294,6 @@ class TDXNExt:
 					f"Backup rotation FAILED for {result.get('file')} "
 					f"({result['backup_error']}) -- the write succeeded but "
 					f"had no recovery copy", 'WARNING')
-			if result.get('cleaned_up'):
-				self._log(
-					f"Cleaned up {result['cleaned_up']} stale .tdn file(s)",
-					'INFO')
 
 		self._export_state = None
 		# Defer the manager-list rebuild off the completion frame. The
@@ -6734,182 +6631,6 @@ class TDXNExt:
 		return result
 
 	# =========================================================================
-	# STALE FILE CLEANUP
-	# =========================================================================
-
-	@staticmethod
-	def _resolveCached(path_str, cache=None):
-		"""Path.resolve() memoized per caller-supplied dict.
-
-		resolve() is a FILESYSTEM call (nt._getfinalpathname): 308 of them
-		measured in one TDXN save, because the stale-cleanup pass and the
-		tracked-restriction pass each resolve the same ~65 tracked paths
-		independently. Sharing one cache for the duration of a single export
-		halves that. Scope the cache to one operation -- never module-global,
-		so a path that genuinely changes on disk is re-resolved next time.
-		Falls back to the raw string exactly as the callers did before.
-		"""
-		if cache is not None and path_str in cache:
-			return cache[path_str]
-		try:
-			resolved = str(Path(path_str).resolve())
-		except Exception:
-			resolved = None
-		if cache is not None:
-			cache[path_str] = resolved
-		return resolved
-
-	def _restrictToTrackedTDXN(self, files: set, resolve_cache=None) -> set:
-		"""Restrict stale-cleanup deletion candidates to tracked files.
-
-		A file Embody never tracked is never Embody's to delete (the old
-		sweep unlinked manual snapshots and Keep-Files survivors).
-		Candidates = intersection with the table's .tdn paths, taken
-		BEFORE the write/track step so a moving row still contributes its
-		OLD file. Untracked orphans stay (clutter over data loss).
-		"""
-		if not files:
-			return set()
-		try:
-			tracked = self.ownerComp.ext.Embody._getAllTrackedTDXNFiles()
-		except Exception:
-			# No table -> nothing is provably Embody's -> delete nothing.
-			return set()
-		resolved_tracked = set()
-		for p in tracked:
-			r = TDXNExt._resolveCached(p, resolve_cache)
-			if r is not None:
-				resolved_tracked.add(r)
-		kept = set()
-		for f in files:
-			r = TDXNExt._resolveCached(f, resolve_cache)
-			if r is not None and r in resolved_tracked:
-				kept.add(f)
-		return kept
-
-	@staticmethod
-	def _collectExistingTDXNFiles(base_folder, root_path='/'):
-		"""Collect existing .tdn files under base_folder for a given export root.
-
-		For root='/': collects ALL .tdn files under base_folder.
-		For sub-COMP root: only collects files matching that COMP's path prefix.
-
-		Args:
-			base_folder: Absolute path to the base directory to scan
-			root_path: TD root path of the export (e.g., '/' or '/controller')
-
-		Returns:
-			Set of absolute file path strings for all matching .tdn files.
-		"""
-		from pathlib import Path
-		base = Path(base_folder)
-		if not base.is_dir():
-			return set()
-
-		# One tree walk covering both suffixes, not two: the scan below is
-		# measured at 150-200ms per save and is the dominant checkpoint
-		# cost, so doubling it is not acceptable. The trailing 'n' anchor
-		# keeps '.tdn.tmp' write leftovers out; is_tdxn_network_file is the
-		# authority on what actually counts.
-		if root_path == '/':
-			return {str(p) for p in base.rglob('*.td*n')
-					if is_tdxn_network_file(p)}
-
-		# Scope the SCAN, not just its result: a sub-COMP's files are only
-		# <prefix>.tdn/.tdxn or under <prefix>/, and rglobbing the whole
-		# project cost 150-200ms per save to find 1 file. Root '/' full-scans.
-		prefix = root_path.lstrip('/')
-		scoped = set()
-		for suffix in TDXN_FILE_SUFFIXES:
-			own = base / f'{prefix}{suffix}'
-			if own.is_file():
-				scoped.add(str(own))
-		subtree = base / prefix
-		if subtree.is_dir():
-			scoped.update(str(p) for p in subtree.rglob('*.td*n')
-						  if is_tdxn_network_file(p))
-		return scoped
-
-	@staticmethod
-	def _cleanupStaleTDXNFiles(before_files, written_files, base_folder,
-							  resolve_cache=None):
-		"""Delete .tdn files that existed before export but weren't written.
-
-		Safety:
-		- Only deletes files with .tdn extension
-		- Only deletes files under base_folder
-		- Uses Path.rmdir() for empty directory cleanup (fails on non-empty)
-
-		Args:
-			before_files: Set of absolute .tdn file paths from before export
-			written_files: List of absolute .tdn file paths just written
-			base_folder: Absolute path to base directory (safety boundary)
-
-		Returns:
-			List of deleted file paths.
-		"""
-		from pathlib import Path
-
-		base_root = Path(base_folder).resolve()
-		written_set = set()
-		for f in written_files:
-			r = TDXNExt._resolveCached(f, resolve_cache)
-			if r is None:
-				# Cannot prove this just-written file differs from a deletion
-				# candidate -> delete NOTHING. (The unguarded resolve() this
-				# replaces raised here, which also deleted nothing. Fail closed:
-				# never risk unlinking the file we just wrote.)
-				return []
-			written_set.add(r)
-		deleted = []
-
-		for fpath_str in before_files:
-			resolved = TDXNExt._resolveCached(fpath_str, resolve_cache)
-			if resolved is None:
-				continue  # unresolvable -> never a deletion candidate
-			fpath = Path(resolved)
-
-			# Safety: only delete TDXN network files (.tdxn or legacy .tdn)
-			if not is_tdxn_network_file(fpath):
-				continue
-
-			# Safety: only delete files under base_folder
-			try:
-				fpath.relative_to(base_root)
-			except ValueError:
-				continue
-
-			# Skip files that were just written
-			if str(fpath) in written_set:
-				continue
-
-			# Delete the stale file
-			try:
-				if fpath.is_file():
-					fpath.unlink()
-					deleted.append(fpath_str)
-			except Exception:
-				pass
-
-		# Clean up empty directories (bottom-up)
-		dirs_to_check = set()
-		for d in deleted:
-			parent = Path(d).parent
-			while parent.resolve() != base_root and parent != parent.parent:
-				dirs_to_check.add(parent)
-				parent = parent.parent
-
-		for d in sorted(dirs_to_check,
-						key=lambda p: len(p.parts), reverse=True):
-			try:
-				if d.is_dir():
-					d.rmdir()  # Only succeeds if empty
-			except OSError:
-				pass
-
-		return deleted
-
-	# =========================================================================
 	# HELPERS
 	# =========================================================================
 
@@ -8660,14 +8381,16 @@ class TDXNExt:
 				'persist)', 'WARNING')
 
 	def _findLockedNonDATs(self, root_op: 'COMP',
-						   only: Optional[set] = None) -> list:
+						   only: Optional[set] = None,
+						   embed_all: bool = False) -> list:
 		"""Collect locked TOP/CHOP/SOP/POP ops this export is responsible for.
 
 		Skips system paths and Embody's own subtree (as the exporter
 		does), ops inside clone/replicant interiors, and ops below a nested
 		externalization boundary -- only locked content that THIS root's
 		TDXN export would actually serialize (and lose) is reported.
-		`only` narrows the result to those paths (an import's created ops).
+		`only` narrows the result to those paths (an import's created ops);
+		`embed_all` keeps the ops below a nested boundary (it inlines them).
 		"""
 		embody_prefix = self.ownerComp.path.rstrip('/') + '/'
 		locked = []
@@ -8682,7 +8405,8 @@ class TDXNExt:
 					continue
 				if self._isInsideCloneOrReplicant(child, root_op):
 					continue
-				if self._isInsideNestedExternalization(child, root_op):
+				if (not embed_all
+						and self._isInsideNestedExternalization(child, root_op)):
 					continue
 				locked.append(child)
 		return locked
@@ -9145,9 +8869,19 @@ class TDXNExt:
 		comp = op(comp) if isinstance(comp, str) else comp
 		if comp is None or not comp.isCOMP:
 			return {'ok': False, 'reason': 'not_a_comp'}
-		export = self.ExportNetwork(root_path=comp.path, include_dat_content=True)
+		# embed_all: portable, so a nested externalized COMP travels whole
+		# rather than as a ref to this project's file (which holds its pars)
+		export = self.ExportNetwork(root_path=comp.path, include_dat_content=True,
+									 embed_all=True)
 		if not isinstance(export, dict) or not export.get('success'):
 			return {'ok': False, 'reason': 'export_failed', 'detail': (export or {}).get('error')}
+		TDXNExt._dropFileLinksWithContent(export['tdn'].get('operators') or [])
+		locked = self._findLockedNonDATs(comp, embed_all=True)
+		if locked:
+			self._log(f'Clipboard copy of {comp.path} leaves out the frozen '
+					  f'data of {len(locked)} locked operator(s): '
+					  f'{self._lockedSummary(locked)} -- they paste locked '
+					  f'but empty', 'WARNING')
 		env = wrap_tdxn(export.get('tdn'), source='embody', slug=comp.name)
 		ui.clipboard = to_clipboard_str(env)
 		# Seed the clipboard watcher's seen-signature with what we just
@@ -9162,6 +8896,20 @@ class TDXNExt:
 		op_count = len(env['tdn'].get('operators', []))
 		self._log("Copied %s TDXN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
+
+	@staticmethod
+	def _dropFileLinksWithContent(ops: list) -> None:
+		"""A DAT whose content travels in a clipboard envelope loses its file
+		link: pasted, the link shares the original's file and the paste's
+		content write reverts any edit made there since the copy."""
+		for o in ops:
+			pars = o.get('parameters')
+			if pars and 'dat_content' in o:
+				pars.pop('file', None)
+				pars.pop('syncfile', None)
+				if not pars:
+					del o['parameters']
+			TDXNExt._dropFileLinksWithContent(o.get('children') or [])
 
 	def copySelectedToClipboard(self) -> dict:
 		"""Copy-TDXN shortcut handler (Shortcutcopytdxn binding, default

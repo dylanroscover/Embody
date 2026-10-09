@@ -183,7 +183,7 @@ Read any COMP's live network as `.tdxn` (no disk I/O), export it to disk, or imp
 | Tool | Description |
 |---|---|
 | `read_tdxn` | Read a live network as a TDXN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
-| `export_network` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` plus stale-file cleanup |
+| `export_network` | Write a `.tdxn` file to disk. Same payload as `read_tdxn` |
 | `import_network` | Recreate a network from `.tdxn` |
 | `diff_tdxn` | Diff a live network against its on-disk `.tdxn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
 

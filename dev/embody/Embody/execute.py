@@ -284,7 +284,7 @@ def onProjectPreSave():
 
 def _runPreSaveExternalization():
 	# An async export still in flight would race the strip: its worker's
-	# os.replace and stale-cleanup land after Phase 1 exported, tracked and
+	# os.replace lands after Phase 1 exported, tracked and
 	# fingerprinted the same file, and its success hook then tracks a COMP
 	# the strip has just emptied (TDXN review 2026-08-30). The save
 	# re-exports everything anyway, so cancel it.
@@ -379,18 +379,7 @@ def _runPreSaveExternalization():
 				continue
 
 			# Content changed (or first export) - write to disk
-			scan_folder = str(project.folder)
-			before_tdxn = parent.Embody.ext.TDXN._collectExistingTDXNFiles(
-				scan_folder, comp_path)
-			# Only files Embody tracks are deletion candidates -- never
-			# reclaim a stray the user placed themselves.
-			before_tdxn = parent.Embody.ext.TDXN._restrictToTrackedTDXN(
-				before_tdxn)
 			content = parent.Embody.ext.TDXN._compact_json_dumps(new_tdxn)
-			# Same value as scan_folder, separate name on purpose:
-			# scan_folder is the stale-cleanup DELETE boundary, backup_root
-			# is where rotation mirrors copies. See the note in
-			# TDXNExt.ExportNetwork.
 			backup_root = str(project.folder)
 			write_result = parent.Embody.ext.TDXN._safe_write_tdxn(
 				abs_path, content, backup_root)
@@ -407,15 +396,6 @@ def _runPreSaveExternalization():
 					f'Backup rotation FAILED for {abs_path} '
 					f'({write_result["backup_error"]}) -- the write '
 					f'succeeded but had no recovery copy', 'WARNING')
-
-			# Stale file cleanup
-			protected = [abs_path]
-			other_protected = parent.Embody.ext.Embody._getAllTrackedTDXNFiles(
-				exclude_path=comp_path)
-			if other_protected:
-				protected.extend(other_protected)
-			parent.Embody.ext.TDXN._cleanupStaleTDXNFiles(
-				before_tdxn, protected, scan_folder)
 
 			# Track export and update fingerprint
 			parent.Embody.ext.TDXN._trackTDXNExport(

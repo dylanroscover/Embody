@@ -4487,7 +4487,7 @@ class EmbodyExt:
         pulse can only cost a no-op re-export or two. A no-op when Envoy is absent."""
         try:
             _envoy = getattr(self.my.ext, 'Envoy', None)
-            orig = (_envoy.vizPulseOriginalColor(oper.path)
+            orig = (_envoy.vizPulseOriginalColor(oper.id)
                     if _envoy is not None else None)
         except Exception:
             orig = None
@@ -4699,13 +4699,9 @@ class EmbodyExt:
             if hasattr(oper.par, 'Touchbuild'):
                 oper.par.Touchbuild = app.build
 
-            # Export TDXN -- protect .tdn files belonging to OTHER tracked
-            # TDXN COMPs so the stale-file cleanup doesn't delete them.
             abs_path = str(self.buildAbsolutePath(rel_path))
-            protected = self._getAllTrackedTDXNFiles(exclude_path=opPath)
             result = self.my.ext.TDXN.ExportNetwork(
-                root_path=opPath, output_file=abs_path,
-                cleanup_protected=protected)
+                root_path=opPath, output_file=abs_path)
 
             if result.get('success'):
                 # The write was a no-op (identical network), so the build must
@@ -4741,8 +4737,7 @@ class EmbodyExt:
     def checkpoint(self, opPath: str) -> bool:
         """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDXN COMP.
 
-        Re-exports with stale-cleanup skipped (the ~700ms rglob is the
-        dominant save cost; a single-COMP checkpoint orphans nothing).
+        Re-exports with the save-time warnings skipped (skip_cleanup).
         Cost is the export + YAML parse, not the write: ~30 ms at 100 ops,
         200-400 ms at 500 ops (measured 2026-08-30); the fingerprint
         re-baseline defers one frame. Gated on Perform Mode + the save
@@ -6775,30 +6770,6 @@ class EmbodyExt:
         """The user-facing name for a frozen externalization tag value."""
         return self._TAG_DISPLAY.get(str(tag_val).strip().lower(), tag_val)
 
-    def _getAllTrackedTDXNFiles(self, exclude_path: Optional[str] = None) -> list[str]:
-        """Collect absolute paths of ALL tracked .tdn files in the table.
-
-        Used to protect .tdn files belonging to other TDXN COMPs from
-        being deleted by stale-file cleanup during a single-COMP export.
-
-        Args:
-            exclude_path: Skip this op_path (the one being exported).
-        """
-        table = self.Externalizations
-        if not table or table[0, 'strategy'] is None:
-            return []
-        protected = []
-        for i in range(1, table.numRows):
-            if self._rowStrategy(i, table) != 'tdn':
-                continue
-            path = self._cellVal(i, 'path', table=table)
-            if path == exclude_path:
-                continue
-            rel = self._cellVal(i, 'rel_file_path', table=table)
-            if rel:
-                protected.append(str(self.buildAbsolutePath(rel)))
-        return protected
-
     def _getCompStrategy(self, comp: OP) -> Optional[str]:
         """Determine if a COMP uses 'tox' or 'tdn' strategy from the table."""
         table = self.Externalizations
@@ -7324,14 +7295,8 @@ class EmbodyExt:
             current_build = oper.par.Build.eval()
         self.setupBuildParameters(oper, build_page, current_build, app.build)
 
-        # Export TDXN -- protect .tdn files belonging to OTHER tracked
-        # TDXN COMPs so the stale-file cleanup doesn't delete them.
-        # Without this, bottom-up addition order causes parent exports
-        # to delete children's .tdn files as "stale".
-        protected = self._getAllTrackedTDXNFiles(exclude_path=oper.path)
         result = self.my.ext.TDXN.ExportNetwork(
-            root_path=oper.path, output_file=str(abs_path),
-            cleanup_protected=protected)
+            root_path=oper.path, output_file=str(abs_path))
 
         if result.get('success'):
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -8754,8 +8719,10 @@ class EmbodyExt:
             path = self._cellVal(i, 'path', table=table)
             if not path or (only_path is not None and path != only_path):
                 continue
-            groups.setdefault(
-                (path, self._cellVal(i, kind_col, table=table)), []).append(i)
+            kind = self._cellVal(i, kind_col, table=table)
+            if kind_col == 'strategy':
+                kind = self._normalizeStrategy(kind)   # 'tdn' is the old 'tdxn'
+            groups.setdefault((path, kind), []).append(i)
 
         def _stamp(i):
             """Parse a row's timestamp. Deferred until a group is KNOWN to hold
@@ -10559,10 +10526,8 @@ class EmbodyExt:
         rel_tdxn_path = self._getStrategyFilePath(oper.path, 'tdn')
         if rel_tdxn_path:
             abs_path = str(self.buildAbsolutePath(rel_tdxn_path))
-            protected = self._getAllTrackedTDXNFiles(exclude_path=oper.path)
             self.my.ext.TDXN.ExportNetwork(
-                root_path=oper.path, output_file=abs_path,
-                cleanup_protected=protected)
+                root_path=oper.path, output_file=abs_path)
 
         state = 'on' if new_val else 'off'
         self.Log(f"Embed DATs set to {state} for {oper.path}", 'SUCCESS')
@@ -10585,10 +10550,8 @@ class EmbodyExt:
         rel_tdxn_path = self._getStrategyFilePath(oper.path, 'tdn')
         if rel_tdxn_path:
             abs_path = str(self.buildAbsolutePath(rel_tdxn_path))
-            protected = self._getAllTrackedTDXNFiles(exclude_path=oper.path)
             self.my.ext.TDXN.ExportNetwork(
-                root_path=oper.path, output_file=abs_path,
-                cleanup_protected=protected)
+                root_path=oper.path, output_file=abs_path)
 
         state = 'on' if new_val else 'off'
         self.Log(f"Embed storage set to {state} for {oper.path}", 'SUCCESS')

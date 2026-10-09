@@ -30,7 +30,7 @@ properties:
       6.0 and earlier, and by any older Embody that re-exports one. Both are permanently valid.
   version:
     type: string
-    description: Format version. Currently "2.0". Files <2.0 are JSON; >=2.0 are YAML.
+    description: Format version. Currently "2.2". Files <2.0 are JSON; >=2.0 are YAML.
   build:
     type:
     - integer

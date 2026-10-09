@@ -2237,15 +2237,11 @@ def export_network(ext, root_path='/', include_dat_content=None,
     """
     if not getattr(ext.ownerComp.ext, 'TDXN', None):
         return {'error': 'TDXN extension not loaded on Embody COMP'}
-    # Protect .tdn files belonging to other tracked TDXN COMPs
-    protected = ext.ownerComp.ext.Embody._getAllTrackedTDXNFiles(
-        exclude_path=root_path) if output_file else None
     result = ext.ownerComp.ext.TDXN.ExportNetwork(
         root_path=root_path,
         include_dat_content=include_dat_content,
         output_file=output_file,
         max_depth=max_depth,
-        cleanup_protected=protected,
         embed_all=embed_all,
         interactive=False,
     )

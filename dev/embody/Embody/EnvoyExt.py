@@ -5332,7 +5332,7 @@ class EnvoyExt:
         self._viz_next_squint: float = 0.0           # absTime.seconds of the next happy squint
         self._viz_squint_end: float = 0.0            # absTime.seconds the current squint ends
         self._viz_squinting: bool = False            # eyes currently flattened (squint)
-        self._viz_pulse_op: Optional[str] = None      # path of the op currently pulsing
+        self._viz_pulse_id: Optional[int] = None      # id of the op pulsing: survives a rename
         self._viz_pulse_orig: Optional[tuple] = None  # its original node colour
         self._viz_pulse_start: float = 0.0     # absTime.seconds the pulse began
         self._viz_bot_net: Optional[str] = None       # path of the net the bot figure lives in
@@ -5456,6 +5456,9 @@ class EnvoyExt:
         extension reinit can crash TD if triggered by a save-time file sync.
         """
         self.shutdown_event.set()
+        # the next instance knows nothing of a pulse mid-fade: hand the node
+        # its colour back, or the tint stays and reaches the next export
+        mod.envoy_viz.restorePulse(self)
 
     def _cleanupStaleThreads(self) -> None:
         """Remove stale Envoy threads from the Thread Manager.
@@ -8279,11 +8282,11 @@ class EnvoyExt:
         """Retire Embot if he is inside a COMP about to be written -- see envoy_viz."""
         return mod.envoy_viz.vizRetireForWrite(self, path)
 
-    def vizPulseOriginalColor(self, path: str) -> Optional[tuple]:
-        """Pre-pulse colour of `path`, or None -- see envoy_viz.pulseOriginalColor."""
-        if not self._viz_pulse_op:
+    def vizPulseOriginalColor(self, op_id: int) -> Optional[tuple]:
+        """Pre-pulse colour of op `op_id`, or None -- see envoy_viz.pulseOriginalColor."""
+        if self._viz_pulse_id is None:
             return None   # per-op on every export: skip the mod lookup
-        return mod.envoy_viz.pulseOriginalColor(self, path)
+        return mod.envoy_viz.pulseOriginalColor(self, op_id)
 
     def _get_logs(self, level=None, count=50, since_id=None, source=None):
         """Get filtered log entries from Embody's ring buffer -- see envoy_read."""

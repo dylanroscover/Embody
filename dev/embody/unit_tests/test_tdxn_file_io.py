@@ -1,8 +1,8 @@
 """
 Test suite: TDXN file I/O, path resolution, and per-comp splitting.
 
-Tests _resolveOutputPath, _splitPerComp, _collectExistingTDXNFiles,
-_cleanupStaleTDXNFiles, file write integrity, and end-to-end file export.
+Tests _resolveOutputPath, _splitPerComp, file write integrity, and
+end-to-end file export.
 """
 
 import json
@@ -27,6 +27,13 @@ class TestTDXNFileIO(EmbodyTestCase):
 			shutil.rmtree(self._temp_dir)
 		except Exception:
 			pass
+		# A destroyed sandbox leaves its tracking rows behind (autosave then
+		# chases them); sweep whatever any test here created.
+		table = self.embody_ext.Externalizations
+		prefix = self.sandbox.path.rstrip('/') + '/'
+		self._dropTrackingRows(*{
+			table[i, 'path'].val for i in range(1, table.numRows)
+			if table[i, 'path'].val.startswith(prefix)})
 		for f in self._auto_files:
 			try:
 				Path(f).unlink(missing_ok=True)
@@ -183,168 +190,6 @@ class TestTDXNFileIO(EmbodyTestCase):
 		files = self.embody.ext.TDXN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		self.assertIn(str(Path(self._temp_dir) / 'comp_a.tdn'), files)
 		self.assertIn(str(Path(self._temp_dir) / 'comp_b.tdn'), files)
-
-	# =================================================================
-	# _collectExistingTDXNFiles (static method)
-	# =================================================================
-
-	def test_collectExisting_finds_files_recursively(self):
-		Path(self._temp_dir, 'a.tdn').write_text('{}')
-		sub = Path(self._temp_dir, 'sub')
-		sub.mkdir()
-		Path(sub, 'b.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
-		self.assertLen(result, 2)
-
-	def test_collectExisting_ignores_non_tdxn(self):
-		Path(self._temp_dir, 'a.tdn').write_text('{}')
-		Path(self._temp_dir, 'b.json').write_text('{}')
-		Path(self._temp_dir, 'c.py').write_text('')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
-		self.assertLen(result, 1)
-
-	def test_collectExisting_root_returns_all(self):
-		Path(self._temp_dir, 'a.tdn').write_text('{}')
-		sub = Path(self._temp_dir, 'embody')
-		sub.mkdir()
-		Path(sub, 'b.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir, '/')
-		self.assertLen(result, 2)
-
-	def test_collectExisting_scoped_to_prefix(self):
-		"""Non-root path should only return files matching that prefix."""
-		embody = Path(self._temp_dir, 'embody')
-		embody.mkdir()
-		Path(embody, 'Embody.tdn').write_text('{}')
-		Path(self._temp_dir, 'other.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
-			self._temp_dir, '/embody')
-		self.assertLen(result, 1)
-
-	def test_collectExisting_scoped_includes_nested(self):
-		"""Scoped search should include files under the prefix path."""
-		embody = Path(self._temp_dir, 'embody')
-		embody.mkdir()
-		Path(embody, 'Embody.tdn').write_text('{}')
-		sub = Path(embody, 'Embody')
-		sub.mkdir()
-		Path(sub, 'help.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
-			self._temp_dir, '/embody')
-		self.assertLen(result, 2)
-
-	def test_collectExisting_scoped_excludes_unrelated(self):
-		"""Scoped search should exclude files with a different prefix."""
-		embody = Path(self._temp_dir, 'embody')
-		embody.mkdir()
-		Path(embody, 'Embody.tdn').write_text('{}')
-		ctrl = Path(self._temp_dir, 'controller')
-		ctrl.mkdir()
-		Path(ctrl, 'main.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
-			self._temp_dir, '/embody')
-		self.assertLen(result, 1)
-
-	def test_collectExisting_nonexistent_dir(self):
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles('/nonexistent_tdn_xyz')
-		self.assertLen(result, 0)
-
-	def test_collectExisting_empty_dir(self):
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(self._temp_dir)
-		self.assertLen(result, 0)
-
-	def test_collectExisting_exact_match_prefix(self):
-		"""File matching the exact prefix (embody.tdn for /embody) should be found."""
-		Path(self._temp_dir, 'embody.tdn').write_text('{}')
-		result = self.embody.ext.TDXN._collectExistingTDXNFiles(
-			self._temp_dir, '/embody')
-		self.assertLen(result, 1)
-
-	# =================================================================
-	# _cleanupStaleTDXNFiles (static method)
-	# =================================================================
-
-	def test_cleanup_deletes_stale(self):
-		"""Should delete .tdn files that existed before but weren't written."""
-		stale = str(Path(self._temp_dir, 'old.tdn'))
-		Path(stale).write_text('{}')
-		kept = str(Path(self._temp_dir, 'kept.tdn'))
-		Path(kept).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-			{stale, kept}, [kept], self._temp_dir)
-		self.assertIn(stale, deleted)
-		self.assertFalse(Path(stale).exists())
-		self.assertTrue(Path(kept).exists())
-
-	def test_cleanup_keeps_written_files(self):
-		written = str(Path(self._temp_dir, 'new.tdn'))
-		Path(written).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-			{written}, [written], self._temp_dir)
-		self.assertLen(deleted, 0)
-		self.assertTrue(Path(written).exists())
-
-	def test_cleanup_rejects_non_tdxn(self):
-		"""Should refuse to delete non-.tdn files."""
-		non_tdxn = str(Path(self._temp_dir, 'data.json'))
-		Path(non_tdxn).write_text('{}')
-		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-			{non_tdxn}, [], self._temp_dir)
-		self.assertLen(deleted, 0)
-		self.assertTrue(Path(non_tdxn).exists())
-
-	def test_cleanup_rejects_outside_base(self):
-		"""Should refuse to delete files outside base_folder."""
-		other_dir = tempfile.mkdtemp(prefix='tdn_other_')
-		try:
-			outside = str(Path(other_dir, 'x.tdn'))
-			Path(outside).write_text('{}')
-			deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-				{outside}, [], self._temp_dir)
-			self.assertLen(deleted, 0)
-			self.assertTrue(Path(outside).exists())
-		finally:
-			import shutil
-			shutil.rmtree(other_dir, ignore_errors=True)
-
-	def test_cleanup_removes_empty_dirs(self):
-		"""Should remove empty parent directories after deleting files."""
-		sub = Path(self._temp_dir, 'a', 'b')
-		sub.mkdir(parents=True)
-		stale = str(sub / 'old.tdn')
-		Path(stale).write_text('{}')
-		self.embody.ext.TDXN._cleanupStaleTDXNFiles({stale}, [], self._temp_dir)
-		self.assertFalse(sub.exists())
-		self.assertFalse(sub.parent.exists())
-
-	def test_cleanup_preserves_nonempty_dirs(self):
-		"""Should not remove directories that still contain files."""
-		sub = Path(self._temp_dir, 'mydir')
-		sub.mkdir()
-		stale = str(sub / 'old.tdn')
-		Path(stale).write_text('{}')
-		Path(sub / 'keep.txt').write_text('data')
-		self.embody.ext.TDXN._cleanupStaleTDXNFiles({stale}, [], self._temp_dir)
-		self.assertFalse(Path(stale).exists())
-		self.assertTrue(sub.exists())
-
-	def test_cleanup_empty_before_set(self):
-		"""No-op when before set is empty."""
-		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(set(), [], self._temp_dir)
-		self.assertLen(deleted, 0)
-
-	def test_cleanup_multiple_stale_files(self):
-		"""Should delete all stale files in one pass."""
-		stale_files = set()
-		for i in range(5):
-			f = str(Path(self._temp_dir, f'stale_{i}.tdn'))
-			Path(f).write_text('{}')
-			stale_files.add(f)
-		deleted = self.embody.ext.TDXN._cleanupStaleTDXNFiles(
-			stale_files, [], self._temp_dir)
-		self.assertLen(deleted, 5)
-		for f in stale_files:
-			self.assertFalse(Path(f).exists())
 
 	# =================================================================
 	# _resolveOutputPath - direct method testing
@@ -1197,11 +1042,9 @@ class TestTDXNFileIO(EmbodyTestCase):
 		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 		self.embody_ext._addToTable(child, str(child_path), timestamp,
 			False, 1, str(app.build), 'tdn')
-		# protect the child's file the way every real caller does
 		fp = str(Path(self._temp_dir) / 'parent.tdn')
 		self.embody.ext.TDXN.ExportNetwork(
-			root_path=parent.path, output_file=fp,
-			cleanup_protected=[str(child_abs)])
+			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = yaml.safe_load(f)
 		child_entry = [o for o in data['operators']
@@ -1573,10 +1416,10 @@ class TestTDXNFileIO(EmbodyTestCase):
 		window records the authored colour, not the tint."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		node = parent.create(baseCOMP, 'node')
-		saved = (self.embody.ext.Envoy._viz_pulse_op,
+		saved = (self.embody.ext.Envoy._viz_pulse_id,
 			self.embody.ext.Envoy._viz_pulse_orig)
 		try:
-			self.embody.ext.Envoy._viz_pulse_op = node.path
+			self.embody.ext.Envoy._viz_pulse_id = node.id
 			self.embody.ext.Envoy._viz_pulse_orig = (0.3, 0.5, 0.9)
 			node.color = (0.2, 0.7333, 0.7667)   # mid-fade tint
 			res = self.embody.ext.TDXN.ExportNetwork(root_path=parent.path)
@@ -1589,7 +1432,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 				self.embody_ext._positionCells(node).get('node_color'),
 				'0.3000,0.5000,0.9000')
 		finally:
-			(self.embody.ext.Envoy._viz_pulse_op,
+			(self.embody.ext.Envoy._viz_pulse_id,
 				self.embody.ext.Envoy._viz_pulse_orig) = saved
 
 	def test_save_on_a_tdxn_comp_reexports_its_tdxn(self):
@@ -1617,7 +1460,7 @@ class TestTDXNFileIO(EmbodyTestCase):
 
 	def test_adhoc_export_keeps_nested_tracked_tdxn_files(self):
 		"""An ad-hoc export of an untracked COMP never deletes the tracked
-		.tdxn of a TDXN COMP inside it, even without cleanup_protected."""
+		.tdxn of a TDXN COMP inside it."""
 		parent = self.sandbox.create(baseCOMP, 'parent_comp')
 		child, child_abs = self._tracked_tdxn_child(parent)
 		try:
