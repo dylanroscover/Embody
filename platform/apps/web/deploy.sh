@@ -8,8 +8,8 @@
 #
 # One-time setup:
 #   1. cp .cloudflare.env.example .cloudflare.env
-#   2. Create an "Edit Cloudflare Workers" API token in the EMBODY Cloudflare
-#      account and paste it into .cloudflare.env
+#   2. Create an API token in the EMBODY Cloudflare account (permissions in
+#      .cloudflare.env.example) and paste it into .cloudflare.env
 #   3. ./deploy.sh
 set -euo pipefail
 cd "$(dirname "$0")"
