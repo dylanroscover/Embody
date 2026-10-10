@@ -111,6 +111,21 @@ never signs up or sends mail. If it fails, roll back
 with `npx wrangler rollback` (deploy token) or Cloudflare dashboard > Workers >
 embody-web > Deployments.
 
+## Domain and HTTPS
+
+The Worker serves the apex `embody.tools`. Two Cloudflare zone settings, kept
+outside this repo, cover the rest:
+
+- SSL/TLS > Edge Certificates > **Always Use HTTPS** is on, so every `http://`
+  request is redirected to `https://`.
+- A Single Redirect rule sends `www.embody.tools/*` to `https://embody.tools/${1}`
+  (301, query string kept).
+
+HSTS is on every response: `src/middleware.ts` sets it for rendered pages and
+`public/_headers` for static files. The product pages `/tdxn/`, `/embody/` and
+`/envoy/` are static HTML in `public/`, ported from the retired `web/` site
+(issue #156).
+
 ## Production environment / secrets
 
 Set these on the Worker before going live (locally they live in `.dev.vars`):

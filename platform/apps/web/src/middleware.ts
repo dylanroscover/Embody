@@ -80,8 +80,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (!h.has("X-Frame-Options")) h.set("X-Frame-Options", "SAMEORIGIN");
     if (!h.has("Referrer-Policy")) h.set("Referrer-Policy", "strict-origin-when-cross-origin");
     if (!h.has("Strict-Transport-Security")) {
-      // No includeSubDomains/preload -- the apex is HTTPS-only behind Cloudflare,
-      // but we don't want to assert anything about subdomains we don't control.
+      // No includeSubDomains/preload: we don't assert anything about subdomains
+      // we don't control. The zone's Always Use HTTPS does the http redirect;
+      // public/_headers covers static assets, which never reach this middleware.
       h.set("Strict-Transport-Security", "max-age=15552000");
     }
   } catch {
