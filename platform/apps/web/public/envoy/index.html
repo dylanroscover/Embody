@@ -157,7 +157,7 @@
           <article class="feature">
             <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
             <div>
-              <h3 class="feature__name">read_tdn</h3>
+              <h3 class="feature__name">read_tdxn</h3>
               <p class="feature__desc"><code>read_tdxn</code> returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network via <code>get_op</code> + <code>query_network</code>, with a 5&times; floor verified in CI. Default omission, <code>type_defaults</code>, and <code>par_templates</code> do the compression. Use it for structural reads; fall back to <code>get_parameter</code>, <code>get_op_errors</code>, or <code>get_dat_content</code> when you need live runtime values.</p>
             </div>
           </article>
@@ -434,7 +434,7 @@
             <h3 class="pillar__name">TDXN</h3>
             <p class="pillar__claim">the substrate.</p>
             <p class="pillar__body">
-              Envoy reads the live network via <code>export_network</code> to see what's on screen. It modifies the JSON and imports it back &mdash; changes appear instantly, and the diff is human-readable.
+              Envoy reads the live network via <code>export_network</code> to see what's on screen. It modifies the YAML and imports it back &mdash; changes appear instantly, and the diff is human-readable.
             </p>
           </article>
           <article class="pillar">

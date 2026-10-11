@@ -15,3 +15,12 @@ for (const [path, title] of PAGES) {
     await expect(page).toHaveTitle(title);
   });
 }
+
+test("the landing's three pillars link to the product pages", async ({ page }) => {
+  await page.goto("/");
+  const pillars = page.locator(".section--pillars a.pillar--link");
+  await expect(pillars).toHaveCount(PAGES.length);
+  for (const [path] of PAGES) {
+    await expect(page.locator(`.section--pillars a[href="${path}"]`)).toHaveCount(1);
+  }
+});
