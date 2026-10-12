@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.73
+
+Your `.mcp.json` is never overwritten.
+
+- **`.mcp.json` safety** (#159). A `.mcp.json` Embody cannot parse (a trailing comma, a comment) is left untouched with a warning, instead of being replaced by one holding only Envoy, which dropped your other MCP servers. A file saved with a byte-order mark now merges normally. +3 tests.
+
 ## v6.2.72
 
 Convoy moves files and switches branches; TDXN 2.2 makes copies self-contained.

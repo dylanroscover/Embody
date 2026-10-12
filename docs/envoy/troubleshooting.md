@@ -218,6 +218,7 @@ If you need a config while TD is already running, see [Manual Configuration](set
     - Re-enable Envoy (toggle off, then on) to regenerate it
     - Just cloned this project? See [A Cloned Project Has No `.mcp.json`](#a-cloned-project-has-no-mcpjson) above — the config is written on your machine at first open, not carried by git
     - Or create it manually — see [Manual Configuration](setup.md#manual-configuration)
+    - The log says `Could not parse existing .mcp.json ... leaving it untouched`? The file is not valid JSON (a trailing comma, a comment). Embody will not overwrite it, since it may hold your other servers: fix the JSON, then toggle Envoy off and on
 3. **Restart Claude Code:** After Envoy generates `.mcp.json`, you need to start a **new** Claude Code session for it to pick up the config. Run `claude` again in your project directory.
 4. **Port mismatch:** Ensure the port in `.mcp.json` matches the Envoy Port parameter in TD. If you changed the port, `.mcp.json` should update automatically — but check it.
 5. **Firewall or proxy:** Envoy binds to `127.0.0.1` (localhost only). If you're running Claude Code on the same machine, firewalls shouldn't be an issue. If using a remote setup, Envoy does not support remote connections.
