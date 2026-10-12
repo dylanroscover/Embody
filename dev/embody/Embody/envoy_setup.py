@@ -207,49 +207,37 @@ def configure_mcp_client(ext, port, target_dir=None):
             pass
 
         # Read existing config to preserve other servers
-        config = {}
-        if mcp_file.exists():
-            try:
-                config = json.loads(mcp_file.read_text(encoding='utf-8'))
-            except (json.JSONDecodeError, OSError) as e:
-                ext._log(f'Could not parse existing .mcp.json, will overwrite: {e}', 'DEBUG')
-
-        servers = config.get('mcpServers', {})
+        config = read_mcp_json(ext, mcp_file)
+        servers = (config or {}).get('mcpServers', {})
         existing = servers.get('envoy', {})
 
-        # Check if already configured with matching STDIO bridge
         expected_args = ['-u', bridge_abs, '--port', str(port),
                          '--config', config_abs]
-        if (existing.get('type') == 'stdio'
+        if config is None:
+            pass  # unparseable: the user's file, never ours to replace
+        elif (existing.get('type') == 'stdio'
                 and existing.get('command') == python_cmd
                 and existing.get('args') == expected_args):
             ext._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
-            maybe_write_opencode_config(
-                ext, target_dir, port, [python_cmd] + expected_args)
-            write_client_mcp_configs(
-                ext, target_dir, port, [python_cmd] + expected_args)
-            deploy_settings_local(ext, target_dir / '.claude')
-            mirror_ai_config_to_worktrees(ext, target_dir)
-            return
+        else:
+            servers['envoy'] = {
+                'type': 'stdio',
+                'command': python_cmd,
+                'args': expected_args,
+            }
+            config['mcpServers'] = servers
 
-        servers['envoy'] = {
-            'type': 'stdio',
-            'command': python_cmd,
-            'args': expected_args,
-        }
-        config['mcpServers'] = servers
+            def _write():
+                mcp_file.write_text(
+                    json.dumps(config, indent=2) + '\n', encoding='utf-8')
+                ext._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
 
-        def _write():
-            mcp_file.write_text(
-                json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            ext._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
-
-        # Advanced mode: confirm before writing the Envoy entry into the
-        # user's .mcp.json (only reached when it is missing or out of date).
-        verb = 'add the Envoy MCP server entry to' if existing else 'create'
-        op.Embody.ext.Embody._guardFileWrite(
-            'MCP config', f'{verb} .mcp.json in {target_dir}',
-            [str(mcp_file)], _write)
+            # Advanced mode: confirm before writing the Envoy entry into the
+            # user's .mcp.json (only reached when it is missing or out of date).
+            verb = 'add the Envoy MCP server entry to' if existing else 'create'
+            op.Embody.ext.Embody._guardFileWrite(
+                'MCP config', f'{verb} .mcp.json in {target_dir}',
+                [str(mcp_file)], _write)
 
         # --- OpenCode client config (only when that client is in play) ---
         maybe_write_opencode_config(
@@ -343,20 +331,33 @@ def configure_mcp_client_http(ext, target_dir, port):
     url = f'http://127.0.0.1:{port}/mcp'
     mcp_file = target_dir / '.mcp.json'
 
-    config = {}
-    if mcp_file.exists():
-        try:
-            config = json.loads(mcp_file.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    servers = config.get('mcpServers', {})
-    servers['envoy'] = {'type': 'http', 'url': url}
-    config['mcpServers'] = servers
-    mcp_file.write_text(
-        json.dumps(config, indent=2) + '\n', encoding='utf-8')
-    ext._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
+    config = read_mcp_json(ext, mcp_file)
+    if config is not None:
+        servers = config.get('mcpServers', {})
+        servers['envoy'] = {'type': 'http', 'url': url}
+        config['mcpServers'] = servers
+        mcp_file.write_text(
+            json.dumps(config, indent=2) + '\n', encoding='utf-8')
+        ext._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
     maybe_write_opencode_config(ext, target_dir, port, None)
+
+
+def read_mcp_json(ext, mcp_file):
+    """The parsed .mcp.json, {} when absent, or None when it cannot be
+    parsed -- then the caller must leave it alone: it holds the user's
+    other servers (issue #159). utf-8-sig so a BOM is not a parse failure."""
+    if not mcp_file.exists():
+        return {}
+    try:
+        config = json.loads(mcp_file.read_text(encoding='utf-8-sig'))
+        if isinstance(config, dict):
+            return config
+        reason = 'not a JSON object'
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+        reason = e
+    ext._log(f'Could not parse existing {mcp_file} ({reason}) -- leaving it '
+             f'untouched. Fix it, or add the envoy entry by hand.', 'WARNING')
+    return None
 
 
 # ==========================================================================
