@@ -2,8 +2,7 @@
 // Three tools, one idea. Each card leads with its tool's face: the Embody
 // manager screenshot (moved here from the hero), Embot standing in for Envoy
 // (live, the same figure and gestures as the network-editor bot), and a TDXN
-// excerpt for the format. Pillar links point at the docs sections until
-// dedicated tool routes exist (tracked as a follow-up to the unify migration).
+// excerpt for the format. Each links to its product page (public/<tool>/).
 import { Picture } from "astro:assets";
 import Embot from "./Embot.astro";
 import embodyShot from "../../assets/embody-screenshot.png";
@@ -15,7 +14,7 @@ import embodyShot from "../../assets/embody-screenshot.png";
     <h2 class="section__title">three tools, one idea.</h2>
 
     <div class="pillars">
-      <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/">
+      <a class="pillar pillar--link" href="/embody/">
         <div class="pillar__media pillar__media--shot">
           <Picture
             src={embodyShot}
@@ -37,7 +36,7 @@ import embodyShot from "../../assets/embody-screenshot.png";
         </div>
       </a>
 
-      <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/">
+      <a class="pillar pillar--link" href="/envoy/">
         <div class="pillar__media pillar__media--embot" aria-hidden="true">
           <Embot mode="stand" scale={1.1} />
         </div>
@@ -45,13 +44,13 @@ import embodyShot from "../../assets/embody-screenshot.png";
           <h3 class="pillar__name">Envoy</h3>
           <p class="pillar__claim">forward velocity.</p>
           <p class="pillar__body">
-            65 MCP tools that plug Claude Code, Codex, Gemini, Cursor, Windsurf, or GitHub Copilot via VS Code straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
+            70 MCP tools that plug Claude Code, Codex, Gemini, Cursor, Windsurf, or GitHub Copilot via VS Code straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
           </p>
           <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
         </div>
       </a>
 
-      <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/specification/">
+      <a class="pillar pillar--link" href="/tdxn/">
         <div class="pillar__media pillar__media--yaml" aria-hidden="true">
           <pre class="pillar__yaml"><code><span class="c-k">format</span><span class="c-p">:</span> <span class="c-s">tdxn</span>
 <span class="c-k">version</span><span class="c-p">:</span> <span class="c-s">'2.1'</span>

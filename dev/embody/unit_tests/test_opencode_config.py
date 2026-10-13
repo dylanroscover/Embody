@@ -18,6 +18,9 @@ opencode.json that already carries an envoy entry (dual-client refresh).
 ensure_opencode_config (the parexec/_extractAIConfig path) reuses the bridge
 argv from .mcp.json and the port from the .embody/envoy.json registry.
 
+The .mcp.json writers (configure_mcp_client and its HTTP fallback) share the
+same never-clobber rule and are pinned at the end.
+
 SAFETY: not destructive. All writes go to throwaway temp dirs; the
 Toolpermissions param is saved/restored; _consent_bulk silences the Advanced
 guard so writes happen inline; manifest recorders are stubbed so the real
@@ -237,6 +240,36 @@ class TestOpencodeConfig(EmbodyTestCase):
         self._setup.mirror_ai_config_to_worktrees(self._env, root)
         self.assertTrue((wt / 'opencode.json').is_file(),
                         'worktree must receive opencode.json (same as .mcp.json)')
+
+
+    # ---- .mcp.json: never clobber the user's file (issue #159) -----------
+
+    def test_mcp_json_unparseable_left_untouched(self):
+        root = self._tmp()
+        raw = '{ "mcpServers": { "mine": {"command": "x"}, } }\n'
+        (root / '.mcp.json').write_text(raw, encoding='utf-8')
+        self._setup.configure_mcp_client(self._env, 9872, target_dir=root)
+        self.assertEqual((root / '.mcp.json').read_text(encoding='utf-8'),
+                         raw, 'unparseable .mcp.json must never be clobbered')
+
+    def test_mcp_json_http_fallback_unparseable_left_untouched(self):
+        root = self._tmp()
+        raw = '{ "mcpServers": { "mine": {"command": "x"}, } }\n'
+        (root / '.mcp.json').write_text(raw, encoding='utf-8')
+        self._setup.configure_mcp_client_http(self._env, root, 9872)
+        self.assertEqual((root / '.mcp.json').read_text(encoding='utf-8'),
+                         raw, 'unparseable .mcp.json must never be clobbered')
+
+    def test_mcp_json_with_bom_keeps_other_servers(self):
+        root = self._tmp()
+        (root / '.mcp.json').write_text(
+            json.dumps({'mcpServers': {'mine': {'command': 'x'}}}),
+            encoding='utf-8-sig')
+        self._setup.configure_mcp_client(self._env, 9872, target_dir=root)
+        cfg = json.loads((root / '.mcp.json').read_text(encoding='utf-8-sig'))
+        self.assertIn('mine', cfg['mcpServers'],
+                      'a BOM must not cost the user their other servers')
+        self.assertIn('envoy', cfg['mcpServers'])
 
 
 class TestOpencodeUninstall(EmbodyTestCase):

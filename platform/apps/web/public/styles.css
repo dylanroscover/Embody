@@ -127,6 +127,7 @@ code, kbd, pre {
   text-transform: uppercase;
   margin: 0 0 2.5rem;
   font-weight: 500;
+  text-align: center;
 }
 .eyebrow__sep {
   color: var(--text-faint);
@@ -142,6 +143,7 @@ code, kbd, pre {
   color: var(--text);
   margin: 0 0 3rem;
   text-transform: lowercase;
+  text-align: center;
 }
 
 .lede {
@@ -149,7 +151,8 @@ code, kbd, pre {
   line-height: 1.6;
   color: var(--text-muted);
   max-width: 70ch;
-  margin: 0 0 3rem;
+  margin: 0 auto 3rem;
+  text-align: center;
 }
 .lede strong {
   color: var(--text);
@@ -349,11 +352,12 @@ code, kbd, pre {
   overflow: hidden;
 }
 
-/* Faint radial green wash, off-center */
+/* Faint radial green wash, behind the centered hero */
 .hero__glow {
   position: absolute;
   top: -10%;
-  right: clamp(-30%, -8vw, -10%);
+  left: 50%;
+  transform: translateX(-50%);
   width: clamp(40rem, 60vw, 70rem);
   height: 70vw;
   max-width: 1100px;
@@ -371,7 +375,9 @@ code, kbd, pre {
   z-index: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2.5rem;
+  text-align: center;
 }
 .hero__inner .eyebrow {
   margin: 0;
@@ -400,6 +406,7 @@ code, kbd, pre {
 .hero__ctas {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.85rem;
   margin: 0;
 }
@@ -552,7 +559,8 @@ code, kbd, pre {
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   color: var(--text);
   text-align: left;
-  margin: 3rem 0;
+  max-width: 70ch;
+  margin: 3rem auto;
   border-left: 3px solid var(--accent);
   padding-left: 1.75rem;
   line-height: 1.45;
@@ -769,6 +777,7 @@ code, kbd, pre {
 
 .sample__caption {
   margin-top: 1.5rem;
+  text-align: center;
   font-size: 0.95rem;
   color: var(--text-muted);
   line-height: 1.55;
@@ -824,8 +833,9 @@ code, kbd, pre {
   font-size: clamp(1.05rem, 1.6vw, 1.2rem);
   color: var(--text-muted);
   max-width: 60ch;
-  margin: 3rem 0 1.5rem;
+  margin: 3rem auto 1.5rem;
   line-height: 1.55;
+  text-align: center;
 }
 
 .tdxn__link {
@@ -844,6 +854,7 @@ code, kbd, pre {
   flex-direction: column;
   gap: 1.25rem;
   max-width: 760px;
+  margin-inline: auto;
 }
 .step {
   display: grid;
@@ -907,6 +918,7 @@ code, kbd, pre {
 
 .start__meta {
   margin-top: 2rem;
+  text-align: center;
   font-family: var(--font-mono);
   font-size: 0.82rem;
   color: var(--text-faint);
