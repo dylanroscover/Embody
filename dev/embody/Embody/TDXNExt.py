@@ -1610,7 +1610,7 @@ class TDXNExt:
 		root_op = op(root_path)
 		if not root_op:
 			return {'error': f'Operator not found: {root_path}'}
-		if not hasattr(root_op, 'children'):
+		if not root_op.isCOMP:
 			return {'error': f'{root_path} is not a COMP'}
 
 		# Resolve from per-COMP storage, falling back to global toggle
@@ -1842,7 +1842,7 @@ class TDXNExt:
 		if not root_op:
 			self._log(f'Operator not found: {root_path}', 'ERROR')
 			return
-		if not hasattr(root_op, 'children'):
+		if not root_op.isCOMP:
 			self._log(f'{root_path} is not a COMP', 'ERROR')
 			return
 
@@ -3275,7 +3275,7 @@ class TDXNExt:
 		# COMP. Without this, async exports of a parent containing
 		# externalized children produce shells that look like normal
 		# leaf COMPs and the importer cannot tell them apart.
-		if hasattr(target, 'children'):
+		if target.isCOMP:
 			# Blackbox eligibility = classified AND restorable. A palette
 			# clone whose master is disabled/unresolvable exports fully --
 			# there is nothing to re-clone from on rebuild.
@@ -5851,7 +5851,7 @@ class TDXNExt:
 				self._resyncSiblingClones(target, kids)
 				continue
 			params = op_def.get('parameters') or {}
-			if not params.get('clone') or not hasattr(target, 'children'):
+			if not params.get('clone') or not target.isCOMP:
 				continue
 			pulse = getattr(target.par, 'enablecloningpulse', None)
 			enable = getattr(target.par, 'enablecloning', None)
@@ -6405,7 +6405,7 @@ class TDXNExt:
 							f'Failed to restore TOX shell {child.path}: {e}',
 							'WARNING')
 				else:
-					if hasattr(child, 'children'):
+					if child.isCOMP:
 						_walk(child)
 
 		_walk(dest)
@@ -6486,7 +6486,7 @@ class TDXNExt:
 							f'Failed to restore TDXN shell '
 							f'{child.path}: {e}', 'WARNING')
 				else:
-					if hasattr(child, 'children'):
+					if child.isCOMP:
 						_walk(child)
 
 		_walk(dest)
@@ -6527,7 +6527,7 @@ class TDXNExt:
 
 			# Recurse into COMPs (but skip palette clone children
 			# and TDXN-tagged COMP children unless embed_all)
-			if hasattr(child, 'children'):
+			if child.isCOMP:
 				if (self._isPaletteClone(child)
 						and self._cloneRestorable(child)
 						and self._resolvePaletteHandling(child) == 'blackbox'):
@@ -6901,12 +6901,12 @@ class TDXNExt:
 		file and rebuilt by cloning (see _exportSingleOp, Phase 8.7).
 		"""
 		try:
-			if not hasattr(target, 'children') or self._isPaletteClone(target):
+			if not target.isCOMP or self._isPaletteClone(target):
 				return False
 			if not self._cloneRestorable(target):
 				return False
 			master = target.par.clone.eval()
-			if (master is None or not hasattr(master, 'children')
+			if (master is None or not master.isCOMP
 					or master.path == target.path
 					or master.parent().path != target.parent().path):
 				return False

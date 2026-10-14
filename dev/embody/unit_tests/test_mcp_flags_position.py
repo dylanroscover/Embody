@@ -135,3 +135,8 @@ class TestMCPFlagsPosition(EmbodyTestCase):
     def test_get_network_layout_nonexistent(self):
         result = self.envoy._get_network_layout(comp_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
+
+    def test_get_network_layout_non_comp(self):
+        chop = self.sandbox.create(constantCHOP, 'layout_chop')
+        result = self.envoy._get_network_layout(comp_path=chop.path)
+        self.assertIn('not a COMP', result.get('error', ''))
