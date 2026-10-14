@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.74
+
+`query_network` walks every network again.
+
+- **No crash on non-COMP operators** (#160). A recursive `query_network` that included annotations crashed on the first CHOP, DAT or TOP it met; it now walks the whole tree. `query_network`, `get_network_layout` and `export_network` refuse a non-COMP parent with a clear "not a COMP" error, and `get_op` no longer lists an empty `children` on one. +5 tests.
+
 ## v6.2.73
 
 Your `.mcp.json` is never overwritten.
