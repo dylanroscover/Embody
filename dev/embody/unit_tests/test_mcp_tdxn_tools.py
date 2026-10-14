@@ -181,6 +181,12 @@ class TestMCPTDXNTools(EmbodyTestCase):
             root_path='/nonexistent', output_file=None)
         self.assertDictHasKey(result, 'error')
 
+    def test_export_network_non_comp_root(self):
+        chop = self.sandbox.create(constantCHOP, 'export_chop')
+        result = self.envoy._export_network(
+            root_path=chop.path, output_file=None)
+        self.assertIn('not a COMP', result.get('error', ''))
+
     def test_export_then_import_round_trips(self):
         """Round-trip through the MCP handlers: export the fixture, then
         import it into a fresh COMP and confirm every child reappears."""

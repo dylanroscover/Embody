@@ -187,7 +187,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     info['outputs'] = [out.path if out else None for out in target.outputs]
 
     # COMP-specific info
-    if hasattr(target, 'children'):
+    if target.isCOMP:
         info['children'] = [child.name for child in target.children]
 
     info['summary'] = _op_summary(target, info)
@@ -201,7 +201,7 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
     if not parent:
         return {'error': f'Parent not found: {parent_path}'}
 
-    if not hasattr(parent, 'children'):
+    if not parent.isCOMP:
         return {'error': f'{parent_path} is not a COMP'}
 
     hidden_bot = [0]
@@ -217,7 +217,7 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
         for child in children:
             # Filter by type if specified
             if op_type and child.OPType != op_type and child.family != op_type:
-                if recursive and hasattr(child, 'children'):
+                if recursive and child.isCOMP:
                     results.extend(get_ops(child, depth + 1))
                 continue
 
@@ -231,7 +231,7 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
                 info['utility'] = True
             results.append(info)
 
-            if recursive and hasattr(child, 'children'):
+            if recursive and child.isCOMP:
                 results.extend(get_ops(child, depth + 1))
 
         return results
@@ -1717,7 +1717,7 @@ def get_network_layout(ext, comp_path: str, include_annotations: bool = True) ->
     parent_op = resolve_op(ext, comp_path)
     if not parent_op:
         return {'error': f'COMP not found: {comp_path}'}
-    if not hasattr(parent_op, 'children'):
+    if not parent_op.isCOMP:
         return {'error': f'{comp_path} is not a COMP'}
 
     try:

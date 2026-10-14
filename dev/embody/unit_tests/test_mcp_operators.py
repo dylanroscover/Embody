@@ -149,6 +149,32 @@ class TestMCPOperators(EmbodyTestCase):
         result = self.envoy._query_network(parent_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
+    # every OP exposes .children ([] on non-COMPs) but only COMPs have
+    # findChildren, so recursion must gate on isCOMP (issue #160)
+    def test_query_network_recursive_utility_skips_non_comps(self):
+        self.sandbox.create(constantCHOP, 'chop_child')
+        inner = self.sandbox.create(baseCOMP, 'inner')
+        inner.create(textDAT, 'nested_dat')
+        for op_type in (None, 'DAT'):
+            result = self.envoy._query_network(
+                parent_path=self.sandbox.path, recursive=True,
+                include_utility=True, op_type=op_type)
+            self.assertNotIn('error', result)
+            paths = [o['path'] for o in result['operators']]
+            self.assertIn(inner.path + '/nested_dat', paths)
+
+    def test_query_network_non_comp_parent(self):
+        chop = self.sandbox.create(constantCHOP, 'chop_parent')
+        for include_utility in (False, True):
+            result = self.envoy._query_network(
+                parent_path=chop.path, include_utility=include_utility)
+            self.assertIn('not a COMP', result.get('error', ''))
+
+    def test_get_op_non_comp_has_no_children(self):
+        chop = self.sandbox.create(constantCHOP, 'chop_info')
+        result = self.envoy._get_op(op_path=chop.path)
+        self.assertNotIn('children', result)
+
     # --- _find_children ---
 
     def test_find_children_by_name(self):
