@@ -57,6 +57,11 @@ CLAUDE.md critical rule #10: "Always update unit tests when modifying project co
 - Changed code in `dev/embody/Embody/` -> check whether existing tests assert against the changed behavior.
 - New code path, function, or MCP tool -> add test coverage.
 - Refactor without behavior change -> run existing tests to confirm they still pass.
+- Any commit that changes bytes under `specimens/` (a `.tdxn`, cover or video,
+  even a save-time re-export in a `chore:`) regenerates the site data first
+  (`dev/.venv-tests/Scripts/python.exe platform/apps/web/scripts/build-specimen-data.py`)
+  and commits the generated files with it; e2e and sync-specimens hash the
+  committed bytes and fail on drift (2026-10-17, a chore commit broke main).
 - If tests were added or removed, note the new count for the next release commit's README update.
 
 ### 4. Commit Message
