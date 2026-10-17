@@ -1,9 +1,13 @@
 name: D1 Backup
 
-# Nightly export of the production `embody` D1 database -- the Collection's
+# Nightly dump of the production `embody` D1 database -- the Collection's
 # rows (specimens, versions, scans, users, reactions, reports) -- as a gzipped
-# SQL dump kept 90 days as a workflow artifact, with the current Time Travel
-# bookmark in the run summary.
+# SQL file kept 90 days as a workflow artifact, with the current Time Travel
+# bookmark in the run summary. `wrangler d1 export` refuses a database with a
+# virtual table and specimens_fts is FTS5 (first scheduled run, 2026-10-17), so
+# scripts/d1-dump.mjs reads schema + rows through `d1 execute --json` and
+# writes CREATE + INSERT statements itself; it rebuilds the FTS mirror at the
+# end of the file.
 #
 # D1 Time Travel already keeps 30 days of point-in-time history with no setup
 # (`wrangler d1 time-travel restore embody --timestamp=<iso>` or
@@ -44,14 +48,14 @@ jobs:
       - name: Install dependencies
         working-directory: platform
         run: npm ci
-      - name: Export production D1
+      - name: Dump production D1
         run: |
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
           out="$RUNNER_TEMP/embody-d1-$stamp.sql"
-          npx wrangler d1 export embody --remote --output "$out" < /dev/null
+          node scripts/d1-dump.mjs --remote --output "$out" | tee -a "$GITHUB_STEP_SUMMARY"
           gzip -9 "$out"
           {
-            echo "### D1 export $stamp"
+            echo "### D1 dump $stamp"
             echo "gzip size: $(stat -c %s "$out.gz") bytes"
             echo '```'
             npx wrangler d1 time-travel info embody < /dev/null

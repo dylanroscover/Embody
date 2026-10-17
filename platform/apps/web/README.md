@@ -66,9 +66,13 @@ live D1 it drops and rebuilds `specimens_fts` with only the first-party rows, so
 every community specimen drops out of search, and it deletes the `STALE_SLUGS`
 rows. `first-party-sync.sql` is the production path (field 2026-09-11).
 
-The `D1 Backup` workflow exports the production database nightly as a gzipped
-SQL dump kept 90 days as a workflow artifact; D1 Time Travel covers the last 30
-days on its own (`wrangler d1 time-travel restore embody --timestamp=...`).
+The `D1 Backup` workflow dumps the production database nightly as a gzipped
+SQL file kept 90 days as a workflow artifact (`scripts/d1-dump.mjs`: schema
+plus INSERTs read through `d1 execute`, because `wrangler d1 export` refuses a
+database with an FTS5 table). Restore into an empty database with
+`wrangler d1 execute embody --remote --file=<dump.sql>`; the file rebuilds the
+search mirror at the end. D1 Time Travel covers the last 30 days on its own
+(`wrangler d1 time-travel restore embody --timestamp=...`).
 
 In non-production environments, the submit endpoint accepts `turnstileToken: "dev-bypass"`. In
 production the Turnstile gate fails closed: the `dev-bypass` token is never honored, an unknown
