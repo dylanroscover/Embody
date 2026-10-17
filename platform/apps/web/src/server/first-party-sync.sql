@@ -268,7 +268,7 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -666,23 +666,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f size=130968
+-- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76 size=130165
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-thermite-and-freon-453cc35654105b78', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', 130968, 111, 'scan-thermite-and-freon-453cc35654105b78', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
+SELECT 'ver-thermite-and-freon-c38e47875edb31ac', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 130165, 111, 'scan-thermite-and-freon-c38e47875edb31ac', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-thermite-and-freon-453cc35654105b78', 'ver-thermite-and-freon-453cc35654105b78', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-453cc35654105b78') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-453cc35654105b78');
+SELECT 'scan-thermite-and-freon-c38e47875edb31ac', 'ver-thermite-and-freon-c38e47875edb31ac', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-c38e47875edb31ac') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-c38e47875edb31ac');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Thermite and Freon', description = 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.', category = 'simulation', level = 'advanced', requires = '[]', op_count = 111, family_summary = 'TOP,POP,CHOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76')
   AND (
       s.title IS NOT 'Thermite and Freon'
    OR s.description IS NOT 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.'
@@ -695,7 +695,7 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1

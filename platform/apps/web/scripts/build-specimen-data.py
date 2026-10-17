@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 import yaml
@@ -199,7 +200,29 @@ def build_graph(parsed: dict) -> dict:
     return graph
 
 
+def warn_dirty_specimens() -> None:
+    """CI hashes the COMMITTED specimen bytes; this script hashes the working
+    copy. A dirty specimens/ file (a lab save re-exports it) bakes a sha that no
+    commit matches, and e2e + sync-specimens then fail the drift check (field
+    2026-10-17). Warn, do not stop: regenerating against a deliberate edit is
+    the normal path to committing it."""
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--", str(SPECIMENS_DIR)],
+            capture_output=True, text=True, cwd=str(REPO_ROOT), check=False,
+        ).stdout.strip()
+    except OSError:
+        return
+    if out:
+        print("WARNING: specimens/ differs from HEAD; the generated shas follow the working copy."
+              " Commit these too, or stash them before generating:", file=sys.stderr)
+        for line in out.splitlines():
+            print("  " + line, file=sys.stderr)
+
+
 def main() -> int:
+    warn_dirty_specimens()
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     specimens = manifest["specimens"]
 
