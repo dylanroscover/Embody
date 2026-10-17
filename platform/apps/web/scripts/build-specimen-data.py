@@ -71,6 +71,15 @@ THUMBNAIL_MAX_BYTES = 500 * 1024
 THUMBNAIL_CONTENT_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 THUMBNAIL_KEY_PREFIX = "thumbnails/"
 
+# Optional hover-play cover video: manifest video_path, repo-relative under
+# specimens/. Same caps as the upload route (server/r2.ts putCoverVideo): 10 MB,
+# video/mp4 with the ftyp box at bytes 4-7. Stored at videos/<sha256>, pointed at
+# by the row's video_key, served by /api/specimens/<slug>/video; the thumbnail
+# stays the poster. A slug with no repo video keeps whatever video_key it has.
+VIDEO_MAX_BYTES = 10 * 1024 * 1024
+VIDEO_CONTENT_TYPE = "video/mp4"
+VIDEO_KEY_PREFIX = "videos/"
+
 # Fictional placeholder + stray test rows to purge from local D1 so the page
 # shows only the six real first-party specimens.
 STALE_SLUGS = [
@@ -266,6 +275,30 @@ def main() -> int:
                 "path": thumb_path.relative_to(REPO_ROOT).as_posix(),
             }
 
+        video = None
+        if spec.get("video_path"):
+            video_path = SPECIMENS_DIR / spec["video_path"]
+            if not video_path.is_file():
+                raise SystemExit(f"{slug}: video_path {spec['video_path']} is not a file under specimens/")
+            if video_path.suffix.lower() != ".mp4":
+                raise SystemExit(f"{slug}: the cover video must be an .mp4, got {video_path.suffix}")
+            video_bytes = video_path.read_bytes()
+            if len(video_bytes) < 8 or video_bytes[4:8] != b"ftyp":
+                raise SystemExit(f"{slug}: {spec['video_path']} is not an MP4 (no ftyp box at bytes 4-7)")
+            if len(video_bytes) > VIDEO_MAX_BYTES:
+                raise SystemExit(
+                    f"{slug}: cover video is {len(video_bytes)} bytes; the cap is {VIDEO_MAX_BYTES}"
+                    " (re-encode: ~8 s loop, 720 px, H.264 CRF 26-28)"
+                )
+            video_sha = hashlib.sha256(video_bytes).hexdigest()
+            video = {
+                "sha256": video_sha,
+                "size": len(video_bytes),
+                "content_type": VIDEO_CONTENT_TYPE,
+                "key": VIDEO_KEY_PREFIX + video_sha,
+                "path": video_path.relative_to(REPO_ROOT).as_posix(),
+            }
+
         rows.append(
             {
                 "slug": slug,
@@ -300,6 +333,9 @@ def main() -> int:
                 # None when the manifest lists no cover: the row keeps an empty
                 # thumbnail_key and the site shows the procedural placeholder.
                 "thumb": thumb,
+                # None when the manifest lists no video: the row's video_key is
+                # left alone (an author-uploaded cover video stays).
+                "video": video,
             }
         )
 
@@ -407,7 +443,7 @@ def write_seed_sql(rows: list[dict]) -> None:
     a(
         "INSERT OR REPLACE INTO specimens (\n"
         "  id, slug, author_id, title, description, category, level, requires, op_count,\n"
-        "  family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,\n"
+        "  family_summary, current_version_id, thumbnail_key, video_key, license, visibility, tier, scan_status,\n"
         "  capability_json, likes_count, views_count, copies_count\n"
         ") VALUES"
     )
@@ -427,6 +463,7 @@ def write_seed_sql(rows: list[dict]) -> None:
             f"    {sql_str(r['family_summary'])},\n"
             f"    {sql_str('ver-' + r['slug'])},\n"
             f"    {sql_str(r['thumb']['key'] if r['thumb'] else '')},\n"
+            f"    {sql_str(r['video']['key']) if r['video'] else 'NULL'},\n"
             f"    {sql_str(r['license'])},\n"
             f"    'public',\n"
             f"    'featured',\n"
@@ -554,6 +591,8 @@ def stale_predicate(r: dict, cap_json: str, alias: str = "s") -> str:
         # The repo cover is the cover. No manifest thumbnail -> the clause is
         # omitted and whatever the row holds stays.
         *([f"{s}.thumbnail_key IS NOT {sql_str(r['thumb']['key'])}"] if r["thumb"] else []),
+        # Same for a repo cover video; a slug without one keeps its video_key.
+        *([f"{s}.video_key IS NOT {sql_str(r['video']['key'])}"] if r["video"] else []),
         f"(SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = {s}.current_version_id) IS NOT {sha}",
         f"(SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = {s}.id) <> {n_tags}",
         f"(SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id"
@@ -590,14 +629,15 @@ def write_sync_sql(rows: list[dict]) -> None:
     for r in rows:
         a(
             "INSERT INTO specimens (id, slug, author_id, title, description, category, level,"
-            " requires, op_count, family_summary, current_version_id, thumbnail_key, license,"
+            " requires, op_count, family_summary, current_version_id, thumbnail_key, video_key, license,"
             " visibility, tier, scan_status, capability_json)"
         )
         a(
             f"SELECT {sql_str('sp-' + r['slug'])}, {sql_str(r['slug'])}, u.id, {sql_str(r['name'])},"
             f" {sql_str(r['description'])}, {sql_str(r['category'])}, {sql_str(r['level'])},"
             f" {sql_str(json.dumps(r['requires']))}, {r['op_count']}, {sql_str(r['family_summary'])},"
-            f" NULL, {sql_str(r['thumb']['key'] if r['thumb'] else '')}, {sql_str(r['license'])},"
+            f" NULL, {sql_str(r['thumb']['key'] if r['thumb'] else '')},"
+            f" {sql_str(r['video']['key']) if r['video'] else 'NULL'}, {sql_str(r['license'])},"
             f" 'public', 'featured', 'clean', {sql_str(cap_json)}"
         )
         a(f"FROM users_profile AS u WHERE u.handle = {sql_str(AUTHOR_HANDLE)}")
@@ -664,7 +704,7 @@ def write_sync_sql(rows: list[dict]) -> None:
             f"WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = {ver_id})"
             f" AND NOT EXISTS (SELECT 1 FROM scans WHERE id = {scan_id});"
         )
-        a("-- Metadata, cover + current version. Engagement, visibility, tier, video untouched.")
+        a("-- Metadata, cover (+ video when the repo has one) + current version. Engagement, visibility, tier untouched.")
         a("UPDATE specimens AS s")
         a(
             f"SET title = {sql_str(r['name'])}, description = {sql_str(r['description'])},"
@@ -673,6 +713,7 @@ def write_sync_sql(rows: list[dict]) -> None:
             f" family_summary = {sql_str(r['family_summary'])}, license = {sql_str(r['license'])},"
             f" scan_status = 'clean', capability_json = {sql_str(cap_json)},"
             + (f" thumbnail_key = {sql_str(r['thumb']['key'])}," if r["thumb"] else "")
+            + (f" video_key = {sql_str(r['video']['key'])}," if r["video"] else "")
         )
         a(
             "    current_version_id = (SELECT v.id FROM specimen_versions AS v"
@@ -716,8 +757,8 @@ def write_plan_sql(rows: list[dict]) -> None:
     a("-- result per first-party slug: found, first_party, live vs repo sha, stale")
     a("-- (1 = first-party-sync.sql would write). One statement per slug: D1 refuses a")
     a("-- 6-term UNION ALL (too many terms in compound SELECT). CI runs it via")
-    a("-- --file --json (wrangler 4 returns every statement's rows; a --command of the")
-    a("-- whole file is ~28 KB, past a Windows argv limit).")
+    a("-- one --command per statement with the comment lines stripped: a remote --file")
+    a("-- goes through the import API and returns only meta, never the SELECT rows.")
     a("SELECT type, name, sql FROM sqlite_master")
     a("WHERE name IN ('specimens_fts', 'specimens_fts_ad') ORDER BY name;")
     parts = []
@@ -817,7 +858,8 @@ def to_ts_literal(value, indent: int) -> str:
 
 def blob_entries(rows: list[dict]) -> list[dict]:
     """Every R2 object the first-party rows point at: the .tdxn (key = sha256)
-    and, when the manifest lists one, the cover (key = thumbnails/<sha256>)."""
+    and, when the manifest lists them, the cover (key = thumbnails/<sha256>)
+    and the hover-play cover video (key = videos/<sha256>)."""
     entries = []
     for r in rows:
         entries.append(
@@ -842,6 +884,19 @@ def blob_entries(rows: list[dict]) -> list[dict]:
                     "size": t["size"],
                     "content_type": t["content_type"],
                     "path": t["path"],
+                }
+            )
+        if r["video"]:
+            v = r["video"]
+            entries.append(
+                {
+                    "slug": r["slug"],
+                    "kind": "video",
+                    "key": v["key"],
+                    "sha256": v["sha256"],
+                    "size": v["size"],
+                    "content_type": v["content_type"],
+                    "path": v["path"],
                 }
             )
     return entries

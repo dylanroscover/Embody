@@ -178,5 +178,14 @@
     "size": 50675,
     "content_type": "image/jpeg",
     "path": "specimens/compositing/tile-zoom-type.jpg"
+  },
+  {
+    "slug": "tile-zoom-type",
+    "kind": "video",
+    "key": "videos/366f9b4b2e43169001e78f56f6d12b3c3ffad5446aca8e997c89cab38010fcd2",
+    "sha256": "366f9b4b2e43169001e78f56f6d12b3c3ffad5446aca8e997c89cab38010fcd2",
+    "size": 2131189,
+    "content_type": "video/mp4",
+    "path": "specimens/compositing/tile-zoom-type.mp4"
   }
 ]

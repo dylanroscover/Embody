@@ -195,6 +195,7 @@
       "output_op": "out1",
       "tdxn_path": "compositing/tile-zoom-type.tdxn",
       "thumbnail_path": "compositing/tile-zoom-type.jpg",
+      "video_path": "compositing/tile-zoom-type.mp4",
       "prompt_path": "compositing/tile-zoom-type.prompt.md",
       "operator_count": 14,
       "warmup_frames": 3,
