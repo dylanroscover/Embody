@@ -452,37 +452,56 @@ jobs:
           done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) console.log([e.slug, e.key, e.sha256, e.content_type, e.path].join("\t"))')
           echo "put $count blobs (networks + covers) into embody-blobs"
       # Read-only plan: one row per slug (found, first_party, live vs repo sha,
-      # stale). A slug held by another author is a hard stop.
+      # stale). A slug another author holds (one the user published through the
+      # site under their own account, e.g. thermite-and-freon by rosco on
+      # 2026-10-08) is theirs: the sync never touches it, this step warns, and
+      # the verification below skips it. Parsing must fail loudly: a silent
+      # parse failure here let the first run skip this check (2026-10-17).
       - name: Plan (what the sync would change)
         run: |
+          set -o pipefail
           npx wrangler d1 execute embody --remote --yes --json --file=src/server/first-party-plan.sql > "$RUNNER_TEMP/plan.json" < /dev/null
-          node - "$RUNNER_TEMP/plan.json" <<'JS' | tee -a "$GITHUB_STEP_SUMMARY"
+          node - "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/skip-slugs.txt" <<'JS' | tee -a "$GITHUB_STEP_SUMMARY"
           const fs = require('fs');
-          const results = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const raw = fs.readFileSync(process.argv[2], 'utf8');
+          const start = raw.indexOf('[');
+          if (start < 0) { console.error('::error::plan: wrangler returned no JSON:\n' + raw.slice(0, 2000)); process.exit(1); }
+          const results = JSON.parse(raw.slice(start));
           const rows = results.slice(1).flatMap(r => r.results || []);
+          if (!rows.length) { console.error('::error::plan: no per-slug rows parsed:\n' + raw.slice(0, 2000)); process.exit(1); }
           console.log('### First-party sync plan');
-          console.log('| slug | found | first_party | stale | live sha | repo sha |');
-          console.log('|---|---|---|---|---|---|');
-          let bad = 0;
+          console.log('| slug | found | first_party | author | stale | live sha | repo sha |');
+          console.log('|---|---|---|---|---|---|---|');
+          const skip = [];
           for (const r of rows) {
-            const stale = r.found === 1 ? r.stale : 'new';
-            console.log(`| ${r.slug} | ${r.found} | ${r.first_party ?? ''} | ${stale} | ${(r.live_sha || '').slice(0, 12)} | ${String(r.repo_sha).slice(0, 12)} |`);
-            if (r.found === 1 && r.first_party !== 1) bad++;
+            const held = r.found === 1 && r.first_party !== 1;
+            const stale = r.found !== 1 ? 'new' : held ? 'held' : r.stale;
+            console.log(`| ${r.slug} | ${r.found} | ${r.first_party ?? ''} | ${r.author_handle ?? ''} | ${stale} | ${(r.live_sha || '').slice(0, 12)} | ${String(r.repo_sha).slice(0, 12)} |`);
+            if (held) {
+              skip.push(r.slug);
+              console.log(`::warning title=${r.slug} is held by @${r.author_handle}::the sync leaves it alone and the live check skips it; to make the repo copy the live one, publish it from the envoy account or hand the slug over.`);
+            }
           }
-          if (bad) { console.error(`::error::${bad} slug(s) exist under another author; refusing to sync them.`); process.exit(1); }
+          fs.writeFileSync(process.argv[3], skip.join('\n') + (skip.length ? '\n' : ''));
           JS
       - name: Apply first-party-sync.sql (production)
         if: env.DRY_RUN != 'true'
         run: npx wrangler d1 execute embody --remote --yes --file=src/server/first-party-sync.sql < /dev/null
       # Acceptance is the live site, not wrangler's exit code: every first-party
       # .tdxn must download with the repo's sha256 and its cover must serve.
-      # Retries ride out edge propagation.
+      # Retries ride out edge propagation. Slugs the plan marked as held by
+      # another author are skipped (the sync did not write them).
       - name: Verify the live collection
         if: env.DRY_RUN != 'true'
         timeout-minutes: 10
         run: |
+          set -o pipefail
           fail=0
           while IFS=$'\t' read -r slug sha; do
+            if grep -qx "$slug" "$RUNNER_TEMP/skip-slugs.txt" 2>/dev/null; then
+              echo "skip: $slug is held by another author (see the plan)"
+              continue
+            fi
             ok=0
             for i in 1 2 3 4 5 6; do
               got="$(curl -sS --max-time 30 -A 'embody-ci-sync (+github actions)' "$SITE/api/specimens/$slug/tdn" | sha256sum | cut -d' ' -f1)"

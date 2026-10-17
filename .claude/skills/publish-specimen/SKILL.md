@@ -158,7 +158,12 @@ gh run watch <id>
 ```
 Jobs: build-and-test, e2e, check-deploy-secrets, deploy, sync-specimens. The
 sync job's summary shows the D1 Time Travel bookmark taken before the write and
-the per-slug plan (found / first_party / stale). Its last step is the
+the per-slug plan (found / first_party / author / stale). A slug the user
+published through the site under their own account (thermite-and-freon is held
+by @rosco since 2026-10-08, with a video the repo path cannot carry) shows as
+`held`: the sync never touches it and the live check skips it with a warning.
+That row is the live one until it is published from the envoy account or the
+slug is handed over; do not "fix" it from CI. Its last step is the
 acceptance test: `/api/specimens/<slug>/tdn` must hash to the repo sha256 and
 `/thumbnail` must return 200. Confirm yourself anyway:
 ```
