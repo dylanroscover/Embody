@@ -222,11 +222,35 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
    OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT s.rowid, s.slug, 'Tile Zoom Type', 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.', 'compositing typography remap uv motion-graphics text no-glsl', u.handle, 'remapTOP rampTOP crossTOP channelmixTOP textTOP'
+FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id
+WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts' AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)
+  AND (
+      s.title IS NOT 'Tile Zoom Type'
+   OR s.description IS NOT 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.'
+   OR s.category IS NOT 'compositing'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 14
+   OR s.family_summary IS NOT 'TOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'compositing')
   );
 
 -- 2. Tags the six need (an existing tag row is never rewritten).
@@ -260,7 +284,13 @@ INSERT OR IGNORE INTO tags (id, name, slug) VALUES
   ('tag-streaks', 'streaks', 'streaks'),
   ('tag-loop', 'loop', 'loop'),
   ('tag-mandala', 'mandala', 'mandala'),
-  ('tag-line', 'line', 'line');
+  ('tag-line', 'line', 'line'),
+  ('tag-typography', 'typography', 'typography'),
+  ('tag-remap', 'remap', 'remap'),
+  ('tag-uv', 'uv', 'uv'),
+  ('tag-motion-graphics', 'motion-graphics', 'motion-graphics'),
+  ('tag-text', 'text', 'text'),
+  ('tag-no-glsl', 'no-glsl', 'no-glsl');
 
 -- murmuration: specimens/simulation/murmuration.tdxn sha256=c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f size=13631
 -- Version row for the repo blob, unless this specimen already has one.
@@ -590,23 +620,23 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('generative');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'generative' FROM specimens AS s WHERE s.slug = 'mandala' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 
--- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76 size=130165
+-- thermite-and-freon: specimens/simulation/thermite-and-freon.tdxn sha256=453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f size=130968
 -- Version row for the repo blob, unless this specimen already has one.
 INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
-SELECT 'ver-thermite-and-freon-c38e47875edb31ac', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 130165, 111, 'scan-thermite-and-freon-c38e47875edb31ac', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
+SELECT 'ver-thermite-and-freon-453cc35654105b78', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', 130968, 111, 'scan-thermite-and-freon-453cc35654105b78', NULL, 'First-party sync of specimens/simulation/thermite-and-freon.tdxn'
 FROM specimens AS s
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76');
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f');
 INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
-SELECT 'scan-thermite-and-freon-c38e47875edb31ac', 'ver-thermite-and-freon-c38e47875edb31ac', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
-WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-c38e47875edb31ac') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-c38e47875edb31ac');
+SELECT 'scan-thermite-and-freon-453cc35654105b78', 'ver-thermite-and-freon-453cc35654105b78', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-thermite-and-freon-453cc35654105b78') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-thermite-and-freon-453cc35654105b78');
 -- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
 UPDATE specimens AS s
 SET title = 'Thermite and Freon', description = 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.', category = 'simulation', level = 'advanced', requires = '[]', op_count = 111, family_summary = 'TOP,POP,CHOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99',
-    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76' ORDER BY v.version_num DESC LIMIT 1),
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f' ORDER BY v.version_num DESC LIMIT 1),
     updated_at = datetime('now')
 WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
-  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f')
   AND (
       s.title IS NOT 'Thermite and Freon'
    OR s.description IS NOT 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.'
@@ -619,7 +649,7 @@ WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_pro
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/bb9d241708e7cdd47f6271cdba51dcb3e7b56a156725147d03076bf0e80f4c99'
-   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative')) <> 7
    OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
@@ -630,3 +660,44 @@ DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s 
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('simulation', 'glsl', 'feedback', 'pop', 'particles', 'streaks', 'generative') WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('simulation');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'simulation' FROM specimens AS s WHERE s.slug = 'thermite-and-freon' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+
+-- tile-zoom-type: specimens/compositing/tile-zoom-type.tdxn sha256=f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91 size=15740
+-- Version row for the repo blob, unless this specimen already has one.
+INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
+SELECT 'ver-tile-zoom-type-f187a39bc552f38b', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 15740, 14, 'scan-tile-zoom-type-f187a39bc552f38b', NULL, 'First-party sync of specimens/compositing/tile-zoom-type.tdxn'
+FROM specimens AS s
+WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91');
+INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
+SELECT 'scan-tile-zoom-type-f187a39bc552f38b', 'ver-tile-zoom-type-f187a39bc552f38b', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-tile-zoom-type-f187a39bc552f38b') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-tile-zoom-type-f187a39bc552f38b');
+-- Metadata, cover + current version. Engagement, visibility, tier, video untouched.
+UPDATE specimens AS s
+SET title = 'Tile Zoom Type', description = 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.', category = 'compositing', level = 'intermediate', requires = '[]', op_count = 14, family_summary = 'TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7',
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91' ORDER BY v.version_num DESC LIMIT 1),
+    updated_at = datetime('now')
+WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91')
+  AND (
+      s.title IS NOT 'Tile Zoom Type'
+   OR s.description IS NOT 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.'
+   OR s.category IS NOT 'compositing'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 14
+   OR s.family_summary IS NOT 'TOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'compositing')
+  );
+-- Tag and category sets: drop links the repo no longer lists, add missing ones.
+DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND tag_id NOT IN (SELECT t.id FROM tags AS t WHERE t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl'));
+INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl') WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('compositing');
+INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'compositing' FROM specimens AS s WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');

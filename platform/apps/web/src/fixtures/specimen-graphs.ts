@@ -4195,6 +4195,243 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       }
     ]
+  },
+  "tile-zoom-type": {
+    "format": "tdxn",
+    "version": "2.2",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          3200,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "remap_tiles"
+        ]
+      },
+      {
+        "name": "ramp_x",
+        "type": "rampTOP",
+        "position": [
+          1200,
+          0
+        ],
+        "inputs": [
+          "channelmix_delta"
+        ]
+      },
+      {
+        "name": "ramp_y",
+        "type": "rampTOP",
+        "position": [
+          1600,
+          0
+        ],
+        "inputs": [
+          "ramp_x"
+        ]
+      },
+      {
+        "name": "cross_uv",
+        "type": "crossTOP",
+        "position": [
+          2000,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "channelmix_rest",
+          "ramp_y"
+        ]
+      },
+      {
+        "name": "ramp_cellx",
+        "type": "rampTOP",
+        "position": [
+          0,
+          400
+        ]
+      },
+      {
+        "name": "ramp_celly",
+        "type": "rampTOP",
+        "position": [
+          400,
+          400
+        ],
+        "inputs": [
+          "ramp_cellx"
+        ]
+      },
+      {
+        "name": "text_glyph",
+        "type": "textTOP",
+        "position": [
+          0,
+          -900
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "ramp_x_keys",
+        "type": "tableDAT",
+        "position": [
+          1200,
+          -120
+        ]
+      },
+      {
+        "name": "ramp_y_keys",
+        "type": "tableDAT",
+        "position": [
+          1600,
+          -120
+        ]
+      },
+      {
+        "name": "remap_tiles",
+        "type": "remapTOP",
+        "position": [
+          2800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "text_glyph",
+          "cross_uv"
+        ]
+      },
+      {
+        "name": "channelmix_rest",
+        "type": "channelmixTOP",
+        "position": [
+          800,
+          400
+        ],
+        "inputs": [
+          "ramp_celly"
+        ]
+      },
+      {
+        "name": "ramp_cellx_keys",
+        "type": "tableDAT",
+        "position": [
+          0,
+          280
+        ]
+      },
+      {
+        "name": "ramp_celly_keys",
+        "type": "tableDAT",
+        "position": [
+          400,
+          280
+        ]
+      },
+      {
+        "name": "channelmix_delta",
+        "type": "channelmixTOP",
+        "position": [
+          800,
+          0
+        ],
+        "inputs": [
+          "ramp_celly"
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "UV map: each cell window spins about its own center while it zooms",
+        "text": "ramp_cellx/ramp_celly repeat 1/Grid, so together they are the cell-local coordinate (-0.5..0.5). channelmix_rest is the rest map 0.5 + Glyphscale * R(theta) * local: every cell shows the whole glyph, spun about the cell center. ramp_x/ramp_y are the plain map (0.135..0.865, the Fit span); channelmix_delta adds (Fit/Grid) * (R(theta) - I) * local to it, so the big-letter crops spin about their cell centers too and the map is exact at whole turns. cross_uv blends the two by Zoom: the window center slides from the glyph center to the cell position, so a spinning glyph orbits a pivot offset outward (centered in the middle cell, top-left in a top-left cell). Holdzoom just under 1 keeps every window about 40% wider than its share at the hold: each cell shows a sliver of its neighbours, which gives the repeated thin bands, the gaps and the arrowheads on diagonals, deterministic and symmetric like the reference. Nothing random.",
+        "position": [
+          -70,
+          -190
+        ],
+        "size": [
+          2270,
+          850
+        ],
+        "color": [
+          0.25,
+          0.42,
+          0.32
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "Glyph source",
+        "text": "Letters[Letterindex] in Font + Typeface (a light grotesque, like the reference) at 60% of its texture, so the spinning window never reaches the texture edge; outside it the Remap's Extend Hold returns the background color. Font and background swap colors when Inverted flips.",
+        "position": [
+          -70,
+          -970
+        ],
+        "size": [
+          270,
+          330
+        ],
+        "color": [
+          0.45,
+          0.35,
+          0.22
+        ]
+      },
+      {
+        "name": "annotate4",
+        "title": "Output",
+        "text": "Remap of the spinning glyph through the UV map, Extend Hold so the background color fills outside the texture. Pace is set in seconds by Zoomin, Hold, Zoomout and Rest (Period is their sum); scrub with Manual + Phase. The letter and polarity cut lands Swapat of the way into the zoom-out, while scale and spin are both moving, so the cut hides in the motion.",
+        "position": [
+          2730,
+          -70
+        ],
+        "size": [
+          670,
+          330
+        ],
+        "color": [
+          0.4,
+          0.28,
+          0.42
+        ]
+      }
+    ]
   }
 };
 

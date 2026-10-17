@@ -206,5 +206,30 @@
       "feedbackPOP",
       "audioplayCHOP"
     ]
+  },
+  {
+    "slug": "tile-zoom-type",
+    "name": "Tile Zoom Type",
+    "category": "compositing",
+    "level": "intermediate",
+    "description": "A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.",
+    "tags": [
+      "compositing",
+      "typography",
+      "remap",
+      "uv",
+      "motion-graphics",
+      "text",
+      "no-glsl"
+    ],
+    "requires": [],
+    "operator_count": 14,
+    "key_ops": [
+      "remapTOP",
+      "rampTOP",
+      "crossTOP",
+      "channelmixTOP",
+      "textTOP"
+    ]
   }
 ]

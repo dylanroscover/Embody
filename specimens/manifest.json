@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 9,
+  "specimen_count": 10,
   "specimens": [
     {
       "slug": "murmuration",
@@ -178,6 +178,26 @@
       "prompt_path": "simulation/thermite-and-freon.prompt.md",
       "operator_count": 111,
       "warmup_frames": 600,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "tile-zoom-type",
+      "name": "Tile Zoom Type",
+      "category": "compositing",
+      "difficulty": "intermediate",
+      "description": "A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.",
+      "tags": ["compositing", "typography", "remap", "uv", "motion-graphics", "text", "no-glsl"],
+      "key_ops": ["remapTOP", "rampTOP", "crossTOP", "channelmixTOP", "textTOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdxn_path": "compositing/tile-zoom-type.tdxn",
+      "thumbnail_path": "compositing/tile-zoom-type.jpg",
+      "prompt_path": "compositing/tile-zoom-type.prompt.md",
+      "operator_count": 14,
+      "warmup_frames": 3,
       "preview": true,
       "author": "Embody",
       "license": "CC-BY-4.0"
