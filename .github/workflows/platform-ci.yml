@@ -396,7 +396,7 @@ jobs:
       !cancelled()
       && needs.build-and-test.result == 'success'
       && needs.check-deploy-secrets.outputs.enabled == 'true'
-      && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')
+      && (needs.deploy.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.deploy.result == 'skipped'))
     runs-on: ubuntu-latest
     defaults:
       run:

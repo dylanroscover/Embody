@@ -97,6 +97,17 @@ field `tdn_path`; every real entry uses `tdxn_path`). Fields: `slug`
 
 ## 4. Regenerate the site data
 
+**First: `git status --short specimens/` must list only your specimen's files.**
+The generator hashes the WORKING-COPY bytes of every `.tdxn` and cover, and CI
+hashes the COMMITTED bytes (line endings are normalized, content is not); any
+other dirty specimen file (a lab save re-exports every listed specimen) bakes a
+sha into seed/sync/blob manifest that no commit matches, and both e2e and
+sync-specimens fail on the drift check (field 2026-10-17, an uncommitted
+thermite-and-freon re-export took the first production run down). Either commit that file
+deliberately or regenerate against HEAD without touching it:
+`git stash push -- specimens/<other>.tdxn`, generate, commit, `git stash pop`.
+The generator prints a warning when it sees this.
+
 ```
 dev/.venv-tests/Scripts/python.exe platform/apps/web/scripts/build-specimen-data.py
 ```
