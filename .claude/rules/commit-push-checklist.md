@@ -19,6 +19,11 @@ This rule applies to EVERY commit, not just releases. For version-specific relea
 
 - Run `git diff --stat` and `git diff --name-status` (or `git diff --cached` if already staged) to see every file touched.
 - **Read the diffs**, not just the filenames. Understand what each change does and why. Never commit changes you haven't reviewed.
+- A change under `.github/workflows/` is parsed before it is committed:
+  `dev/.venv-tests/Scripts/python.exe -c "import yaml; yaml.safe_load(open('<file>'))"`.
+  Platform CI runs only on a push to `main`, so a workflow that does not
+  parse passes every PR check and fails main with zero jobs (2026-10-17,
+  a literal newline inside a regex in a `run:` block).
 - Confirm no unintended files are staged (secrets, `.env`, build artifacts). `externalizations.tsv` is machine-written by Embody: commit its changes, never hand-edit it.
 
 ### 2. Documentation Audit

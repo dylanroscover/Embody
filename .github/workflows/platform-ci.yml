@@ -466,8 +466,7 @@ jobs:
           const fs = require('fs');
           const { execFileSync } = require('child_process');
           const sql = fs.readFileSync(process.argv[2], 'utf8').split('\n').filter(l => !l.startsWith('--')).join('\n');
-          const statements = sql.split(/;\s*
-/).map(s => s.trim()).filter(Boolean);
+          const statements = sql.split(/;\s*\n/).map(s => s.trim()).filter(Boolean);
           const rows = [];
           for (const statement of statements.slice(1)) {   // statement 0 is the FTS DDL probe
             const out = execFileSync('npx', ['wrangler', 'd1', 'execute', 'embody', '--remote', '--json', '--command', statement], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 16 * 1024 * 1024 });
