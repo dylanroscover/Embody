@@ -30,11 +30,11 @@ DELETE FROM specimen_categories WHERE specimen_id IN (SELECT id FROM specimens W
 DELETE FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil');
 
 -- Purge any prior copy of these real specimens (clean re-run).
-DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon'));
-DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
-DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
-DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
-DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon');
+DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type'));
+DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
+DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
+DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
+DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
 
 -- Tags (deduped across all specimens).
 INSERT OR REPLACE INTO tags (id, name, slug) VALUES
@@ -67,7 +67,13 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
   ('tag-streaks', 'streaks', 'streaks'),
   ('tag-loop', 'loop', 'loop'),
   ('tag-mandala', 'mandala', 'mandala'),
-  ('tag-line', 'line', 'line');
+  ('tag-line', 'line', 'line'),
+  ('tag-typography', 'typography', 'typography'),
+  ('tag-remap', 'remap', 'remap'),
+  ('tag-uv', 'uv', 'uv'),
+  ('tag-motion-graphics', 'motion-graphics', 'motion-graphics'),
+  ('tag-text', 'text', 'text'),
+  ('tag-no-glsl', 'no-glsl', 'no-glsl');
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
@@ -272,6 +278,28 @@ INSERT OR REPLACE INTO specimens (
     0,
     0,
     0
+  ),
+  (
+    'sp-tile-zoom-type',
+    'tile-zoom-type',
+    'dev-user',
+    'Tile Zoom Type',
+    'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.',
+    'compositing',
+    'intermediate',
+    '[]',
+    14,
+    'TOP',
+    'ver-tile-zoom-type',
+    'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
   );
 
 -- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdxn bytes).
@@ -287,7 +315,8 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080', 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080', 10191, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.'),
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', 34243, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
   ('ver-mandala', 'sp-mandala', 1, '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', 89571, 461, 'scan-mandala', NULL, 'First-party specimen.'),
-  ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 'c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76', 130165, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.');
+  ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', 130968, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.'),
+  ('ver-tile-zoom-type', 'sp-tile-zoom-type', 1, 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 15740, 14, 'scan-tile-zoom-type', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -301,7 +330,8 @@ INSERT OR REPLACE INTO scans (
   ('scan-mandelbulb-march', 'ver-mandelbulb-march', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-prismatic-strata', 'ver-prismatic-strata', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-mandala', 'ver-mandala', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
-  ('scan-thermite-and-freon', 'ver-thermite-and-freon', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
+  ('scan-thermite-and-freon', 'ver-thermite-and-freon', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-tile-zoom-type', 'ver-tile-zoom-type', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
 
 -- Specimen <-> tag links.
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
@@ -360,7 +390,14 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
   ('sp-thermite-and-freon', 'tag-pop'),
   ('sp-thermite-and-freon', 'tag-particles'),
   ('sp-thermite-and-freon', 'tag-streaks'),
-  ('sp-thermite-and-freon', 'tag-generative');
+  ('sp-thermite-and-freon', 'tag-generative'),
+  ('sp-tile-zoom-type', 'tag-compositing'),
+  ('sp-tile-zoom-type', 'tag-typography'),
+  ('sp-tile-zoom-type', 'tag-remap'),
+  ('sp-tile-zoom-type', 'tag-uv'),
+  ('sp-tile-zoom-type', 'tag-motion-graphics'),
+  ('sp-tile-zoom-type', 'tag-text'),
+  ('sp-tile-zoom-type', 'tag-no-glsl');
 
 -- FTS5 keyword mirror (rowid = specimen rowid; dat_text = key_ops).
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
@@ -398,6 +435,10 @@ FROM specimens WHERE id = 'sp-mandala';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'thermite-and-freon', 'Thermite and Freon', 'Two suns dance like magnets in deep space, colliding in slow-motion golden explosions while globs of zero-g water cling to the large one, wobble, get flung off and drift back. A two-body simulation in a tiny GLSL feedback texture drives everything: reaction-diffusion flares erupting from the limbs, an incompressible fluid, metaball water that refracts the fire behind it, grid-housed spray and GLSL POP sparks, all printed through a film pass. Native 4:5, aspect-correct at any frame shape.', 'simulation glsl feedback pop particles streaks generative', 'envoy', 'glslTOP glslmultiTOP feedbackTOP renderselectTOP glslPOP feedbackPOP audioplayCHOP'
 FROM specimens WHERE id = 'sp-thermite-and-freon';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'tile-zoom-type', 'Tile Zoom Type', 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.', 'compositing typography remap uv motion-graphics text no-glsl', 'envoy', 'remapTOP rampTOP crossTOP channelmixTOP textTOP'
+FROM specimens WHERE id = 'sp-tile-zoom-type';
 
 -- Category membership (multi). Seed the join table from each specimen's primary
 -- category so the collection facet filter (which reads specimen_categories) and

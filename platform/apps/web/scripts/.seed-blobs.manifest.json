@@ -146,9 +146,9 @@
   {
     "slug": "thermite-and-freon",
     "kind": "tdxn",
-    "key": "c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76",
-    "sha256": "c38e47875edb31ac68240aee294d880bb9361dbd92edbd4f04dfbde6379d0c76",
-    "size": 130165,
+    "key": "453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f",
+    "sha256": "453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f",
+    "size": 130968,
     "content_type": "application/json",
     "path": "specimens/simulation/thermite-and-freon.tdxn"
   },
@@ -160,5 +160,23 @@
     "size": 212615,
     "content_type": "image/jpeg",
     "path": "specimens/simulation/thermite-and-freon.jpg"
+  },
+  {
+    "slug": "tile-zoom-type",
+    "kind": "tdxn",
+    "key": "f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91",
+    "sha256": "f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91",
+    "size": 15740,
+    "content_type": "application/json",
+    "path": "specimens/compositing/tile-zoom-type.tdxn"
+  },
+  {
+    "slug": "tile-zoom-type",
+    "kind": "thumbnail",
+    "key": "thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7",
+    "sha256": "ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7",
+    "size": 50675,
+    "content_type": "image/jpeg",
+    "path": "specimens/compositing/tile-zoom-type.jpg"
   }
 ]

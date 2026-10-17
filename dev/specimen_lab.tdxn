@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
-build: 13
-generator: Embody/6.2.71
+build: 14
+generator: Embody/6.2.74
 td_build: 099.2025.33230
 network_path: /specimen_lab
 options:
@@ -71,6 +71,14 @@ operators:
   position: [2000, -400]
   inputs:
   - mandala
+- name: tile_zoom_type
+  type: baseCOMP
+  parameters:
+    parentshortcut: Specimen
+  flags:
+  - viewer
+  position: [0, -1200]
+  tdn_ref: specimen_lab/tile_zoom_type.tdxn
 - name: waveform_stack
   type: baseCOMP
   position: [0, -400]
@@ -204,6 +212,111 @@ operators:
         st['written'] = ch.eval() if ch is not None else -1
         drv.store('state', st)
   dat_content_format: text
+- name: tile_zoom_type_record
+  type: moviefileoutTOP
+  parameters:
+    type: stopframemovie
+    videocodec: h264
+    file: C:/tmp/tile_zoom_type_render/tile-zoom-type.mp4
+    moviecontainer: mp4
+    pause: true
+    maxthread: 8
+  position: [400, -1200]
+  inputs:
+  - tile_zoom_type
+- name: tile_zoom_type_render
+  type: textDAT
+  parameters:
+    language: python
+  position: [400, -1400]
+  dat_content: |
+    """Offline render of the tile_zoom_type specimen (dev tooling: lives outside the specimen, never exports).
+
+    start() records tile_zoom_type/out1 non-realtime through tile_zoom_type_record (H.264 mp4, 60 fps) into OUT,
+    one run()-chained step per real frame: the specimen is driven in Manual mode (Cycle + Phase per frame), out1
+    is force-cooked, then one Add Frame pulse writes exactly one frame. A dropped frame aborts. Every exit goes
+    through _finish, which restores Realtime and the specimen's Manual/Phase/Cycle.
+    """
+    import os
+
+    OUT = 'C:/tmp/tile_zoom_type_render'
+    S = {'running': False}
+
+
+    def start(letters: int = 0) -> str:
+        if S.get('running'):
+            return 'already running'
+        os.makedirs(OUT, exist_ok=True)
+        P = op('tile_zoom_type').par
+        fpc = int(round(P.Period.eval() * 60))
+        n = (letters or len(P.Letters.eval())) * fpc
+        S.clear()
+        S.update(running=True, prior=project.realTime, n=n, fpc=fpc, i=0, err=None, done=False,
+                 manual=int(P.Manual.eval()), phase=float(P.Phase.eval()), cycle=int(P.Cycle.eval()))
+        mfo = op('tile_zoom_type_record')
+        mfo.par.record = 0
+        mfo.par.file = OUT + '/tile-zoom-type.mp4'
+        project.realTime = False
+        P.Manual = 1
+        run('args[0].module._begin()', me, delayFrames=2)
+        return 'started: %d frames (%d per letter)' % (n, fpc)
+
+
+    def cancel() -> None:
+        _finish('cancelled')
+
+
+    def _begin() -> None:
+        try:
+            mfo = op('tile_zoom_type_record')
+            mfo.par.pause = 1
+            mfo.par.record = 1
+            run('args[0].module._step()', me, delayFrames=1)
+        except Exception as e:
+            _finish('begin: %r' % e)
+
+
+    def _step() -> None:
+        if not S.get('running'):
+            return
+        try:
+            info = op('tile_zoom_type_record_info')
+            if int(info['total_frames_dropped']):
+                _finish('dropped frame near %d' % S['i'])
+                return
+            if S['i'] > 0 and int(info['last_frames_written']) > 1:
+                _finish('frame %d wrote %d images' % (S['i'] - 1, int(info['last_frames_written'])))
+                return
+            i = S['i']
+            if i >= S['n']:
+                _finish(None)
+                return
+            P = op('tile_zoom_type').par
+            P.Cycle = i // S['fpc']
+            P.Phase = (i % S['fpc']) / S['fpc']
+            op('tile_zoom_type/out1').cook(force=True)
+            op('tile_zoom_type_record').par.addframe.pulse()
+            S['i'] = i + 1
+            run('args[0].module._step()', me, delayFrames=1)
+        except Exception as e:
+            _finish('step: %r' % e)
+
+
+    def _finish(err) -> None:
+        if not S.get('running'):
+            return
+        S['running'] = False
+        try:
+            op('tile_zoom_type_record').par.record = 0
+        finally:
+            project.realTime = S.get('prior', True)
+            P = op('tile_zoom_type').par
+            P.Manual = S.get('manual', 0)
+            P.Phase = S.get('phase', 0)
+            P.Cycle = S.get('cycle', 0)
+        S['err'] = err
+        S['done'] = True
+  dat_content_format: text
 - name: thermite_and_freon_driver
   type: executeDAT
   parameters:
@@ -310,6 +423,11 @@ operators:
         (OUT / 'render_log.json').write_text(json.dumps(log))
         S['done'] = True
   dat_content_format: text
+- name: tile_zoom_type_record_info
+  type: infoCHOP
+  parameters:
+    op: tile_zoom_type_record
+  position: [800, -1200]
 - name: thermite_and_freon_record_info
   type: infoCHOP
   parameters:

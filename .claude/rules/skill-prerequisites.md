@@ -30,6 +30,7 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Running or modifying agent-tier tests (`RunAgentTests`) | `/agent-tests` |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
 | Building or persisting a Specimen (gallery TDXN networks) | `/specimen-authoring` |
+| Publishing a Specimen to the embody.tools Collection (export, manifest, commit, PR to main, CI deploy + sync, live check) | `/publish-specimen` |
 | First MCP call in a new session | `/mcp-tools-reference` |
 | Writing GLSL, or creating a `glslTOP`, `glslmultiTOP`, `glslMAT` or `glslPOP` | `/glsl-shaders` |
 | Wiring a TOP, CHOP, MAT, DAT, light, camera or instancing chain you have not built before (and `describe_op_type` for exact parameter names) | `/operator-gotchas` |

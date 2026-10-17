@@ -140,7 +140,11 @@ the fills), and the round-trip check compares a frame, not just operator counts.
 
 ## Persisting (storage model)
 
-The collection lives at repo-root `specimens/`. Per specimen:
+The collection lives at repo-root `specimens/`. The end-to-end path from an
+approved lab COMP to a verified live card (export, prompt, cover, manifest,
+generated site data, local checks, commit, PR to main, Platform CI deploy +
+`sync-specimens`, live verification, rollback) is `/publish-specimen`; the
+notes below are the per-file detail it relies on. Per specimen:
 
 1. The temp driver stays out of the export (it's outside the COMP).
 2. `export_network` the COMP -> `specimens/<category>/<slug>.tdxn` with `include_dat_content=True` (captures the shaders). The "Failed to track" warning is expected (outside `dev/`). The on-disk `.tdxn` is **YAML (TDXN v2.0)**: shader/script `dat_content` is a plain string rendered as a YAML literal block scalar (`|`), so GLSL reads top-to-bottom and diffs line-by-line -- do not hand-author it as an array of lines (that was the v1.5 form; v2.0 reverts to a plain string). Keep shader source LF/space-indented, not tab-indented: a tab-bearing string falls back to an ugly double-quoted scalar. Auto-created default docked compute DATs are omitted on export and recreated by TD on import, so an unedited compute companion will not appear in the file. Legacy JSON `.tdxn` still import unchanged (json-first parse).

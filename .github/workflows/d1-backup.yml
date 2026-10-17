@@ -1,0 +1,66 @@
+name: D1 Backup
+
+# Nightly export of the production `embody` D1 database -- the Collection's
+# rows (specimens, versions, scans, users, reactions, reports) -- as a gzipped
+# SQL dump kept 90 days as a workflow artifact, with the current Time Travel
+# bookmark in the run summary.
+#
+# D1 Time Travel already keeps 30 days of point-in-time history with no setup
+# (`wrangler d1 time-travel restore embody --timestamp=<iso>` or
+# `--bookmark=<id>` from platform/apps/web). This export is the copy that
+# outlives that window and can be restored anywhere
+# (`wrangler d1 execute embody --remote --file=<dump.sql>` into an empty db).
+#
+# R2 blobs (.tdxn networks, covers, videos) are content-addressed and NOT in
+# this dump. First-party ones are reproducible from specimens/ in git; community
+# uploads exist only in R2 (R2 has no snapshots: copy the bucket with rclone or
+# an S3 sync if that ever needs a backup).
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/apps/web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - name: Install dependencies
+        working-directory: platform
+        run: npm ci
+      - name: Export production D1
+        run: |
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          out="$RUNNER_TEMP/embody-d1-$stamp.sql"
+          npx wrangler d1 export embody --remote --output "$out" < /dev/null
+          gzip -9 "$out"
+          {
+            echo "### D1 export $stamp"
+            echo "gzip size: $(stat -c %s "$out.gz") bytes"
+            echo '```'
+            npx wrangler d1 time-travel info embody < /dev/null
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "ARCHIVE=$out.gz" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: embody-d1-backup
+          path: ${{ env.ARCHIVE }}
+          retention-days: 90
+          if-no-files-found: error

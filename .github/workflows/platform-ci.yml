@@ -14,6 +14,14 @@ on:
       - 'platform/**'
       - 'specimens/**'
       - '.github/workflows/platform-ci.yml'
+  # By hand: re-run the production specimen sync (job sync-specimens) without a
+  # push. dry_run (the default) puts the blobs and prints the plan, writes no rows.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan only: upload blobs and report, do not write D1 rows'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -228,7 +236,7 @@ jobs:
   # the deploy job gates on. Once the secret is added, deploy runs automatically.
   check-deploy-secrets:
     needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
@@ -255,7 +263,7 @@ jobs:
   #   CLOUDFLARE_ACCOUNT_ID  - the account that owns the embody-web Worker.
   deploy:
     needs: [build-and-test, e2e, check-deploy-secrets]
-    if: needs.check-deploy-secrets.outputs.enabled == 'true'
+    if: needs.check-deploy-secrets.outputs.enabled == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -372,3 +380,116 @@ jobs:
           sleep 30
           check_auth
           echo "ok: production auth passed twice, 30 s apart"
+
+  # Production specimen sync -- the half of a deploy that wrangler deploy does
+  # not do. The featured cards and interactive covers are bundled into the
+  # Worker, but the /api/specimens rows live in D1 and the .tdxn + cover blobs
+  # in R2. This job puts the blobs (content-addressed, so re-putting is a no-op)
+  # and runs first-party-sync.sql, which creates a missing first-party row,
+  # updates a stale one and never deletes, so it is safe after every push to
+  # main. By hand: Actions > Platform CI > Run workflow; dry_run (the default)
+  # uploads blobs and prints the plan but writes no rows. The token needs
+  # Workers R2 Storage:Edit and D1:Edit.
+  sync-specimens:
+    needs: [build-and-test, check-deploy-secrets, deploy]
+    if: >-
+      !cancelled()
+      && needs.build-and-test.result == 'success'
+      && needs.check-deploy-secrets.outputs.enabled == 'true'
+      && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/apps/web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
+      SITE: https://embody.tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Same cache-poisoning reasoning as the deploy job: main-only, never a fork PR.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm  # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: platform/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        working-directory: platform
+        run: |
+          npm ci
+          python3 -m pip install --quiet pyyaml==6.0.2
+      # The committed seed/sync/plan SQL, fixtures and blob manifest must be the
+      # generator's output for the specimens/ in this commit, or the keys and
+      # hashes below lie. Drift fails here, never in production.
+      - name: Generated specimen data is current
+        run: |
+          python3 scripts/build-specimen-data.py
+          git -C ../../.. diff --exit-code -- platform/apps/web/src/server/seed.sql platform/apps/web/src/server/first-party-sync.sql platform/apps/web/src/server/first-party-plan.sql platform/apps/web/src/fixtures platform/apps/web/scripts/.seed-blobs.manifest.json \
+            || { echo "::error::Generated specimen data is stale. Run platform/apps/web/scripts/build-specimen-data.py and commit."; exit 1; }
+      # Recovery point. D1 Time Travel keeps 30 days; this bookmark names the
+      # state right before this run (wrangler d1 time-travel restore embody --bookmark=<id>).
+      - name: Record D1 Time Travel bookmark
+        run: |
+          { echo '### D1 bookmark before sync'; echo '```'; npx wrangler d1 time-travel info embody < /dev/null; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload specimen blobs to R2 (remote)
+        run: |
+          count=0
+          while IFS=$'\t' read -r slug key sha ctype rel; do
+            f="../../../$rel"
+            got="$(sha256sum "$f" | cut -d' ' -f1)"
+            if [ "$got" != "$sha" ]; then
+              echo "::error::$rel hashes to $got; the committed blob manifest says $sha ($slug). Rerun scripts/build-specimen-data.py and commit."
+              exit 1
+            fi
+            npx wrangler r2 object put "embody-blobs/$key" --file="$f" --content-type "$ctype" --remote < /dev/null
+            count=$((count + 1))
+          done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) console.log([e.slug, e.key, e.sha256, e.content_type, e.path].join("\t"))')
+          echo "put $count blobs (networks + covers) into embody-blobs"
+      # Read-only plan: one row per slug (found, first_party, live vs repo sha,
+      # stale). A slug held by another author is a hard stop.
+      - name: Plan (what the sync would change)
+        run: |
+          npx wrangler d1 execute embody --remote --yes --json --file=src/server/first-party-plan.sql > "$RUNNER_TEMP/plan.json" < /dev/null
+          node - "$RUNNER_TEMP/plan.json" <<'JS' | tee -a "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const rows = results.slice(1).flatMap(r => r.results || []);
+          console.log('### First-party sync plan');
+          console.log('| slug | found | first_party | stale | live sha | repo sha |');
+          console.log('|---|---|---|---|---|---|');
+          let bad = 0;
+          for (const r of rows) {
+            const stale = r.found === 1 ? r.stale : 'new';
+            console.log(`| ${r.slug} | ${r.found} | ${r.first_party ?? ''} | ${stale} | ${(r.live_sha || '').slice(0, 12)} | ${String(r.repo_sha).slice(0, 12)} |`);
+            if (r.found === 1 && r.first_party !== 1) bad++;
+          }
+          if (bad) { console.error(`::error::${bad} slug(s) exist under another author; refusing to sync them.`); process.exit(1); }
+          JS
+      - name: Apply first-party-sync.sql (production)
+        if: env.DRY_RUN != 'true'
+        run: npx wrangler d1 execute embody --remote --yes --file=src/server/first-party-sync.sql < /dev/null
+      # Acceptance is the live site, not wrangler's exit code: every first-party
+      # .tdxn must download with the repo's sha256 and its cover must serve.
+      # Retries ride out edge propagation.
+      - name: Verify the live collection
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 10
+        run: |
+          fail=0
+          while IFS=$'\t' read -r slug sha; do
+            ok=0
+            for i in 1 2 3 4 5 6; do
+              got="$(curl -sS --max-time 30 -A 'embody-ci-sync (+github actions)' "$SITE/api/specimens/$slug/tdn" | sha256sum | cut -d' ' -f1)"
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -A 'embody-ci-sync (+github actions)' "$SITE/api/specimens/$slug/thumbnail")"
+              if [ "$got" = "$sha" ] && [ "$code" = "200" ]; then ok=1; break; fi
+              sleep 10
+            done
+            if [ "$ok" = 1 ]; then echo "ok: $slug (tdn sha matches, cover $code)"; else echo "::error::$slug: tdn sha $got != $sha, or cover $code"; fail=1; fi
+          done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) if (e.kind === "tdxn") console.log([e.slug, e.sha256].join("\t"))')
+          exit $fail

@@ -1,0 +1,441 @@
+format: tdxn
+version: '2.2'
+build: 5
+generator: Embody/6.2.74
+td_build: 099.2025.33230
+network_path: /specimen_lab/tile_zoom_type
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  channelmixTOP:
+    parameters:
+      alpha4: 0
+      blue3: 0
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  rampTOP:
+    parameters:
+      format: rgba32float
+      outputresolution: custom
+      parmcolorspace: passthrough
+      premultrgbbyalpha: false
+      resolutionh: =parent.Specimen.par.Resolution
+      resolutionw: =parent.Specimen.par.Resolution
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  tableDAT:
+    flags:
+    - -showDocked
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Tile Zoom:
+  - name: Letters
+    style: Str
+    startSection: true
+    default: YZABCDE
+    help: The glyphs the effect cycles through, one character per letter, in order. Polarity flips on every letter.
+  - name: Font
+    style: Str
+    default: Segoe UI
+    help: Font family name for the glyph. Must be installed; pair with Typeface for the weight. The reference is a light grotesque; Segoe UI Semilight (weight 350, between Light and Regular) is the closest installed match.
+  - name: Typeface
+    style: Str
+    default: Semilight
+    help: Weight/style within the Font family, as the family names it. Segoe UI offers Light, Semilight, Regular, Semibold, Bold; Open Sans and Bahnschrift have Light; Arial has no light face.
+  - name: Grid
+    style: Int
+    default: 9
+    min: 2.0
+    max: 32.0
+    clampMin: true
+    clampMax: true
+    normMin: 2.0
+    normMax: 16.0
+    help: Number of tile cells across and down. The big letter reassembles from this many cells per axis.
+  - name: Resolution
+    style: Int
+    default: 1080
+    min: 64.0
+    clampMin: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output size in pixels (square). Also the glyph texture size.
+  - name: Zoomin
+    style: Float
+    startSection: true
+    default: 0.95
+    min: 0.1
+    clampMin: true
+    normMin: 0.1
+    normMax: 3.0
+    help: Seconds the grid takes to zoom into the big letter (gentle ease in and out).
+  - name: Hold
+    style: Float
+    default: 0.05
+    clampMin: true
+    normMax: 3.0
+    help: Seconds the big letter pauses before breaking apart. Near 0 for a continuous breathe (the smootherstep ease already brings it to a full stop).
+  - name: Zoomout
+    style: Float
+    default: 0.95
+    min: 0.1
+    clampMin: true
+    normMin: 0.1
+    normMax: 3.0
+    help: Seconds the big letter takes to zoom back out to the grid; the letter and polarity swap as this starts.
+  - name: Rest
+    style: Float
+    default: 0.05
+    clampMin: true
+    normMax: 5.0
+    help: Seconds the small grid pauses between letters. Near 0 for a continuous breathe.
+  - name: Period
+    style: Float
+    default: 2.5
+    min: 0.5
+    clampMin: true
+    normMin: 0.5
+    normMax: 10.0
+    readOnly: true
+    help: 'Seconds per letter: the sum of Zoomin, Hold, Zoomout and Rest. Read-only.'
+    value: =me.par.Zoomin + me.par.Hold + me.par.Zoomout + me.par.Rest
+  - name: Glyphscale
+    style: Float
+    default: 1.5
+    min: 1.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 4.0
+    help: Width of each resting cell window in glyph-texture units. The glyph fills 60% of its texture, so 1.5 shows it at about 40% of the cell like the reference; 0.6 fills every cell with the glyph.
+  - name: Holdzoom
+    style: Float
+    default: 0.978
+    min: 0.9
+    clampMin: true
+    clampMax: true
+    help: 'Zoom fraction reached while the big letter holds. 1 is a seamless letter; just under 1 keeps each cell window wider than its share (0.978 is about 1.4x), so every seam shows a sliver of the neighbour: the repeated thin bands, gaps and arrowheads of the reference. Lower for bigger offsets.'
+  - name: Spin
+    style: Int
+    startSection: true
+    default: 1
+    clampMin: true
+    normMax: 3.0
+    help: Whole clockwise turns each cell window makes about its own center during each zoom (in and out), easing to a stop with the zoom. Because the window center slides toward the cell position as it zooms, the glyph orbits a pivot offset outward from the screen center. Whole turns keep the hold and rest upright.
+  - name: Swapat
+    style: Float
+    default: 0.35
+    clampMin: true
+    clampMax: true
+    help: Where inside the zoom-out the letter and polarity cut happens, 0-1 of the Zoomout segment. 0 cuts on the still big letter; around 0.35 hides the cut in the middle of the spin and scale change.
+  - name: Manual
+    style: Toggle
+    startSection: true
+    help: Freeze the clock and drive the cycle from Phase and Cycle instead of absolute time. For scrubbing, matching reference frames and baking stills.
+  - name: Phase
+    style: Float
+    default: 0.7
+    clampMin: true
+    clampMax: true
+    help: 'Position inside one letter cycle when Manual is on: zoom in until Tin, hold until Thold, zoom out until Tout with the letter and polarity cut at Tswap, then rest.'
+    value: 0.3
+  - name: Cycle
+    style: Int
+    clampMin: true
+    normMax: 7.0
+    help: Which letter cycle is shown when Manual is on. Letter index is Cycle plus one after the swap point, modulo the letter count.
+  State:
+  - name: Phasenow
+    style: Float
+    readOnly: true
+    help: Live position inside the current letter cycle, 0-1. Read-only.
+    value: =me.par.Phase if me.par.Manual else (absTime.seconds / me.par.Period) % 1
+  - name: Progress
+    style: Float
+    readOnly: true
+    help: 'Eased zoom progress 0-1 on a smootherstep curve (zero velocity and acceleration at both ends): rises over the Zoomin segment, 1 through the Hold, falls over the Zoomout segment, 0 at Rest. Pure expression (no lambdas) so it survives the community-paste sandbox. Read-only.'
+    value: =(me.par.Xin.eval() ** 3 * (6 * me.par.Xin.eval() ** 2 - 15 * me.par.Xin.eval() + 10)) if me.par.Phasenow.eval() < me.par.Tin.eval() else (1 if me.par.Phasenow.eval() < me.par.Thold.eval() else ((1 - (me.par.Xout.eval() ** 3 * (6 * me.par.Xout.eval() ** 2 - 15 * me.par.Xout.eval() + 10))) if me.par.Phasenow.eval() < me.par.Tout.eval() else 0))
+  - name: Zoom
+    style: Float
+    readOnly: true
+    help: 'Progress scaled by Holdzoom: 0 is the resting grid, 1 would be a seamless big letter. Read-only.'
+    value: =me.par.Progress * me.par.Holdzoom
+  - name: Letterindex
+    style: Int
+    readOnly: true
+    help: Index into Letters of the glyph on screen; advances at the swap point of every zoom-out. Read-only.
+    value: =(int(me.par.Cycle if me.par.Manual else absTime.seconds / me.par.Period) + (1 if me.par.Phasenow > me.par.Tswap else 0)) % max(1, len(me.par.Letters.eval()))
+  - name: Inverted
+    style: Int
+    readOnly: true
+    help: 1 while the polarity is flipped to black glyphs on white; alternates with every letter. Read-only.
+    value: =(int(me.par.Cycle if me.par.Manual else absTime.seconds / me.par.Period) + (1 if me.par.Phasenow > me.par.Tswap else 0)) % 2
+  - name: Tin
+    style: Float
+    readOnly: true
+    help: Cycle fraction where the zoom-in ends and the hold begins. Read-only.
+    value: =me.par.Zoomin / me.par.Period
+  - name: Thold
+    style: Float
+    readOnly: true
+    help: Cycle fraction where the hold ends and the zoom-out (and letter swap) begins. Read-only.
+    value: =(me.par.Zoomin + me.par.Hold) / me.par.Period
+  - name: Tout
+    style: Float
+    readOnly: true
+    help: Cycle fraction where the zoom-out ends and the rest begins. Read-only.
+    value: =(me.par.Zoomin + me.par.Hold + me.par.Zoomout) / me.par.Period
+  - name: Spinphase
+    style: Float
+    readOnly: true
+    help: 'Spin progress: follows Progress during the zoom-in (0 to 1), holds at 1, continues 1 to 2 during the zoom-out so the turn never reverses, 0 at rest. Read-only.'
+    value: =me.par.Progress.eval() if me.par.Phasenow.eval() < me.par.Tin.eval() else (1 if me.par.Phasenow.eval() < me.par.Thold.eval() else ((2 - me.par.Progress.eval()) if me.par.Phasenow.eval() < me.par.Tout.eval() else 0))
+  - name: Tswap
+    style: Float
+    readOnly: true
+    help: 'Cycle fraction of the letter and polarity cut: Thold plus Swapat of the zoom-out. Read-only.'
+    value: =me.par.Thold + me.par.Swapat * (me.par.Tout - me.par.Thold)
+  - name: Fit
+    style: Float
+    default: 0.73
+    readOnly: true
+    help: Fraction of the glyph texture the screen spans at full zoom (the glyph fills 60% of its texture, so 0.73 puts the big letter at 82% of the screen). Baked into the ramp_x/ramp_y key tables (0.135..0.865); change both together.
+  - name: Xin
+    style: Float
+    readOnly: true
+    help: Normalized position inside the zoom-in segment, clamped 0-1. Read-only.
+    value: =min(1.0, max(0.0, me.par.Phasenow.eval() / me.par.Tin.eval()))
+  - name: Xout
+    style: Float
+    readOnly: true
+    help: Normalized position inside the zoom-out segment, clamped 0-1. Read-only.
+    value: =min(1.0, max(0.0, (me.par.Phasenow.eval() - me.par.Thold.eval()) / max(0.001, me.par.Tout.eval() - me.par.Thold.eval())))
+parameters:
+  parentshortcut: Specimen
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [3200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - remap_tiles
+- name: ramp_x
+  type: rampTOP
+  parameters:
+    dat: ramp_x_keys
+    operand: add
+  position: [1200, 0]
+  inputs:
+  - channelmix_delta
+- name: ramp_y
+  type: rampTOP
+  parameters:
+    dat: ramp_y_keys
+    type: vertical
+    operand: add
+  position: [1600, 0]
+  inputs:
+  - ramp_x
+- name: cross_uv
+  type: crossTOP
+  parameters:
+    cross: =parent.Specimen.par.Zoom
+    format: rgba32float
+  position: [2000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - channelmix_rest
+  - ramp_y
+- name: ramp_cellx
+  type: rampTOP
+  parameters:
+    dat: ramp_cellx_keys
+    period: =1 / parent.Specimen.par.Grid
+    antialias: 1
+  position: [0, 400]
+- name: ramp_celly
+  type: rampTOP
+  parameters:
+    dat: ramp_celly_keys
+    type: vertical
+    period: =1 / parent.Specimen.par.Grid
+    antialias: 1
+    operand: add
+  position: [400, 400]
+  inputs:
+  - ramp_cellx
+- name: text_glyph
+  type: textTOP
+  parameters:
+    text: =parent.Specimen.par.Letters.eval()[int(parent.Specimen.par.Letterindex) % max(1, len(parent.Specimen.par.Letters.eval()))]
+    font: =parent.Specimen.par.Font
+    typeface: =parent.Specimen.par.Typeface
+    fontsizex: =parent.Specimen.par.Resolution * 0.83
+    fontsizexunit: pixels
+    fontcolorr: =1 - parent.Specimen.par.Inverted
+    fontcolorg: =1 - parent.Specimen.par.Inverted
+    fontcolorb: =1 - parent.Specimen.par.Inverted
+    bgcolorr: =parent.Specimen.par.Inverted
+    bgcolorg: =parent.Specimen.par.Inverted
+    bgcolorb: =parent.Specimen.par.Inverted
+    bgalpha: 1
+    outputresolution: custom
+    resolutionw: =parent.Specimen.par.Resolution
+    resolutionh: =parent.Specimen.par.Resolution
+  position: [0, -900]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: ramp_x_keys
+  type: tableDAT
+  position: [1200, -120]
+  dock: ramp_x
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '0.135'
+    - '0'
+    - '0'
+    - '0'
+  - - '1'
+    - '0.865'
+    - '0'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: ramp_y_keys
+  type: tableDAT
+  position: [1600, -120]
+  dock: ramp_y
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '0'
+    - '0.135'
+    - '0'
+    - '0'
+  - - '1'
+    - '0'
+    - '0.865'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: remap_tiles
+  type: remapTOP
+  parameters:
+    extend: hold
+  position: [2800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - text_glyph
+  - cross_uv
+- name: channelmix_rest
+  type: channelmixTOP
+  parameters:
+    red1: =parent.Specimen.par.Glyphscale * math.cos(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    red2: =-parent.Specimen.par.Glyphscale * math.sin(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    green1: =parent.Specimen.par.Glyphscale * math.sin(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    green2: =parent.Specimen.par.Glyphscale * math.cos(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    constant1: 0.5
+    constant2: 0.5
+    constant4: 1
+  position: [800, 400]
+  inputs:
+  - ramp_celly
+- name: ramp_cellx_keys
+  type: tableDAT
+  position: [0, 280]
+  dock: ramp_cellx
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '-0.5'
+    - '0'
+    - '0'
+    - '0'
+  - - '1'
+    - '0.5'
+    - '0'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: ramp_celly_keys
+  type: tableDAT
+  position: [400, 280]
+  dock: ramp_celly
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '0'
+    - '-0.5'
+    - '0'
+    - '0'
+  - - '1'
+    - '0'
+    - '0.5'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: channelmix_delta
+  type: channelmixTOP
+  parameters:
+    red1: =parent.Specimen.par.Fit / parent.Specimen.par.Grid * (math.cos(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase) - 1)
+    red2: =-parent.Specimen.par.Fit / parent.Specimen.par.Grid * math.sin(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    green1: =parent.Specimen.par.Fit / parent.Specimen.par.Grid * math.sin(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase)
+    green2: =parent.Specimen.par.Fit / parent.Specimen.par.Grid * (math.cos(2 * math.pi * parent.Specimen.par.Spin * parent.Specimen.par.Spinphase) - 1)
+  position: [800, 0]
+  inputs:
+  - ramp_celly
+annotations:
+- name: annotate1
+  mode: annotate
+  title: 'UV map: each cell window spins about its own center while it zooms'
+  text: 'ramp_cellx/ramp_celly repeat 1/Grid, so together they are the cell-local coordinate (-0.5..0.5). channelmix_rest is the rest map 0.5 + Glyphscale * R(theta) * local: every cell shows the whole glyph, spun about the cell center. ramp_x/ramp_y are the plain map (0.135..0.865, the Fit span); channelmix_delta adds (Fit/Grid) * (R(theta) - I) * local to it, so the big-letter crops spin about their cell centers too and the map is exact at whole turns. cross_uv blends the two by Zoom: the window center slides from the glyph center to the cell position, so a spinning glyph orbits a pivot offset outward (centered in the middle cell, top-left in a top-left cell). Holdzoom just under 1 keeps every window about 40% wider than its share at the hold: each cell shows a sliver of its neighbours, which gives the repeated thin bands, the gaps and the arrowheads on diagonals, deterministic and symmetric like the reference. Nothing random.'
+  position: [-70, -190]
+  size: [2270, 850]
+  color: [0.25, 0.42, 0.32]
+  opacity: 0.35
+- name: annotate3
+  mode: annotate
+  title: Glyph source
+  text: Letters[Letterindex] in Font + Typeface (a light grotesque, like the reference) at 60% of its texture, so the spinning window never reaches the texture edge; outside it the Remap's Extend Hold returns the background color. Font and background swap colors when Inverted flips.
+  position: [-70, -970]
+  size: [270, 330]
+  color: [0.45, 0.35, 0.22]
+  opacity: 0.35
+- name: annotate4
+  mode: annotate
+  title: Output
+  text: Remap of the spinning glyph through the UV map, Extend Hold so the background color fills outside the texture. Pace is set in seconds by Zoomin, Hold, Zoomout and Rest (Period is their sum); scrub with Manual + Phase. The letter and polarity cut lands Swapat of the way into the zoom-out, while scale and spin are both moving, so the cut hides in the motion.
+  position: [2730, -70]
+  size: [670, 330]
+  color: [0.4, 0.28, 0.42]
+  opacity: 0.35
