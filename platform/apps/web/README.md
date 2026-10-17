@@ -47,20 +47,26 @@ cover exactly like anyone else's. The site holds no slug list and no static
 cover files: a row with an empty `thumbnail_key` shows the procedural
 placeholder, and a new cover appears the moment its row has a key.
 
-To seed **production** (deployed D1 + R2), run the generator, then target the
-remote resources:
+**Production** (deployed D1 + R2) is written only by Platform CI, never from a
+laptop. The `sync-specimens` job runs after every deploy on `main` (and by hand
+from Actions > Platform CI > Run workflow, `dry_run` on = plan only): it checks
+the generated files are current, records a D1 Time Travel bookmark, puts every
+blob in `.seed-blobs.manifest.json` into the `embody-blobs` bucket, prints the
+per-slug plan from `first-party-plan.sql`, applies `first-party-sync.sql`
+(creates a first-party row D1 lacks, updates a stale one, never deletes), then
+verifies each `/api/specimens/<slug>/tdn` hashes to the repo sha256 and its
+`/thumbnail` serves. The token needs Workers R2 Storage:Edit and D1:Edit. The
+full procedure from a lab COMP to a live card is the repo's `/publish-specimen`
+skill.
 
-```sh
-python3 scripts/build-specimen-data.py
-bash scripts/upload-seed-blobs.sh --remote
-wrangler d1 execute embody --remote --file ./src/server/seed.sql
-```
+**Never run `seed.sql` with `--remote`.** It is written for a dev database: on a
+live D1 it drops and rebuilds `specimens_fts` with only the first-party rows, so
+every community specimen drops out of search, and it deletes the `STALE_SLUGS`
+rows. `first-party-sync.sql` is the production path (field 2026-09-11).
 
-**Caution (2026-09-11):** `seed.sql` is written for a dev database. On a live D1 it
-drops and rebuilds `specimens_fts` with only the six first-party rows, so every
-community specimen drops out of search, and it deletes the `STALE_SLUGS` rows
-(`ev`, `clean2`, `ff`, `clean-net`, `evil`). Until a targeted re-seed exists,
-review it against production data before running the last command.
+The `D1 Backup` workflow exports the production database nightly as a gzipped
+SQL dump kept 90 days as a workflow artifact; D1 Time Travel covers the last 30
+days on its own (`wrangler d1 time-travel restore embody --timestamp=...`).
 
 In non-production environments, the submit endpoint accepts `turnstileToken: "dev-bypass"`. In
 production the Turnstile gate fails closed: the `dev-bypass` token is never honored, an unknown

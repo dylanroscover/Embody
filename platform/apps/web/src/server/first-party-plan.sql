@@ -3,7 +3,8 @@
 -- result per first-party slug: found, first_party, live vs repo sha, stale
 -- (1 = first-party-sync.sql would write). One statement per slug: D1 refuses a
 -- 6-term UNION ALL (too many terms in compound SELECT). CI runs it via
--- --command with these comment lines stripped, never --file (the import path).
+-- --file --json (wrangler 4 returns every statement's rows; a --command of the
+-- whole file is ~28 KB, past a Windows argv limit).
 SELECT type, name, sql FROM sqlite_master
 WHERE name IN ('specimens_fts', 'specimens_fts_ad') ORDER BY name;
 SELECT 'murmuration' AS slug, 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f' AS repo_sha, 13631 AS repo_size,

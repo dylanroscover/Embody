@@ -75,6 +75,8 @@ operators:
   type: baseCOMP
   parameters:
     parentshortcut: Specimen
+  flags:
+  - viewer
   position: [0, -1200]
   tdn_ref: specimen_lab/tile_zoom_type.tdxn
 - name: waveform_stack
