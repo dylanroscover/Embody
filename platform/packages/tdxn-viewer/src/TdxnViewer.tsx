@@ -75,7 +75,8 @@ export interface TdxnViewerProps {
    * Enable COMP drill-down + operator selection: a single click selects any
    * operator (highlighted, and surfaced via onSelect / the tdxnviewer:select
    * event for a properties panel), and a double click on a COMP enters its
-   * sub-network, with a breadcrumb "address bar" to climb back out -- a 1:1,
+   * sub-network, with a breadcrumb "address bar" to climb back out (shown only
+   * inside a COMP; at the root it would just repeat the page title) -- a 1:1,
    * TD-faithful walk of the network. When false (the default), the whole network
    * is flattened into one inert plane (the dense hero / card-cover thumbnail).
    */
@@ -519,7 +520,7 @@ export function TdxnViewer({
       style={style}
       onDoubleClick={handleDoubleClick}
     >
-      {navigable && (
+      {navigable && path.length > 0 && (
         <nav
           className="tdxn-viewer__breadcrumb"
           aria-label="network path"
