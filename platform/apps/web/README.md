@@ -45,7 +45,9 @@ community uploads -- and `seed.sql` / the first-party sync point the row's
 `thumbnail_key` at it, so `/api/specimens/:slug/thumbnail` serves a first-party
 cover exactly like anyone else's. The site holds no slug list and no static
 cover files: a row with an empty `thumbnail_key` shows the procedural
-placeholder, and a new cover appears the moment its row has a key.
+placeholder, and a new cover appears the moment its row has a key. An
+optional hover-play cover video (`video_path`, an H.264 mp4 under 10 MB)
+goes to `videos/<sha256>` the same way and sets the row's `video_key`.
 
 **Production** (deployed D1 + R2) is written only by Platform CI, never from a
 laptop. The `sync-specimens` job runs after every deploy on `main` (and by hand

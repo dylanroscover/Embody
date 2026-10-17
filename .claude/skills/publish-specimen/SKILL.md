@@ -78,11 +78,19 @@ Specimen. Run it (step 5) rather than trusting the export.
   deterministically: the Specimen's own `Manual` + `Phase` (or equivalent),
   `out1.cook(force=True)`, `out1.save(path, quality=0.92)`. Read the file and
   judge it against `/visual-aesthetics`.
-- Video, when asked: `/movie-export` rules apply (non-realtime, Add Frame per
-  stepped frame, abort on a drop, `framemd5` uniqueness out of process). The
-  site has no video slot yet, so it stays out of the repo (C:/tmp/<slug>_render
-  is the convention; the lab keeps a `<name>_record` Movie File Out, an Info
-  CHOP and a `<name>_render` Text DAT driver, like thermite_and_freon).
+- Cover video (the card plays it on hover; the thumbnail stays the poster):
+  render a master with `/movie-export` rules (non-realtime, Add Frame per
+  stepped frame, abort on a drop, `framemd5` uniqueness out of process; the lab
+  keeps a `<name>_record` Movie File Out, an Info CHOP and a `<name>_render`
+  Text DAT driver, output under C:/tmp/<slug>_render), then cut the hover loop
+  from it:
+  ```
+  ffmpeg -i master.mp4 -t 8 -vf "scale=720:720:flags=lanczos,fps=30" -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p -profile:v main -movflags +faststart -an specimens/<category>/<slug>.mp4
+  ```
+  About 2 MB. The route cap is 10 MB and `video/mp4` with an ftyp box; the
+  generator enforces both. Set `video_path` in the manifest; the row's
+  `video_key` points at `videos/<sha256>` and `/api/specimens/<slug>/video`
+  streams it. A slug with no `video_path` keeps whatever video its row has.
 
 ## 3. Manifest entry
 

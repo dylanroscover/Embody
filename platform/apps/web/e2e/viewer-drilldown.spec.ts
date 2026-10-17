@@ -19,10 +19,9 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
       els.map((e) => (e.textContent || "").trim())
     );
 
-  // At root: the breadcrumb shows exactly one crumb (the network root) and at
-  // least one COMP advertises that it can be entered.
-  await expect(breadcrumb).toBeVisible();
-  await expect(crumbs).toHaveCount(1);
+  // At root: no breadcrumb (it would only repeat the page title) and at least
+  // one COMP advertises that it can be entered.
+  await expect(breadcrumb).toHaveCount(0);
   const enterable = viewer.locator(".tdxn-operator--enterable").first();
   await expect(enterable).toBeVisible();
 
@@ -36,17 +35,18 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   // missed the COMP (field 2026-09-11). A pre-click masks that regression.
   await enterable.dblclick();
 
-  // Breadcrumb gains a second crumb naming the COMP we entered, and the visible
+  // The breadcrumb appears: root crumb + the COMP we entered, and the visible
   // operator set is now that COMP's children (different from the root level).
+  await expect(breadcrumb).toBeVisible();
   await expect(crumbs).toHaveCount(2);
   await expect(crumbs.nth(1)).toHaveText(compName!);
   await expect(viewer.locator(".tdxn-operator__name").first()).toBeVisible();
   const childOps = await opNames();
   expect(childOps).not.toEqual(rootOps);
 
-  // Click the root crumb -> climb back out to the top-level network.
+  // Click the root crumb -> climb back out to the top-level network; the bar goes away again.
   await crumbs.first().click();
-  await expect(crumbs).toHaveCount(1);
+  await expect(breadcrumb).toHaveCount(0);
   await expect.poll(opNames).toEqual(rootOps);
 
   // One click selects the COMP: the ring reads SelectedOpContext, not node data.

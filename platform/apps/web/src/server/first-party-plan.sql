@@ -3,8 +3,8 @@
 -- result per first-party slug: found, first_party, live vs repo sha, stale
 -- (1 = first-party-sync.sql would write). One statement per slug: D1 refuses a
 -- 6-term UNION ALL (too many terms in compound SELECT). CI runs it via
--- --file --json (wrangler 4 returns every statement's rows; a --command of the
--- whole file is ~28 KB, past a Windows argv limit).
+-- one --command per statement with the comment lines stripped: a remote --file
+-- goes through the import API and returns only meta, never the SELECT rows.
 SELECT type, name, sql FROM sqlite_master
 WHERE name IN ('specimens_fts', 'specimens_fts_ad') ORDER BY name;
 SELECT 'murmuration' AS slug, 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f' AS repo_sha, 13631 AS repo_size,
@@ -307,6 +307,7 @@ SELECT 'tile-zoom-type' AS slug, 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7'
+   OR s.video_key IS NOT 'videos/366f9b4b2e43169001e78f56f6d12b3c3ffad5446aca8e997c89cab38010fcd2'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl')) <> 7

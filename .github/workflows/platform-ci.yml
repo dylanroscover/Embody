@@ -460,15 +460,22 @@ jobs:
       - name: Plan (what the sync would change)
         run: |
           set -o pipefail
-          npx wrangler d1 execute embody --remote --yes --json --file=src/server/first-party-plan.sql > "$RUNNER_TEMP/plan.json" < /dev/null
-          node - "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/skip-slugs.txt" <<'JS' | tee -a "$GITHUB_STEP_SUMMARY"
+          # One --command per statement: a remote --file goes through D1's import
+          # API and returns only meta, never the SELECT rows (field 2026-10-17).
+          node - src/server/first-party-plan.sql "$RUNNER_TEMP/skip-slugs.txt" <<'JS' | tee -a "$GITHUB_STEP_SUMMARY"
           const fs = require('fs');
-          const raw = fs.readFileSync(process.argv[2], 'utf8');
-          const start = raw.indexOf('[');
-          if (start < 0) { console.error('::error::plan: wrangler returned no JSON:\n' + raw.slice(0, 2000)); process.exit(1); }
-          const results = JSON.parse(raw.slice(start));
-          const rows = results.slice(1).flatMap(r => r.results || []);
-          if (!rows.length) { console.error('::error::plan: no per-slug rows parsed:\n' + raw.slice(0, 2000)); process.exit(1); }
+          const { execFileSync } = require('child_process');
+          const sql = fs.readFileSync(process.argv[2], 'utf8').split('\n').filter(l => !l.startsWith('--')).join('\n');
+          const statements = sql.split(/;\s*
+/).map(s => s.trim()).filter(Boolean);
+          const rows = [];
+          for (const statement of statements.slice(1)) {   // statement 0 is the FTS DDL probe
+            const out = execFileSync('npx', ['wrangler', 'd1', 'execute', 'embody', '--remote', '--json', '--command', statement], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 16 * 1024 * 1024 });
+            const start = out.indexOf('[');
+            if (start < 0) { console.error('::error::plan: wrangler returned no JSON:\n' + out.slice(0, 2000)); process.exit(1); }
+            for (const r of JSON.parse(out.slice(start))) rows.push(...(r.results || []));
+          }
+          if (!rows.length) { console.error('::error::plan: no per-slug rows parsed'); process.exit(1); }
           console.log('### First-party sync plan');
           console.log('| slug | found | first_party | author | stale | live sha | repo sha |');
           console.log('|---|---|---|---|---|---|---|');
@@ -511,4 +518,15 @@ jobs:
             done
             if [ "$ok" = 1 ]; then echo "ok: $slug (tdn sha matches, cover $code)"; else echo "::error::$slug: tdn sha $got != $sha, or cover $code"; fail=1; fi
           done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) if (e.kind === "tdxn") console.log([e.slug, e.sha256].join("\t"))')
+          # Cover videos: the /video route must stream the repo bytes (Range-capable, so a plain GET returns the whole file).
+          while IFS=$'\t' read -r slug sha; do
+            if grep -qx "$slug" "$RUNNER_TEMP/skip-slugs.txt" 2>/dev/null; then continue; fi
+            ok=0
+            for i in 1 2 3 4 5 6; do
+              got="$(curl -sS --max-time 60 -A 'embody-ci-sync (+github actions)' "$SITE/api/specimens/$slug/video" | sha256sum | cut -d' ' -f1)"
+              if [ "$got" = "$sha" ]; then ok=1; break; fi
+              sleep 10
+            done
+            if [ "$ok" = 1 ]; then echo "ok: $slug (cover video sha matches)"; else echo "::error::$slug: cover video sha $got != $sha"; fail=1; fi
+          done < <(node -e 'for (const e of require("./scripts/.seed-blobs.manifest.json")) if (e.kind === "video") console.log([e.slug, e.sha256].join("\t"))')
           exit $fail
