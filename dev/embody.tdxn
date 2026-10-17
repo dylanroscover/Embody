@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
-build: 1328
-generator: Embody/6.2.71
+build: 1332
+generator: Embody/6.2.74
 td_build: 099.2025.33230
 network_path: /embody
 options:
@@ -138,7 +138,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 354
+    rows: 355
     cols: 11
   flags:
   - viewer

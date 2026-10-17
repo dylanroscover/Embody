@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
 build: 23
-generator: Embody/6.2.71
+generator: Embody/6.2.72
 td_build: 099.2025.33230
 network_path: /specimen_lab/thermite_and_freon
 options:
@@ -143,7 +143,7 @@ custom_pars:
     clampMin: true
     normMax: 0.6
     help: Mean water level in terrain height units. Raise it to flood more of the drainage network.
-    value: 0.4600000083
+    value: 0.46
   - name: Tiderange
     style: Float
     label: Tide Range
@@ -152,7 +152,7 @@ custom_pars:
     clampMin: true
     normMax: 0.2
     help: How far the tide rises and falls around the mean level. 0 holds the water still.
-    value: 0.0900000036
+    value: 0.09
   - name: Tideperiod
     style: Float
     label: Tide Period
@@ -172,7 +172,7 @@ custom_pars:
     clampMin: true
     normMax: 3.0
     help: Strength of the downhill flow that drains the land into the channels. Carries the grains and silt.
-    value: 1.7999999523
+    value: 1.8
   - name: Swirl
     style: Float
     default: 1
@@ -180,7 +180,7 @@ custom_pars:
     clampMin: true
     normMax: 3.0
     help: Curl-noise stirring of the open water. Higher values break the plumes into finer eddies.
-    value: 1.1399999857
+    value: 1.14
   - name: Jets
     style: Float
     default: 1
@@ -188,7 +188,7 @@ custom_pars:
     clampMin: true
     normMax: 3.0
     help: How hard the channels discharge into the lagoon, setting off vortices at the mouths.
-    value: 1.6599999666
+    value: 1.66
   - name: Vorticity
     style: Float
     default: 1
@@ -581,7 +581,8 @@ operators:
     - {}
     - name: uWin
       valuex: 0
-      valuey: 0
+      valuez: 1
+      valuew: 1
   position: [4800, -2400]
   inputs:
   - null_life
@@ -605,18 +606,16 @@ operators:
       valuex: =parent.Specimen.par.Feed
       valuey: =parent.Specimen.par.Kill
       valuez: =parent.Specimen.par.Patternscale
-      valuew: 0
     - name: uTime
       valuex: =absTime.seconds
-      valuey: 0
-      valuez: 0
-      valuew: 0
     - name: uWin
       valuex: 0
-      valuey: 0
-      valuew: 0
+      valuez: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [4000, -2000]
   inputs:
   - feedback_life
@@ -835,6 +834,9 @@ operators:
       valuew: =parent.Specimen.par.Waterfling
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [2400, -3600]
   inputs:
   - feedback_drops
@@ -858,8 +860,14 @@ operators:
       valuew: =parent.Specimen.par.Sunsize
     - name: uOrbit2
       valuex: =parent.Specimen.par.Smallsun
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [400, -400]
   inputs:
   - feedback_orbit
@@ -882,6 +890,9 @@ operators:
       valuew: =parent.Specimen.par.Watersize
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [2800, -3200]
   inputs:
   - feedback_spray
@@ -901,6 +912,9 @@ operators:
     - {}
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [2800, -3600]
   inputs:
   - glsl_drops
@@ -937,8 +951,14 @@ operators:
       valuex: =absTime.seconds
     - name: uDisc
       valuex: =parent.Specimen.par.Sunsize
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [3600, -400]
   inputs:
   - glsl_orbit
@@ -963,8 +983,12 @@ operators:
       valuex: =absTime.frame
       valuey: =parent.Specimen.par.Halation
       valuez: =parent.Specimen.par.Imperfections
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [7600, -800]
   inputs:
   - glsl_compose
@@ -986,6 +1010,9 @@ operators:
       valuex: =parent.Specimen.par.Tidelevel
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [400, 0]
   inputs:
   - glsl_terrain
@@ -1003,12 +1030,15 @@ operators:
       valuex: =absTime.seconds
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [0, -600]
 - name: topto_drops
   type: toptoCHOP
   parameters:
     top: glsl_drops
-    vstart: 0.8333333333
+    vstart: 0.833333
   position: [800, -5200]
 - name: topto_orbit
   type: toptoCHOP
@@ -1215,11 +1245,18 @@ operators:
       valuew: =parent.Specimen.par.Carve * 0.05
     - name: uWin
       valuex: 0
-      valuey: 0
+      valuez: 1
+      valuew: 1
     - name: uTime
       valuex: =absTime.seconds
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [6000, -800]
   inputs:
   - glsl_terrain
@@ -1249,16 +1286,20 @@ operators:
       valuex: =parent.Specimen.par.Tidelevel
       valuey: =parent.Specimen.par.Tiderange
       valuez: =absTime.seconds / parent.Specimen.par.Tideperiod
-      valuew: 0
     - name: uWorld
       valuex: 0
       valuey: =parent.Specimen.par.Twist
       valuez: =parent.Specimen.par.Collapse
-      valuew: 0
     - name: uBurst
       valuex: =parent.Specimen.par.Bursts
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [3200, -1600]
   inputs:
   - feedback_pigment
@@ -1283,15 +1324,15 @@ operators:
     - name: uRun
       valuex: =parent.Specimen.par.Runoff * 0.015
       valuey: 0.6
-      valuez: 0
-      valuew: 0
     - name: uWorld
       valuex: 0
       valuey: =parent.Specimen.par.Twist
       valuez: =parent.Specimen.par.Collapse
-      valuew: 0
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [1600, -800]
   inputs:
   - glsl_pressure
@@ -1330,6 +1371,9 @@ operators:
       valuew: =absTime.seconds * parent.Specimen.par.Morph * 0.05
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
 - name: null_pigment
   type: nullTOP
   position: [3600, -1600]
@@ -1502,6 +1546,9 @@ operators:
       valuew: =parent.Specimen.par.Carve * 0.05
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [1200, -800]
   inputs:
   - glsl_flow_step
@@ -1551,8 +1598,14 @@ operators:
       valuew: =parent.Specimen.par.Carve * 0.05
     - name: uStir
       valuex: 0.08
+      valuey: 1
+      valuez: 1
+      valuew: 1
     - name: uAspect
       valuex: =parent.Specimen.par.Aspect
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [800, -800]
   inputs:
   - feedback_flow

@@ -1,7 +1,7 @@
 format: tdxn
-version: '2.1'
+version: '2.2'
 build: 35
-generator: Embody/6.2.70
+generator: Embody/6.2.74
 td_build: 099.2025.33230
 network_path: /embody/Embody/tagger
 options:
@@ -390,7 +390,7 @@ operators:
 - name: btn_embed
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed DATs in tdxn  ✓
+    label: ⊞  Embed DATs in tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -783,7 +783,7 @@ operators:
 - name: btn_embed_storage
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed storage in tdxn
+    label: ⊞  Embed storage in tdxn  ✓
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
