@@ -7,7 +7,7 @@ import {
   BaseEdge,
   ControlButton,
   Controls,
-  getSmoothStepPath,
+  getBezierPath,
   Handle,
   MarkerType,
   Position,
@@ -199,9 +199,9 @@ function LiftedEdge({
   const liftY = (data as { liftY?: number } | undefined)?.liftY;
   let path: string;
   if (typeof liftY === "number") {
-    // A same-row Right->Left edge has no vertical step, so getSmoothStepPath's
-    // `centerY` can't bend it -- it renders dead flat across the intervening
-    // tile. Instead draw a smooth cubic arch: the wire leaves the source and
+    // A same-row Right->Left edge has no vertical offset, so a plain bezier
+    // renders dead flat across the intervening tile. Instead draw a cubic
+    // arch: the wire leaves the source and
     // enters the target horizontally (control points offset along x), and both
     // control points sit high enough that the curve's midpoint peaks at ~liftY.
     // For a symmetric cubic with sourceY == targetY, the t=0.5 height is
@@ -211,14 +211,13 @@ function LiftedEdge({
     const ctrlY = sourceY + (liftY - sourceY) / 0.75;
     path = `M ${sourceX},${sourceY} C ${sourceX + dx},${ctrlY} ${targetX - dx},${ctrlY} ${targetX},${targetY}`;
   } else {
-    [path] = getSmoothStepPath({
+    [path] = getBezierPath({
       sourceX,
       sourceY,
       sourcePosition,
       targetX,
       targetY,
-      targetPosition,
-      borderRadius: 12
+      targetPosition
     });
   }
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
@@ -827,7 +826,9 @@ function toFlowElements(
       target: edge.to,
       sourceHandle: "out",
       targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
-      type: "smoothstep",
+      // Bezier S-curve with horizontal tangents at both ends: the shape of a
+      // TouchDesigner wire, not a right-angled circuit trace.
+      type: "default",
       animated: edge.comp,
       focusable: false,
       selectable: false,
