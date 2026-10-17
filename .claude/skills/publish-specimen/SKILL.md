@@ -164,7 +164,15 @@ work, branch from `origin/main`, cherry-pick the specimen commit, PR that.)
 gh run list --workflow=platform-ci.yml --branch main -L 1
 gh run watch <id>
 ```
-Jobs: build-and-test, e2e, check-deploy-secrets, deploy, sync-specimens. The
+Jobs: build-and-test, e2e, check-deploy-secrets, deploy, sync-specimens.
+Cloudflare's own Workers Build also deploys the Worker on every push to
+`main`, independently of this workflow, so a UI change (viewer, page) can be
+live while the rows and blobs are not: a specimen is published only when
+`sync-specimens` is green, never because the site already looks updated.
+Platform CI runs only on pushes to `main` (the PR checks are the bridge
+tests), so a workflow edit is parsed locally before it is committed
+(`commit-push-checklist.md`); a file that does not parse fails main with
+zero jobs and deploys nothing. The
 sync job's summary shows the D1 Time Travel bookmark taken before the write and
 the per-slug plan (found / first_party / author / stale). A slug the user
 published through the site under their own account (thermite-and-freon is held
