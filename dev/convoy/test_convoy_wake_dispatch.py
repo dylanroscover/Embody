@@ -226,3 +226,31 @@ def test_long_awake_dispatch_refreshes_lease_until_terminal_release(
     finally:
         release.set()
         app.db.close()
+
+
+def test_a_perform_mode_save_refusal_releases_the_wake_once(tmp_path):
+    """A woken show machine still refuses save_project (the node reads the
+    Perform request, not the wake). The delivery ends there and the wake is
+    released -- no wake per backoff for the rest of the show."""
+    app = hostapp.HostApp(str(tmp_path / "state"))
+    app.drain_backoff_s = 0.0
+    calls = []
+    app.waker = lambda port, token, action, lease, ttl: (
+        calls.append(action) or {"ok": True})
+    forwarded = []
+    app.forwarder = lambda port, operation, arguments: (
+        forwarded.append(operation) or {"ok": True, "result": {
+            "error": "This node is in Perform Mode -- never save a project "
+                     "mid-show. Retry after Perform Mode is off.",
+            "code": "perform_mode"}})
+    try:
+        node = _register(app, awake=True)
+        job = _enqueue(app, node, operation="save_project", key="show-save")
+        code, response = app.dispatch_job(job["delivery_id"])
+        assert code == 200 and response["job"]["state"] == "failed"
+        assert calls == ["touch", "release"]
+        app.drain_once()
+        assert forwarded == ["save_project"]
+        assert calls == ["touch", "release"]
+    finally:
+        app.db.close()

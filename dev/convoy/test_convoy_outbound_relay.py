@@ -464,3 +464,88 @@ def test_send_file_uploads_to_the_peer_then_puts_into_its_inbox(
     assert dispatched["job"]["state"] == "succeeded", dispatched
     landed = b_project / ".embody" / "convoy" / "inbox" / "notes.txt"
     assert landed.read_bytes() == b"cue list v2\n"
+
+
+# -- save_project over the LAN (remote-exposed 2026-10-18, gated) --------
+
+def _savable_node(mesh):
+    """A node on B with a live Envoy port, so the save reaches a forward."""
+    code, node = mesh.b.register_node({
+        "project_root": "/dev-project", "comp_path": "/Embody",
+        "convoy_id": CONVOY, "runtime_id": "rt_dev", "envoy_port": 9800})
+    assert code == 200, node
+    return node
+
+
+def test_a_relayed_save_project_runs_as_a_node_job_and_polls_to_done(mesh):
+    """No TD Python grant on B, and the job shape is the local one: a node
+    job handle, the get_job_status poll, the idempotency key on the wire."""
+    node = _savable_node(mesh)
+    forwarded = []
+
+    def forward(port, operation, arguments):
+        forwarded.append((operation, sorted(arguments)))
+        if operation == "save_project":
+            return {"ok": True, "result": {"job_id": "job_5a7e0001",
+                                           "status": "running"}}
+        return {"ok": True, "result": {
+            "id": "job_5a7e0001", "kind": "save_project", "status": "done",
+            "version_before": "6.2.75", "version_after": "6.2.76"}}
+
+    mesh.b.forwarder = forward
+    code, accepted = mesh.a.relay_submit(relay_body(
+        mesh, target_node_id=node["node_id"], operation="save_project",
+        expected_runtime_id="rt_dev", idempotency_key="remote-save-1"))
+    assert code == 200 and accepted["ok"] is True, accepted
+    delivery_id = accepted["job"]["delivery_id"]
+
+    code, dispatched = mesh.b.dispatch_job(delivery_id)
+    assert code == 200 and dispatched["job"]["state"] == "running"
+    assert forwarded == [("save_project", ["idempotency_key"])]
+
+    code, polled = mesh.b.poll_job(delivery_id)
+    assert code == 200 and polled["job"]["state"] == "succeeded", polled
+    assert forwarded[1] == ("get_job_status", ["job_id"])
+
+    code, mirrored = mesh.a.relay_job({
+        "target_host_id": mesh.b.host_id, "convoy_id": CONVOY,
+        "delivery_id": delivery_id})
+    assert code == 200 and mirrored["job"]["state"] == "succeeded"
+    assert mirrored["job"]["result"]["version_after"] == "6.2.76"
+
+
+def test_a_relayed_save_refused_in_perform_mode_reaches_the_controller(mesh):
+    """The controller reads the node's own refusal, terminal: never a job
+    that requeues for the whole show and saves when it ends."""
+    node = _savable_node(mesh)
+    refusal = {"error": "This node is in Perform Mode -- never save a "
+                        "project mid-show. Retry after Perform Mode is off.",
+               "code": "perform_mode"}
+    mesh.b.forwarder = lambda port, operation, arguments: {
+        "ok": True, "result": refusal}
+    code, accepted = mesh.a.relay_submit(relay_body(
+        mesh, target_node_id=node["node_id"], operation="save_project",
+        expected_runtime_id="rt_dev", idempotency_key="remote-save-show"))
+    assert code == 200 and accepted["ok"] is True, accepted
+    delivery_id = accepted["job"]["delivery_id"]
+
+    code, dispatched = mesh.b.dispatch_job(delivery_id)
+    assert code == 200 and dispatched["job"]["state"] == "failed"
+
+    code, mirrored = mesh.a.relay_job({
+        "target_host_id": mesh.b.host_id, "convoy_id": CONVOY,
+        "delivery_id": delivery_id})
+    assert code == 200 and mirrored["job"]["state"] == "failed"
+    assert mirrored["job"]["result"] == refusal
+
+
+def test_run_tests_is_still_refused_before_any_envelope_is_sent(
+        mesh, monkeypatch):
+    sends = []
+    monkeypatch.setattr(peerclient, "send_envelope",
+                        lambda *args, **kwargs: sends.append(1))
+    code, refusal = mesh.a.relay_submit(relay_body(
+        mesh, operation="run_tests", expected_runtime_id="rt_remote",
+        idempotency_key="remote-tests"))
+    assert code == 403 and refusal["reason"] == "operation_not_exposed"
+    assert sends == []

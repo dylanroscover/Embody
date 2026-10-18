@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.2.75
+
+Convoy saves a remote node's project.
+
+- **Remote `save_project`.** `convoy_call(operation="save_project")` saves another machine's project, with no Allow Execute TD Python grant. Both machines need this release.
+- **Never during a show.** A save blocks TouchDesigner 15+ seconds and restarts Envoy, so a node in Perform Mode refuses it, and `update_embody`, with code `perform_mode`: the job ends instead of retrying until the show ends, and `save_then_restart` stops. +12 tests.
+
 ## v6.2.74
 
 `query_network` walks every network again.

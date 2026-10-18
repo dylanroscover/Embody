@@ -151,6 +151,7 @@ _DETAILS = {
     "dirty_state_unknown": "TouchDesigner project dirty state could not be proven",
     "project_dirty": "TouchDesigner has unsaved project changes",
     "save_failed": "TouchDesigner could not save the project safely",
+    "perform_mode": "the node is in Perform Mode, which refuses a save mid-show",
     "destructive_policy_disabled": "the requested destructive restart policy is not locally approved",
     "quit_failed": "the exact TouchDesigner runtime did not exit safely",
     "launch_failed": "the exact TouchDesigner process could not be launched",
@@ -2940,7 +2941,9 @@ class LifecycleManager:
                                     False, "save_failed", node_id=node_id,
                                     operation_id=operation_id,
                                     save_may_have_run=True))
-                        raise LifecycleError("save_failed")
+                        raise LifecycleError(
+                            "perform_mode" if saved.get("code")
+                            == "perform_mode" else "save_failed")
                     if cancel_event is not None and cancel_event.is_set():
                         return self._terminal(
                             attempt, _result(

@@ -27,7 +27,9 @@ finishes `done` with the versions equal. A successful install restarts the
 node's MCP server, so its next call may ride one reconnect blip.
 
 Nodes are skipped (and named in `skipped`) when they are offline, disabled,
-or in Perform Mode -- never update a machine mid-show.
+or in Perform Mode -- never update a machine mid-show. A plain
+`convoy_call(operation="update_embody")` that reaches a node in Perform Mode
+ends `failed` with the node's `perform_mode` refusal; nothing is retried.
 
 ## Requirements and caveats
 
@@ -38,15 +40,20 @@ or in Perform Mode -- never update a machine mid-show.
   `releases/latest` and the release assets itself; an offline show LAN
   reports a network error in the job record instead of updating.
 - **`update_embody` never needs the TD Python grant.** It is classified
-  `executes_arbitrary_code=False` in the Convoy operation registry, and it
-  is deliberately the remote-exposed one of the fleet verbs -- `run_tests`
-  counts as arbitrary code, and `save_project` is local-only.
+  `executes_arbitrary_code=False` in the Convoy operation registry, like
+  `save_project`; `run_tests` counts as arbitrary code and is never relayed.
 - **Persistence**: the updater installs into the live component. If your
   project embeds Embody inside a `.tox` you manage yourself, re-save that
   component (or the project) after the update, or the machine reverts on
-  its next open. Saving is a local step -- `save_project` is deliberately
-  not remote-exposed -- so save from a session on that machine, or use
-  `convoy_restart_node` with its `save_then_restart` policy.
+  its next open. Relay the save with
+  `convoy_call(operation="save_project")`, or save from a session on that
+  machine. **A save blocks that machine's TouchDesigner for 15+ seconds and
+  restarts its Envoy server**: do it between shows, never during one. A node
+  in Perform Mode refuses it (`perform_mode`, nothing saved). The
+  controller's and the target's Convoy App must both run Embody 6.2.75 or
+  later; an older one refuses `save_project` as `operation_not_exposed`. Each
+  Convoy App follows its machine's Embody on its own (see
+  [Setup and Troubleshooting](host-app.md)).
 
 ## Traps (learned in the field)
 

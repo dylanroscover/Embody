@@ -559,6 +559,34 @@ def test_cancelling_after_save_acceptance_reports_save_may_have_run(tmp_path):
         app.db.close()
 
 
+def test_a_perform_mode_refusal_ends_the_lifecycle_save_at_once(tmp_path):
+    """save_then_restart on a show machine: the node refuses the save, and
+    the adapter stops instead of asking again every 0.2 s to the deadline."""
+    app, _ = make_app(tmp_path)
+    try:
+        node = register(app)
+        calls = []
+
+        def call(_node_id, _runtime_id, operation, _arguments, _timeout,
+                 _cancel):
+            calls.append(operation)
+            return {"error": "This node is in Perform Mode -- never save a "
+                             "project mid-show.", "code": "perform_mode"}
+
+        app.lifecycle_runtime._call = call
+        app.lifecycle_runtime.begin_operation("restart-mid-show")
+        try:
+            result = app.lifecycle_runtime.save(
+                node["node_id"], "runtime-1", 5.0, threading.Event())
+        finally:
+            app.lifecycle_runtime.end_operation()
+
+        assert result == {"ok": False, "code": "perform_mode"}
+        assert calls == ["save_project"]
+    finally:
+        app.db.close()
+
+
 def _load_envoy_ext_module():
     path = (Path(__file__).resolve().parents[1] / "embody" / "Embody" /
             "EnvoyExt.py")

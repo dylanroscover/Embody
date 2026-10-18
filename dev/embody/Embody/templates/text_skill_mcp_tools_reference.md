@@ -121,7 +121,7 @@ Reduced reads, never a blind dump: a 4x600 CHOP is 2,400 raw floats; these retur
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Recent log entries from the ring buffer (200 entries; the log files in Embody's `Logfolder` hold the rest) |
 | `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?`, `idempotency_key?`, `confirm_saved?` | Embody unit-test suites; `background=True` (recommended for full runs) returns a job id |
 | `get_job_status` | `job_id?` | Status of background jobs (`run_tests`, `save_project`, `update_embody`, `run_soak_test`); omit the id to list recent jobs |
-| `save_project` | `idempotency_key?` | Save the project as a tracked job |
+| `save_project` | `idempotency_key?` | Save the project as a tracked job. Development only: blocks TD's main thread 15+ s and restarts Envoy; refused in Perform Mode (`perform_mode`) |
 | `update_embody` | `idempotency_key?` | Self-update Embody as a tracked job |
 | `get_td_status` | _(none)_ | Bridge-side: TD running, Envoy reachable, frozen-main-thread flags, instance registry, live sessions; works with TD down |
 | `launch_td` / `restart_td` | `timeout?` | Launch or gracefully relaunch TD with the project's `.toe` |

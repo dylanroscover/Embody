@@ -941,6 +941,21 @@ def test_save_then_restart_saves_rechecks_then_launches(tmp_path):
         (NODE, "runtime-1", False, "revision:1")]
 
 
+def test_save_then_restart_in_perform_mode_is_refused_by_name(tmp_path):
+    # The node refuses a save mid-show (2026-10-18); the restart stops with
+    # that reason, not a generic save_failed, and nothing quits.
+    manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True}]
+    runtime.save = lambda *args, **kwargs: {"ok": False,
+                                            "code": "perform_mode"}
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-mid-show", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["code"] == "perform_mode"
+    assert "Perform Mode" in result["detail"]
+    assert runtime.quit_calls == [] and launcher.spawns == []
+
+
 def test_cancelled_accepted_save_never_restarts_and_reports_uncertainty(
         tmp_path):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)

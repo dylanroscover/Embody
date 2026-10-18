@@ -130,26 +130,26 @@ def test_manifest_digest_material_is_the_registry_entry(server):
 
 def test_the_reviewed_registry_is_the_complete_remote_operation_surface():
     """The full Envoy node-operation surface is remotely addressable EXCEPT
-    the two worker-only escalation operations.
+    the one worker-only escalation operation.
 
-    run_tests exec_module's every test file it finds on disk, and
-    save_project blocks TD's main thread 15+s before A-30/A-31 show
-    protection exists (R-2); both stay OFF the remote surface even though the
-    rest of the surface is exposed. Executability is otherwise
+    run_tests exec_module's every test file it finds on disk (R-2), so it
+    stays OFF the remote surface. save_project is ON it since 2026-10-18:
+    it runs no caller code and the node refuses it in Perform Mode, the
+    gate update_embody already had. Executability is otherwise
     least-privilege: arbitrary-code entries require the node's separate
     TD-Python approval, mutations remain lease-gated, and bridge/session-local
     MCP tools are absent from this registry.
     """
     remote = {name for name, entry in ha.PHASE1_OPERATIONS.items()
               if ha.gating_of(entry)["remote_exposed"]}
-    assert remote == set(ha.PHASE1_OPERATIONS) - {"run_tests", "save_project"}
+    assert remote == set(ha.PHASE1_OPERATIONS) - {"run_tests"}
     assert remote < set(ha.PHASE1_OPERATIONS), "must be a STRICT subset"
     assert "run_tests" not in remote, (
         "run_tests execs every test file it finds on disk -- never "
         "relayable to a remote peer (R-2)")
-    assert "save_project" not in remote, (
-        "save_project blocks TD's main thread 15+s; show protection "
-        "(A-30/A-31) is Phase 4 -- not relayable before it exists")
+    assert "save_project" in remote and "update_embody" in remote
+    assert ha.gating_of(ha.PHASE1_OPERATIONS["save_project"])[
+        "executes_arbitrary_code"] is False
     assert ha.gating_of(ha.PHASE1_OPERATIONS["run_tests"])[
         "executes_arbitrary_code"] is True
     assert "get_sessions" not in remote
