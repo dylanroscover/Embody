@@ -162,7 +162,7 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | Tool | Description |
 |---|---|
 | `get_job_status` | Poll disk-backed background jobs; results survive server restarts |
-| `save_project` | Save the project as a tracked job instead of a severed synchronous call |
+| `save_project` | Save the project as a tracked job instead of a severed synchronous call. Development only: a save stalls TouchDesigner 15+ seconds, so it is refused in Perform Mode |
 
 ### Embody Integration
 

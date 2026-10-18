@@ -4414,6 +4414,14 @@ class EnvoyMCPServer:
             """
             Save the TouchDesigner project as a tracked background job.
 
+            A DEVELOPMENT TOOL, NOT FOR SHOWS: a save blocks
+            TouchDesigner's main thread for 15+ seconds (no frames
+            render) and restarts the Envoy server. Never run it against
+            a machine running a show. The node refuses it while Embody's
+            Perform Mode or TD's perform window is on ({'error', 'code':
+            'perform_mode'}, no job started). Convoy relays it to remote
+            nodes without the TD Python grant; the same refusal applies.
+
             project.save() blocks TD's main thread for many seconds (the
             TDXN strip/restore cycle plus the release-tox export) and
             reinitializes extensions, so a synchronous MCP call is severed
@@ -4448,7 +4456,8 @@ class EnvoyMCPServer:
                     save. Omit for a one-shot save.
 
             Returns:
-                {'job_id', 'status': 'running', 'hint'}
+                {'job_id', 'status': 'running', 'hint'}, or {'error'}
+                (with 'code': 'perform_mode' in Perform Mode).
             """
             return self._execute_in_td('save_project',
                                        {'idempotency_key': idempotency_key})
@@ -4473,7 +4482,9 @@ class EnvoyMCPServer:
                     redelivery reconciles to the original update job.
 
             Returns:
-                {'job_id', 'status': 'running', 'hint'} or {'error'}.
+                {'job_id', 'status': 'running', 'hint'} or {'error'}
+                (with 'code': 'perform_mode' in Perform Mode: never
+                update a machine mid-show).
             """
             return self._execute_in_td('update_embody',
                                        {'idempotency_key': idempotency_key})
@@ -8672,6 +8683,25 @@ class EnvoyExt:
         except Exception:
             pass
 
+    def _performModeRefusal(self, action):
+        """The refusal for a job that must never start mid-show, or None.
+
+        Mid-show is Embody's Perform request (_performMode, which a Convoy
+        wake leaves on) or TD's own perform window (ui.performMode), the
+        pair chopexec_exit_tagger checks. The Convoy host terminalises on
+        code 'perform_mode' (NODE_TERMINAL_REFUSAL_CODES). Main thread."""
+        try:
+            performing = bool(op.Embody.ext.Embody._performMode
+                              or ui.performMode)
+        except Exception:
+            return None
+        if not performing:
+            return None
+        return {'error': 'This node is in Perform Mode -- never %s '
+                         'mid-show. Retry after Perform Mode is off.'
+                         % action,
+                'code': 'perform_mode'}
+
     def _save_project(self, idempotency_key=None) -> dict:
         """Start a project save as a tracked job (main thread).
 
@@ -8681,7 +8711,9 @@ class EnvoyExt:
         while a test run is active (a mid-run save bakes the runner's
         forced Filecleanup='delete' / Status='Testing' into the exported
         .tdn/.toe -- the exact incident class destructive-tests.md records
-        -- and its strip/restore kills the deferred run). Idempotent
+        -- and its strip/restore kills the deferred run) and in Perform
+        Mode (_performModeRefusal: a save blocks the main thread 15+ s,
+        and Convoy relays this tool to remote nodes). Idempotent
         against retries: an idempotency_key reconciles a redelivery to the
         original save regardless of age (16.5); even without one, a second
         call while a save job is in flight returns the EXISTING handle."""
@@ -8718,6 +8750,9 @@ class EnvoyExt:
             return {'job_id': active['id'], 'status': 'running',
                     'hint': 'A save is already in flight -- returning its '
                             'existing job handle (calls are idempotent).'}
+        refusal = self._performModeRefusal('save a project')
+        if refusal is not None:
+            return refusal
         job = _new_job('save_project', {}, idempotency_key=idempotency_key)
         try:
             job['version_before'] = str(op.Embody.par.Version.eval())
@@ -8799,12 +8834,9 @@ class EnvoyExt:
             return {'job_id': active['id'], 'status': 'running',
                     'hint': 'An update is already in flight -- returning '
                             'its existing job handle.'}
-        try:
-            if op.Embody.ext.Embody._performMode:
-                return {'error': 'This node is in Perform Mode -- never '
-                                 'update a machine mid-show.'}
-        except Exception:
-            pass
+        refusal = self._performModeRefusal('update a machine')
+        if refusal is not None:
+            return refusal
         try:
             updater = self.ownerComp.op('updater').ext.UpdaterExt
         except Exception:

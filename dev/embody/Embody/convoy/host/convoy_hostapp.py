@@ -195,6 +195,17 @@ POLL_UNKNOWN_GRACE_S = 60.0
 # OWN trouble, not the job's absence, and terminalising on it would put
 # a claim in the record the node never made.
 _NODE_UNKNOWN_JOB_RE = re.compile(r"no job with id", re.IGNORECASE)
+# Node refusal codes that END an async delivery instead of requeueing it.
+# The node returns these only after its idempotency lookup missed, so
+# nothing ran for this key; a requeue would retry it every backoff and run
+# the work the moment the show ends. Producer: EnvoyExt._performModeRefusal.
+NODE_TERMINAL_REFUSAL_CODES = frozenset({"perform_mode"})
+# The operations _performModeRefusal guards. This host refuses them too,
+# before waking a node registered in Perform Mode, so a show machine is
+# never woken for them and a node whose Embody predates the gate is covered.
+# A delivery already on the wire once goes to the node instead: its key
+# lookup may find a run the lost answer started.
+PERFORM_MODE_REFUSED_OPERATIONS = frozenset({"save_project", "update_embody"})
 # A running mirror is rewritten at most this often. Every successful
 # running-poll used to rewrite the whole job file for a record whose
 # state and provenance had not changed -- measured at 6-38 ms each, 200
@@ -665,13 +676,13 @@ PHASE1_OPERATIONS = {
     "get_job_status": _operation(
         {"job_id": "string?"}, mutating=False, executes_arbitrary_code=False,
         remote_exposed=True, runtime_required=False, batch_eligible=False),
-    # NOT relayable to a remote peer: it blocks TD's main thread 15+ seconds
-    # and restarts the Envoy server under itself. A-30's performance guard
-    # and A-31's per-node remote-work policy -- the machinery whose whole job
-    # is to stop a remote peer wrecking a live output -- are Phase 4. Returns
-    # to the remote surface in Phase 4, gated, never ungated.
+    # Remote-exposed, gated (owner, 2026-10-18): it runs no caller code, so
+    # a node without the TD Python grant can still be saved. Dev only: a save
+    # blocks TD's main thread 15+ s and restarts Envoy, never for a show.
+    # Refused in Perform Mode by the node (EnvoyExt._performModeRefusal) and
+    # before any wake by this host (PERFORM_MODE_REFUSED_OPERATIONS).
     "save_project": _operation(
-        {}, mutating=True, executes_arbitrary_code=False, remote_exposed=False,
+        {}, mutating=True, executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=True, batch_eligible=False,
         side_effects={"writes_toe": True, "blocks_main_thread": True,
                       "restarts_server": True},
@@ -683,11 +694,10 @@ PHASE1_OPERATIONS = {
     # place. No caller-supplied code or URL ever crosses the wire, so this
     # is NOT arbitrary-code -- the whole point is that patching a fleet
     # must not require the TD Python grant (field 2026-08-19).
-    # Remote-exposed unlike run_tests/save_project (finding 544): those are
-    # excluded for caller-code execution and unprotected 15s+ main-thread
-    # blocks; this one runs no caller code and the node itself refuses in
-    # Perform Mode, so it is no more consequential than the already-remote
-    # delete_op/set_parameter surface.
+    # Remote-exposed unlike run_tests (finding 544, caller-code execution):
+    # it runs no caller code and the node itself refuses in Perform Mode --
+    # the gate save_project shares -- so it is no more consequential than
+    # the already-remote delete_op/set_parameter surface.
     "update_embody": _operation(
         {}, mutating=True, executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=True, batch_eligible=False,
@@ -1636,6 +1646,11 @@ class _HostLifecycleRuntime:
                     and NODE_JOB_ID_RE.fullmatch(candidate)):
                 job_id = candidate
                 break
+            if (isinstance(result, dict)
+                    and result.get("code") in NODE_TERMINAL_REFUSAL_CODES):
+                # The node started nothing and will not until Perform Mode
+                # ends; retrying until the deadline only loads a show.
+                return {"ok": False, "code": result["code"]}
             time.sleep(min(self.SAVE_POLL_S, max(0.0, remaining)))
         while time.monotonic() < deadline and job_id is not None:
             if self._cancelled(cancel_event):
@@ -7479,6 +7494,29 @@ class HostApp:
                 or job["operation"] == "convoy_restart_node")
             if (needs_td_endpoint
                     and node.get("perform_mode")):
+                if (job["operation"] in PERFORM_MODE_REFUSED_OPERATIONS
+                        and not job.get("attempts")):
+                    detail = {
+                        "reason": "perform_mode", "code": "perform_mode",
+                        "detail": "the node is in Perform Mode, and %s "
+                                  "never runs mid-show; it was not "
+                                  "delivered" % job["operation"],
+                        "operation": job.get("operation"),
+                        "at": self._now(),
+                    }
+                    try:
+                        refused = self.db.mark_refused(delivery_id, detail)
+                    except Exception:
+                        refused = None
+                    self._note_dispatch_event(
+                        delivery_id, "dispatch_refused",
+                        {"reason": "perform_mode", "terminal": True})
+                    payload = {"ok": False, "reason": "perform_mode",
+                               "detail": detail["detail"]}
+                    if refused is not None:
+                        self._release_operation_claim_locked(refused)
+                        payload["job"] = refused
+                    return 409, payload
                 if not node.get("wake_active") or not port:
                     wake = self._send_node_wake(
                         node, "acquire", delivery_id)
@@ -8639,6 +8677,26 @@ class HostApp:
                 # record_dispatch_note in _requeue_claim: attempts and
                 # last_attempt on the delivery record, because the audit
                 # line is deduped to one by design.
+                #
+                # The one exception: a refusal carrying a code in
+                # NODE_TERMINAL_REFUSAL_CODES is the node's own verdict that
+                # nothing started for this key, so it is recorded (failed,
+                # node_sync, with the node's words) instead of requeued.
+                refusal = outcome.get("result")
+                if (isinstance(refusal, dict) and refusal.get("code")
+                        in NODE_TERMINAL_REFUSAL_CODES):
+                    self._drain_noted.pop(delivery_id, None)
+                    self._drain_backoff.pop(delivery_id, None)
+                    updated = self.db.record_sync_result(
+                        delivery_id, False, observed,
+                        result=_bounded_result(refusal))
+                    self._release_operation_claim_locked(updated)
+                    self._audit_best_effort(
+                        "dispatch_node_refused",
+                        {"delivery_id": delivery_id, "operation": operation,
+                         "code": refusal.get("code")})
+                    return 200, {"ok": True, "dispatched": True,
+                                 "job": updated}
                 return self._requeue_claim(
                     delivery_id, operation, observed,
                     reason="no_node_job_handle", event="dispatch_no_handle",
@@ -10143,10 +10201,8 @@ class HostApp:
             # anything could read it, and then nothing did: run_tests
             # (which exec_module's every test_*.py AND test_*.txt it finds
             # on disk -- the registry's own comment says that argument
-            # "dissolves the moment a socket binds off-box") and
-            # save_project (15+ seconds of blocked main thread on a show
-            # machine, before A-30's show protection exists) were both
-            # remotely submittable. STRICT DEFAULT FALSE: an operation
+            # "dissolves the moment a socket binds off-box") was remotely
+            # submittable. STRICT DEFAULT FALSE: an operation
             # nobody audited for the LAN is refused by ABSENCE, exactly
             # like absence from the registry itself. The LOCAL path is
             # untouched -- this is the owner's own machine.
@@ -10482,9 +10538,9 @@ class HostApp:
     def build_remote_manifest(self):
         """The manifest a peer sees, filtered by explicit remote exposure.
 
-        The reviewed registry exposes every node operation EXCEPT the two
-        worker-only escalation operations (run_tests, save_project), which a
-        peer must never even see (remote_exposed False). The filter also stays
+        The reviewed registry exposes every node operation EXCEPT run_tests
+        (it execs every test file on disk), which a peer must never even see
+        (remote_exposed False). The filter also stays
         fail-closed for future/local-only entries and sparse extensions.
         Per-node code approval is deliberately not baked into this host-wide
         manifest -- it is mutable node policy checked at admission and

@@ -1369,6 +1369,33 @@ def test_an_async_answer_without_a_handle_requeues_never_terminalises(server):
     assert len(events) == 1, events
 
 
+@pytest.mark.parametrize("operation", ["save_project", "update_embody"])
+def test_a_perform_mode_refusal_is_the_nodes_verdict_not_a_requeue(
+        server, operation):
+    """The one no-handle answer that ends the delivery: code perform_mode
+    comes only after the node's idempotency lookup missed, so nothing ran
+    for this key. A requeue would retry it every backoff and run the save or
+    update the moment the show ends (owner, 2026-10-18: refused)."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, operation=operation, key="mid-show")
+    did = job["delivery_id"]
+    refusal = {"error": "This node is in Perform Mode -- never save a "
+                        "project mid-show. Retry after Perform Mode is off.",
+               "code": "perform_mode"}
+    forwarded = []
+    server.app.forwarder = lambda p, o, a: (forwarded.append(o) or {
+        "ok": True, "result": refusal})
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 200 and body["dispatched"] is True
+    assert body["job"]["state"] == "failed"
+    assert body["job"]["verdict_source"] == "node_sync"
+    assert body["job"]["result"] == refusal
+    with server.app.lock:
+        assert did not in server.app._drain_backoff
+    server.app.drain_once()
+    assert forwarded == [operation], "a terminal refusal went out again"
+
+
 def test_a_requeued_async_delivery_recovers_the_lost_handle(server):
     """B13: the recovery the requeue is BETTING on. The retry sends the
     same idempotency_key, the node reconciles to the run it already
@@ -1443,11 +1470,11 @@ def test_the_async_registry_entries_are_honestly_gated(server):
     is refused without the A-22 precondition, exactly like any other
     stale-state-sensitive operation.
 
-    NEITHER is remotely exposed (A-1/R-2): run_tests exec_module's every
-    test file it finds on disk, and save_project blocks TD's main thread
-    15+s before A-30/A-31 show protection exists. run_tests is additionally
-    classified arbitrary-code so its LOCAL path still needs the node's
-    explicit TD-Python approval; save_project does not execute caller code.
+    run_tests is NOT remotely exposed (A-1/R-2): it exec_module's every
+    test file it finds on disk, and is classified arbitrary-code so its
+    LOCAL path still needs the node's explicit TD-Python approval.
+    save_project runs no caller code and is remote-exposed (2026-10-18),
+    gated by the node's Perform Mode refusal.
     """
     node = register_rt(server)
     code, body = server.call("/jobs", {
@@ -1460,7 +1487,7 @@ def test_the_async_registry_entries_are_honestly_gated(server):
             "executes_arbitrary_code": name == "run_tests",
             "mutating": True,
             "runtime_required": True,
-            "remote_exposed": False}
+            "remote_exposed": name == "save_project"}
         assert entry["async_job"]["key_arg"] == "idempotency_key"
 
 

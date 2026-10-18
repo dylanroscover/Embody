@@ -225,16 +225,17 @@ def test_loopback_path_is_unchanged_and_uses_the_psk(two):
     assert code == 200 and resp["created"] is True
 
 
-def test_the_remote_manifest_excludes_the_worker_only_operations(two):
-    # run_tests and save_project are LOCAL-only (remote_exposed=False,
-    # finding 544): present in the local manifest, filtered from the remote
-    # one. convoy_ping and the rest remain on both.
+def test_the_remote_manifest_excludes_only_run_tests(two):
+    # run_tests is LOCAL-only (remote_exposed=False, finding 544): present in
+    # the local manifest, filtered from the remote one. save_project is on
+    # both since 2026-10-18 (gated node-side by Perform Mode), with the SAME
+    # digest, so a controller's preflight matches a peer's advertisement.
     remote = two.b.build_remote_manifest().to_dict()["operations"]
     local = two.b.build_manifest().to_dict()["operations"]
-    assert "run_tests" in local and "save_project" in local
-    assert "run_tests" not in remote and "save_project" not in remote
+    assert "run_tests" in local and "run_tests" not in remote
+    assert remote["save_project"] == local["save_project"]
     assert "convoy_ping" in remote
-    assert set(remote) == set(local) - {"run_tests", "save_project"}
+    assert set(remote) == set(local) - {"run_tests"}
 
 
 # -- enabled-node-driven LAN lifecycle ---------------------------------

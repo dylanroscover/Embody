@@ -298,28 +298,29 @@ def test_remote_run_tests_is_refused(mesh):
     assert result.get("reason") == "td_python_not_approved"
 
 
-def test_remote_save_project_is_refused_as_not_remote_exposed(mesh):
-    # save_project blocks TD's main thread and is off the remote surface
-    # until A-30/A-31 show protection exists (finding 544).
+def test_remote_save_project_is_accepted_without_td_python(mesh):
+    # save_project is on the remote surface since 2026-10-18 (no caller
+    # code; the node refuses it in Perform Mode), so it needs no grant.
     node_id, convoy_id = mesh.register_node()
     env = mesh.envelope(node_id, convoy_id, "save_project",
                         expected_runtime_id=mesh.runtime_id)
     result = pc.send_envelope(mesh.target(), mesh.a.hostkeys, env)
-    assert result.get("reason") == "operation_not_remote_exposed"
+    assert result.get("ok") is True, result
+    assert result["job"]["operation"] == "save_project"
 
 
 # -- /peer/manifest is filtered to remote-exposed ----------------------
 
 def test_peer_manifest_excludes_the_non_remote_operations(mesh):
-    # The peer manifest advertises only the remote-exposed surface; the two
-    # worker-only operations must not appear on it (finding 544).
+    # The peer manifest advertises only the remote-exposed surface; run_tests
+    # must not appear on it (finding 544). save_project does (2026-10-18).
     body = pc.get_peer_manifest(mesh.target(), mesh.a.hostkeys)
     assert body["ok"] is True
     names = set(body["manifest"]["operations"].keys())
     assert "convoy_ping" in names
     assert "query_network" in names
     assert "run_tests" not in names
-    assert "save_project" not in names
+    assert "save_project" in names
 
 
 # -- /peer/nodes: namespace-bound discovery ---------------------------

@@ -2,7 +2,9 @@
 
 This suite intentionally reads EnvoyExt through Python's AST.  A new MCP tool
 must land with either a reviewed Convoy registry classification or a reviewed
-exclusion; silently inheriting a permissive default is never allowed.
+exclusion; silently inheriting a permissive default is never allowed.  The
+node-side Perform Mode gate tests at the end execute a private EnvoyExt copy
+instead, because that gate is what makes save_project remote-exposed.
 """
 
 import ast
@@ -65,11 +67,11 @@ def test_envoy_ast_and_convoy_registry_cannot_drift_silently():
                for name in excluded)
 
 
-# run_tests and save_project are the two worker-only operations kept OFF the
-# remote surface (A-1/R-2): run_tests exec_module's every test file it finds on
-# disk, and save_project blocks TD's main thread 15+s before A-30/A-31 show
-# protection exists.  Every OTHER registered operation is remotely addressable.
-_NOT_REMOTE_EXPOSED = {"run_tests", "save_project"}
+# run_tests is the one worker-only operation kept OFF the remote surface
+# (A-1/R-2): it exec_module's every test file it finds on disk. save_project
+# joined the remote surface 2026-10-18, gated by the node's Perform Mode
+# refusal. Every OTHER registered operation is remotely addressable.
+_NOT_REMOTE_EXPOSED = {"run_tests"}
 
 
 def test_every_real_registry_entry_has_an_explicit_gate_classification():
@@ -299,3 +301,84 @@ def test_get_job_status_is_an_explicit_relayable_poll_operation(tmp_path):
         "arguments": {"job_id": "job_12345678"},
     })
     assert code == 200, body
+
+
+# -- the node-side gate behind save_project's remote exposure -----------
+#
+# save_project and update_embody are remote-exposed BECAUSE the node refuses
+# them in Perform Mode (owner's decision 2026-10-18). EnvoyExt is loaded as a
+# private module copy with only the TD globals these handlers touch planted.
+
+def _envoy_node(tmp_path, performing, perform_window=False):
+    from types import SimpleNamespace
+    from test_convoy_lifecycle_hostapp import _load_envoy_ext_module
+    module = _load_envoy_ext_module()
+    module.ui = SimpleNamespace(performMode=perform_window)
+    jobs = tmp_path / "jobs"
+    module._jobs_dir = lambda: str(jobs)
+    scheduled = []
+    module.run = lambda *args, **kwargs: scheduled.append(args)
+    embody = SimpleNamespace(_performMode=performing,
+                             _testRunnerActive=lambda: False)
+    module.op = SimpleNamespace(Embody=SimpleNamespace(
+        ext=SimpleNamespace(Embody=embody),
+        par=SimpleNamespace(Version=SimpleNamespace(eval=lambda: "6.2.75"))))
+    node = object.__new__(module.EnvoyExt)
+    node.ownerComp = SimpleNamespace(path="/Embody", op=lambda name: None)
+    return module, node, jobs, scheduled
+
+
+def _job_files(jobs):
+    return sorted(p.name for p in jobs.glob("job_*.json")) if jobs.exists() \
+        else []
+
+
+def test_the_node_refuses_save_project_in_perform_mode(tmp_path):
+    _module, node, jobs, scheduled = _envoy_node(tmp_path, performing=True)
+    out = node._save_project(idempotency_key="remote-save")
+    assert out == {
+        "error": "This node is in Perform Mode -- never save a project "
+                 "mid-show. Retry after Perform Mode is off.",
+        "code": "perform_mode"}
+    assert out["code"] in hostapp.NODE_TERMINAL_REFUSAL_CODES
+    assert _job_files(jobs) == [] and scheduled == [], (
+        "a refused save must mint no job and schedule no project.save()")
+
+
+def test_tds_perform_window_alone_refuses_a_save(tmp_path):
+    """Embody's Perform toggle resets on every open; a show relaunched
+    into TD's perform window is still mid-show."""
+    _module, node, jobs, scheduled = _envoy_node(
+        tmp_path, performing=False, perform_window=True)
+    out = node._save_project(idempotency_key="window-save")
+    assert out["code"] == "perform_mode"
+    assert _job_files(jobs) == [] and scheduled == []
+
+
+def test_the_node_refuses_update_embody_with_the_same_gate(tmp_path):
+    _module, node, jobs, _scheduled = _envoy_node(tmp_path, performing=True)
+    out = node._update_embody(idempotency_key="remote-update")
+    assert out["code"] == "perform_mode"
+    assert "never update a machine mid-show" in out["error"]
+    assert _job_files(jobs) == []
+
+
+def test_a_keyed_retry_reconciles_before_the_perform_gate(tmp_path):
+    """The ordering the host's terminal refusal rests on: a key that already
+    minted a save reconciles to it even in Perform Mode, so a perform_mode
+    answer proves nothing started for that key."""
+    module, node, _jobs, _scheduled = _envoy_node(tmp_path, performing=True)
+    job = module._new_job("save_project", {}, idempotency_key="seen")
+    module._write_job(job)
+    module._record_job_key("seen", job["id"])
+    out = node._save_project(idempotency_key="seen")
+    assert out["job_id"] == job["id"]
+    assert "code" not in out
+
+
+def test_outside_perform_mode_the_save_job_shape_is_unchanged(tmp_path):
+    _module, node, jobs, scheduled = _envoy_node(tmp_path, performing=False)
+    out = node._save_project(idempotency_key="dev-save")
+    assert out["status"] == "running"
+    assert _job_files(jobs) == [out["job_id"] + ".json"]
+    assert len(scheduled) == 1 and "_runSaveJob" in scheduled[0][0]

@@ -9,7 +9,9 @@ all reachable with no I/O error and no race:
       narrowing lands, and a requeue puts it straight back on the wire.
   B2  remote_exposed was dead data: run_tests (which exec_module's every
       test_*.py on disk) and save_project (15s main-thread block) were
-      both remotely submittable and dispatchable.
+      both remotely submittable and dispatchable. (save_project returned
+      to the remote surface 2026-10-18, gated by the node's Perform Mode
+      refusal; run_tests stays off it.)
   M3  a peer-chosen controller_id let a peer's own revocation release
       the LOCAL operator's lease.
   M4  db.jobs() swallows unreadable records, so a revocation that read
@@ -221,7 +223,7 @@ def test_peer_update_embody_relays_without_the_td_python_grant(server):
     granting arbitrary code execution (field 2026-08-19). It runs no
     caller code (sha-pinned official release, downgrade-refusing node-side
     updater), so a peer submission is ACCEPTED with TD Python unapproved --
-    unlike run_tests/save_project it is remote-exposed."""
+    unlike run_tests it is remote-exposed."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,
@@ -240,11 +242,11 @@ def test_peer_update_embody_relays_without_the_td_python_grant(server):
     assert entry["async_job"]["kind"] == "update_embody"
 
 
-def test_peer_save_project_is_not_on_the_remote_surface(server):
-    """save_project blocks TD's main thread 15+s and, without A-30/A-31 show
-    protection, is NOT relayable to a remote peer (remote_exposed=False). A peer
-    submitting it is refused as not remote-exposed (finding 544). It remains
-    available on the LOCAL path (see test_the_local_path_keeps_both_operations)."""
+def test_peer_save_project_relays_without_the_td_python_grant(server):
+    """A node with Allow Execute TD Python off must still be savable from a
+    peer (owner, 2026-10-18): save_project runs no caller code, so a peer
+    submission is ACCEPTED ungranted, like update_embody. The gate is the
+    node's Perform Mode refusal, not this surface."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,
@@ -255,8 +257,11 @@ def test_peer_save_project_is_not_on_the_remote_surface(server):
                             operation="save_project", idempotency_key="b2-save",
                             expected_runtime_id="rt_live")
     code, body = submit_as_peer(server, envelope)
-    assert code == 403
-    assert body["reason"] == "operation_not_remote_exposed"
+    assert code == 200, body
+    assert body["created"] is True
+    entry = server.app.operations["save_project"]
+    assert entry["executes_arbitrary_code"] is False
+    assert entry["async_job"]["caller_args"] == ()
 
 
 @pytest.mark.parametrize("operation", ["run_tests", "save_project"])
