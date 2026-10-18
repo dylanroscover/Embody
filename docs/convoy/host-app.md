@@ -256,7 +256,7 @@ Cancellation is definitive for queued work but may be best effort once TouchDesi
 | Git/GitHub operation unavailable | Use a supported structured action, verify the registered repository and local CLI authentication, and align versions |
 | Version/capability mismatch | Update nodes to the same Embody release |
 | Node in Perform Mode with wake disabled | Turn on **Remote Wake** locally or leave Perform Mode manually |
-| `perform_mode` on `save_project` or `update_embody` | The node is in Perform Mode, and a save or update never runs mid-show. Leave Perform Mode on that machine, then send it again |
+| `perform_mode` on `save_project` or `update_embody` | The node is in Perform Mode or TouchDesigner's perform window is open, and a save or update never runs mid-show. Turn it off on that machine, then send it again |
 | `operation_not_exposed` on `save_project` | The controller's or the target's Convoy App predates remote saving (6.2.75). Update Embody on both machines; each Convoy App follows its Embody |
 
 TD Python and Full Shell are separate dangerous capabilities. TD Python can use operating-system process APIs, so turning Full Shell off does not make arbitrary Python safe.

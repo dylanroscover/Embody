@@ -182,7 +182,7 @@ Long-running and relayed operations are represented as **jobs**. Jobs survive a 
 - New remote work during that window restarts the timer.
 - Discovery, status, ping, job polling, and controller queries do **not** wake TouchDesigner.
 - Turning **Remote Wake** off leaves the node discoverable but refuses work that requires waking it.
-- `save_project` and `update_embody` never run mid-show, and a node in Perform Mode is not woken for them. Its host app refuses the job (`refused`), or the node itself does if it entered Perform Mode a moment earlier (`failed`); either way the reason is `perform_mode` and nothing ran.
+- `save_project` and `update_embody` never run mid-show, and a node in Perform Mode is not woken for them. Its host app refuses the job (`refused`), or the node itself does (`failed`), including when only TouchDesigner's perform window is open; either way the job's result carries code `perform_mode` and nothing ran.
 
 Remote Wake means “temporarily leave Perform Mode.” It does not launch a closed TouchDesigner process. Use the separate lifecycle tools described below when they are present in your preview build.
 
@@ -197,7 +197,7 @@ The normal restart policies are:
 | Policy | Behavior |
 |---|---|
 | `require_clean` | Default. Refuses to restart if the project is dirty, unsaved, or its state cannot be verified. |
-| `save_then_restart` | Saves first, verifies the saved state, and then restarts. A failed or uncertain save stops the restart; in Perform Mode the node refuses the save and the restart stops with `perform_mode`. |
+| `save_then_restart` | Saves first, verifies the saved state, and then restarts. A failed or uncertain save stops the restart; a dirty project on a node in Perform Mode is not saved, and the restart stops with `perform_mode`. |
 
 The public Convoy relay accepts only these two restart policies. Discard/force behavior is not exposed as a remote recovery shortcut. A restart also refuses when several Embody nodes share the same TouchDesigner process, because restarting one would silently interrupt the others.
 
@@ -220,7 +220,7 @@ Convoy's ordinary registered TouchDesigner tools are available when the node is 
 
 Self-updating Embody on a node (`update_embody`, the operation behind `convoy_update_embody`) is a registered operation, not TD Python: it installs only the sha256-verified official release and refuses downgrades, so patching a fleet never requires the dangerous grant.
 
-Saving a node's project (`save_project` through `convoy_call`) needs no grant either: it runs no caller code. **It is a development action, not for shows.** A save blocks that machine's TouchDesigner main thread for 15+ seconds, so no frames render, and restarts its Envoy server. Never send it to a machine running a show; a node in Perform Mode refuses it. `run_tests` is never relayed to another computer.
+Saving a node's project (`save_project` through `convoy_call`) needs no grant either: it runs no caller code. **It is a development action, not for shows.** A save blocks that machine's TouchDesigner main thread for 15+ seconds, so no frames render, and restarts its Envoy server. Never send it to a machine running a show; a node in Perform Mode, or with TouchDesigner's perform window open, refuses it. `run_tests` is never relayed to another computer.
 
 Structured Git and GitHub actions use named, bounded operations rather than accepting an arbitrary command line. The catalog covers repository status, remotes, branches/revision, fetch, fast-forward pull, push, branch switching, sibling worktrees, and read-only GitHub inspection; destructive Git history rewrites and force operations are not part of the default surface. Network Git is HTTPS-only.
 

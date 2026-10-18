@@ -250,8 +250,33 @@ def test_a_perform_mode_node_is_never_woken_for_a_save_or_update(
         code, response = app.dispatch_job(job["delivery_id"])
         assert code == 409 and response["reason"] == "perform_mode"
         assert response["job"]["state"] == "refused"
-        assert response["job"]["result"]["reason"] == "perform_mode"
+        assert response["job"]["result"]["code"] == "perform_mode"
         app.drain_once()
         assert calls == [] and forwarded == []
+    finally:
+        app.db.close()
+
+
+def test_a_delivery_already_forwarded_once_goes_to_the_node(tmp_path):
+    """A no-handle answer may hide a save that started; only the node's key
+    lookup can find it, so the host does not refuse that retry itself."""
+    app = hostapp.HostApp(str(tmp_path / "state"))
+    app.waker = lambda *args: {"ok": True}
+    forwarded = []
+    app.forwarder = lambda port, op, arguments: (
+        forwarded.append(op) or {"ok": True, "result": {
+            "error": "This node is in Perform Mode -- never save a project "
+                     "mid-show. Retry after Perform Mode is off.",
+            "code": "perform_mode"}})
+    try:
+        node = _register(app, awake=True)
+        job = _enqueue(app, node, operation="save_project", key="seen-once")
+        with app.lock:
+            app.db.record_dispatch_note(job["delivery_id"],
+                                        "no_node_job_handle", app._now())
+        code, response = app.dispatch_job(job["delivery_id"])
+        assert code == 200 and forwarded == ["save_project"]
+        assert response["job"]["state"] == "failed"
+        assert response["job"]["result"]["code"] == "perform_mode"
     finally:
         app.db.close()

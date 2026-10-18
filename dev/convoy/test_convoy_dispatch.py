@@ -1374,8 +1374,8 @@ def test_a_perform_mode_refusal_is_the_nodes_verdict_not_a_requeue(
         server, operation):
     """The one no-handle answer that ends the delivery: code perform_mode
     comes only after the node's idempotency lookup missed, so nothing ran
-    for this key. A requeue would wake a show machine every backoff and run
-    the save or update when the show ends (owner, 2026-10-18: refused)."""
+    for this key. A requeue would retry it every backoff and run the save or
+    update the moment the show ends (owner, 2026-10-18: refused)."""
     node = register_rt(server)
     job = enqueue_async(server, node, operation=operation, key="mid-show")
     did = job["delivery_id"]

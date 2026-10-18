@@ -4417,10 +4417,10 @@ class EnvoyMCPServer:
             A DEVELOPMENT TOOL, NOT FOR SHOWS: a save blocks
             TouchDesigner's main thread for 15+ seconds (no frames
             render) and restarts the Envoy server. Never run it against
-            a machine running a show. The node refuses it while Perform
-            Mode is on ({'error', 'code': 'perform_mode'}, no job
-            started). Convoy relays it to remote nodes without the TD
-            Python grant; the same refusal applies there.
+            a machine running a show. The node refuses it while Embody's
+            Perform Mode or TD's perform window is on ({'error', 'code':
+            'perform_mode'}, no job started). Convoy relays it to remote
+            nodes without the TD Python grant; the same refusal applies.
 
             project.save() blocks TD's main thread for many seconds (the
             TDXN strip/restore cycle plus the release-tox export) and
@@ -8686,12 +8686,13 @@ class EnvoyExt:
     def _performModeRefusal(self, action):
         """The refusal for a job that must never start mid-show, or None.
 
-        Reads _performMode, the user's Perform request, which a Convoy wake
-        leaves on: a woken show machine still refuses. The Convoy host
-        terminalises on code 'perform_mode' (NODE_TERMINAL_REFUSAL_CODES)
-        rather than requeueing the job for the whole show. Main thread."""
+        Mid-show is Embody's Perform request (_performMode, which a Convoy
+        wake leaves on) or TD's own perform window (ui.performMode), the
+        pair chopexec_exit_tagger checks. The Convoy host terminalises on
+        code 'perform_mode' (NODE_TERMINAL_REFUSAL_CODES). Main thread."""
         try:
-            performing = bool(op.Embody.ext.Embody._performMode)
+            performing = bool(op.Embody.ext.Embody._performMode
+                              or ui.performMode)
         except Exception:
             return None
         if not performing:

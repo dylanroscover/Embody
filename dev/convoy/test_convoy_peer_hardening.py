@@ -223,7 +223,7 @@ def test_peer_update_embody_relays_without_the_td_python_grant(server):
     granting arbitrary code execution (field 2026-08-19). It runs no
     caller code (sha-pinned official release, downgrade-refusing node-side
     updater), so a peer submission is ACCEPTED with TD Python unapproved --
-    unlike run_tests/save_project it is remote-exposed."""
+    unlike run_tests it is remote-exposed."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,

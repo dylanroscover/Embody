@@ -2,7 +2,9 @@
 
 This suite intentionally reads EnvoyExt through Python's AST.  A new MCP tool
 must land with either a reviewed Convoy registry classification or a reviewed
-exclusion; silently inheriting a permissive default is never allowed.
+exclusion; silently inheriting a permissive default is never allowed.  The
+node-side Perform Mode gate tests at the end execute a private EnvoyExt copy
+instead, because that gate is what makes save_project remote-exposed.
 """
 
 import ast
@@ -307,13 +309,11 @@ def test_get_job_status_is_an_explicit_relayable_poll_operation(tmp_path):
 # them in Perform Mode (owner's decision 2026-10-18). EnvoyExt is loaded as a
 # private module copy with only the TD globals these handlers touch planted.
 
-def _envoy_node(tmp_path, performing):
-    import importlib.util
+def _envoy_node(tmp_path, performing, perform_window=False):
     from types import SimpleNamespace
-    spec = importlib.util.spec_from_file_location(
-        "convoy_perform_gate_envoy_%s" % performing, ENVOY_EXT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    from test_convoy_lifecycle_hostapp import _load_envoy_ext_module
+    module = _load_envoy_ext_module()
+    module.ui = SimpleNamespace(performMode=perform_window)
     jobs = tmp_path / "jobs"
     module._jobs_dir = lambda: str(jobs)
     scheduled = []
@@ -343,6 +343,16 @@ def test_the_node_refuses_save_project_in_perform_mode(tmp_path):
     assert out["code"] in hostapp.NODE_TERMINAL_REFUSAL_CODES
     assert _job_files(jobs) == [] and scheduled == [], (
         "a refused save must mint no job and schedule no project.save()")
+
+
+def test_tds_perform_window_alone_refuses_a_save(tmp_path):
+    """Embody's Perform toggle resets on every open; a show relaunched
+    into TD's perform window is still mid-show."""
+    _module, node, jobs, scheduled = _envoy_node(
+        tmp_path, performing=False, perform_window=True)
+    out = node._save_project(idempotency_key="window-save")
+    assert out["code"] == "perform_mode"
+    assert _job_files(jobs) == [] and scheduled == []
 
 
 def test_the_node_refuses_update_embody_with_the_same_gate(tmp_path):
