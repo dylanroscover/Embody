@@ -182,7 +182,7 @@ Long-running and relayed operations are represented as **jobs**. Jobs survive a 
 - New remote work during that window restarts the timer.
 - Discovery, status, ping, job polling, and controller queries do **not** wake TouchDesigner.
 - Turning **Remote Wake** off leaves the node discoverable but refuses work that requires waking it.
-- `save_project` and `update_embody` never run mid-show, wake or not: the node refuses them in Perform Mode and the job ends `failed` with code `perform_mode`.
+- `save_project` and `update_embody` never run mid-show, and a node in Perform Mode is not woken for them. Its host app refuses the job (`refused`), or the node itself does if it entered Perform Mode a moment earlier (`failed`); either way the reason is `perform_mode` and nothing ran.
 
 Remote Wake means “temporarily leave Perform Mode.” It does not launch a closed TouchDesigner process. Use the separate lifecycle tools described below when they are present in your preview build.
 

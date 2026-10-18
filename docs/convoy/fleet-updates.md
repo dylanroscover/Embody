@@ -28,8 +28,8 @@ node's MCP server, so its next call may ride one reconnect blip.
 
 Nodes are skipped (and named in `skipped`) when they are offline, disabled,
 or in Perform Mode -- never update a machine mid-show. A plain
-`convoy_call(operation="update_embody")` that reaches a node in Perform Mode
-ends `failed` with the node's `perform_mode` refusal; nothing is retried.
+`convoy_call(operation="update_embody")` aimed at a node in Perform Mode
+ends with `perform_mode`, without waking it, and is not retried.
 
 ## Requirements and caveats
 

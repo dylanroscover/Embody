@@ -201,6 +201,11 @@ _NODE_UNKNOWN_JOB_RE = re.compile(r"no job with id", re.IGNORECASE)
 # backoff and then run the work when the show ends. Producer:
 # EnvoyExt._performModeRefusal (save_project, update_embody).
 NODE_TERMINAL_REFUSAL_CODES = frozenset({"perform_mode"})
+# The operations _performModeRefusal guards. This host refuses them too,
+# before waking a node registered in Perform Mode: a show machine is
+# never woken for work it must refuse, and a node whose Embody predates the
+# node-side gate (an older project beside a newer Convoy App) is covered.
+PERFORM_MODE_REFUSED_OPERATIONS = frozenset({"save_project", "update_embody"})
 # A running mirror is rewritten at most this often. Every successful
 # running-poll used to rewrite the whole job file for a record whose
 # state and provenance had not changed -- measured at 6-38 ms each, 200
@@ -678,7 +683,9 @@ PHASE1_OPERATIONS = {
     # seconds and restarts the Envoy server under itself, so it is never for
     # a machine running a show. The gate is the node's: it refuses in
     # Perform Mode (EnvoyExt._performModeRefusal, shared with update_embody)
-    # and this host ends that refusal (NODE_TERMINAL_REFUSAL_CODES).
+    # and this host ends that refusal (NODE_TERMINAL_REFUSAL_CODES); a node
+    # registered in Perform Mode is refused before any wake
+    # (PERFORM_MODE_REFUSED_OPERATIONS).
     "save_project": _operation(
         {}, mutating=True, executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=True, batch_eligible=False,
@@ -7490,6 +7497,29 @@ class HostApp:
             needs_td_endpoint = (
                 job["operation"] not in HOST_NATIVE_OPERATIONS
                 or job["operation"] == "convoy_restart_node")
+            if (needs_td_endpoint and node.get("perform_mode")
+                    and job["operation"] in PERFORM_MODE_REFUSED_OPERATIONS):
+                detail = {
+                    "reason": "perform_mode",
+                    "detail": "the node is in Perform Mode, and %s never "
+                              "runs mid-show; it was not delivered"
+                              % job["operation"],
+                    "operation": job.get("operation"),
+                    "at": self._now(),
+                }
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": "perform_mode", "terminal": True})
+                payload = {"ok": False, "reason": "perform_mode",
+                           "detail": detail["detail"]}
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return 409, payload
             if (needs_td_endpoint
                     and node.get("perform_mode")):
                 if not node.get("wake_active") or not port:

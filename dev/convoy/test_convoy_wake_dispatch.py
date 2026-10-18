@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 import convoy_hostapp as hostapp
 
 
@@ -228,29 +230,28 @@ def test_long_awake_dispatch_refreshes_lease_until_terminal_release(
         app.db.close()
 
 
-def test_a_perform_mode_save_refusal_releases_the_wake_once(tmp_path):
-    """A woken show machine still refuses save_project (the node reads the
-    Perform request, not the wake). The delivery ends there and the wake is
-    released -- no wake per backoff for the rest of the show."""
+@pytest.mark.parametrize("awake", [False, True])
+@pytest.mark.parametrize("operation", ["save_project", "update_embody"])
+def test_a_perform_mode_node_is_never_woken_for_a_save_or_update(
+        tmp_path, operation, awake):
+    """The host refuses these before any wake or forward: a show machine is
+    not woken for work it must refuse, and a node whose Embody predates
+    the node-side gate (beside a newer Convoy App) is covered too."""
     app = hostapp.HostApp(str(tmp_path / "state"))
     app.drain_backoff_s = 0.0
     calls = []
-    app.waker = lambda port, token, action, lease, ttl: (
-        calls.append(action) or {"ok": True})
+    app.waker = lambda *args: calls.append(args) or {"ok": True}
     forwarded = []
-    app.forwarder = lambda port, operation, arguments: (
-        forwarded.append(operation) or {"ok": True, "result": {
-            "error": "This node is in Perform Mode -- never save a project "
-                     "mid-show. Retry after Perform Mode is off.",
-            "code": "perform_mode"}})
+    app.forwarder = lambda port, op, arguments: (
+        forwarded.append(op) or {"ok": True, "result": {}})
     try:
-        node = _register(app, awake=True)
-        job = _enqueue(app, node, operation="save_project", key="show-save")
+        node = _register(app, awake=awake)
+        job = _enqueue(app, node, operation=operation, key="show-" + operation)
         code, response = app.dispatch_job(job["delivery_id"])
-        assert code == 200 and response["job"]["state"] == "failed"
-        assert calls == ["touch", "release"]
+        assert code == 409 and response["reason"] == "perform_mode"
+        assert response["job"]["state"] == "refused"
+        assert response["job"]["result"]["reason"] == "perform_mode"
         app.drain_once()
-        assert forwarded == ["save_project"]
-        assert calls == ["touch", "release"]
+        assert calls == [] and forwarded == []
     finally:
         app.db.close()
