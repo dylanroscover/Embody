@@ -1,5 +1,6 @@
-export { parseTDXN, parseTDXNLevel, getNetworkAtPath, operatorsAtLevel } from "./parseTDXN";
-export { TdxnViewer } from "./TdxnViewer";
+export { parseTDXN, parseTDXNLevel, getNetworkAtPath, operatorsAtLevel, resolveProperties } from "./parseTDXN";
+export type { TdxnProperties } from "./parseTDXN";
+export { TdxnViewer, levelOwner } from "./TdxnViewer";
 export type { TdxnViewerProps, TdxnSelection } from "./TdxnViewer";
 export type {
   GraphAnnotation,
