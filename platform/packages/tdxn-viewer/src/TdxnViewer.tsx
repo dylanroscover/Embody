@@ -23,7 +23,14 @@ import {
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
-import { operatorsAtLevel, parseTDXN, parseTDXNLevel } from "./parseTDXN";
+import {
+  getNetworkAtPath,
+  operatorsAtLevel,
+  parseTDXN,
+  parseTDXNLevel,
+  resolveProperties,
+  type TdxnProperties
+} from "./parseTDXN";
 
 /**
  * The operator a viewer click selected, with the raw TDXN fields a properties
@@ -32,7 +39,7 @@ import { operatorsAtLevel, parseTDXN, parseTDXNLevel } from "./parseTDXN";
  * page) can render the panel without a serialized callback prop. `null` = the
  * selection was cleared (a click on empty canvas).
  */
-export interface TdxnSelection {
+export interface TdxnSelection extends TdxnProperties {
   /** Drill path to the current level (COMP names, deepest last); empty at root. */
   path: string[];
   /** Node id at this level (the operator name). */
@@ -46,13 +53,49 @@ export interface TdxnSelection {
   childCount: number;
   comment?: string;
   tags?: string[];
-  /** Built-in parameters the network customized (non-default values only). */
-  parameters?: Record<string, unknown>;
-  /** Custom parameter pages (COMPs): { pageName: [par, ...] }. */
-  customPars?: Record<string, unknown>;
   /** DAT text content (shader source, scripts, tables) when the TDXN captured it,
       normalized to a single newline-joined string. Shown as a code block. */
   datContent?: string;
+}
+
+// The panel fields a raw record carries: comment, tags, every stored parameter,
+// and DAT content (one string, or an array of lines -- normalized to one).
+function recordFields(tdxn: Record<string, unknown>, raw: Record<string, unknown> | undefined) {
+  const content = raw?.dat_content;
+  return {
+    comment: typeof raw?.comment === "string" ? raw.comment : undefined,
+    tags: Array.isArray(raw?.tags) ? (raw.tags as string[]) : undefined,
+    ...(raw ? resolveProperties(tdxn, raw) : {}),
+    datContent:
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.map((line) => (typeof line === "string" ? line : String(line))).join("\n")
+          : undefined
+  };
+}
+
+/**
+ * The COMP whose network is drawn at `path` -- the document's own COMP at the
+ * root, else the COMP entered -- so a panel can show its parameters while no
+ * operator is selected. Also dispatched as `tdxnviewer:level` on every level
+ * change. Null when the path does not resolve.
+ */
+export function levelOwner(tdxn: Record<string, unknown>, path: string[]): TdxnSelection | null {
+  const net = getNetworkAtPath(tdxn, path);
+  if (!net) return null;
+  const rootName = typeof tdxn.network_path === "string" ? tdxn.network_path.split("/").pop() : "";
+  const name = path.at(-1) ?? (rootName || "/");
+  return {
+    path: [...path],
+    id: name,
+    name,
+    type: typeof net.type === "string" ? net.type : "COMP",
+    family: "COMP",
+    isComp: true,
+    childCount: operatorsAtLevel(tdxn, path).length,
+    ...recordFields(tdxn, net)
+  };
 }
 
 /** Mirrors React Flow's `PaddingWithUnit` (it isn't re-exported from
@@ -308,23 +351,6 @@ export function TdxnViewer({
     (id: string): TdxnSelection | null => {
       const gn = nodeById.get(id);
       if (!gn) return null;
-      const raw = opRecords.get(id);
-      const params =
-        raw && isPlainRecord(raw.parameters)
-          ? raw.parameters
-          : raw && isPlainRecord(raw.pars)
-            ? (raw.pars as Record<string, unknown>)
-            : undefined;
-      const customPars = raw && isPlainRecord(raw.custom_pars) ? raw.custom_pars : undefined;
-      // DAT text content (a shader's GLSL, a script DAT's Python, a table). The
-      // TDXN may store it as one string or an array of lines -- normalize to one.
-      const rawContent = raw ? raw.dat_content : undefined;
-      const datContent =
-        typeof rawContent === "string"
-          ? rawContent
-          : Array.isArray(rawContent)
-            ? rawContent.map((line) => (typeof line === "string" ? line : String(line))).join("\n")
-            : undefined;
       return {
         path: [...path],
         id,
@@ -333,14 +359,10 @@ export function TdxnViewer({
         family: gn.family,
         isComp: (gn.childCount ?? 0) > 0,
         childCount: gn.childCount ?? 0,
-        comment: raw && typeof raw.comment === "string" ? raw.comment : undefined,
-        tags: raw && Array.isArray(raw.tags) ? (raw.tags as string[]) : undefined,
-        parameters: params,
-        customPars: customPars as Record<string, unknown> | undefined,
-        datContent
+        ...recordFields(tdxn, opRecords.get(id))
       };
     },
-    [nodeById, opRecords, path]
+    [nodeById, opRecords, path, tdxn]
   );
 
   // Single entry point for changing the selection: updates the ref (sync),
@@ -470,13 +492,14 @@ export function TdxnViewer({
   }, [navigable, path]);
 
   // The selected op no longer exists after a level change -- clear it (and tell
-  // the panel) whenever the path changes. Also fires on mount, seeding the panel
-  // with its empty/placeholder state.
+  // the panel) whenever the path changes, then name the network now shown. Also
+  // fires on mount, seeding the panel with its empty/placeholder state.
   useEffect(() => {
     if (!navigable) return;
     setSelectedId(null);
     emitSelect(null);
-  }, [navigable, path, emitSelect]);
+    document.dispatchEvent(new CustomEvent("tdxnviewer:level", { detail: levelOwner(tdxn, path) }));
+  }, [navigable, path, emitSelect, tdxn]);
 
   // Fullscreen modal: a single control opens the graph as a full-viewport
   // overlay (the same ReactFlow, resized via CSS), with Escape / a close button
@@ -914,8 +937,4 @@ function channel(value: number): number {
 function handlePercent(index: number, count: number): number {
   if (count <= 1) return 50;
   return 20 + (index * 60) / (count - 1);
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

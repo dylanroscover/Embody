@@ -45,6 +45,56 @@ export function operatorsAtLevel(tdxn: TdxnDict, path: string[]): TdxnDict[] {
   return net ? networkOperators(net) : [];
 }
 
+/** Every parameter the TDXN stores for one operator (or the document's own COMP). */
+export interface TdxnProperties {
+  /** Built-in parameters: the type's shared `type_defaults` under the op's own. */
+  parameters?: Record<string, unknown>;
+  /** Custom parameter pages, `$t` template references expanded: { page: [par, ...] }. */
+  customPars?: Record<string, TdxnDict[]>;
+  /** Parameter sequences (GLSL uniforms, POP attribute blocks...): { name: [block, ...] }. */
+  sequences?: Record<string, TdxnDict[]>;
+}
+
+/**
+ * Resolve a record's parameters the way the importer does (docs/tdxn/
+ * specification.md: Type Defaults, Parameter Templates). `type_defaults` cover
+ * the operators of the export, never the document's own COMP.
+ */
+export function resolveProperties(tdxn: TdxnDict, rec: TdxnDict): TdxnProperties {
+  const out: TdxnProperties = {};
+  const type = readString(rec.type);
+  const typeDefaults = rec !== tdxn && type && isRecord(tdxn.type_defaults) ? tdxn.type_defaults[type] : null;
+  const shared = isRecord(typeDefaults) && isRecord(typeDefaults.parameters) ? typeDefaults.parameters : null;
+  const own = isRecord(rec.parameters) ? rec.parameters : isRecord(rec.pars) ? rec.pars : null;
+  if (shared || own) out.parameters = { ...shared, ...own };
+
+  if (isRecord(rec.custom_pars)) {
+    const templates = isRecord(tdxn.par_templates) ? tdxn.par_templates : {};
+    const pages: Record<string, TdxnDict[]> = {};
+    for (const [page, pars] of Object.entries(rec.custom_pars)) {
+      if (Array.isArray(pars)) {
+        pages[page] = asRecords(pars);
+      } else if (isRecord(pars) && typeof pars.$t === "string") {
+        // A template page: the definitions live in par_templates, every other
+        // key is a value override (parameter name -> current value).
+        pages[page] = asRecords(templates[pars.$t]).map((def) => {
+          const name = readString(def.name);
+          if (!name || !(name in pars)) return def;
+          return { ...def, [Array.isArray(pars[name]) ? "values" : "value"]: pars[name] };
+        });
+      }
+    }
+    out.customPars = pages;
+  }
+
+  if (isRecord(rec.sequences)) {
+    const sequences: Record<string, TdxnDict[]> = {};
+    for (const [name, blocks] of Object.entries(rec.sequences)) sequences[name] = asRecords(blocks);
+    out.sequences = sequences;
+  }
+  return out;
+}
+
 /**
  * Parse the WHOLE network into one flat graph, recursing into every nested COMP
  * so all descendants are drawn at once. This is the dense, all-in-one-plane view

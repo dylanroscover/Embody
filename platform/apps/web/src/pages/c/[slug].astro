@@ -1,7 +1,7 @@
 ---
 import { env } from "cloudflare:workers";
 import type { SpecimenDetail } from "@embody/contracts";
-import { TdxnViewer } from "@embody/tdxn-viewer";
+import { TdxnViewer, levelOwner } from "@embody/tdxn-viewer";
 import CopyTdxnEnvelopeButton from "../../components/CopyTdxnEnvelopeButton";
 import TdxnYamlViewer from "../../components/TdxnYamlViewer";
 import Base from "../../layouts/Base.astro";
@@ -118,6 +118,12 @@ try {
   tdxn = specimenGraph(specimen.slug) ?? sampleTdxn;
   rawTdxn = tdxnToYaml(tdxn);
 }
+
+// The network's own COMP for the properties panel while nothing is selected.
+// Rendered from the page rather than the viewer's mount-time `tdxnviewer:level`,
+// which can fire before the panel script listens. `<` is escaped so a specimen's
+// text can never close the script tag.
+const rootOwnerJson = JSON.stringify(levelOwner(tdxn, [])).replace(/</g, "\\u003c");
 
 // Quick counts for the raw-YAML viewer's summary bar.
 const countOf = (k: string): number => (Array.isArray(tdxn[k]) ? (tdxn[k] as unknown[]).length : 0);
@@ -732,6 +738,7 @@ function emitKey(key: string): string {
           <p class="props-empty__hint mono">single click selects &middot; double click enters a COMP</p>
         </div>
         <div class="props-content" data-props-content hidden></div>
+        <script type="application/json" data-props-owner set:html={rootOwnerJson} />
       </div>
     </aside>
 
@@ -1008,9 +1015,10 @@ function emitKey(key: string): string {
     }
 
     // ---- Properties panel: render the selected operator ------------------------
-    // The TdxnViewer dispatches `tdxnviewer:select` with the op's customized
-    // parameters (or null when the selection is cleared). We render only what the
-    // TDXN actually stores -- the values this network changed from defaults.
+    // The TdxnViewer dispatches `tdxnviewer:select` with every parameter the TDXN
+    // stores for the op (or null when the selection is cleared), and
+    // `tdxnviewer:level` with the network's own COMP, shown while nothing is
+    // selected. Built-in values are the ones this network changed from defaults.
     {
       const FAMILY_COLORS: Record<string, string> = {
         TOP: "#9d8cdb", CHOP: "#7cc45a", SOP: "#5fa3dd", POP: "#7a78ec",
@@ -1032,7 +1040,11 @@ function emitKey(key: string): string {
           if (value.startsWith("~")) return { text: value, kind: "bind" };
           return { text: value.length ? value : '""', kind: "str" };
         }
-        if (Array.isArray(value)) return { text: `[${value.map((v) => String(v)).join(", ")}]`, kind: "num" };
+        if (Array.isArray(value)) {
+          const parts = value.map(formatValue);
+          const live = parts.find((p) => p.kind === "expr" || p.kind === "bind");
+          return { text: `[${parts.map((p) => p.text).join(", ")}]`, kind: live ? live.kind : "num" };
+        }
         if (typeof value === "boolean") return { text: value ? "on" : "off", kind: "bool" };
         if (value === null || value === undefined) return { text: "null", kind: "null" };
         if (typeof value === "number") return { text: String(value), kind: "num" };
@@ -1046,14 +1058,69 @@ function emitKey(key: string): string {
         k.title = key;
         r.appendChild(k);
         const fv = formatValue(value);
-        const v = el("span", `prop-row__val is-${fv.kind}`, fv.text);
-        v.title = fv.text;
-        r.appendChild(v);
+        r.appendChild(el("span", `prop-row__val is-${fv.kind}`, fv.text));
         return r;
       };
 
-      const render = (sel: any) => {
+      // A captioned block of rows; `count` reads beside the caption. A caption
+      // with a count but no rows still says how many blocks a sequence holds.
+      const section = (title: string | null, rows: HTMLElement[], count?: string) => {
+        if (!content || (!rows.length && !count)) return false;
+        if (title) {
+          const label = el("p", "prop-group", title);
+          if (count) label.appendChild(el("span", "prop-code-count", ` ${count}`));
+          content.appendChild(label);
+        }
+        if (rows.length) {
+          const g = el("div", "prop-rows");
+          rows.forEach((r) => g.appendChild(r));
+          content.appendChild(g);
+        }
+        return true;
+      };
+
+      // Custom parameters (docs/tdxn/specification.md, Custom Parameters): tuplet
+      // sizes by style, and the styles with no value. A Sequence header and its
+      // member pars are drawn from the op's sequences instead.
+      const TUPLET: Record<string, number> = { XY: 2, XYZ: 3, XYZW: 4, WH: 2, UV: 2, UVW: 3, RGB: 3, RGBA: 4 };
+      const NO_VALUE = new Set(["Header", "Pulse", "Momentary", "Sequence"]);
+      // The stored value(s), else the `default` the importer seeds from, else
+      // TD's standard 0 / "" / off; a scalar default spans every component.
+      const customValue = (par: any): unknown => {
+        if ("values" in par) return par.values;
+        if ("value" in par) return par.value;
+        const size = Number(par.size) || TUPLET[par.style] || 1;
+        const standard = par.style === "Toggle" ? false : TUPLET[par.style] || /^(Float|Int)$/.test(par.style) ? 0 : "";
+        const value = "default" in par ? par.default : standard;
+        return size > 1 && !Array.isArray(value) ? Array(size).fill(value) : value;
+      };
+
+      // Hovering a clipped value shows it whole, at once (a native title waits
+      // ~1s and never shows on touch). Any other hover, or a scroll, hides it.
+      const tip = el("div", "prop-tip");
+      tip.hidden = true;
+      document.body.appendChild(tip);
+      const hideTip = () => { tip.hidden = true; };
+      content?.addEventListener("mouseover", (e) => {
+        const v = (e.target as HTMLElement).closest<HTMLElement>(".prop-row__val");
+        if (!v || v.scrollWidth <= v.clientWidth) return hideTip();
+        tip.textContent = v.textContent;
+        tip.style.color = getComputedStyle(v).color;
+        tip.style.left = tip.style.top = "0px";
+        tip.hidden = false;
+        const r = v.getBoundingClientRect();
+        const t = tip.getBoundingClientRect();
+        const below = r.bottom + 6;
+        tip.style.left = `${Math.max(16, Math.min(r.left, innerWidth - t.width - 16))}px`;
+        tip.style.top = `${below + t.height <= innerHeight - 16 ? below : Math.max(16, r.top - 6 - t.height)}px`;
+      });
+      content?.addEventListener("mouseleave", hideTip);
+      content?.closest(".props-body")?.addEventListener("scroll", hideTip, { passive: true });
+
+      // `isOwner`: the network's own COMP, shown while nothing is selected.
+      const render = (sel: any, isOwner = false) => {
         if (!content || !empty) return;
+        hideTip();
         content.replaceChildren();
 
         // Header: a family-colored title bar (op name + type), echoing the node
@@ -1064,45 +1131,32 @@ function emitKey(key: string): string {
         head.appendChild(el("span", "prop-head__type", sel.type));
         content.appendChild(head);
 
-        if (sel.isComp) {
+        if (isOwner) {
+          content.appendChild(el("p", "prop-comp-hint", "this network - click an operator to inspect it"));
+        } else if (sel.isComp) {
           const n = sel.childCount || 0;
           content.appendChild(el("p", "prop-comp-hint", `COMP - double-click to enter${n ? ` (${n} ops)` : ""}`));
         }
         if (sel.comment) content.appendChild(el("p", "prop-comment", sel.comment));
 
-        let any = false;
+        let any = section(null, Object.entries(sel.parameters ?? {}).map(([k, v]) => row(k, v)));
 
-        const params = sel.parameters && typeof sel.parameters === "object" ? sel.parameters : null;
-        if (params) {
-          const rows = Object.entries(params).map(([k, v]) => row(k, v));
-          if (rows.length) {
-            const g = el("div", "prop-rows");
-            rows.forEach((r) => g.appendChild(r));
-            content.appendChild(g);
-            any = true;
-          }
+        // Parameter sequences (GLSL uniforms, POP attribute blocks...) under TD's
+        // own par names, `{sequence}{block}{par}`: vec1valuex.
+        for (const [seq, blocks] of Object.entries<any>(sel.sequences ?? {})) {
+          if (!Array.isArray(blocks)) continue;
+          const rows = blocks.flatMap((block: any, i: number) =>
+            Object.entries(block ?? {}).map(([k, v]) => row(`${seq}${i}${k}`, v))
+          );
+          any = section(seq, rows, `${blocks.length} ${blocks.length === 1 ? "block" : "blocks"}`) || any;
         }
 
-        // Custom parameter pages (COMPs): { page: [ {name,label,value,default}, ...] }.
-        const custom = sel.customPars && typeof sel.customPars === "object" ? sel.customPars : null;
-        if (custom) {
-          const rows: HTMLElement[] = [];
-          for (const pars of Object.values<any>(custom)) {
-            if (!Array.isArray(pars)) continue;
-            for (const par of pars) {
-              if (!par || typeof par !== "object") continue;
-              const name = par.label || par.name;
-              if (!name) continue;
-              rows.push(row(String(name), "value" in par ? par.value : par.default));
-            }
-          }
-          if (rows.length) {
-            content.appendChild(el("p", "prop-group", "custom"));
-            const g = el("div", "prop-rows");
-            rows.forEach((r) => g.appendChild(r));
-            content.appendChild(g);
-            any = true;
-          }
+        // Custom parameter pages, one caption each: { page: [par, ...] }.
+        for (const [page, pars] of Object.entries<any>(sel.customPars ?? {})) {
+          const rows = (Array.isArray(pars) ? pars : [])
+            .filter((p: any) => p && (p.label || p.name) && !NO_VALUE.has(p.style) && !p.sequence)
+            .map((p: any) => row(String(p.label || p.name), customValue(p)));
+          any = section(page, rows) || any;
         }
 
         // DAT text content (shader source / scripts / tables) as a line-numbered
@@ -1137,17 +1191,35 @@ function emitKey(key: string): string {
         content.hidden = false;
       };
 
+      // The network's own COMP: the page renders the root's (a mount-time level
+      // event can beat this script), and each level change replaces it.
+      let owner: any = null;
+      let selected = false;
+      try {
+        owner = JSON.parse(document.querySelector("[data-props-owner]")?.textContent || "null");
+      } catch {
+        owner = null;
+      }
+
       const clear = () => {
         if (!content || !empty) return;
+        if (owner) return render(owner, true);
+        hideTip();
         content.hidden = true;
         content.replaceChildren();
         empty.hidden = false;
       };
+      clear();
 
       document.addEventListener("tdxnviewer:select", (e) => {
         const detail = (e as CustomEvent).detail;
+        selected = Boolean(detail);
         if (detail) render(detail);
         else clear();
+      });
+      document.addEventListener("tdxnviewer:level", (e) => {
+        owner = (e as CustomEvent).detail;
+        if (!selected) clear();
       });
     }
 
@@ -2448,15 +2520,24 @@ function emitKey(key: string): string {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* A long value scrolls sideways rather than clipping to an ellipsis (Chrome
+     keeps the ellipsis even scrolled to the end, so the two cannot mix). The
+     scrollbar is hidden; scroll shadows mark an edge the text runs past: each
+     `local` cover rides the content's end and hides the fixed `scroll` glow. */
   .prop-row__val {
     padding: 2px 7px;
     border: 1px solid var(--border-faint);
     border-radius: 4px;
-    background: var(--bg-code);
+    background:
+      linear-gradient(to right, var(--bg-code) 50%, transparent) left / 32px 100% no-repeat local,
+      linear-gradient(to left, var(--bg-code) 50%, transparent) right / 32px 100% no-repeat local,
+      linear-gradient(to right, color-mix(in srgb, currentColor 30%, transparent), transparent) left / 14px 100% no-repeat scroll,
+      linear-gradient(to left, color-mix(in srgb, currentColor 30%, transparent), transparent) right / 14px 100% no-repeat scroll,
+      var(--bg-code);
     color: var(--text);
     font: 12px/1.5 var(--font-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-x: auto;
+    scrollbar-width: none;
     white-space: nowrap;
   }
   /* Expressions (= prefix) and binds (~ prefix) read as live, not constant. */
@@ -2465,6 +2546,22 @@ function emitKey(key: string): string {
   .prop-row__val.is-num { color: var(--tdxn-num, #d79a73); }
   .prop-row__val.is-bool { color: var(--tdxn-kw, #c79bd1); }
   .prop-row__val.is-null { color: var(--text-faint); }
+  /* The whole value of a clipped field, on hover. One shared node on <body>,
+     placed in JS; it never takes the cursor, so selecting in the field works. */
+  .prop-tip {
+    position: fixed;
+    z-index: 120;
+    max-width: min(440px, calc(100vw - 32px));
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+    font: 12px/1.5 var(--font-mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+  }
   .prop-empty-note {
     margin: 4px 0 0;
     color: var(--text-faint);
