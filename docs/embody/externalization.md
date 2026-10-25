@@ -363,6 +363,8 @@ A beat after the agent (or you) goes idle, Embody writes each changed TDXN COMP 
 
 On the next open after a crash, recovery runs even in Export-on-Save mode: any TDXN COMP that has a `.tdxn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdxn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDXN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
 
+The same holds when you close without saving right after your first externalization: the `.toe` on disk predates Embody's tracking file, so on open Embody re-links `externalizations.tsv` (only when that file is newer than the `.toe`, and no other project's `.toe` beside it was saved since), puts the tags back, and rebuilds the COMPs you built after that save.
+
 So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDXN page; see [Configuration](configuration.md#tdxn).
 
 ## Export Portable Tox

@@ -7,7 +7,7 @@
 1. **Check the Textport** (Alt+T) — Embody logs all startup messages there. Look for lines starting with `[Envoy]`.
 2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for the error in the Textport, then toggle Envoy off and on to rebuild. Never pip-install into `.venv` yourself — Embody owns that environment and rebuilds it (including your declared extras) on its own; see [Python Environment](../embody/python-environment.md).
    On Windows, also add `"pywin32>=311"`.
-3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
+3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871). One `Server error: Port 9871 is already in use. Another Envoy instance or process may be bound to it.` WARNING right after two TouchDesigners start together is expected: both picked the same free port, and the loser moves to the next one on its own.
 4. **TD version too old:** Envoy requires TouchDesigner **2025.33230** or later.
 
 ## Port Climbs on Every Restart, Then Envoy Disables Itself
