@@ -59,6 +59,11 @@ Both mean a TOX-tracked COMP's **External .tox** now points at a different file 
 
 If the COMP was never meant to be tracked (a `tox` tag that predates Embody), remove its tracking in the manager and keep the file. If the new file is the one to track, remove the tracking and externalize the COMP again.
 
+### "Refusing to tag" or "Embody Is Tracking Itself"
+
+- **"Refusing to tag '...'"** (a **WARNING**): the operator can never be externalized: Embody itself or anything inside it, TouchDesigner's system COMPs (`/perform`, `/ui`, `/sys`, `/local`) or anything inside them, the root `/`, an annotation, or a TOX tag on the COMP that holds Embody (tag that one TDXN). A tag typed by hand on such an operator logs **"Not externalizing '...'"** instead. See [What stays out](externalization.md#what-stays-out).
+- **The "Embody -- Embody Is Tracking Itself" dialog** appears after updating a project that Externalize Full Project over-tagged in Embody 6.2.75 or earlier. See [Cleaning up after Embody 6.2.75 or earlier](externalization.md#cleaning-up-after-embody-6275-or-earlier).
+
 ### Cross-Platform Issues
 
 Embody normalizes all paths to forward slashes (`/`). If you're collaborating across Windows and macOS and encountering path issues, ensure you're using a recent version of Embody with cross-platform path handling.

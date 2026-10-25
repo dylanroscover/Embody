@@ -2256,6 +2256,46 @@ class EmbodyExt:
     # skipped the same way by _cleanupEmptyDirectories.)
     _BUILTIN_ROOT_COMPS = frozenset({'local', 'perform', 'sys', 'ui'})
 
+    def _isInsideEmbody(self, path: str) -> bool:
+        """True for Embody's own COMP or anything inside it."""
+        return path == self.my.path or path.startswith(self.my.path + '/')
+
+    def _isSystemPath(self, path: str) -> bool:
+        """True for TouchDesigner's own root COMPs and everything inside
+        them: never user content, and a TDXN export skips their children."""
+        return path.strip('/').split('/', 1)[0] in self._BUILTIN_ROOT_COMPS
+
+    def _holdsEmbody(self, path: str) -> bool:
+        """True for a COMP that contains Embody: an ancestor, or the root."""
+        return self.my.path.startswith(path.rstrip('/') + '/')
+
+    def _isProtectedPath(self, path: str) -> bool:
+        """True where a strip, rebuild or reload must never run: the root,
+        Embody itself, its ancestors and descendants (self-destruction), and
+        TouchDesigner's system COMPs (an empty export, then a strip, issue
+        #176)."""
+        return (self._isInsideEmbody(path) or self._holdsEmbody(path)
+                or self._isSystemPath(path))
+
+    def _isToxOverEmbody(self, path: str, tag: str) -> bool:
+        """True for a TOX tag on a COMP that holds Embody: the .tox embeds
+        Embody (1.7 MB per save), and reloading it replaces the running
+        Embody (issue #110). TDXN skips Embody, so it stays allowed."""
+        return (self._holdsEmbody(path)
+                and (tag == 'tox' or tag in self.getTags('tox')))
+
+    def embodyOwnedPaths(self) -> frozenset:
+        """Embody's COMP, and its externalizations table where it sits in a
+        protected COMP (beside Embody or above it): Embody state, never part
+        of a user COMP's .tdxn (issue #176). A table moved into user content
+        exports as content, or a Roundtrip rebuild of that COMP would lose
+        it."""
+        table = self.Externalizations
+        owned = {self.my.path}
+        if table is not None and self._isProtectedPath(table.parent().path):
+            owned.add(table.path)
+        return frozenset(owned)
+
     def _projectLooksExternalized(self) -> bool:
         """Best-effort: does this project already write itself out to disk?
 
@@ -3274,8 +3314,96 @@ class EmbodyExt:
             if str(self.my.par.Externalizations.val).startswith('/'):
                 self._linkExternalizationsTable(externalizations_dat)
                 self.Log('Externalizations link rewritten relative', 'DEBUG')
+            self._relinkTableToDisk(externalizations_dat)
             return
         self.createExternalizationsTable()
+
+    # The time of Disable(), stored on the tracking table and cleared by
+    # enabling: the table, not Embody, so it never ships in a release .tox.
+    _DISABLED_MARK = '_embody_disabled'
+
+    def _relinkTableToDisk(self, table: Optional[DAT]) -> bool:
+        """Point an unlinked, empty tracking table at its .tsv on disk.
+
+        The table gets its file only when a sweep first externalizes it, so
+        a .toe saved before that reopens with no rows, and reconcileMetadata
+        and the restores have nothing to work from (issue #176). Adopts the
+        file only on evidence it is this project's record: the table carries
+        Embody's tag, the header is Embody's, the file is newer than the
+        saved .toe and than a Disable here (_DISABLED_MARK), and no other
+        project's .toe beside this one was saved after it (two .toe files in
+        one folder share one .tsv path). Its rows may name operators the
+        .toe lacks: those were built after that save, and the restores bring
+        them back. Loads the rows before linking, so the sync can never
+        write the empty table over the record. Never links over rows, never
+        writes the file.
+        """
+        if (table is None or table.par.file.eval() or table.numRows > 1
+                or not set(self.getTags()).intersection(table.tags)
+                or not self._projectSavedOnDisk()):
+            return False
+        _, save_path, _, rel = self.getOpPaths(table)
+        if not rel or save_path is None or not Path(save_path).is_file():
+            return False
+        toe = self._resolveProjectToe()
+        try:
+            written = Path(save_path).stat().st_mtime
+            disabled = table.fetch(self._DISABLED_MARK, None, search=False)
+            if ((toe and written < os.path.getmtime(toe))
+                    or (disabled is not None and written <= float(disabled))
+                    or self._newerOtherProject(toe, written)):
+                return False
+            text = Path(save_path).read_text(encoding='utf-8')
+        except (OSError, ValueError) as e:
+            self.Log(f"Could not read {rel} to re-link '{table.path}': {e}",
+                     'WARNING')
+            return False
+        header = text.splitlines()[0].split('\t') if text.strip() else []
+        if 'path' not in header or 'rel_file_path' not in header:
+            self.Log(f"Not re-linking '{table.path}': {rel} is not an "
+                     f"Embody tracking file", 'WARNING')
+            return False
+        table.text = text
+        self.setExternalPath(table, rel)
+        table.par.syncfile = True
+        # Rows on disk prove the unsaved session was enabled, and a .toe saved
+        # before the first sweep still reads Disabled, which makes Update and
+        # reconcileMetadata return at once. A Disable marks the table, so
+        # this never overrides one.
+        if self.my.par.Status == 'Disabled' and table.numRows > 1:
+            self.my.par.Status = 'Enabled'
+            self.param_tracker.initializeTracking(self)
+        self.Log(f"Re-linked '{table.path}' to {rel} ({table.numRows - 1} "
+                 f"row(s)): the project was saved before Embody first wrote "
+                 f"it", 'INFO')
+        return True
+
+    @staticmethod
+    def _newerOtherProject(toe: Optional[str], since: float) -> bool:
+        """True when another project's .toe beside `toe` was saved after
+        `since`. Increments of this project and TD's CrashAutoSave copy of
+        it are this project's."""
+        if not toe:
+            return False
+        folder, name = os.path.split(toe)
+
+        def series(n):
+            return re.sub(r'(\.\d+)?\.toe$', '', n, flags=re.I).lower()
+
+        own = series(name)
+        try:
+            names = [n for n in os.listdir(folder) if n.lower().endswith('.toe')]
+        except OSError:
+            return False
+        for n in names:
+            if series(n) in (own, 'crashautosave.' + own):
+                continue
+            try:
+                if os.path.getmtime(os.path.join(folder, n)) > since:
+                    return True
+            except OSError:
+                pass
+        return False
 
     def _migrateTableSchema(self) -> None:
         """Migrate externalizations table schema to current version.
@@ -3739,6 +3867,8 @@ class EmbodyExt:
         # creates a race condition if re-enabled before the callback fires)
         if self.Externalizations:
             self.Externalizations.clear(keepFirstRow=True)
+            import time
+            self.Externalizations.store(self._DISABLED_MARK, time.time())
 
         self.my.par.Status = 'Disabled'
 
@@ -3824,6 +3954,8 @@ class EmbodyExt:
         if self.my.par.Status == 'Disabled':
             self.Log("Enabled", "SUCCESS")
             self.my.par.Status = 'Enabled'
+            if self.Externalizations:
+                self.Externalizations.unstore(self._DISABLED_MARK)
             self.param_tracker.initializeTracking(self)
             
             # Create externalization folder (makedirs handles missing parents)
@@ -3979,6 +4111,39 @@ class EmbodyExt:
                 if save_dirty:
                     self.Save(comp.path)
 
+    def _isSubtraction(self, oper: OP, tdxn_paths: set, all_tags: list) -> bool:
+        """True when a tracked op lost its tag by a user's hand: untrack it.
+
+        TDXN-strategy COMPs are excluded -- their lifecycle is managed by
+        ToggleTag() -> _removeTDXNStrategy(), not by tag-presence detection.
+        Without this, Full Project TDXN exports (which track "/" in the table
+        without tagging the root) get incorrectly removed as "subtractions".
+        Embody's own operators lose their tags on every update reload, not by
+        a user's hand: where they are not tracked on purpose their rows wait
+        for untrackStrayExternalizations, which can still delete their files
+        (issue #176).
+        """
+        return (oper.path not in tdxn_paths
+                and not set(all_tags).intersection(oper.tags)
+                and not oper.warnings()
+                and not oper.scriptErrors()
+                and self.isOpProcessable(oper)
+                and not self._keepsOwnRows(oper.path))
+
+    def _refusesTypedTag(self, oper: OP, all_tags: list) -> bool:
+        """True when a tag typed by hand is one the tagger would refuse;
+        warns once per op until the extension next reinitializes."""
+        for tag in set(all_tags).intersection(oper.tags):
+            reason = self._tagRefusal(oper, tag)
+            if reason:
+                warned = self.__dict__.setdefault('_refused_tag_paths', set())
+                if oper.path not in warned:
+                    warned.add(oper.path)
+                    self.Log(f"Not externalizing '{oper.path}' ({tag}): "
+                             f"{reason}", 'WARNING')
+                return True
+        return False
+
     def _updateScan(self) -> tuple:
         """Update phase 2 (shared): duplicates check + additions/
         subtractions discovery. Returns (tdxn_paths, additions,
@@ -4007,20 +4172,11 @@ class EmbodyExt:
             if oper.path not in externalized_paths
             and set(all_tags).intersection(oper.tags)
             and self.isOpProcessable(oper)
+            and not self._refusesTypedTag(oper, all_tags)
         ]
 
-        # TDXN-strategy COMPs are excluded -- their lifecycle is managed by
-        # ToggleTag() -> _removeTDXNStrategy(), not by tag-presence detection.
-        # Without this, Full Project TDXN exports (which track "/" in the table
-        # without tagging the root) get incorrectly removed as "subtractions".
-        subtractions = [
-            oper for oper in externalized_ops
-            if oper.path not in tdxn_paths
-            and not set(all_tags).intersection(oper.tags)
-            and not oper.warnings()
-            and not oper.scriptErrors()
-            and self.isOpProcessable(oper)
-        ]
+        subtractions = [oper for oper in externalized_ops
+                        if self._isSubtraction(oper, tdxn_paths, all_tags)]
 
         additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
 
@@ -4510,6 +4666,9 @@ class EmbodyExt:
         """
         if self._performMode:
             return False
+        if self._skipsOwnExport(opPath):
+            # every save loop lands here, as saveTDXN for TDXN rows
+            return False
         try:
             oper = op(opPath)
             if not oper or oper.family != 'COMP':
@@ -4633,6 +4792,10 @@ class EmbodyExt:
             return False
         if not self._tdxnEnabled():
             self.Log(f'TDXN disabled -- skipping saveTDXN for {opPath}', 'INFO')
+            return False
+        if self._skipsOwnExport(opPath):
+            self.Log(f"Not exporting Embody's own {opPath}: this project does "
+                     f"not track Embody's operators", 'DEBUG')
             return False
         try:
             oper = op(opPath)
@@ -6445,7 +6608,8 @@ class EmbodyExt:
     @staticmethod
     def _computeTDXNFingerprint(comp, tdxn_paths: Optional[set] = None,
                                exclude_tag: Optional[str] = None,
-                               ext_tags: Optional[frozenset] = None) -> tuple:
+                               ext_tags: Optional[frozenset] = None,
+                               skip_paths: Optional[frozenset] = None) -> tuple:
         """Compute a hashable fingerprint of a TDXN COMP's network structure.
 
         Used instead of oper.dirty for TDXN COMPs (which always reads True
@@ -6463,6 +6627,8 @@ class EmbodyExt:
 
         ext_tags carries that boundary (see _extBoundaryTags). Pass it:
         tdxn_paths alone under-reports -- see the boundary comment below.
+        skip_paths are children the export omits at any depth
+        (embodyOwnedPaths); untagged, Embody was ~600 ops walked per sweep.
         """
         parts = []
         # The root COMP's own parameters are part of its TDXN export, so a
@@ -6481,6 +6647,8 @@ class EmbodyExt:
             # (e.g. a runtime-materialized copy) would dirty its parent on
             # every change the app makes to it.
             if exclude_tag and c.isCOMP and exclude_tag in c.tags:
+                continue
+            if skip_paths and c.path in skip_paths:
                 continue
             color = tuple(round(v, 4) for v in c.color)
             tags = tuple(sorted(c.tags))
@@ -6547,7 +6715,7 @@ class EmbodyExt:
                 # -- otherwise an app edit to a nested "excluded" COMP would
                 # go undetected and the .tdn would drift stale.
                 child_fp = EmbodyExt._computeTDXNFingerprint(
-                    c, tdxn_paths, None, ext_tags)
+                    c, tdxn_paths, None, ext_tags, skip_paths)
                 parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) -- uses annotation-specific attrs
         is_bot_template = comp.name == _VIZ_BOT_TEMPLATE_COMP
@@ -6638,8 +6806,12 @@ class EmbodyExt:
         Callers sweeping many COMPs in one pass (Update/dirtyHandler) should
         precompute tdxn_paths + exclude_tag + ext_tags once and pass them in, so
         the per-COMP full-table scan in _getTDXNPaths() and the par.eval()s
-        don't repeat for every COMP on every Refresh.
+        don't repeat for every COMP on every Refresh. Embody's own operators
+        are never dirty where they are not tracked on purpose
+        (_skipsOwnExport), so no sweep walks or exports them.
         """
+        if self._skipsOwnExport(comp.path):
+            return False
         if tdxn_paths is None:
             tdxn_paths = self._getTDXNPaths()
         if exclude_tag is None:
@@ -6647,7 +6819,7 @@ class EmbodyExt:
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
         current = self._computeTDXNFingerprint(comp, tdxn_paths, exclude_tag,
-                                              ext_tags)
+                                              ext_tags, self.embodyOwnedPaths())
         stored = self._tdn_fingerprints.get(comp.path)
         if stored is None:
             # No stored fingerprint -- assume clean (just initialized)
@@ -6670,7 +6842,7 @@ class EmbodyExt:
         if ext_tags is None:
             ext_tags = self._extBoundaryTags()
         self._tdn_fingerprints[comp.path] = self._computeTDXNFingerprint(
-            comp, tdxn_paths, exclude_tag, ext_tags)
+            comp, tdxn_paths, exclude_tag, ext_tags, self.embodyOwnedPaths())
 
     # The externalizations `strategy` cell is USER-FACING (documented, and
     # the manager shows it), so it reads 'tdxn'. Internally the wire value
@@ -7157,6 +7329,11 @@ class EmbodyExt:
             # rel_file_path and erase the recovery pointer.
             if oper.family == 'DAT' and not hasattr(oper.par, 'file'):
                 continue
+            # An update reload empties the file pars of Embody's own DATs;
+            # syncing would blank their rows, the pointer
+            # untrackStrayExternalizations deletes by (issue #176).
+            if self._keepsOwnRows(oper.path):
+                continue
 
             current_path = self.getExternalPath(oper)
             try:
@@ -7344,6 +7521,9 @@ class EmbodyExt:
             # (applyTagToOperator also refuses them -- this skip just keeps
             # the cascade quiet instead of logging a refusal per annotate.)
             if child.type == 'annotate':
+                continue
+            # Embody is never part of its container's file (issue #176).
+            if child == self.my:
                 continue
             # Exclude tag wins over cascade auto-tagging: never automatically
             # mark an excluded COMP for TDXN. (Explicit user tagging still works.)
@@ -9700,17 +9880,12 @@ class EmbodyExt:
             return False
 
         if tag not in oper.tags:
-            # Annotations and their internals are never taggable -- same
-            # refusal as applyTagToOperator (the tagger UI routes here, not
-            # through the chokepoint). The REMOVE branch below stays
-            # unguarded so legacy-tagged annotates can always be cleaned up.
-            if (oper.family == 'COMP' and oper.type == 'annotate') \
-                    or self._isInsideAnnotate(oper):
-                self.Log(
-                    f"Refusing to tag '{oper.path}': annotations and their "
-                    f"internals are captured semantically by the parent TDXN "
-                    f"COMP's annotations: section, never externalized per-op",
-                    'WARNING')
+            # Same refusals as applyTagToOperator (the tagger UI routes here,
+            # not through the chokepoint). The REMOVE branch below stays
+            # unguarded so a legacy tag can always be cleaned up.
+            reason = self._tagRefusal(oper, tag)
+            if reason:
+                self.Log(f"Refusing to tag '{oper.path}': {reason}", 'WARNING')
                 return False
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
@@ -10081,6 +10256,29 @@ class EmbodyExt:
             pass
         return False
 
+    def _tagRefusal(self, oper: OP, tag: str) -> Optional[str]:
+        """Why tag may never go on oper, or None. Asked by every path that
+        tags: applyTagToOperator, the tagger and the Update sweep (a tag
+        typed by hand)."""
+        if oper.path == '/':
+            return "the root can't be tagged: keep your work inside a COMP"
+        if (self._isInsideEmbody(oper.path)
+                and self._ownTrackingChoice() is not True):
+            return ("Embody's own operators are not externalized into your "
+                    "project")
+        if (oper.family == 'COMP' and oper.type == 'annotate') \
+                or self._isInsideAnnotate(oper):
+            return ("annotations and their internals are captured "
+                    "semantically by the parent TDXN COMP's annotations: "
+                    "section, never externalized per-op")
+        if self._isSystemPath(oper.path):
+            return ("TouchDesigner's system COMPs and everything inside them "
+                    "are never externalized")
+        if oper.family == 'COMP' and self._isToxOverEmbody(oper.path, tag):
+            return ("it holds Embody, and its .tox would carry all of Embody. "
+                    "Tag it TDXN instead")
+        return None
+
     def applyTagToOperator(self, oper: OP, tag: str) -> bool:
         """Apply a tag to an operator. Enforces mutual exclusivity.
 
@@ -10088,14 +10286,13 @@ class EmbodyExt:
         exclusively through the parent TDXN's semantic `annotations:`
         section, and its internals are TD-managed stock widgetry --
         tagging either creates per-op boundaries whose reconstruction
-        guts the widget and strands orphan files."""
-        if (oper.family == 'COMP' and oper.type == 'annotate') \
-                or self._isInsideAnnotate(oper):
-            self.Log(
-                f"Refusing to tag '{oper.path}': annotations and their "
-                f"internals are captured semantically by the parent TDXN "
-                f"COMP's annotations: section, never externalized per-op",
-                'WARNING')
+        guts the widget and strands orphan files.
+
+        TouchDesigner's system COMPs refuse tags too: their export skips
+        every child, so a strip then rebuilt them empty (issue #176)."""
+        reason = self._tagRefusal(oper, tag)
+        if reason:
+            self.Log(f"Refusing to tag '{oper.path}': {reason}", 'WARNING')
             return False
         color = self._getTagColor(oper, tag)
         if color is None:
@@ -10713,9 +10910,11 @@ class EmbodyExt:
                        if export_combo else '')
         choice = self._messageBox('Embody -- Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
-            '(Palette components, clones, and replicants will be ignored)\n\n'
+            '(Embody itself, TouchDesigner\'s system COMPs, palette\n'
+            'components, clones, and replicants are skipped)\n\n'
             '  TOX: Externalize each COMP as a .tox file.\n'
-            '  TDXN: Externalize each COMP as a .tdxn file.\n\n'
+            '  TDXN: Externalize each COMP as a .tdxn file.\n'
+            '  The COMP holding Embody is always TDXN.\n\n'
             'Optionally, also export a single project-wide .tdxn\n'
             f'snapshot of your entire network{export_hint}.',
             buttons=['Cancel', 'TOX', 'TDXN', 'TOX + Project TDXN',
@@ -10760,7 +10959,11 @@ class EmbodyExt:
             for oper in self.root.findChildren(type=COMP, parName='externaltox'):
                 if self._shouldSkipOp(oper, paths_to_exclude):
                     continue
-                self.applyTagToOperator(oper, comp_tag)
+                # a .tox of a COMP holding Embody would carry all of Embody;
+                # TDXN still tracks its loose ops and wires (issue #176)
+                self.applyTagToOperator(
+                    oper, self.my.par.Tdxntag.val
+                    if self._holdsEmbody(oper.path) else comp_tag)
 
         self.updateHandler()
 
@@ -10775,10 +10978,13 @@ class EmbodyExt:
         The exclude tag is honored for the WHOLE tagged subtree (ancestry
         walk, issue #60): externalizeProject iterates a flat findChildren,
         so an own-tag-only check would still tag every untagged descendant
-        inside an excluded tree.
+        inside an excluded tree. Embody's own subtree and TouchDesigner's
+        system COMPs are never user content (issue #176).
         """
         return (
             oper.path in paths_to_exclude or
+            self._isInsideEmbody(oper.path) or
+            self._isSystemPath(oper.path) or
             # Annotations and their internals never externalize -- captured
             # semantically by the parent TDXN. applyTagToOperator would refuse
             # each one anyway (with a WARNING per op); skipping here keeps a
@@ -10787,9 +10993,7 @@ class EmbodyExt:
             self._isInsideAnnotate(oper) or
             self.isReplicant(oper) or
             self.isInsideClone(oper) or
-            self._hasExcludeTagInAncestry(oper) or
-            oper.path.startswith('/local/') or
-            oper.path == '/local'
+            self._hasExcludeTagInAncestry(oper)
         )
 
     # ==========================================================================
@@ -11292,7 +11496,6 @@ class EmbodyExt:
                 if self._rowStrategy(i) == 'tdn':
                     tracked.add(self._cellVal(i, 'path'))
 
-        embody_path = self.my.path
         try:
             tagged = self.root.findChildren(type=COMP, tags=list(self._tdxnTags()))
         except Exception:
@@ -11300,9 +11503,7 @@ class EmbodyExt:
         candidates = []
         for comp in tagged:
             p = comp.path
-            if (p == '/' or p == embody_path
-                    or p.startswith(embody_path + '/')
-                    or embody_path.startswith(p + '/')):
+            if self._isProtectedPath(p):
                 continue
             if p in tracked:
                 continue
@@ -11996,16 +12197,15 @@ class EmbodyExt:
         """Get all TDXN-strategy COMPs from the externalizations table.
 
         Returns list of (comp_path, rel_tdxn_path) tuples.
-        Never includes Embody itself, its ancestors, or its descendants --
-        reconstructing or stripping anything inside Embody would be
-        self-destruction.
+        Never includes a protected path (_isProtectedPath): stripping or
+        reconstructing Embody, an ancestor of it or the root would be
+        self-destruction, and a system COMP would be rebuilt empty.
         """
         table = self.Externalizations
         if not table:
             return []
         if table[0, 'strategy'] is None:
             return []  # Legacy table without strategy column -- no TDXN entries
-        embody_path = self.my.path  # e.g. /embody/Embody -- skip regardless of location
         result = []
         # Annotation artifacts are collapsed to ONE warning per annotation
         # instead of one per row. A pre-guard project carries a row for the
@@ -12016,12 +12216,7 @@ class EmbodyExt:
         for i in range(1, table.numRows):
             if self._rowStrategy(i) == 'tdn':
                 comp_path = self._cellVal(i, 'path')
-                # Never include root "/" -- stripping it destroys the entire project.
-                # Never include Embody, its ancestors, or its descendants.
-                if (comp_path == '/'
-                        or comp_path == embody_path
-                        or embody_path.startswith(comp_path + '/')
-                        or comp_path.startswith(embody_path + '/')):
+                if self._isProtectedPath(comp_path):
                     continue
                 # Never reconstruct/strip a COMP tagged for exclusion -- the
                 # owning app owns its lifecycle. Defends against a stale row
@@ -12547,6 +12742,15 @@ class EmbodyExt:
                 script_str = child.scriptErrors()
                 if script_str:
                     errors.append(f'{child.path}: {script_str.strip()}')
+                # An op that cooked before the import wired it keeps that
+                # cook's error ("Not enough sources specified") until it
+                # recooks (field 2026-10-24): recook only a wired non-COMP
+                # reporting one; a COMP recook would cook its whole network.
+                if child.errors() and not child.isCOMP and child.inputs:
+                    try:
+                        child.cook(force=True)
+                    except Exception as e:
+                        self.Log(f'Could not recook {child.path}: {e}', 'DEBUG')
                 err_str = child.errors()
                 if err_str:
                     for err in err_str.split('\n'):
@@ -12701,7 +12905,6 @@ class EmbodyExt:
 
         tox_tag = self.my.par.Toxtag.val
         tdxn_tag = self.my.par.Tdxntag.val
-        embody_path = self.my.path
         reconciled = 0
         failed = 0
 
@@ -12711,8 +12914,13 @@ class EmbodyExt:
             rel_file_path = self._cellVal(i, 'rel_file_path')
             node_color = self._cellVal(i, 'node_color') if table[0, 'node_color'] is not None else ''
 
-            # Skip Embody itself and its descendants
-            if path == embody_path or path.startswith(embody_path + '/'):
+            # Skip Embody and its descendants, and TD's system COMPs: relinking
+            # loads a copy into TD's own DATs; untrackStrayExternalizations
+            # drops those rows (issue #176). A tox reload of a protected path
+            # replaces Embody (issue #110).
+            if self._isInsideEmbody(path) or self._isSystemPath(path):
+                continue
+            if strategy == 'tox' and self._isProtectedPath(path):
                 continue
 
             oper = op(path)
@@ -12831,6 +13039,328 @@ class EmbodyExt:
             self.Log(f"Reconciled metadata on {reconciled} operator(s)", "SUCCESS")
         else:
             self.Log("All operator metadata consistent", "DEBUG")
+
+    def _strayTrackedRows(self, table: Optional[DAT] = None,
+                          tagged: Optional[list] = None) -> dict:
+        """Externalizations Externalize Full Project made through 6.2.75
+        (issue #176), by kind. 'system': inside TouchDesigner's system COMPs
+        (a tag with no row counts only as a COMP strategy tag on a COMP: TD's
+        own operators carry tags of their own). 'retag': TOX on a COMP holding
+        Embody (_isToxOverEmbody). 'own': Embody's own COMP and its contents.
+        Each entry is (path, strategy, rel_file_path); a tag with no row comes
+        back as (path, None, ''), so a row with a blank strategy cell is still
+        a row. tagged: the tagged ops to scan (default: one findChildren from
+        root).
+        """
+        found = {'system': [], 'retag': [], 'own': []}
+        seen = set()
+        comp_tags = set(self.getTags('tox')) | set(self.getTags('tdn'))
+
+        def place(entry: tuple, tags) -> None:
+            path = entry[0]
+            if self._isSystemPath(path):
+                found['system'].append(entry)
+            elif any(self._isToxOverEmbody(path, t) for t in tags):
+                found['retag'].append(entry)
+            elif self._isInsideEmbody(path):
+                found['own'].append(entry)
+
+        for _, path, strategy, rel in self._trackedRows(table):
+            seen.add(path)
+            place((path, strategy, rel), (strategy,))
+        if tagged is None:
+            tagged = self.root.findChildren(tags=self.getTags())
+        for oper in tagged:
+            if oper.path in seen:
+                continue
+            if self._isSystemPath(oper.path) and not (
+                    oper.family == 'COMP'
+                    and comp_tags.intersection(oper.tags)):
+                continue
+            place((oper.path, None, ''), oper.tags)
+        return found
+
+    def _trackedRows(self, table: Optional[DAT] = None) -> list:
+        """(row, path, strategy, rel_file_path) for every tracking row, read
+        in one table.rows() call. The first read or edit after an edit
+        recooks and rewrites the file-synced table (8 ms at 246 rows), so a
+        per-row read or deleteRow froze TD for 2.5 s on 240 rows (E2E
+        2026-10-25): read with this, write with one table.text."""
+        table = table if table is not None else self.Externalizations
+        if table is None or not table.numRows:
+            return []
+        head = [c.val for c in table.row(0)]
+        if not {'path', 'strategy', 'rel_file_path'}.issubset(head):
+            return []
+        pi, si, ri = (head.index(c)
+                      for c in ('path', 'strategy', 'rel_file_path'))
+        need = max(pi, si, ri)
+        return [(i, r[pi].val, self._normalizeStrategy(r[si].val),
+                 self.normalizePath(r[ri].val))
+                for i, r in enumerate(table.rows()) if i and len(r) > need]
+
+    def untrackStrayExternalizations(self, table: Optional[DAT] = None,
+                                     tagged: Optional[list] = None) -> dict:
+        """Startup cleanup for projects Externalize Full Project over-tagged
+        through 6.2.75 (issue #176). System COMPs are untracked at once, their
+        files kept. A TOX on the COMP holding Embody becomes TDXN, so that
+        COMP stays tracked without carrying Embody. Embody's own operators
+        wait on one prompt, unless this project tracks them on purpose
+        (.embody/project.json) or that file is unreadable. Waits out an
+        unverified update: VerifyUpdate runs it once the update lands.
+        Returns the paths handled as {'system', 'retag', 'own'}.
+        """
+        done = {'system': [], 'retag': [], 'own': []}
+        if (self.my.par.Status == 'Disabled' or self._performMode
+                or ui.performMode or self._updatePendingVerify()):
+            return done
+        if table is None:
+            self._markContainerFileStale()
+        found = self._strayTrackedRows(table, tagged)
+        if found['system']:
+            self._untrackEntries(found['system'])
+            done['system'] = [e[0] for e in found['system']]
+            files = ', '.join(e[2] for e in found['system'] if e[2]) or 'none'
+            self.Log(f"Untracked {', '.join(done['system'])}: TouchDesigner's "
+                     f"system COMPs are never externalized. Files left on "
+                     f"disk: {files}", 'WARNING')
+        if found['retag']:
+            self._untrackEntries(found['retag'])
+            tag = self.my.par.Tdxntag.val
+            for path, _, rel in found['retag']:
+                oper = op(path)
+                if oper is None:
+                    continue
+                # a tag-only entry still points at the .tox holding Embody
+                oper.par.externaltox = ''
+                oper.par.externaltox.readOnly = False
+                left = f"{rel or 'Its .tox'} is left on disk for you to delete"
+                if not self._tdxnEnabled():
+                    self.Log(f"Untracked '{path}' TOX: its .tox would carry "
+                             f"all of Embody, and TDXN is off, so it is no "
+                             f"longer tracked. {left}", 'WARNING')
+                    continue
+                # the tag only: the next save's Update exports it inside its
+                # locked-content batch, never from this startup frame
+                oper.tags.add(tag)
+                oper.color = self._getTagColor(oper, tag) or oper.color
+                done['retag'].append(path)
+                self.Log(f"Switched '{path}' from TOX to TDXN: its .tox would "
+                         f"carry all of Embody. The next save writes its "
+                         f".tdxn. {left}", 'WARNING')
+        if not found['own'] or self._ownTrackingChoice() is not False:
+            return done
+        folder = self._ownMirrorFolder()
+        choice = self._messageBox(
+            'Embody -- Embody Is Tracking Itself',
+            f"{len(found['own'])} of Embody's own operators are externalized "
+            f"into this project, most likely by Externalize Full Project in "
+            f"Embody 6.2.75 or earlier. Their files in {folder}/ are copies "
+            f"of Embody's code, not your work.\n\n"
+            f"Untrack them? Keep Tracking is only for developing Embody.",
+            buttons=['Not Now', 'Untrack and Delete Files',
+                     'Untrack, Keep Files', 'Keep Tracking'])
+        if choice in (1, 2):
+            # the dialog let frames run: read the rows again
+            own = self._strayTrackedRows(table, tagged)['own']
+            deleted = self._untrackEntries(
+                own, delete_within=folder if choice == 1 else None)
+            done['own'] = [e[0] for e in own]
+            self.Log(f"Untracked {len(own)} of Embody's own operator(s)"
+                     f"{f' and deleted {deleted} file(s)' if choice == 1 else ''}",
+                     'SUCCESS')
+            self._reportOwnLeftovers(folder, prune=(choice == 1))
+        elif choice == 3:
+            if self._recordTracksOwnOperators():
+                self.Log("Keeping Embody's own operators tracked: recorded in "
+                         ".embody/project.json, commit it", 'INFO')
+            else:
+                self.Log("Keeping Embody's own operators tracked for this "
+                         "session only: .embody/project.json could not be "
+                         "written", 'WARNING')
+        return done
+
+    def _untrackEntries(self, entries: list,
+                        delete_within: Optional[str] = None) -> int:
+        """Untrack many entries in one pass, one project scan and one manager
+        reset, where removeListerRow scans the project per row (see
+        _trackedRows). Strips the tags, clears a file par only while it
+        still names the tracked file (TD's own DATs keep theirs), drops the
+        rows. delete_within: also delete each tracked file under that
+        folder, or that folder's own .tdxn/.tdn/.tox, that no live operator
+        read before this call. Returns the number of files deleted.
+        """
+        table = self.Externalizations
+        # before the pars are cleared: a file an entry still syncs is source
+        live = self._liveFileReferences() if delete_within else set()
+        tags = set(self.getTags())
+        rows = set()
+        for path, strategy, rel in entries:
+            rel = self.normalizePath(rel) if rel else ''
+            if strategy is not None:
+                rows.add((path, rel))
+            self._tdn_fingerprints.pop(path, None)
+            oper = self.resolveOpIncludingUtility(path)
+            if oper is None:
+                continue
+            for tag in tags.intersection(oper.tags):
+                oper.tags.remove(tag)
+            par = (oper.par.externaltox if oper.family == 'COMP'
+                   else getattr(oper.par, 'file', None))
+            if rel and par is not None and self.normalizePath(par.eval()) == rel:
+                if oper.family == 'DAT':
+                    oper.par.syncfile = False
+                par.val = ''
+                par.readOnly = False
+            oper.unstore('_tdn_rel_path')
+            self.resetOpColor(oper)
+            self.param_tracker.removeComp(path)
+
+        deleted = 0
+        if delete_within:
+            base = self.buildAbsolutePath(delete_within).resolve()
+            own_files = {base.with_suffix(s) for s in ('.tdxn', '.tdn', '.tox')}
+            tracked = {self.buildAbsolutePath(rel).resolve()
+                       for _, _, _, rel in self._trackedRows(table) if rel}
+            for _, rel in rows:
+                if not rel:
+                    continue
+                f = self.buildAbsolutePath(rel).resolve()
+                if (f in live or f not in tracked
+                        or not (f in own_files or base in f.parents)):
+                    continue
+                try:
+                    if f.is_file():
+                        f.unlink()
+                        deleted += 1
+                except OSError as e:
+                    self.Log(f"Could not delete {f}: {e}", 'WARNING')
+
+        drop = {i for i, path, _, rel in self._trackedRows(table)
+                if (path, rel) in rows}
+        if drop:
+            table.text = '\n'.join(
+                '\t'.join(c.val for c in r)
+                for i, r in enumerate(table.rows()) if i not in drop)
+        try:
+            self.lister.reset()
+        except Exception as e:
+            self.Log(f'Could not refresh the manager list: {e}', 'DEBUG')
+        return deleted
+
+    def _liveFileReferences(self) -> set:
+        """Every file a live COMP's externaltox or DAT's file par names,
+        resolved: one project scan for a whole batch of deletes."""
+        refs = set()
+        for comp in self.root.findChildren(type=COMP, parName='externaltox'):
+            value = comp.par.externaltox.eval()
+            if value:
+                refs.add(self.buildAbsolutePath(value).resolve())
+        for dat in self.root.findChildren(type=DAT, parName='file'):
+            value = dat.par.file.eval()
+            if value:
+                refs.add(self.buildAbsolutePath(value).resolve())
+        return refs
+
+    def _updatePendingVerify(self) -> bool:
+        """True while an in-place update awaits VerifyUpdate, which may still
+        roll it back and runs the cleanup itself once the update lands.
+        Witness: UpdaterExt's sentinel, on disk until then (externaltox is
+        none: verify() clears it at frame 30). A sentinel over 10 minutes old
+        is a leftover, never a live update."""
+        import time
+        try:
+            sentinel = (Path(self._findProjectRoot()) / '.embody' / 'updates'
+                        / 'pending.json')
+            return time.time() - sentinel.stat().st_mtime < 600
+        except (OSError, TypeError, ValueError):
+            return False
+
+    def _markContainerFileStale(self) -> None:
+        """Mark the nearest TDXN-tracked COMP above Embody dirty when its
+        .tdxn still lists Embody or its table: an older build wrote them
+        there, and the fingerprint now skips them, so no edit short of the
+        user's own would rewrite the file. Embody's next sweep exports it
+        as it does any dirty COMP; nothing exports here. The project
+        snapshot ('/') is rewritten by its own pulse.
+        """
+        node = self.my.parent()
+        rel = None
+        while node is not None and node.path != '/':
+            rel = self._getStrategyFilePath(node.path, 'tdn')
+            if rel:
+                break
+            node = node.parent()
+        if not rel:
+            return
+        try:
+            text = self.buildAbsolutePath(rel).read_text(encoding='utf-8')
+        except (OSError, ValueError):
+            return
+        table = self.Externalizations
+        names = [self.my.name]
+        if table is not None and table.path in self.embodyOwnedPaths():
+            names.append(table.name)
+        if any(re.search(rf'^\s*- name: {re.escape(n)}\r?$', text, re.M)
+               for n in names):
+            self._tdn_fingerprints[node.path] = ('stale',)
+            self.Log(f"{rel} still lists Embody's own operators: marked "
+                     f"dirty, so its next export leaves them out", 'INFO')
+
+    def _reportOwnLeftovers(self, folder: str, prune: bool) -> None:
+        """Prune the emptied mirror folder, then name it if files remain:
+        only tracked files are ever deleted, and copies an older build
+        untracked before the cleanup ran are not."""
+        mirror = self.buildAbsolutePath(folder)
+        if prune:
+            # deleteEmptyDirectories keeps the folder it is given
+            self.deleteEmptyDirectories(mirror)
+            try:
+                if mirror.is_dir() and not any(mirror.iterdir()):
+                    mirror.rmdir()
+            except OSError as e:
+                self.Log(f"Could not remove {folder}/: {e}", 'WARNING')
+        if mirror.is_dir() and any(p.is_file() for p in mirror.rglob('*')):
+            self.Log(f"Copies of Embody's code remain in {folder}/ that "
+                     f"Embody no longer tracks: delete that folder", 'WARNING')
+
+    def _ownMirrorFolder(self) -> str:
+        """Where externalizing Embody's own operators writes their files:
+        the mirror of Embody's path under the externalizations folder."""
+        return self.normalizePath('/'.join(
+            p for p in (self.externalizationsFolder, self.my.path.strip('/'))
+            if p))
+
+    def _ownTrackingChoice(self) -> Optional[bool]:
+        """Whether this project tracks Embody's own operators on purpose
+        (.embody/project.json): None when that file is unreadable. Read once
+        per instance: the dirty sweeps ask for every COMP."""
+        cached = getattr(self, '_tracks_own_cache', ())
+        if not cached:
+            cached = self._tracks_own_cache = (
+                mod.embody_admin.read_embody_internals_tracked(self),)
+        return cached[0]
+
+    def _recordTracksOwnOperators(self) -> bool:
+        """Record that this project tracks Embody's own operators. True when
+        it is on disk; the choice holds for this session either way."""
+        self._tracks_own_cache = (True,)
+        return mod.embody_admin.record_embody_internals_tracked(self)
+
+    def _skipsOwnExport(self, path: str) -> bool:
+        """True for Embody's own operators in a project known not to track
+        them. After an update an over-tagged project re-walked and rewrote
+        all of Embody inline on every save (7.1 MB, E2E 2026-10-25)
+        until the cleanup prompt was answered."""
+        return (self._isInsideEmbody(path)
+                and self._ownTrackingChoice() is False)
+
+    def _keepsOwnRows(self, path: str) -> bool:
+        """True for Embody's own rows wherever they are not tracked on
+        purpose, unreadable project.json included: only the cleanup prompt
+        ever drops them, never an update sweep."""
+        return (self._isInsideEmbody(path)
+                and self._ownTrackingChoice() is not True)
 
     # ==========================================================================
     # TOX RESTORATION ON START
@@ -13015,23 +13545,18 @@ class EmbodyExt:
         sorted by path depth (shallowest first) so parents are created
         before children.
 
-        Never includes Embody itself, its ancestors, or its descendants.
+        Never includes a protected path (see _isProtectedPath).
         """
         table = self.Externalizations
         if not table:
             return []
         if table[0, 'strategy'] is None:
             return []  # Legacy table without strategy column
-        embody_path = self.my.path
         result = []
         for i in range(1, table.numRows):
             if self._rowStrategy(i) == 'tox':
                 comp_path = self._cellVal(i, 'path')
-                # Never include Embody, its ancestors, or its descendants
-                if (comp_path == '/'
-                        or comp_path == embody_path
-                        or embody_path.startswith(comp_path + '/')
-                        or comp_path.startswith(embody_path + '/')):
+                if self._isProtectedPath(comp_path):
                     continue
                 result.append((
                     comp_path,
@@ -13187,7 +13712,6 @@ class EmbodyExt:
         if table[0, 'strategy'] is None:
             return []  # Legacy table without strategy column
 
-        embody_path = self.my.path
 
         # Collect TOX/TDXN COMP paths so we can skip DATs inside them
         comp_paths = set()
@@ -13206,9 +13730,9 @@ class EmbodyExt:
             if not dat_path:
                 continue
 
-            # Never include Embody or its descendants
-            if (dat_path == embody_path
-                    or dat_path.startswith(embody_path + '/')):
+            # Never include Embody or its descendants, or TD's system COMPs
+            # (the frame-100 cleanup drops those rows, issue #176)
+            if self._isInsideEmbody(dat_path) or self._isSystemPath(dat_path):
                 continue
 
             # Skip DATs inside TOX/TDXN COMPs
@@ -13247,6 +13771,11 @@ class EmbodyExt:
     # ==========================================================================
 
 
+    # Directories that must never be touched by empty-dir cleanup. Dropped in
+    # v6.0.261 while both readers stayed, so every sweep raised on its first
+    # folder (found 2026-10-25).
+    _SCM_DIRS = frozenset({'.git', '.svn', '.hg'})
+
     def deleteEmptyDirectories(self, path: Union[str, Path]) -> None:
         """
         Recursively delete empty directories only.
@@ -13258,13 +13787,17 @@ class EmbodyExt:
         if not path.is_dir():
             return
 
-        # SAFETY: Never walk project.folder -- too broad, can delete
-        # unrelated empty directories (e.g. newly-created target folders)
+        # SAFETY: Never walk project.folder or a folder holding it -- too
+        # broad, can delete unrelated empty directories (e.g. newly-created
+        # target folders)
         try:
-            if path.resolve() == Path(project.folder).resolve():
+            target = path.resolve()
+            home = Path(project.folder).resolve()
+            if target == home or target in home.parents:
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            self.Log(f"Not pruning {path}: {e}", 'WARNING')
+            return
 
         empty_dir_found = True
         iteration = 0

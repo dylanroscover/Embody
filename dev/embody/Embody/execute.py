@@ -112,6 +112,9 @@ def onStart():
 	# (tsv truncation/crash) but whose .tdn survives on disk. Additive +
 	# consent-gated; after ReconcileMetadata so tags are re-applied first.
 	run(f"op('{parent.Embody}').ext.Embody.recoverOrphanShells()", delayFrames=90)
+	# Untrack what Externalize Full Project wrongly tagged through 6.2.75
+	# (system COMPs, Embody's own operators; issue #176). After reconcile.
+	run(f"op('{parent.Embody}').ext.Embody.untrackStrayExternalizations()", delayFrames=100)
 	# Pin current TD build into .embody/project.json so the Envoy bridge can
 	# pick a matching install on fresh clones (committed; survives git clone).
 	run(f"op('{parent.Embody}').ext.Embody._writeProjectJson()", delayFrames=80)
@@ -142,6 +145,10 @@ def onCreate():
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
 		f"if op('{parent.Embody}').ext.Embody._tdxnMode() != 'off' else None",
 		delayFrames=45)
+	# An in-place update lands here too: its reload strips the tags from
+	# Embody's own operators, and each save then rewrites Embody's whole
+	# network into one .tdxn until the cleanup runs (issue #176).
+	run(f"op('{parent.Embody}').ext.Embody.untrackStrayExternalizations()", delayFrames=100)
 	# The Autoupdate-gated check on the FRESH-INSTALL path too. It was
 	# scheduled only from onStart (project open) -- but on a first install
 	# the open happened before Embody existed, so a user with 'Check and

@@ -73,6 +73,52 @@ This table serves as the source of truth for what files Embody manages. Only fil
 !!! warning
     Never edit the `externalizations.tsv` file directly. It is managed exclusively by Embody's tracking system.
 
+## Tracking a Whole Project
+
+To keep everything in a project as diffable files:
+
+1. **Leave Embody where you dropped it**, usually `/project1` next to your work. Embody keeps itself out of your files: its own COMP and its `externalizations` table never appear in the `.tdxn` of the COMP that holds them, so you don't need to tag Embody `tdxn_exclude`.
+2. **Tag your top-level COMP (`/project1`) with the TDXN tag**, or pulse [Externalize Full Project](parameters.md#par-externalizeproject) and choose **TDXN**, which tags it along with every COMP and DAT inside it. The COMP that holds Embody can't take the TOX tag, because its `.tox` would carry all of Embody: Externalize Full Project gives it TDXN even when you choose TOX.
+3. **Save.** `project1.tdxn` now holds every operator that sits directly in `/project1` and the wiring between them. Each COMP that has its own tag gets its own file, which its parent references.
+
+Anything you add inside a tagged COMP later, by hand or through your AI assistant, is written into that COMP's `.tdxn` on the next save. To give a new COMP a file of its own, tag it (++lctrl+lctrl++).
+
+### Externalize Full Project vs tagging a top-level COMP
+
+| | Tag a top-level COMP | Externalize Full Project |
+|---|---|---|
+| What it does | One tag. That COMP's file holds everything inside it that has no file of its own. | A one-time sweep that tags every COMP and file-backed DAT in the project, so each gets its own file. |
+| Files | One per tagged COMP | One per COMP and DAT |
+| New work afterwards | Written into the file of the tagged COMP that holds it | The same |
+| Pick it when | You want the fewest files: one diff per network | You want each component reviewable on its own |
+
+The Externalize Full Project dialog asks for a format:
+
+- **TOX** or **TDXN** sets the format for every COMP it tags, except the COMP that holds Embody, which is always TDXN.
+- **TOX + Project TDXN** and **TDXN + Project TDXN** also write one `.tdxn` snapshot of the whole project, named after your `.toe`. It is handy for search and AI context; Embody never rebuilds anything from it.
+
+The sweep skips palette components, clones, replicants, `/local`, TouchDesigner's system COMPs (`/perform`, `/ui`, `/sys`), Embody itself, and anything tagged [`tdxn_exclude`](#excluding-a-comp-from-tdxn-the-tdxn_exclude-tag). Run from the setup wizard's **Externalize everything** step, it also turns on [Auto-Externalize New Ops](parameters.md#par-autoexternalize), which gives COMPs and DATs your AI assistant creates outside any tagged COMP a file of their own.
+
+### What stays out
+
+- **The root `/`** can never be tagged. COMPs and file-backed DATs at the root get files of their own, but other operators placed directly at the root, and the wires between them, are not tracked. Keep your work inside a COMP.
+- **TouchDesigner's system COMPs** (`/perform`, `/ui`, `/sys`, `/local`) and the COMPs inside them are never externalized.
+- **Roundtrip mode and Embody's container.** In [Roundtrip mode](#tdxn-mode-master-switch) the COMP that holds Embody, and every COMP above it, is never stripped or rebuilt from disk: that would destroy the running Embody. Its `.tdxn` is still written on save, but the `.toe` stays its source of truth. For the same reason Envoy refuses to reload that COMP from its `.tdxn` with `import_network(clear_first=True)`, so your AI assistant changes it live instead. If your top-level network must round-trip, put Embody at the root (`/`) instead, and open your network before asking your AI assistant to build so new work lands inside it.
+
+### Cleaning up after Embody 6.2.75 or earlier
+
+Externalize Full Project in 6.2.75 and earlier also tagged Embody itself, everything inside it, and `/perform`, and its TOX option tagged the COMP that holds Embody. After you update (once the update is verified), and on every open until it is resolved, Embody:
+
+- untracks anything in TouchDesigner's system COMPs, such as `/perform`; the files stay on disk.
+- switches a TOX-tagged COMP that holds Embody to TDXN, so it stays tracked. Its old `.tox` stays on disk for you to delete.
+- asks about its own operators:
+    - **Untrack and Delete Files** removes them from tracking and deletes the copies of Embody's code from your project folder.
+    - **Untrack, Keep Files** removes them from tracking and leaves the files for you to delete.
+    - **Not Now** asks again on the next open.
+    - **Keep Tracking** is only for developing Embody itself. The choice is recorded in `.embody/project.json`; commit it. If that file can't be read, Embody doesn't ask and leaves its own operators' tracking as it is.
+
+If the `.tdxn` of the COMP that holds Embody still lists Embody or its `externalizations` table, Embody marks that COMP changed, and its next export leaves them out. A project-wide snapshot written by an older build is not rewritten for you: refresh it with [Export Project to TDXN](parameters.md#par-shortcutexportproject) (++ctrl+shift+e++). Embody only deletes files it tracks, inside its own folder, that nothing else reads: if copies remain because an older build had already stopped tracking them, the log names the folder to delete.
+
 ## TDXN Strategy
 
 COMPs can also be externalized using the **TDXN strategy** instead of `.tox`. This exports the COMP's network as human-readable YAML (`.tdxn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
@@ -316,6 +362,8 @@ The restoration above covers a *clean* reopen, where your last `.toe` is on disk
 A beat after the agent (or you) goes idle, Embody writes each changed TDXN COMP to disk as a frame-cheap `.tdxn` checkpoint — **~3-6 ms, with no full project save, no TDXN strip/restore, and no frame freeze**. It also fires a synchronous pre-checkpoint just before a destructive `delete_op` inside a tracked COMP. The engine is bypassed in Perform Mode and during saves, and perf-gated so a checkpoint never lands on a hot frame. `execute_python` and `exec_op_method` run arbitrary code, so neither can name the COMP it touched; rather than going unwatched they arm a *coarse* checkpoint — anything already queued is written before the code runs, and the settle-drain afterwards discovers which tracked COMPs actually changed (once per burst, not once per call).
 
 On the next open after a crash, recovery runs even in Export-on-Save mode: any TDXN COMP that has a `.tdxn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdxn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDXN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
+
+The same holds when you close without saving right after your first externalization: the `.toe` on disk predates Embody's tracking file, so on open Embody re-links `externalizations.tsv` (only when that file is newer than the `.toe`, and no other project's `.toe` beside it was saved since), puts the tags back, and rebuilds the COMPs you built after that save.
 
 So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDXN page; see [Configuration](configuration.md#tdxn).
 

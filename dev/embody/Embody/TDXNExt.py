@@ -3076,12 +3076,22 @@ class TDXNExt:
 		# these keys are auto-created defaults (e.g. torus1 inside a
 		# geoCOMP) that TD recreates automatically on COMP creation.
 		_TRIVIAL_KEYS = {'name', 'type', 'position', 'size'}
+		# Embody's COMP and tracking table are Embody state, never part of
+		# the COMP that holds them; inlined, Embody alone was ~600 ops and
+		# every tracked row rewrote the user's file (issue #176). Read once
+		# per export, not per COMP.
+		owned = options.get('embody_owned')
+		if owned is None:
+			owned = options['embody_owned'] = (
+				self.ownerComp.ext.Embody.embodyOwnedPaths())
 
 		result = []
 		for child in children:
 			# Skip system/internal paths (exact match or children)
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
+				continue
+			if child.path in owned:
 				continue
 
 			# Annotations are captured only by the `annotations:` section
@@ -6505,9 +6515,11 @@ class TDXNExt:
 	# =========================================================================
 
 	def _collectAllPaths(self, parent_op, max_depth=None, depth=0,
-					   embed_all=False):
+					   embed_all=False, owned=None):
 		"""Recursively collect all exportable operator paths."""
 		paths = []
+		if owned is None:
+			owned = self.ownerComp.ext.Embody.embodyOwnedPaths()
 		for child in parent_op.children:
 			# Skip system/internal paths (exact match or children)
 			if child.path in SYSTEM_PATHS or child.path.startswith(
@@ -6522,6 +6534,9 @@ class TDXNExt:
 				continue
 			# Skip excluded COMPs and their whole subtree -- invisible to TDXN.
 			if self._hasExcludeTag(child):
+				continue
+			# Same seam as the sync walk: Embody's own state (issue #176).
+			if child.path in owned:
 				continue
 			paths.append(child.path)
 
@@ -6539,7 +6554,7 @@ class TDXNExt:
 				if max_depth is None or depth < max_depth:
 					paths.extend(
 						self._collectAllPaths(child, max_depth, depth + 1,
-											  embed_all))
+											  embed_all, owned))
 
 		return paths
 

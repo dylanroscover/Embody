@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
-build: 1235
-generator: Embody/6.2.75
+build: 1236
+generator: Embody/6.2.76
 td_build: 099.2025.33230
 network_path: /embody/Embody
 options:
@@ -53,7 +53,7 @@ custom_pars:
     style: Pulse
     label: Externalize Full Project
     startSection: true
-    help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
+    help: Tags all eligible operators in the entire project for externalization. A dialog picks .tox or .tdxn for COMPs, optionally with a project-wide .tdxn snapshot; DATs get file-type tags based on their content. Skips Embody itself, TouchDesigner's system COMPs, palette components, clones, replicants and tdxn_exclude subtrees.
   - name: Disable
     style: Pulse
     startSection: true
@@ -857,7 +857,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.75
+    value: 6.2.76
   - name: Touchbuild
     style: Str
     label: Touch Build

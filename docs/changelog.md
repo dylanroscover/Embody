@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.2.76
+
+Externalize Full Project keeps Embody and TouchDesigner's own COMPs out of your files.
+
+- **Embody stays out of your files** (#176). Externalize Full Project, the tagger and hand-typed tags no longer tag Embody, `/perform`, `/ui`, `/sys` or the root. The COMP holding Embody is always TDXN, so its `.tdxn` keeps your loose operators and wiring, without Embody inside.
+- **Cleanup for older projects.** After the update, a project over-tagged by 6.2.75 or earlier untracks TouchDesigner's COMPs, switches a TOX container to TDXN, and asks before deleting the copies of Embody's own code.
+- **Reopen without saving.** A project saved before its first externalization reopens with its tracking intact and rebuilds COMPs built after that save.
+- **Docs.** [Tracking a Whole Project](embody/externalization.md#tracking-a-whole-project) covers where Embody goes and when to use Externalize Full Project.
+- **Fixes.** A lost Envoy port race reads as port-in-use; stale cook errors no longer show as reconstruction errors; empty-folder cleanup works again; the Collection's properties panel shows every parameter. +58 tests.
+
 ## v6.2.75
 
 Convoy saves a remote node's project.

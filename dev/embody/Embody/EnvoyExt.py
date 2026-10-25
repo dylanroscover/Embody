@@ -1377,6 +1377,61 @@ class _EventLoopWedged(RuntimeError):
     """Event-loop construction never completed (see _newEventLoopBounded)."""
 
 
+class _SessionCapture:
+    """ASGI middleware: read the bridge's X-Envoy-Session / X-Envoy-Label
+    headers, update the presence registry, and stash the identity in
+    _SESSION_CTX for the request so tool functions can attribute their
+    work. Pure Python only -- never touches TD objects (mcp-safety)."""
+
+    def __init__(self, app: Any, worker: Any) -> None:
+        self.app = app
+        self.worker = worker
+
+    async def __call__(self, scope: dict, receive: Callable,
+                       send: Callable) -> None:
+        sid = label = None
+        if scope.get('type') == 'http':
+            try:
+                hdrs = {k.decode('latin-1').lower(): v.decode('latin-1')
+                        for k, v in (scope.get('headers') or [])}
+                sid = hdrs.get('x-envoy-session') or None
+                label = hdrs.get('x-envoy-label') or None
+            except Exception:
+                sid = label = None
+            if sid:
+                try:
+                    self.worker._touch_session(sid, label)
+                except Exception:
+                    pass
+        # A hot reload of this module mid-request rebinds _SESSION_CTX, and
+        # resetting the new var with the old token raised ValueError into
+        # the DAT's errors (field 2026-10-25): reset the var that was set.
+        ctx = _SESSION_CTX
+        token = ctx.set((sid, label))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            ctx.reset(token)
+
+
+class _PortTaken(RuntimeError):
+    """Another process bound the port between the scan and this bind, e.g.
+    two TDs starting together. Routine: the restart scans past it."""
+
+
+def _portBindable(port: int) -> bool:
+    """True when 127.0.0.1:port binds right now. Mirrors uvicorn's bind
+    exactly (plain bind, no SO_REUSEADDR) so the answer predicts the real
+    startup outcome -- including zombie-held and TIME_WAIT-blocked ports."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
+
 def _newEventLoopBounded(timeout: float = 1.5, attempts: int = 4,
                          factory: Optional[Callable[[], Any]] = None,
                          cancel: Optional[Event] = None
@@ -5064,39 +5119,7 @@ class EnvoyMCPServer:
                         return
                     raise
 
-        # Session identity capture: read the bridge's X-Envoy-Session /
-        # X-Envoy-Label headers, update the presence registry, and stash
-        # the identity in _SESSION_CTX for the duration of the request so
-        # tool functions can attribute their work. Pure Python only --
-        # never touches TD objects (mcp-safety thread boundary).
-        worker = self
-
-        class _SessionCapture:
-            def __init__(self, app):
-                self.app = app
-
-            async def __call__(self, scope, receive, send):
-                sid = label = None
-                if scope.get('type') == 'http':
-                    try:
-                        hdrs = {k.decode('latin-1').lower(): v.decode('latin-1')
-                                for k, v in (scope.get('headers') or [])}
-                        sid = hdrs.get('x-envoy-session') or None
-                        label = hdrs.get('x-envoy-label') or None
-                    except Exception:
-                        sid = label = None
-                    if sid:
-                        try:
-                            worker._touch_session(sid, label)
-                        except Exception:
-                            pass
-                token = _SESSION_CTX.set((sid, label))
-                try:
-                    await self.app(scope, receive, send)
-                finally:
-                    _SESSION_CTX.reset(token)
-
-        starlette_app = _SuppressDisconnect(_SessionCapture(starlette_app))
+        starlette_app = _SuppressDisconnect(_SessionCapture(starlette_app, self))
 
         config = uvicorn.Config(
             starlette_app,
@@ -5686,19 +5709,7 @@ class EnvoyExt:
         Base port first; if busy, force-close our own stale server, then
         scan the range. Returns the port or None.
         """
-        import socket
         import os as _os
-
-        def _port_bindable(port: int) -> bool:
-            # Mirror uvicorn's bind exactly (plain bind, no SO_REUSEADDR) so
-            # the answer predicts the real startup outcome -- including
-            # zombie-held and TIME_WAIT-blocked ports.
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.bind(('127.0.0.1', port))
-                    return True
-                except OSError:
-                    return False
 
         def _recent_bind_failure(port: int) -> bool:
             bad = getattr(sys, '_envoy_bad_bind_ports', None)
@@ -5735,7 +5746,7 @@ class EnvoyExt:
 
         def _port_taken(port: int) -> bool:
             return (_recent_bind_failure(port)
-                    or not _port_bindable(port)
+                    or not _portBindable(port)
                     or _port_registered_by_other(port))
 
         # Reap our own orphans BEFORE probing anything. Without this the scan
@@ -5747,7 +5758,7 @@ class EnvoyExt:
             import time as _reap_time
             for _ in range(3):   # <=300ms for the OS to release; force_exit +
                 _reap_time.sleep(0.1)   # sock.close() frees it near-instantly
-                if all(_port_bindable(p) for p in reaped):
+                if all(_portBindable(p) for p in reaped):
                     break
 
         # Fast path: preferred port is free AND not claimed by another instance
@@ -6881,6 +6892,22 @@ class EnvoyExt:
     # === Thread Manager Target (runs in worker thread) ===
 
     @staticmethod
+    def _bindFailure(port: int, e: BaseException,
+                     bound: bool = False) -> RuntimeError:
+        """The error a failed server start reports. Before the bind, a port
+        that will not bind now was won by another instance or process between
+        the scan and this bind; uvicorn says so only as UnboundLocalError
+        ("cannot access local variable 'server'") or SystemExit, so ask the
+        port itself. After the bind the port is ours and proves nothing.
+        The cause rides on __cause__. Worker-safe: no TD."""
+        if not bound and ('address already in use' in str(e).lower()
+                          or not _portBindable(port)):
+            return _PortTaken(
+                f'Port {port} is already in use. '
+                f'Another Envoy instance or process may be bound to it.')
+        return RuntimeError(f'MCP server failed on port {port}: {e}')
+
+    @staticmethod
     def _runServer(port: int, request_queue: Queue, response_queue: Queue,
                    shutdown_event: Event, startup_event: Optional[Event] = None,
                    gen: int = 0):
@@ -6930,29 +6957,21 @@ class EnvoyExt:
             return ctx
         except _EventLoopWedged:
             raise   # pre-bind; the generic wrappers below would blame the port
-        except OSError as e:
-            if e.errno == 48 or 'address already in use' in str(e).lower():
-                raise RuntimeError(
-                    f'Port {port} is already in use. '
-                    f'Another Envoy instance or process may be bound to it.'
-                ) from e
-            raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
         except Exception as e:
-            # uvicorn raises UnboundLocalError when bind fails -- surface
-            # the underlying cause if possible.
-            if 'address already in use' in str(e).lower():
-                raise RuntimeError(
-                    f'Port {port} is already in use. '
-                    f'Another Envoy instance or process may be bound to it.'
-                ) from e
-            raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
+            raise EnvoyExt._bindFailure(
+                port, e, startup_event is not None and startup_event.is_set()
+            ) from e
         except BaseException as e:
             # uvicorn calls sys.exit(1) on bind failure -> SystemExit, which is
             # a BaseException and escapes the handlers above. Without this it
             # never reaches the ExceptHook (no error -> no restart/escalation ->
             # zombie "Running"). Normalize so _onServerError fires.
-            raise RuntimeError(
-                f'MCP server exited abnormally on port {port}: {e!r}') from e
+            bound = startup_event is not None and startup_event.is_set()
+            err = EnvoyExt._bindFailure(port, e, bound)
+            if not isinstance(err, _PortTaken):
+                err = RuntimeError(
+                    f'MCP server exited abnormally on port {port}: {e!r}')
+            raise err from e
 
     # === Thread Manager Callbacks (run on main thread) ===
 
@@ -7794,8 +7813,14 @@ class EnvoyExt:
         """ExceptHook - Called when the thread task errors.
 
         blacklist_port=False for a startup TIMEOUT: the port never proved bad,
-        the worker was merely slow (issue #98)."""
-        self._log(f'Server error: {error}', 'ERROR')
+        the worker was merely slow (issue #98). The Thread Manager passes an
+        exc_info tuple; a lost bind race (_PortTaken) logs as a WARNING."""
+        if isinstance(error, tuple) and len(error) > 1:
+            error = error[1]
+        self._log(f'Server error: {error}',
+                  'WARNING' if isinstance(error, _PortTaken) else 'ERROR')
+        if isinstance(error, _PortTaken) and error.__cause__ is not None:
+            self._log(f'Bind failure cause: {error.__cause__!r}', 'DEBUG')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         self._starting = False

@@ -2946,21 +2946,64 @@ def record_envoy_enabled(ext) -> None:
     if isinstance(entry, dict) and entry.get('enabled') is True:
         return
     data[ENVOY_KEY] = {'enabled': True}
-    path = project_json_path(ext)
     try:
-        if path.is_file():
-            _write_json_atomic(path, data)
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with open(path, 'x', encoding='utf-8', newline='\n') as f:
-                    f.write(json.dumps(data, indent=2) + '\n')
-            except FileExistsError:
-                return   # co-writer landed it; the next save records the key
+        if not _save_project_json(project_json_path(ext), data):
+            return   # co-writer landed it; the next save records the key
         ext.Log('Declared Envoy in .embody/project.json -- commit it so a '
                 'clone starts Envoy without being hand-enabled', 'DEBUG')
     except Exception as e:
         ext.Log(f'Could not record the Envoy declaration: {e}', 'WARNING')
+
+
+def _save_project_json(path: Path, data: dict) -> bool:
+    """Write project.json data read by _load_project_json: atomic replace
+    when the file exists, EXCLUSIVE create when it does not. False when a
+    co-writer created it first (never clobbered)."""
+    if path.is_file():
+        _write_json_atomic(path, data)
+        return True
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(path, 'x', encoding='utf-8', newline='\n') as f:
+            f.write(json.dumps(data, indent=2) + '\n')
+    except FileExistsError:
+        return False
+    return True
+
+
+# Embody's own repo tracks Embody's operators on purpose; every other project
+# that does was over-tagged by Externalize Full Project (issue #176).
+EMBODY_INTERNALS_KEY = 'embody_internals'
+
+
+def read_embody_internals_tracked(ext) -> Optional[bool]:
+    """True when the committed project.json says this project tracks
+    Embody's own operators on purpose (strict JSON `true`, as
+    read_envoy_enabled), None when the file is unreadable: unknown, so a
+    caller never offers to delete what may be Embody's real source."""
+    data, readable = _load_project_json(
+        ext, "reading the Embody-internals choice")
+    if not readable:
+        return None
+    entry = (data or {}).get(EMBODY_INTERNALS_KEY)
+    return entry.get('tracked') is True if isinstance(entry, dict) else False
+
+
+def record_embody_internals_tracked(ext) -> bool:
+    """Record 'keep tracking Embody's own operators' in the COMMITTED
+    project.json. Key-level ownership as record_envoy_enabled. True when
+    the choice is on disk."""
+    data, readable = _load_project_json(
+        ext, "recording the Embody-internals choice")
+    if not readable:
+        return False
+    data[EMBODY_INTERNALS_KEY] = {'tracked': True}
+    try:
+        return _save_project_json(project_json_path(ext), data)
+    except Exception as e:
+        ext.Log(f"Could not record the Embody-internals choice: {e}",
+                'WARNING')
+        return False
 
 
 def adopt_committed_envoy(ext, kick_envoy: bool) -> bool:

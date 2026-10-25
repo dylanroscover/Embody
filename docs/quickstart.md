@@ -107,6 +107,8 @@ Externalization is **opt-in** — nothing is written to disk until you choose. T
 - **Tag operators yourself**: hover one and press ++lctrl++ twice.
 - **Auto-externalize what the AI builds**: set the **Auto-Externalize New Ops** parameter (Embody component → **Envoy** page) to `DATs`, `COMPs`, or `DATs and COMPs`. New operators your assistant creates through Envoy are then tagged and externalized automatically. The default is `Neither`.
 
+To keep a whole project on disk, see [Tracking a Whole Project](embody/externalization.md#tracking-a-whole-project).
+
 To save your changes, press ++ctrl+shift+u++. On the next project open, everything tagged restores from disk automatically.
 
 That's the whole loop — generate, compare, revert, branch. The lateral moves run at the speed of typing; the generating you delegate and come back to.
