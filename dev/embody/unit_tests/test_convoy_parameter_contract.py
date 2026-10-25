@@ -136,12 +136,11 @@ def test_the_convoy_comp_carries_its_global_shortcut():
 
 
 def test_embody_tdxn_is_the_only_copy_of_the_convoy_page():
-    """The parent's Embody entry is a tdn_ref with no custom_pars (6.2.71):
-    a second copy there could drift from the one these tests pin."""
-    embody = next(row for row in _load_yaml(ROOT_TDXN)["operators"]
-                  if row.get("name") == "Embody")
-    assert embody.get("tdn_ref")
-    assert "custom_pars" not in embody
+    """The parent's file carries no Embody entry at all (issue #176; a
+    tdn_ref with no custom_pars before): a second copy there could drift
+    from the one these tests pin."""
+    names = [row.get("name") for row in _load_yaml(ROOT_TDXN)["operators"]]
+    assert "Embody" not in names
     assert _convoy_page(_load_yaml(EMBODY_TDXN))
 
 

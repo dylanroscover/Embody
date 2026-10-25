@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdxn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdxn`), the source of truth for its parameters, so it stays in sync with the actual component. **140 parameters** across 9 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdxn`), the source of truth for its parameters, so it stays in sync with the actual component. **141 parameters** across 9 pages.
 
 ## Embody
 
@@ -14,7 +14,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-setupwizard" href="#par-setupwizard">Setup Wizard (`Setupwizard`)</a> | Pulse | - | Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written. |
 | <a class="par-anchor" id="par-embodymode" href="#par-embodymode">Mode (`Embodymode`)</a> | Menu | `auto` | How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control. Options: `Auto - manage everything`, `Advanced - ask first`. |
 | <a class="par-anchor" id="par-folder" href="#par-folder">Ext. Folder (Rel. to Project) (`Folder`)</a> | Folder | - | Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder. |
-| <a class="par-anchor" id="par-externalizeproject" href="#par-externalizeproject">Externalize Full Project (`Externalizeproject`)</a> | Pulse | - | Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content. |
+| <a class="par-anchor" id="par-externalizeproject" href="#par-externalizeproject">Externalize Full Project (`Externalizeproject`)</a> | Pulse | - | Tags all eligible operators in the entire project for externalization. A dialog picks .tox or .tdxn for COMPs, optionally with a project-wide .tdxn snapshot; DATs get file-type tags based on their content. Skips Embody itself, TouchDesigner's system COMPs, palette components, clones, replicants and tdxn_exclude subtrees. |
 | <a class="par-anchor" id="par-disable" href="#par-disable">`Disable`</a> | Pulse | - | Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable. |
 | <a class="par-anchor" id="par-update" href="#par-update">Enable / Update (`Update`)</a> | Pulse | - | Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table. |
 | <a class="par-anchor" id="par-releaseall" href="#par-releaseall">Export All Release Toxes (`Releaseall`)</a> | Pulse | - | Export every releasable component as its own portable .tox into the release folder, in one pass. A component is releasable when it is BOTH externalized by Embody (tracked -- it is yours) AND carries a release hook (a pre_release or post_release Text DAT as a direct child). Third-party components that ship with their authors' hook DATs are never batch-released -- export those explicitly if needed. Failures are logged and skipped without halting the batch. |
@@ -182,7 +182,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.2.49` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.2.75` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33230` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |

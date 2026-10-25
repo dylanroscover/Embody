@@ -343,3 +343,106 @@ class TestRepoRootSentinel(EmbodyTestCase):
             'the harness must snapshot sys._envoy_repo_root')
         self.assertIn('del sys._envoy_repo_root', src,
             'and delete it again when it was previously unset')
+
+
+class TestBindRaceReporting(EnvoyLifecycleContractBase):
+    """Two TDs starting together can pick the same free port, and the loser's
+    uvicorn reports the failed bind as an UnboundLocalError. That is a race
+    the restart scans past, so it must read as one (E2E 2026-10-25)."""
+
+    UVICORN_BIND = ("cannot access local variable 'server' where it is not "
+                    "associated with a value")
+
+    def test_a_lost_bind_race_reads_as_port_taken(self):
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as held:
+            held.bind(('127.0.0.1', 0))
+            held.listen(1)
+            port = held.getsockname()[1]
+            err = self.envoy_mod.EnvoyExt._bindFailure(
+                port, UnboundLocalError(self.UVICORN_BIND))
+        self.assertIsInstance(err, self.envoy_mod._PortTaken)
+        self.assertIn(f'Port {port} is already in use', str(err))
+        self.assertNotIn('local variable', str(err))
+
+    def test_uvicorn_sys_exit_on_a_taken_port_reads_as_port_taken(self):
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as held:
+            held.bind(('127.0.0.1', 0))
+            held.listen(1)
+            port = held.getsockname()[1]
+            err = self.envoy_mod.EnvoyExt._bindFailure(port, SystemExit(1))
+        self.assertIsInstance(err, self.envoy_mod._PortTaken)
+
+    def test_a_crash_after_the_bind_is_not_blamed_on_the_port(self):
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as held:
+            held.bind(('127.0.0.1', 0))
+            held.listen(1)
+            port = held.getsockname()[1]
+            err = self.envoy_mod.EnvoyExt._bindFailure(
+                port, ValueError('boom'), bound=True)
+        self.assertNotIsInstance(err, self.envoy_mod._PortTaken)
+        self.assertIn('boom', str(err))
+
+    def test_a_failure_on_a_free_port_keeps_its_cause(self):
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('127.0.0.1', 0))
+            port = s.getsockname()[1]
+        err = self.envoy_mod.EnvoyExt._bindFailure(port, ValueError('boom'))
+        self.assertNotIsInstance(err, self.envoy_mod._PortTaken)
+        self.assertIn('boom', str(err))
+
+    def test_a_port_race_logs_a_warning_with_the_plain_message(self):
+        logged = []
+        self._patch(self.envoy, '_log',
+                    lambda msg, level='INFO': logged.append((level, msg)))
+        self._patch(self.envoy, '_scheduleRestart', lambda reason: None)
+        exc = self.envoy_mod._PortTaken('Port 9871 is already in use.')
+        self.envoy._onServerError((type(exc), exc, None))
+        server = [(lvl, msg) for lvl, msg in logged
+                  if msg.startswith('Server error')]
+        self.assertEqual(server,
+                         [('WARNING', 'Server error: Port 9871 is already in use.')])
+
+    def test_other_server_errors_stay_errors(self):
+        logged = []
+        self._patch(self.envoy, '_log',
+                    lambda msg, level='INFO': logged.append((level, msg)))
+        self._patch(self.envoy, '_scheduleRestart', lambda reason: None)
+        exc = RuntimeError('MCP server failed on port 9871: boom')
+        self.envoy._onServerError((type(exc), exc, None))
+        self.assertIn(('ERROR', 'Server error: MCP server failed on port 9871: boom'),
+                      logged)
+
+
+class TestSessionContextSurvivesReload(EmbodyTestCase):
+    """A hot reload of EnvoyExt mid-request rebinds _SESSION_CTX, and the
+    session middleware's reset then raised ValueError ('was created by a
+    different ContextVar') into envoy_ops' errors (field 2026-10-25)."""
+
+    def test_reset_uses_the_var_that_was_set(self):
+        import contextvars
+        mod = self.embody.op('EnvoyExt').module
+        original = mod._SESSION_CTX
+
+        class _Worker:
+            def _touch_session(self, sid, label):
+                pass
+
+        async def app(scope, receive, send):
+            # what a module reload does to the global mid-request
+            mod._SESSION_CTX = contextvars.ContextVar(
+                'envoy_session', default=(None, None))
+
+        scope = {'type': 'http', 'headers': [(b'x-envoy-session', b's176')]}
+        coro = mod._SessionCapture(app, _Worker())(scope, None, None)
+        try:
+            coro.send(None)
+        except StopIteration:
+            pass
+        finally:
+            mod._SESSION_CTX = original
+        self.assertEqual(original.get(), (None, None),
+                         'the var that was set is reset')

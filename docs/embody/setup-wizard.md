@@ -31,7 +31,7 @@ Sets the **Mode** (`Embodymode`) parameter. The choice also governs how Embody h
 | Option | Meaning |
 |---|---|
 | **New work only** (recommended) | Turns on auto-externalization for new COMPs and DATs. Nothing in the existing project is rewritten during setup. |
-| **Externalize everything** | Turns on auto-externalization and, after setup, offers the separately confirmed whole-project externalization flow. A saved `.toe` is required as a recovery point. |
+| **Externalize everything** | Turns on auto-externalization and, after setup, offers the separately confirmed whole-project externalization flow. A saved `.toe` is required as a recovery point. See [Tracking a Whole Project](externalization.md#tracking-a-whole-project). |
 | **Skip for now** | Leaves externalization settings and the existing project unchanged. |
 
 This step is skipped when the project already looks externalized. The whole-project choice keeps its own confirmation and format choice because it can touch many operators.

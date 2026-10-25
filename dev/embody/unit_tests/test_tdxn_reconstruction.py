@@ -4667,3 +4667,33 @@ class TestTDXNReconstruction(EmbodyTestCase):
 			self.assertIn(name, persisted,
 				f'{name} must stay config.json-persisted, or scrubbing it '
 				'would lose the user setting')
+
+	def test_verify_ignores_errors_from_before_the_wires(self):
+		"""A SOP cooks once on creation, before the import wires its input,
+		and keeps "Not enough sources specified" until it recooks: the startup
+		report logged that as a reconstruction error (field 2026-10-24)."""
+		geo = self.sandbox.create(geometryCOMP, 'verify_stale')
+		for c in list(geo.children):
+			c.destroy()
+		box = geo.create(boxSOP, 'box1')
+		tex = geo.create(textureSOP, 'texture1')
+		tex.nodeX = 200
+		tex.inputConnectors[0].connect(box)
+		tex.display = True
+		tex.render = True
+		self._simulateReconstruction(geo)
+		self.assertTrue(geo.op('texture1').errors(),
+			'precondition: the rebuilt SOP still holds its pre-wire error')
+		self.assertEqual(self.embody_ext._verifyReconstructedComp(geo), [],
+			'a wired SOP must not report its pre-wire error')
+
+	def test_verify_still_reports_a_real_error(self):
+		geo = self.sandbox.create(geometryCOMP, 'verify_real')
+		for c in list(geo.children):
+			c.destroy()
+		tex = geo.create(textureSOP, 'texture1')
+		tex.display = True
+		self._simulateReconstruction(geo)
+		errs = self.embody_ext._verifyReconstructedComp(geo)
+		self.assertTrue(any('texture1' in e for e in errs),
+			f'an unwired SOP is a real error: {errs}')

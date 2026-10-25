@@ -1184,6 +1184,9 @@ class UpdaterExt:
             if refusal:
                 message += '\n\n' + refusal
             self._dialog('Embody Update', message, ['OK'])
+        # deferred by its onCreate run while the update was unverified (#176)
+        run(f"op('{embody.path}').ext.Embody.untrackStrayExternalizations() "
+            f"if op('{embody.path}') else None", delayFrames=30)
 
     def _stampAboutPars(self, manifest):
         """Preserved par values keep the OLD About info -- stamp the new."""

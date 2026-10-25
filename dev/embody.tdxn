@@ -1,15 +1,12 @@
 format: tdxn
 version: '2.2'
-build: 1332
-generator: Embody/6.2.74
+build: 1333
+generator: Embody/6.2.75
 td_build: 099.2025.33230
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
-type_defaults:
-  tableDAT:
-    size: [130, 90]
 type: containerCOMP
 parameters:
   w: 960
@@ -31,52 +28,6 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdxn
 operators:
-- name: Embody
-  type: containerCOMP
-  parameters:
-    w: ~op('./manager').par.w
-    h: ~op('./manager').par.h
-    display: false
-    resizecomp: =me
-    repocomp: =me
-    borderover: false
-    align: horizlr
-    justifyv: top
-    parentshortcut: Embody
-    opshortcut: Embody
-    nodeview: opviewer
-    opviewer: ./viz_status
-    reloadbuiltin: false
-  sequences:
-    ext:
-    - object: op('./EmbodyExt').module.EmbodyExt(me)
-      name: Embody
-      promote: true
-    - object: op('./EnvoyExt').module.EnvoyExt(me)
-      name: Envoy
-      promote: true
-    - object: op('./TDXNExt').module.TDXNExt(me)
-      name: TDXN
-      promote: true
-    - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
-      name: CatalogManager
-      promote: true
-    - {}
-    - {}
-    - {}
-    - {}
-    - {}
-    - {}
-    - {}
-  flags:
-  - display
-  - viewer
-  - showCustomOnly
-  size: [160, 130]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdxn
-  tdn_ref: embody/Embody.tdxn
 - name: ndiout1
   type: ndioutTOP
   parameters:
@@ -133,25 +84,13 @@ operators:
   color: [0.9, 0.3, 0.4]
   tags:
   - py
-- name: externalizations
-  type: tableDAT
-  parameters:
-    file: embody/externalizations.tsv
-    syncfile: true
-    rows: 355
-    cols: 11
-  flags:
-  - viewer
-  position: [-200, 0]
-  color: [0.9, 0.3, 0.4]
-  tags:
-  - tsv
 - name: ndiout1_grouptable
   type: tableDAT
   flags:
   - viewer
   - -showDocked
   position: [150, -320]
+  size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dock: ndiout1
   dat_content:

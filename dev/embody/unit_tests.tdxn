@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
-build: 380
-generator: Embody/6.2.73
+build: 385
+generator: Embody/6.2.75
 td_build: 099.2025.33230
 network_path: /embody/unit_tests
 options:
@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 20
+    rows: 8
     cols: 5
   flags:
   - viewer
@@ -435,6 +435,11 @@ operators:
   parameters:
     file: embody/unit_tests/test_catalog_bootstrap_palette.py
   position: [4400, -2200]
+- name: test_project_externalize_scope
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_project_externalize_scope.py
+  position: [1400, -3000]
 annotations:
 - name: annotate1
   mode: annotate

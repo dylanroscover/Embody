@@ -819,6 +819,9 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         tdxn_tag = op.Embody.par.Tdxntag.eval()
         if tag_type in op.Embody.ext.Embody._tdxnTags():
             tag_type = tdxn_tag
+        refusal = op.Embody.ext.Embody._tagRefusal(target, tag_type)
+        if refusal:
+            return {'error': f'{op_path}: not tagged {tag_type!r}: {refusal}.'}
 
         # The tagger REFUSES unknown values -- an unchecked return reported
         # success while nothing was tagged. MCP never raises the locked-
