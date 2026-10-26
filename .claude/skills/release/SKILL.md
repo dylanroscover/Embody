@@ -48,7 +48,7 @@ LIVE DAT state, shipping stale content (observed v6.0.133: the exported
 `op.Embody.par.Refresh` and spot-check the changed DATs (row counts, code
 markers), then save.
 
-If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, then have the user close TD without saving and reopen. Do **not** save again -- the hook will delete the just-correct release `.tox`.
+If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, and do **not** save again -- the hook will delete the just-correct release `.tox`. The rename fixes git, not the session: a `.toe` keeps its own name, so the renamed file reopens under the OLD one (`Embody-6.379.toe` reopened as `Embody-6.378.toe`, 2026-10-26). Make the NEXT release save `project.save('<dev>/Embody-6.<N-1>.toe')`, where N is the build the new version belongs to: TD increments the number in the path it is given, so it writes N and the session is back in lock-step.
 
 ## 1. Audit All Changes
 

@@ -39,6 +39,14 @@ def _updater_cls():
     return dat.module.UpdaterExt
 
 
+def _method_source(name):
+    """One UpdaterExt method's source, read from the file on disk."""
+    from pathlib import Path
+    src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+           / 'UpdaterExt.py').read_text(encoding='utf-8')
+    return src.split('def %s' % name, 1)[1].split('\n    def ', 1)[0]
+
+
 def _valid_manifest():
     return {
         'schema': 1,
@@ -1118,16 +1126,12 @@ class TestVerifyUpdateClosesBeforeItSpeaks(EmbodyTestCase):
     """
 
     def _verify_source(self):
-        from pathlib import Path
-        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
-               / 'UpdaterExt.py').read_text(encoding='utf-8')
-        body = src.split('def VerifyUpdate', 1)[1]
-        return body.split('\n    def ', 1)[0]
+        return _method_source('VerifyUpdate')
 
     def test_the_sentinel_is_cleared_before_any_dialog(self):
         body = self._verify_source()
         cleared = body.find('_clearSentinel()')
-        dialog = body.find('self._dialog(')
+        dialog = body.find('self._reportUpdate(')
         self.assertGreater(cleared, 0, 'VerifyUpdate must clear the sentinel')
         self.assertGreater(dialog, 0, 'and still report to the user')
         self.assertLess(cleared, dialog,
@@ -1138,7 +1142,7 @@ class TestVerifyUpdateClosesBeforeItSpeaks(EmbodyTestCase):
     def test_externaltox_is_detached_before_any_dialog(self):
         body = self._verify_source()
         self.assertLess(body.find('_clearExternalTox()'),
-                        body.find('self._dialog('),
+                        body.find('self._reportUpdate('),
                         'a parked dialog must never leave the component '
                         'pointed at a file in .embody/updates')
 
@@ -1152,14 +1156,10 @@ class TestVerifyUpdateClosesBeforeItSpeaks(EmbodyTestCase):
         critical section, so it is tested that way: nothing called between
         the sentinel being read and being cleared may block on a user.
         """
-        from pathlib import Path
-        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
-               / 'UpdaterExt.py').read_text(encoding='utf-8')
         for callee in ('_stampAboutPars', '_applyBuildOwnedPars',
                        '_pruneRetiredPars', '_clearExternalTox',
                        '_cleanupFiles'):
-            body = src.split('def %s' % callee, 1)[1]
-            body = body.split('\n    def ', 1)[0]
+            body = _method_source(callee)
             for blocker in ('self._dialog(', 'ui.messageBox'):
                 self.assertNotIn(
                     blocker, body,
@@ -1169,14 +1169,80 @@ class TestVerifyUpdateClosesBeforeItSpeaks(EmbodyTestCase):
 
     def test_removals_ride_the_update_dialog_rather_than_their_own(self):
         body = self._verify_source()
-        self.assertEqual(1, body.count('self._dialog('),
+        self.assertEqual(0, body.count('self._dialog('))
+        self.assertEqual(1, body.count('self._reportUpdate('),
                          'one update, one dialog')
-        self.assertIn('no longer exist in this', body,
+        report = _method_source('_reportUpdate')
+        self.assertEqual(1, report.count('self._dialog('))
+        self.assertIn('no longer exist in this', report,
                       'removals are still reported, inside that one dialog')
         self.assertLess(body.find('retired = self._pruneRetiredPars'),
                         body.find('_clearSentinel()'),
                         'the prune still runs INSIDE the critical section; '
                         'only its reporting moved out')
+
+
+class _ReportStub:
+    """Host for _reportUpdate: records the dialog, answers it, counts saves."""
+
+    def __init__(self, saved, answer=0):
+        self.saved = saved
+        self.answer = answer
+        self.dialogs = []
+        self.saves = 0
+
+    def _dialog(self, title, message, buttons):
+        self.dialogs.append((message, buttons))
+        return self.answer
+
+    def _projectSaved(self):
+        return self.saved
+
+    def _saveProject(self):
+        self.saves += 1
+
+
+class TestUpdateDialogOffersSave(EmbodyTestCase):
+    """The update lives in the live session only: Embody is not externalized
+    in a user project, so the saved .toe opens the old version until a save."""
+
+    _SENTINEL = {'tag': 'v6.2.77', 'from_version': '6.2.76'}
+
+    def _report(self, stub, retired=()):
+        _updater_cls()._reportUpdate(stub, self._SENTINEL, list(retired))
+        return stub
+
+    def test_save_now_saves_the_project(self):
+        stub = self._report(_ReportStub(saved=True, answer=0))
+        message, buttons = stub.dialogs[0]
+        self.assertEqual(['Save Now', 'Later'], buttons)
+        self.assertIn('v6.2.76', message, 'names the version the .toe holds')
+        self.assertEqual(1, stub.saves)
+
+    def test_later_closed_or_suppressed_never_saves(self):
+        for answer in (1, -1, None):
+            stub = self._report(_ReportStub(saved=True, answer=answer))
+            self.assertEqual(0, stub.saves, f'answer {answer!r} saved')
+
+    def test_a_never_saved_project_gets_a_plain_ok(self):
+        stub = self._report(_ReportStub(saved=False, answer=0))
+        self.assertEqual(['OK'], stub.dialogs[0][1])
+        self.assertEqual(0, stub.saves, 'never save a NewProject placeholder')
+
+    def test_removals_still_ride_the_same_dialog(self):
+        stub = self._report(_ReportStub(saved=True, answer=1), ['Oldpar'])
+        self.assertEqual(1, len(stub.dialogs))
+        self.assertIn('Oldpar', stub.dialogs[0][0])
+
+    def test_the_cleanup_lands_before_the_save_offer(self):
+        """Save Now must capture what the #176 cleanup changed."""
+        body = _method_source('VerifyUpdate')
+        cleanup = body.find('untrackStrayExternalizations()')
+        self.assertGreater(cleanup, body.find('_clearSentinel()'),
+                           'the cleanup waits out an unverified update')
+        self.assertLess(cleanup, body.find('self._reportUpdate('))
+        self.assertNotIn('delayFrames=30', body,
+                         'a deferred cleanup would land after Save Now')
 
 
 class TestManifestKeysThatDriveDestruction(EmbodyTestCase):

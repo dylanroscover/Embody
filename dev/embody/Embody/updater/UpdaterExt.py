@@ -1170,23 +1170,44 @@ class UpdaterExt:
         self._log(f'update to {sentinel["tag"]} verified '
                   f'(from v{sentinel["from_version"]})', 'SUCCESS')
         # ---- critical section over; dialogs are safe from here ----
+        # deferred by its onCreate run while the update was unverified (#176);
+        # runs before the report so Save Now captures it
+        try:
+            embody.ext.Embody.untrackStrayExternalizations()
+        except Exception as e:
+            self._log(f'stray externalization cleanup failed: {e}', 'WARNING')
         if sentinel.get('interactive'):
-            message = (f'Embody was updated to {sentinel["tag"]}.\n\n'
-                       'Settings and externalizations were preserved.')
-            if retired:
-                # ONE dialog, not two. These are removals the user did not ask
-                # for, so they are reported -- but as part of the update's own
-                # result, not as a separate alarm that lands before the update
-                # has even announced itself.
-                message += ('\n\nThese settings no longer exist in this '
-                            'version and were removed:\n' + ', '.join(retired))
-            refusal = getattr(self, '_prune_refusal', None)
-            if refusal:
-                message += '\n\n' + refusal
-            self._dialog('Embody Update', message, ['OK'])
-        # deferred by its onCreate run while the update was unverified (#176)
-        run(f"op('{embody.path}').ext.Embody.untrackStrayExternalizations() "
-            f"if op('{embody.path}') else None", delayFrames=30)
+            self._reportUpdate(sentinel, retired)
+
+    def _reportUpdate(self, sentinel, retired):
+        """The update's one dialog. Embody is not externalized in a user
+        project, so the saved .toe keeps the old version until a save: a saved
+        project is offered Save Now, and only that button saves."""
+        message = (f'Embody was updated to {sentinel["tag"]}.\n\n'
+                   'Settings and externalizations were preserved.')
+        if retired:
+            # ONE dialog, not two. These are removals the user did not ask
+            # for, so they are reported -- but as part of the update's own
+            # result, not as a separate alarm that lands before the update
+            # has even announced itself.
+            message += ('\n\nThese settings no longer exist in this '
+                        'version and were removed:\n' + ', '.join(retired))
+        refusal = getattr(self, '_prune_refusal', None)
+        if refusal:
+            message += '\n\n' + refusal
+        saved = self._projectSaved()
+        if saved:
+            message += ('\n\nUntil you save, this project still opens with '
+                        f'v{sentinel["from_version"]}.')
+        buttons = ['Save Now', 'Later'] if saved else ['OK']
+        if self._dialog('Embody Update', message, buttons) == 0 and saved:
+            self._saveProject()
+
+    def _projectSaved(self):
+        return self._embody.ext.Embody._projectSavedOnDisk()
+
+    def _saveProject(self):
+        project.save()
 
     def _stampAboutPars(self, manifest):
         """Preserved par values keep the OLD About info -- stamp the new."""
