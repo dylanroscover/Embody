@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.77
+
+Updating Embody offers to save the project.
+
+- **Save Now after an update.** The saved `.toe` keeps the old Embody until you save, so the update-complete dialog now offers **Save Now** or **Later**. Only Save Now saves. The cleanup of projects over-tagged by older versions now runs before the dialog, so Save Now includes it. +5 tests.
+
 ## v6.2.76
 
 Externalize Full Project keeps Embody and TouchDesigner's own COMPs out of your files.

@@ -70,6 +70,11 @@ preference.
    verification fails, the pre-update backup is restored automatically and
    the failure is reported.
 
+   The update lives in the open session until you save: the saved `.toe`
+   still holds the old Embody. So the dialog offers **Save Now** (or
+   **Later**) in a project that has been saved before. Only **Save Now**
+   saves; closing the dialog counts as **Later**.
+
    The reporting deliberately comes last. A message box is modal to the
    script that raised it but *not* to TouchDesigner, whose scheduled
    callbacks keep running behind it — so a dialog raised mid-verification
@@ -206,6 +211,7 @@ invisible to the updater** — users on auto-update simply won't receive it.
 | "A previous update to vX did not complete" on a manual check | An earlier update stopped before it could be verified. Choose `Restore Backup` to go back to the pre-update version, or `Discard and Continue` to drop the leftover and check again. |
 | "Update Recovery" dialog at startup | A previous update was interrupted. `Restore Backup` returns to the pre-update version; `Keep Current State` leaves things as they are. It never appears for an update that is merely still finishing — if you see it, the update really did stop. |
 | "N settings no longer exist in this version and were removed" | The new version retired those parameters; their values are gone with them. It arrives inside the update's own success dialog, never as a separate alarm, and it never names Convoy node rows or any other runtime-populated sequence — those are a live readout, not settings, and an update leaves them alone. |
+| "Until you save, this project still opens with vX" | The update is live, but the saved `.toe` still holds the old Embody. **Save Now** saves the project; **Later** leaves it unsaved, so save before you close TouchDesigner. If you close without saving, the project reopens on vX and you can update again from there. |
 | Status shows an old version after update | The verify step stamps version metadata a few seconds after the reload; if it still shows stale info, check the Embody log for a rollback report. |
 | Status shows the NEW version after a rollback | Fixed in v6.2.58. Older builds preserved the parameter values across the reload without stamping them back, so a rolled-back install kept claiming the version it had discarded — and, because the update check compares against that number, rested on "Up to date" indefinitely. Update to v6.2.58 or later; the version is now restored as part of the rollback. |
 | Updater refuses in the dev repo | Intended — see above. Use `git pull`. |
