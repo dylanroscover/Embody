@@ -95,13 +95,13 @@ Anything you add inside a tagged COMP later, by hand or through your AI assistan
 The Externalize Full Project dialog asks for a format:
 
 - **TOX** or **TDXN** sets the format for every COMP it tags, except the COMP that holds Embody, which is always TDXN.
-- **TOX + Project TDXN** and **TDXN + Project TDXN** also write one `.tdxn` snapshot of the whole project, named after your `.toe`. It is handy for search and AI context; Embody never rebuilds anything from it.
+- **TOX + Project TDXN** and **TDXN + Project TDXN** also write one `.tdxn` snapshot of the whole project, named after your `.toe`. It is handy for search and AI context; Embody never rebuilds anything from it. It appears in `externalizations.tsv` as a `/` row so Embody can track the file. Saves don't update it, so it stays a point-in-time copy: refresh it with [Export Project to TDXN](parameters.md#par-shortcutexportproject) (++ctrl+shift+e++).
 
 The sweep skips palette components, clones, replicants, `/local`, TouchDesigner's system COMPs (`/perform`, `/ui`, `/sys`), Embody itself, and anything tagged [`tdxn_exclude`](#excluding-a-comp-from-tdxn-the-tdxn_exclude-tag). Run from the setup wizard's **Externalize everything** step, it also turns on [Auto-Externalize New Ops](parameters.md#par-autoexternalize), which gives COMPs and DATs your AI assistant creates outside any tagged COMP a file of their own.
 
 ### What stays out
 
-- **The root `/`** can never be tagged. COMPs and file-backed DATs at the root get files of their own, but other operators placed directly at the root, and the wires between them, are not tracked. Keep your work inside a COMP.
+- **The root `/`** can never be tagged. COMPs and file-backed DATs at the root get files of their own, but other operators placed directly at the root, and the wires between them, are not tracked. Keep your work inside a COMP. The `/` row that the project snapshot adds is not a tag.
 - **TouchDesigner's system COMPs** (`/perform`, `/ui`, `/sys`, `/local`) and the COMPs inside them are never externalized.
 - **Roundtrip mode and Embody's container.** In [Roundtrip mode](#tdxn-mode-master-switch) the COMP that holds Embody, and every COMP above it, is never stripped or rebuilt from disk: that would destroy the running Embody. Its `.tdxn` is still written on save, but the `.toe` stays its source of truth. For the same reason Envoy refuses to reload that COMP from its `.tdxn` with `import_network(clear_first=True)`, so your AI assistant changes it live instead. If your top-level network must round-trip, put Embody at the root (`/`) instead, and open your network before asking your AI assistant to build so new work lands inside it.
 
