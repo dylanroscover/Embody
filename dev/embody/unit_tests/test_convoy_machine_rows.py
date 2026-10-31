@@ -9,8 +9,6 @@ import importlib.util
 import json
 import os
 
-import pytest
-
 _EXT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'Embody', 'convoy', 'ConvoyExt.py')
@@ -329,11 +327,13 @@ def test_recording_a_no_keeps_every_other_key(monkeypatch):
 
 def test_recording_a_no_never_overwrites_an_unreadable_file(monkeypatch):
     admin = _admin()
+    written = []
     monkeypatch.setattr(admin, '_load_project_json',
                         lambda ext, purpose: ({}, False))
     monkeypatch.setattr(admin, '_save_project_json',
-                        lambda path, data: pytest.fail('wrote over it'))
+                        lambda path, data: written.append(data))
     assert admin.record_convoy_declined(None) is False
+    assert written == []
 
 
 # -- forgetting a machine ------------------------------------------------

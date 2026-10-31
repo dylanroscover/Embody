@@ -5541,9 +5541,8 @@ class ConvoyExt:
             self._log('Convoy enable cancelled -- this project stays out of '
                       'Convoy until you turn it on', 'INFO')
             self._session()['auto_join_tried'] = True
-            mod_admin = getattr(embody, '_recordConvoyDeclined', None)
-            if mod_admin is not None:
-                mod_admin()
+            if choice == 0:     # an answer: -1 is no answer at all
+                embody._recordConvoyDeclined()
             self._setEnabled(False)
             self._apply({'state': 'disabled'}, self._safeClient())
             return False

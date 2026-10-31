@@ -1633,6 +1633,9 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
                     lambda: self.candidate)
         self._patch(self.embody_target, '_ensureConvoyId', _ensureConvoyId)
         self._patch(self.embody_target, '_messageBox', _messageBox)
+        self.declined = []
+        self._patch(self.embody_target, '_recordConvoyDeclined',
+                    lambda: self.declined.append(True))
 
     def test_consent_scope_is_the_lan_scope(self):
         self.assertEqual(self.convoy._CONSENT_SCOPE, CONSENT_SCOPE,
@@ -1678,7 +1681,9 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.choice = 0
         self.assertFalse(self.convoy._ensureConsent())
         self.assertEqual(self.recorded, [],
-                         'nothing may be written on a decline')
+                         'no id or consent may be written on a decline')
+        self.assertEqual(self.declined, [True],
+                         'but the no itself is kept, or the next open joins')
         self.assertEqual(self.enable_writes, [False])
         self.assertEqual(self.status_writes[-1], 'Disabled')
         self.assertEqual(self._warnings(), [],
@@ -1690,6 +1695,8 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.choice = -1
         self.assertFalse(self.convoy._ensureConsent())
         self.assertEqual(self.recorded, [])
+        self.assertEqual(self.declined, [],
+                         'nobody answered, so nobody said no')
         self.assertEqual(self.enable_writes, [False])
 
     def test_an_already_recorded_convoy_never_re_prompts(self):
