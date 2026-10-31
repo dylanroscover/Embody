@@ -90,6 +90,8 @@ import sys
 import threading
 import time
 
+import convoy_identity as node_identity
+
 
 HOST_LIFECYCLE_CAPABILITY = "host.td-lifecycle/v1"
 STATE_SCHEMA = 1
@@ -344,6 +346,38 @@ def _path_within(root, candidate):
         return False
 
 
+def _same_project(left, right):
+    """True when two .toe paths are saves of one project (see convoy_identity)."""
+    lineage = node_identity.toe_lineage_discriminator(left)
+    if lineage is None:
+        return _path_same(left, right)
+    return lineage == node_identity.toe_lineage_discriminator(right)
+
+
+def _newest_save(toe_path):
+    """The most recently written save of toe_path's project.
+
+    CrashAutoSave shares the lineage and is never what a save wrote. Any
+    listing failure answers toe_path, which is what the caller pinned.
+    """
+    newest, newest_mtime = toe_path, None
+    try:
+        lineage = node_identity.toe_lineage_discriminator(toe_path)
+        folder = os.path.dirname(toe_path)
+        for name in os.listdir(folder):
+            if name.lower().startswith("crashautosave."):
+                continue
+            candidate = os.path.join(folder, name)
+            if node_identity.toe_lineage_discriminator(candidate) != lineage:
+                continue
+            mtime = os.path.getmtime(candidate)
+            if newest_mtime is None or mtime > newest_mtime:
+                newest, newest_mtime = candidate, mtime
+    except OSError:
+        return toe_path
+    return newest
+
+
 def _file_identity(path):
     """JSON-safe identity for one exact regular file, following no guesses."""
     try:
@@ -423,14 +457,18 @@ def _lock_unit_id(profile):
     :meth:`_refresh_saved_toe`, so a launch-unit-keyed lock would change
     identity while the live thread still held the lock minted from the old
     id -- letting the recovery loop acquire a *different* Lock object and race
-    the live post-commit restart it is meant to exclude. Keying on the exact
-    paths + platform + session is stable across a save yet still groups every
-    node that shares one TouchDesigner process (a shared runtime).
+    the live post-commit restart it is meant to exclude. Keying on the project
+    (a versioned save moves toe_path too) + executable + platform + session is
+    stable across a save yet still groups every node that shares one
+    TouchDesigner process (a shared runtime).
     """
     profile = _validate_profile(profile)
     return _content_digest({
-        name: profile[name] for name in (
-            "toe_path", "executable_path", "platform", "session")
+        "project": (node_identity.toe_lineage_discriminator(profile["toe_path"])
+                    or profile["toe_path"]),
+        "executable_path": profile["executable_path"],
+        "platform": profile["platform"],
+        "session": profile["session"],
     })
 
 
@@ -1714,12 +1752,23 @@ class LifecycleManager:
         if not _identity_same(executable_identity, profile["executable_identity"]):
             raise LifecycleError("executable_changed")
 
-    def _refresh_saved_toe(self, profile):
-        """Re-pin the exact file identity after an approved in-TD save."""
-        identity = _file_identity(profile["toe_path"])
+    def _refresh_saved_toe(self, profile, pre_save_identity):
+        """Re-pin the saved file after an approved in-TD save.
+
+        A versioned save wrote a new file beside the old one, so the file to
+        relaunch is the one this save wrote, not the one pinned before it
+        (field 2026-10-31). A newer file that was already there when the save
+        began is someone else's: reopening e1.5 and saving must not relaunch
+        an e1.6 that save never touched.
+        """
+        toe_path = _newest_save(profile["toe_path"])
+        if _identity_same(_file_identity(toe_path), pre_save_identity):
+            toe_path = profile["toe_path"]
+        identity = _file_identity(toe_path)
         if identity is None:
             raise LifecycleError("save_failed")
         refreshed = _clone(profile)
+        refreshed["toe_path"] = toe_path
         refreshed["toe_identity"] = identity
         refreshed["updated_at"] = float(self._clock())
         return self.store.put_profile(refreshed)
@@ -1734,7 +1783,7 @@ class LifecycleManager:
         fact ``_refresh_saved_toe`` re-pins -- is durable evidence the save
         landed regardless of that housekeeping dirt.
         """
-        current = _file_identity(toe_path)
+        current = _file_identity(_newest_save(toe_path))
         return current is not None and not _identity_same(
             current, pre_save_identity)
 
@@ -1773,7 +1822,9 @@ class LifecycleManager:
                 limit=128)
         except LifecycleError:
             raise LifecycleError("runtime_changed")
-        if (not _path_same(toe_path, profile["toe_path"])
+        # Every save of one project is one node: the heartbeat after a versioned
+        # save reports the new file while this attempt still holds the old one.
+        if (not _same_project(toe_path, profile["toe_path"])
                 or td_build != profile["td_build"]):
             raise LifecycleError("runtime_changed")
         runtime_id = _runtime_id(runtime.get("runtime_id"))
@@ -2921,7 +2972,8 @@ class LifecycleManager:
                     save_may_have_run = True
                     # Snapshot the exact .toe identity so a successful save is
                     # proven by the file being rewritten, not by project dirt.
-                    pre_save_toe_identity = _file_identity(profile["toe_path"])
+                    pre_save_toe_identity = _file_identity(
+                        _newest_save(profile["toe_path"]))
                     saved = self._runtime_call_before_commit(
                         "save", node_id, runtime_id, deadline, cancel_event)
                     if saved.get("ok") is not True:
@@ -2970,7 +3022,8 @@ class LifecycleManager:
                             profile["toe_path"], pre_save_toe_identity):
                         raise LifecycleError("save_failed")
                     save_landed = True
-                    profile = self._refresh_saved_toe(profile)
+                    profile = self._refresh_saved_toe(
+                        profile, pre_save_toe_identity)
                 if policy in DESTRUCTIVE_RESTART_POLICIES:
                     if self.local_policy(node_id, policy) is not True:
                         raise LifecycleError("destructive_policy_disabled")

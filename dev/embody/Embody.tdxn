@@ -466,7 +466,7 @@ custom_pars:
   - name: Convoyenable
     style: Toggle
     label: Enable Convoy
-    help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this installs and starts Convoy's small background app, opens an authenticated LAN listener, and begins automatic discovery and reconnect. Disable this on guest, public, or otherwise untrusted networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. Convoy does not configure or launch an AI client, but it runs on Envoy (its Python environment and local command service), so enabling this turns Enable Envoy on if it is off. The first enable creates this project's convoy identity and asks for confirmation.
+    help: Joins this project to the Convoy on this trusted LAN and lets other machines discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. The first enable on a computer installs and starts Convoy's small background app, opens an authenticated LAN listener, and begins automatic discovery and reconnect. From then on the computer stays in the Convoy at every login, with or without TouchDesigner open, and every project opened here joins by itself unless you turn this off for it. Turning this off takes only this project out; to take the computer off the network, use Stop Convoy App, as you should on guest, public, or otherwise untrusted networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. Convoy does not configure or launch an AI client, but it runs on Envoy (its Python environment and local command service), so enabling this turns Enable Envoy on if it is off. The first enable creates this project's convoy identity and asks for confirmation.
   - name: Convoystatus
     style: Str
     label: Status
@@ -511,38 +511,32 @@ custom_pars:
     clampMin: true
     normMax: 8192.0
     help: 'Maximum disk space (MB) this computer may use for temporary Convoy artifacts: screenshots, transferred files, large tool results, command output, and local client-readable copies. When the limit is reached, Convoy removes the least-recently-used unpinned artifacts first. Active transfers, artifacts required by running or unacknowledged jobs, and files you explicitly saved are not removed. This setting applies to all Convoy-enabled Embody nodes on this computer.'
-  - name: Convoynodes
+  - name: Convoymachines
     style: Sequence
-    label: Convoy Nodes
+    label: Convoy Machines
     readOnly: true
-  - name: Nodename
+  - name: Machinename
     style: Str
-    label: Node Name
+    label: Machine
     readOnly: true
-    help: Display name of the node.
-    sequence: Convoynodes
-  - name: Ipaddress
+    help: The computer's name and current LAN address. One computer is listed once, however many projects it has open.
+    sequence: Convoymachines
+  - name: Toefiles
     style: Str
-    label: IP Address
+    label: Open Projects
     readOnly: true
-    help: Current LAN endpoint.
-    sequence: Convoynodes
-  - name: Nodestatus
+    help: The .toe files active on this machine right now. Convoy remembers every project that has opened here; a closed one simply is not listed.
+    sequence: Convoymachines
+  - name: Machinestatus
     style: Str
     label: Status
     readOnly: true
-    help: Node and connection status; notes an Embody version mismatch only when relevant.
-    sequence: Convoynodes
-  - name: Lastseen
-    style: Str
-    label: Last Seen
-    readOnly: true
-    help: How recently the node was seen.
-    sequence: Convoynodes
+    help: Whether the machine is reachable and how recently it was seen, for example Online / 5s ago. A machine stays Online with no project open.
+    sequence: Convoymachines
   - name: Convoyforgetoffline
     style: Pulse
-    label: Forget Offline Nodes...
-    help: Remove this machine's offline Convoy node rows. Names the rows it would forget (the first eight, then a count) in a confirmation before anything is removed. A forgotten node rejoins as a NEW identity the next time its project opens, and its TD Python approval resets. A node with a delivery that has not finished is kept and named afterwards -- a finished result never holds a row, because results are fetched by delivery id and outlive it. A node that comes back online before you confirm is skipped. Each computer can only forget its own rows.
+    label: Forget Offline...
+    help: Remove closed projects Convoy remembers on this machine, and machines listed as offline. Names what it would forget (the first eight, then a count) in a confirmation before anything is removed. A forgotten project rejoins as a NEW identity the next time it opens, and its TD Python approval resets. A forgotten machine stops being trusted until it rejoins. A project with a delivery that has not finished is kept and named afterwards -- a finished result never holds a row, because results are fetched by delivery id and outlive it. Anything that comes back online before you confirm is skipped.
   - name: Convoyresolverealm
     style: Pulse
     label: Resolve Realm Conflict...
@@ -564,7 +558,7 @@ custom_pars:
   - name: Convoystophost
     style: Pulse
     label: Stop Convoy App
-    help: Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Convoy App to resume.
+    help: Take this computer out of the Convoy and keep it out. Stops the host app and disables its supervisor first -- otherwise it would restart within a minute and the button would look broken. Other machines see this computer go offline, and projects opened here do not rejoin. Jobs already queued stay queued. Use Start Convoy App to resume.
   - name: Convoyuninstallhost
     style: Pulse
     label: Uninstall Convoy App

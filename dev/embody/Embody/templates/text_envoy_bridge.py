@@ -375,12 +375,15 @@ BRIDGE_TOOLS = [
     {
         "name": "convoy_list_nodes",
         "description": (
-            "List the local and reachable remote Embody nodes known to "
-            "this machine's Convoy host. Returns stable host/node/runtime "
-            "identities, connection state, address, and version metadata. "
-            "Local nodes carry a capabilities field (td_python, "
-            "full_shell); remote nodes deliberately do not -- absent "
-            "means unknown, never allowed."
+            "List the machines in this Convoy and the Embody nodes known "
+            "to this machine's Convoy host. `machines` has one row per "
+            "computer, online with or without a project open, with the "
+            ".toe files active on it. `nodes` has one row per project "
+            "(every save of one .toe is one node), including closed "
+            "projects, with stable host/node/runtime identities, connection "
+            "state, address, and version metadata. Local nodes carry a "
+            "capabilities field (td_python, full_shell); remote nodes "
+            "deliberately do not -- absent means unknown, never allowed."
         ),
         "inputSchema": {
             "type": "object",

@@ -5,12 +5,14 @@ host-private ``/nodes`` registry.  The latter contains routing paths, ports,
 and approval state; none of those fields may cross the LAN directory surface.
 """
 
+import socket
 import threading
 import types
 
 import pytest
 
 import convoy_hostapp as ha
+import convoy_identity as identity
 import convoy_hostkeys as hostkeys
 import convoy_peerclient as peerclient
 from test_convoy_hostapp import Server
@@ -420,7 +422,7 @@ def test_shutdown_keeps_membership_enabled_and_lists_node_offline(
     assert peer_row["offline_reason"] == "no_runtime"
 
 
-def test_registration_routes_by_saved_toe_discriminator_and_stores_metadata(app):
+def test_registration_routes_by_toe_lineage_and_stores_metadata(app):
     metadata = {
         "toe_path": "/shows/demo/show.toe",
         "toe_name": "show.toe",
@@ -439,8 +441,8 @@ def test_registration_routes_by_saved_toe_discriminator_and_stores_metadata(app)
     with app.lock:
         first_record = app.directory.lookup(first["node_id"])
         second_record = app.directory.lookup(second["node_id"])
-    assert first_record["node_discriminator"] == DISC_A
-    assert second_record["node_discriminator"] == DISC_B
+    assert first_record["node_discriminator"] ==         identity.toe_lineage_discriminator("/shows/demo/show.toe")
+    assert second_record["node_discriminator"] ==         identity.toe_lineage_discriminator("/shows/demo/other.toe")
     assert first_record["metadata"] == metadata
 
     # Metadata is descriptive only: authority-shaped additions are rejected.
@@ -732,3 +734,125 @@ def test_peer_rows_relay_only_the_closed_reason_vocabulary():
         clean = ha.HostApp._sanitize_peer_node(
             dict(base, offline_reason=reason), target, CONVOY_A)
         assert clean["offline_reason"] == reason
+
+
+# -- the machine directory ----------------------------------------------
+
+def _peer_answers(monkeypatch, answer):
+    monkeypatch.setattr(peerclient, "get_peer_nodes",
+                        lambda target, keys, convoy_id, timeout, pool=None:
+                        answer(target, convoy_id))
+
+
+def _established(app):
+    """A joined machine with one project open, so its realm is live."""
+    _register(app)
+    app._tick_realm()
+
+
+def test_a_peer_with_no_project_open_is_an_online_machine(
+        app, tmp_path, monkeypatch):
+    _established(app)
+    peer_host_id, _identity = _admit_peer(app, tmp_path, 7)
+    _peer_answers(monkeypatch, lambda target, convoy_id: {
+        "ok": True, "host_id": target.host_id, "convoy_id": convoy_id,
+        "nodes": [], "machine": {"hostname": "TEC-C3A"}})
+    code, body = app.network_nodes(CONVOY_A)
+    assert code == 200, body
+    assert body["machines"][0]["local"] is True
+    peer = next(m for m in body["machines"] if m["host_id"] == peer_host_id)
+    assert peer["hostname"] == "TEC-C3A"
+    assert peer["online"] is True
+    assert peer["toes"] == []
+    assert peer["last_seen_age_s"] == 0.0
+
+
+def test_a_machine_lists_one_entry_for_many_open_projects(
+        app, tmp_path, monkeypatch):
+    _established(app)
+    peer_host_id, _identity = _admit_peer(app, tmp_path, 8)
+    row = {"status": "online", "online": True, "hostname": "TEC-C3A"}
+    _peer_answers(monkeypatch, lambda target, convoy_id: {
+        "ok": True, "host_id": target.host_id, "convoy_id": convoy_id,
+        "nodes": [
+            dict(row, node_id="b" * 32, toe_name="Project.1.toe"),
+            dict(row, node_id="c" * 32, toe_name="Moonshine.toe"),
+            dict(row, node_id="d" * 32, toe_name="closed.toe",
+                 status="offline", online=False)]})
+    _code, body = app.network_nodes(CONVOY_A)
+    peers = [m for m in body["machines"] if m["host_id"] == peer_host_id]
+    assert len(peers) == 1
+    assert peers[0]["toes"] == ["Moonshine.toe", "Project.1.toe"]
+
+
+def test_a_machine_gone_offline_keeps_its_name_and_says_how_long(
+        app, tmp_path, monkeypatch):
+    _established(app)
+    peer_host_id, _identity = _admit_peer(app, tmp_path, 9)
+    ticks = {"value": 0.0}
+
+    def cache_clock():
+        ticks["value"] += ha.NETWORK_NODE_CACHE_TTL_S + 1.0
+        return ticks["value"]
+
+    app._network_nodes_cache_clock = cache_clock
+    _peer_answers(monkeypatch, lambda target, convoy_id: {
+        "ok": True, "host_id": target.host_id, "convoy_id": convoy_id,
+        "nodes": [], "machine": {"hostname": "TEC-C3A"}})
+    app.network_nodes(CONVOY_A)
+    app.peers.touch_seen(peer_host_id, when=app._now() - 7200)
+    _peer_answers(monkeypatch,
+                  lambda target, convoy_id: peerclient.UNREACHABLE)
+    _code, body = app.network_nodes(CONVOY_A)
+    peer = next(m for m in body["machines"] if m["host_id"] == peer_host_id)
+    assert peer["online"] is False
+    assert peer["hostname"] == "TEC-C3A", "the name outlives the connection"
+    assert peer["last_seen_age_s"] >= 7200
+    assert peer["reason"] == "peer_unreachable"
+
+
+def test_one_address_is_listed_once(app, tmp_path, monkeypatch):
+    """A reinstalled machine's old identity sits at the same address: one
+    computer, one row, and the live identity is the one shown."""
+    _established(app)
+    shared = "192.168.88.36:47600"
+    identities = {}
+    for number in (10, 11):
+        host_id = "%032x" % number
+        identities[host_id] = hostkeys.load_or_create(
+            str(tmp_path / ("peer-%d" % number)))
+        with app.lock:
+            app.peers.admit(
+                host_id, identities[host_id].fingerprint,
+                cert_pem=identities[host_id].certificate_pem,
+                endpoints=[shared], convoy_ids=[CONVOY_A])
+    old_host_id, new_host_id = list(identities)
+
+    def answer(target, convoy_id):
+        if target.host_id == old_host_id:
+            return peerclient.UNREACHABLE
+        return {"ok": True, "host_id": target.host_id, "convoy_id": convoy_id,
+                "nodes": [], "machine": {"hostname": "TEC-C3A"}}
+
+    _peer_answers(monkeypatch, answer)
+    _code, body = app.network_nodes(CONVOY_A)
+    listed = [m for m in body["machines"] if m["ip"] == "192.168.88.36"]
+    assert [m["host_id"] for m in listed] == [new_host_id]
+
+
+def test_a_peers_reported_name_is_untrusted_text(app):
+    clean = ha.HostApp._clean_machine_name
+    assert clean({"hostname": " TEC-C3A "}) == "TEC-C3A"
+    for bad in (None, "x", {}, {"hostname": 7}, {"hostname": ""},
+                {"hostname": "a\nb"}, {"hostname": "x" * 256}):
+        assert clean(bad) == ""
+
+
+def test_the_peer_directory_names_this_machine(app, tmp_path):
+    _established(app)
+    peer_host_id, peer_identity = _admit_peer(app, tmp_path, 12)
+    code, body = app.peer_nodes_view(
+        peer_host_id, CONVOY_A,
+        authenticated_fingerprint=peer_identity.fingerprint)
+    assert code == 200, body
+    assert body["machine"] == {"hostname": socket.gethostname()}

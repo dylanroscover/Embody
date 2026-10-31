@@ -2059,6 +2059,10 @@ class EmbodyExt:
                         comp.ext.ConvoyExt.recordInstallConsent()
                 except Exception as e:
                     self.Log(f'Convoy consent not recorded: {e}', 'DEBUG')
+            else:
+                # A no here must outlast the machine's yes from another
+                # project, which would otherwise join this one on its next open.
+                mod.embody_admin.record_convoy_declined(self)
             self.my.par.Convoyenable = (convoy == 'enable')
 
         # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred
@@ -3563,6 +3567,10 @@ class EmbodyExt:
         """The 'convoy' object from .embody/project.json, or {} -- see
         embody_admin. Never raises."""
         return mod.embody_admin.read_convoy_entry(self)
+
+    def _convoyDeclinedHere(self) -> bool:
+        """Did someone say no to Convoy for this project? See embody_admin."""
+        return mod.embody_admin.convoy_declined_here(self)
 
     def _readConvoyId(self) -> str:
         """This project's convoy id, or '' -- see embody_admin."""
@@ -5598,7 +5606,7 @@ class EmbodyExt:
             # every runtime-populated block back to its template defaults
             # while preserving the block count, so another machine's names,
             # addresses and presence never bake into a TDXN or release tox.
-            'Convoynodes': None,
+            'Convoymachines': None,
             # A dev dialog preference that SHIPPED On in v6.0.246 (every
             # download saw TD's built-in pages instead of the POPX
             # filter). Not in the config.json whitelist, so the scrub

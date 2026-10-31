@@ -304,7 +304,7 @@ quits that TD, so those files are the only evidence left.
 |---|---|---|
 | Embody | `Status` par, `get_op_errors('/embody/Embody', recurse=True)` | `Enabled`, 0 errors, 0 warnings, no script errors |
 | Envoy | `Envoystatus` par, `get_td_status`, one real tool round-trip | `Running on port N`, `connected: true`, the call answers |
-| Convoy (when enabled) | `Convoystatus` par, `op.Embody.seq.Convoynodes.numBlocks` (the node table), `get_convoy_status`, `convoy_list_nodes` | `Connected`, this node listed `online` by the host with `last_seen_age_s` under a minute, host `running` at THIS version, no `Install failed` / `timed out`; the panel's node table populated |
+| Convoy (when enabled) | `Convoystatus` par, `op.Embody.seq.Convoymachines.numBlocks` (the machine table), `get_convoy_status`, `convoy_list_nodes` | `Connected`, this node listed `online` by the host with `last_seen_age_s` under a minute, host `running` at THIS version, no `Install failed` / `timed out`; the panel's machine table populated |
 | Externalization | `get_externalizations` + `Externalizations` par | the table resolves, link relative, no `Invalid path` warning |
 | Settings | `Filecleanup`, `Toxdropexpr`, `Autosave` | the user's values, never the runner's (`delete` / `ignore`) |
 | Frame rate | `get_project_performance` | back at the project's cook rate, no dropped-frame climb |

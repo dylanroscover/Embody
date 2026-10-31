@@ -995,6 +995,91 @@ def test_save_then_restart_repins_toe_identity_after_real_save(tmp_path):
     assert runtime.quit_calls[0][3] == "after"
 
 
+def _versioned_save(runtime, toe):
+    """TouchDesigner's save: writes project.1.toe beside project.toe."""
+    newer = toe.with_name(toe.stem + ".1.toe")
+
+    def save(node_id, runtime_id, timeout_s, cancel_event):
+        runtime.saved.append((node_id, runtime_id))
+        newer.write_bytes(b"toe-saved-as-the-next-version")
+        os.utime(newer, (time.time() + 5, time.time() + 5))
+        return {"ok": True}
+
+    runtime.save = save
+    return newer
+
+
+def test_save_then_restart_relaunches_the_file_the_save_wrote(tmp_path):
+    """A versioned save leaves the pinned file untouched: relaunching it would
+    reopen the project as it was before the save (field 2026-10-31)."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    newer = _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-versioned", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    profile = store.get_profile(NODE)
+    assert cl._path_same(profile["toe_path"], str(newer))
+    assert profile["toe_identity"] == cl._file_identity(str(newer))
+
+
+def test_a_heartbeat_reporting_the_new_version_does_not_abort_the_restart(
+        tmp_path):
+    """The node re-registers the moment the save renames its file, so the
+    runtime can report the new path while this attempt holds the old one."""
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    newer = _versioned_save(runtime, toe)
+    plain_save = runtime.save
+
+    def save(*args):
+        answer = plain_save(*args)
+        runtime.value = dict(runtime.value)
+        runtime.value["metadata"] = dict(runtime.value["metadata"],
+                                         toe_path=str(newer))
+        return answer
+
+    runtime.save = save
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-heartbeat", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_calls and launcher.spawns
+
+
+def test_a_newer_save_the_restart_did_not_write_is_not_relaunched(tmp_path):
+    """Reopening e1.5 with e1.6 beside it, then a save that writes nothing: the
+    project reopens as e1.5, and a dirty project still fails the save."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    newer = toe.with_name(toe.stem + ".1.toe")
+    newer.write_bytes(b"toe-already-here")
+    os.utime(newer, (time.time() + 5, time.time() + 5))
+    runtime.dirty_values = [{"ok": True, "dirty": True},
+                            {"ok": True, "dirty": False}]
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-no-write", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(toe))
+
+
+def test_a_different_project_in_the_folder_still_aborts_the_restart(tmp_path):
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.value = dict(runtime.value)
+    runtime.value["metadata"] = dict(
+        runtime.value["metadata"], toe_path=str(toe.with_name("rig.toe")))
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-other", "runtime-1", timeout_s=5)
+    assert result["ok"] is False
+    assert runtime.quit_calls == [] and launcher.spawns == []
+
+
 def test_unsaved_flag_is_dirty_even_when_generic_dirty_flag_is_false(tmp_path):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     runtime.dirty_values = [{"ok": True, "dirty": False,
@@ -2101,13 +2186,26 @@ def test_lock_identity_is_stable_across_toe_identity_change(tmp_path):
     manager, store, _, _, _, _, toe, _ = make_system(tmp_path)
     before = manager._lock_for(NODE)
     unit_before = cl._launch_unit_id(store.get_profile(NODE))
+    pre_save = cl._file_identity(str(toe))
     toe.write_bytes(b"toe-rewritten-by-a-save-with-a-different-size")
-    manager._refresh_saved_toe(store.get_profile(NODE))
+    manager._refresh_saved_toe(store.get_profile(NODE), pre_save)
     after = manager._lock_for(NODE)
     assert before is after
     # The launch-unit id (reservation namespace) DID change with the file
     # identity, proving the lock is keyed on something more stable.
     assert cl._launch_unit_id(store.get_profile(NODE)) != unit_before
+
+
+def test_lock_identity_is_stable_across_a_versioned_save(tmp_path):
+    # A versioned save moves toe_path as well as toe_identity: the same race.
+    manager, store, runtime, _, _, _, toe, _ = make_system(tmp_path)
+    before = manager._lock_for(NODE)
+    pre_save = cl._file_identity(str(toe))
+    newer = _versioned_save(runtime, toe)
+    runtime.save(NODE, "runtime-1", 1, None)
+    manager._refresh_saved_toe(store.get_profile(NODE), pre_save)
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(newer))
+    assert manager._lock_for(NODE) is before
 
 
 def test_recovery_skips_operation_owned_by_a_live_in_process_op(tmp_path):

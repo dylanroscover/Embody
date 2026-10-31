@@ -1363,7 +1363,7 @@ class UpdaterExt:
         """True for a par that lives inside a custom SEQUENCE block.
 
         Sequence blocks are a RUNTIME projection, never a setting: ConvoyExt
-        sizes the Convoy Nodes sequence to this machine's live Convoy mesh
+        sizes the Convoy Machines sequence to this machine's live Convoy mesh
         (`seq.numBlocks = len(rows)`), so the block count differs on every
         install and drifts within a session. The sequence HEADER par is
         authored and static, so it is NOT a block par and stays prunable

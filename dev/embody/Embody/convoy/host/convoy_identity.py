@@ -15,14 +15,16 @@ TWO IDENTIFIERS, and the split is the whole design (Dylan's call,
                  session in a different state than the one the caller was
                  looking at (A-22's expected_runtime_id).
 
-  node_id     -- WHICH SAVED TD LAUNCH PROFILE ON WHICH MACHINE. Assigned
-                 by the HOST on first contact and remembered host-side,
-                 keyed on (project_root, node_discriminator, comp_path).
-                 Different .toe files in one repository therefore route
-                 independently while a restart of the same file retains
-                 its address and approvals. It is the address, and it is
-                 what a TD-Python approval attaches to, so it must
-                 survive restarts.
+  node_id     -- WHICH PROJECT ON WHICH MACHINE. Assigned by the HOST on
+                 first contact and remembered host-side, keyed on
+                 (project_root, node_discriminator, comp_path), where the
+                 discriminator names the .toe's LINEAGE: its folder plus its
+                 stem without TouchDesigner's ".N" save number. e1.toe,
+                 e1.5.toe and e1.6.toe are one node, so a version-up keeps
+                 its address and approvals; show.toe and rig.toe, or one
+                 name in two folders, are two. It is the address, and it is
+                 what a TD-Python approval attaches to, so it must survive
+                 restarts and saves.
 
 NOTHING IS STORED IN THE PROJECT. The earlier design put a random
 "anchor" in the Embody COMP's TDXN -- a TRACKED file -- so a `git
@@ -38,6 +40,7 @@ sharing an identity while work silently lands on the wrong one -- is
 invisible and much worse. Fail toward the annoying one.
 """
 
+import hashlib
 import ntpath
 import posixpath
 import re
@@ -46,12 +49,18 @@ import sys
 
 _HEX128 = re.compile(r"^[0-9a-f]{32}$")
 _NODE_DISCRIMINATOR = re.compile(r"^nd_[0-9a-f]{32}$")
+# TouchDesigner's save number: only a trailing ".N". A digit in the name itself
+# (Foo-6, show2025) is the name, as in the bridge's _toe_lineage.
+_TOE_SAVE_NUMBER = re.compile(r"\.\d+$")
+_CRASH_SAVE_PREFIX = "crashautosave."
 MAX_CONVOY_ID_BYTES = 128
 BINDING_STATES = ("candidate", "established")
 
-# Descriptive facts a TD node may publish for status/discovery.  These
-# fields are display data only: none participates in identity, routing, or
-# authorization.  Keeping one allowlist at the host-side policy boundary
+# Descriptive facts a TD node may publish for status/discovery.  Display data,
+# except that toe_path selects the node's lineage (see
+# toe_lineage_discriminator): the discriminator it replaces is hashed from the
+# same client-supplied path, so this crosses no new trust boundary. None of
+# these authorizes anything.  Keeping one allowlist at the host-side policy boundary
 # prevents a caller from turning metadata into an unbounded arbitrary JSON
 # store (or quietly smuggling authority-shaped fields into host.json).
 NODE_METADATA_FIELDS = (
@@ -99,6 +108,39 @@ def normalize_node_discriminator(value):
     if not isinstance(value, str) or not _NODE_DISCRIMINATOR.match(value):
         raise IdentityError("malformed_node_discriminator", repr(value))
     return value
+
+
+def toe_lineage_discriminator(toe_path, platform=None):
+    """The discriminator shared by every save of one project, or None.
+
+    None means the path names no saved .toe, and the caller falls back to the
+    discriminator the client sent. TD's CrashAutoSave copy of a project is that
+    project: recovering from a crash must not cost it its address.
+    """
+    if not toe_path or not isinstance(toe_path, str):
+        return None
+    platform = platform or sys.platform
+    if platform == "win32":
+        text = ntpath.normcase(ntpath.normpath(toe_path.replace("/", "\\")))
+        if not ntpath.isabs(text):
+            return None
+        folder, name = ntpath.split(text)
+    else:
+        text = posixpath.normpath(toe_path.replace("\\", "/"))
+        if not posixpath.isabs(text):
+            return None
+        folder, name = posixpath.split(text)
+    if not name.lower().endswith(".toe"):
+        return None
+    stem = name[:-4]
+    if stem.lower().startswith(_CRASH_SAVE_PREFIX):
+        stem = stem[len(_CRASH_SAVE_PREFIX):]
+    stem = _TOE_SAVE_NUMBER.sub("", stem)
+    if not stem:
+        return None
+    digest = hashlib.sha256(
+        ("lineage\0%s\0%s" % (folder, stem)).encode("utf-8")).hexdigest()
+    return "nd_" + digest[:32]
 
 
 def normalize_convoy_id(value):
@@ -554,6 +596,29 @@ class NodeDirectory:
                               binding_state=old["binding_state"])
         assert fresh["td_python_approved"] is False
         return fresh
+
+    def rekey(self, node_id, node_discriminator):
+        """Move one row to a new discriminator, keeping its node_id.
+
+        The migration from exact-path to lineage discriminators. The target
+        location must be free: two rows can never share one.
+        """
+        record = self._by_node.get(node_id)
+        if record is None:
+            raise IdentityError("unknown_node", node_id)
+        discriminator = normalize_node_discriminator(node_discriminator)
+        old = (record["project_root"], record.get("node_discriminator", ""),
+               record["comp_path"])
+        new = (record["project_root"], discriminator, record["comp_path"])
+        if new == old:
+            return record
+        if new in self._by_location:
+            raise IdentityError("node_identity_conflict",
+                                "location already holds a node")
+        del self._by_location[old]
+        record["node_discriminator"] = discriminator
+        self._by_location[new] = record
+        return record
 
     def forget(self, node_id):
         """Drop a record -- used to roll back an in-memory registration

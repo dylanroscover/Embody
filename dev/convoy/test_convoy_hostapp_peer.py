@@ -247,12 +247,12 @@ def _enable_node(app):
     assert code == 200, node
     return node
 
-def test_no_lan_json_means_no_socket(tmp_path):
+def test_a_machine_that_never_joined_owns_no_socket(tmp_path):
     app = ha.HostApp(str(tmp_path / "host"))
     try:
         assert ha.start_lan_if_configured(app, log=lambda m: None) is False
         assert app.lan_server is None
-        assert app.lan_reason == "no_enabled_nodes"
+        assert app.lan_reason == "no_realm"
     finally:
         app.db.close()
 

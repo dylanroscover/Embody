@@ -860,7 +860,7 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
     def test_the_release_manifest_declares_no_sequence_block(self):
         """The test that would have caught v6.0.245 and v6.0.246 at commit
         time. Phrased against every sequence the Embody COMP carries, not
-        as a Convoynodes blacklist, so a sequence added later inherits it.
+        as a Convoymachines blacklist, so a sequence added later inherits it.
         """
         import json
         import re
@@ -899,7 +899,7 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
         self.assertEqual([], leaked,
                          'the exporter is still declaring live sequence '
                          'blocks: %r' % (leaked,))
-        self.assertIn('Convoynodes', declared, 'the header is a declaration')
+        self.assertIn('Convoymachines', declared, 'the header is a declaration')
         self.assertIn('Version', declared)
         self.assertEqual(sorted(set(declared)), declared,
                          'the manifest list must be sorted and duplicate-free')
@@ -925,7 +925,7 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
             self.skipTest('no release manifest in this checkout')
         declared = json.loads(mf.read_text(encoding='utf-8')).get(
             'custom_pars') or []
-        for name in ('Convoynodes', 'Version', 'Autoupdate'):
+        for name in ('Convoymachines', 'Version', 'Autoupdate'):
             self.assertIn(name, declared)
 
 

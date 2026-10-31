@@ -1232,6 +1232,26 @@ class PeerStore:
                                                          "inbound"))
         return True
 
+    def note_display_name(self, host_id, name):
+        """Remember the computer name a peer reports, for when it is offline.
+
+        Best-effort like touch_seen, and written only on a change: the
+        directory calls this on every refresh.
+        """
+        key = normalize_host_id(host_id)
+        if key is None or key not in self._peers or self.unreadable:
+            return False
+        record = self._peers[key]
+        text = str(name)[:MAX_TEXT_CHARS]
+        if record.get("display_name") == text:
+            return False
+        record["display_name"] = text
+        try:
+            self._write()
+        except Exception:
+            return False
+        return True
+
     def set_dormant(self, host_id, successor_host_id, address, when=None):
         """Stop dialing a pinned peer whose address now serves ANOTHER
         pinned identity. Returns the record.

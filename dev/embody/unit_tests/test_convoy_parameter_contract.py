@@ -109,7 +109,7 @@ def test_forget_offline_nodes_pulse_is_present_and_honest():
     rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
     par = rows["Convoyforgetoffline"]
     assert par["style"] == "Pulse"
-    assert par["label"] == "Forget Offline Nodes..."
+    assert par["label"] == "Forget Offline..."
     help_text = par["help"].lower()
     for phrase in ("confirmation", "names", "new identity",
                    "td python approval resets",
@@ -182,19 +182,19 @@ def test_agreed_controls_have_safe_defaults_and_detailed_help():
 
 def test_status_sequence_has_the_agreed_read_only_columns():
     rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
-    sequence = rows["Convoynodes"]
+    sequence = rows["Convoymachines"]
     assert sequence["style"] == "Sequence"
-    # Labelled "Convoy Nodes": it lists NODES, and every other
+    # Labelled "Convoy Machines": it lists MACHINES, and every other
     # parameter in this system is named for what it shows.
-    assert sequence["label"] == "Convoy Nodes"
+    assert sequence["label"] == "Convoy Machines"
     assert sequence["readOnly"] is True
     assert rows["Convoystatus"]["label"] == "Status"
 
-    expected = ("Nodename", "Ipaddress", "Nodestatus", "Lastseen")
+    expected = ("Machinename", "Toefiles", "Machinestatus")
     for name in expected:
-        assert rows[name]["sequence"] == "Convoynodes"
+        assert rows[name]["sequence"] == "Convoymachines"
         assert rows[name]["readOnly"] is True
-    assert set(rows[n]["sequence"] for n in expected) == {"Convoynodes"}
+    assert set(rows[n]["sequence"] for n in expected) == {"Convoymachines"}
 
 
 def test_the_single_status_readout_replaces_the_host_field():
@@ -213,8 +213,8 @@ def test_status_sequence_is_registered_for_release_scrubbing():
     value = _class_assignment(
         EMBODY_EXT, "EmbodyExt", "_TRANSIENT_STATUS_PARS")
     registry = ast.literal_eval(value)
-    assert "Convoynodes" in registry["Embody"]
-    assert registry["Embody"]["Convoynodes"] is None
+    assert "Convoymachines" in registry["Embody"]
+    assert registry["Embody"]["Convoymachines"] is None
 
 
 def test_danger_gates_are_not_project_config_persisted():
@@ -478,25 +478,25 @@ def test_wake_only_route_is_advertised_only_for_perform_mode():
         None, None)
 
 
-def test_status_projection_is_the_four_agreed_columns():
+def test_status_projection_is_the_three_agreed_columns():
     ext_class = _load_convoy_ext_class()
-    rows = ext_class._nodeStatusRows({
+    rows = ext_class._machineRows({
         "state": "nodes",
-        "nodes": [{
-            "node_id": "n" * 32,
-            "host_id": "h" * 32,
-            "node_name": "render / show",
+        "nodes": [],
+        "machines": [{
+            "hostname": "render",
+            "ip": "10.0.0.2",
             "status": "online",
             "online": True,
-            "controller_count": 3,
             "last_seen_age_s": 65,
+            "toes": ["show.toe"],
         }],
     })
-    # Four columns only. controller_count is still consumed from the
-    # coalesced directory (never a separate mesh query) -- it simply is not
-    # a standing column; convoy_list_controllers is where counts belong.
-    assert set(rows[0]) == {"Nodename", "Ipaddress", "Nodestatus", "Lastseen"}
-    assert rows[0]["Lastseen"] == "1m ago"
+    # Three columns only: per-node detail lives in convoy_list_nodes.
+    # `parts` is what the tick ages the status from, not a column.
+    assert set(rows[0]) - {"parts"} == {"Machinename", "Toefiles",
+                                        "Machinestatus"}
+    assert rows[0]["Machinestatus"] == "Online / 1m ago"
 
 
 def test_lan_scope_requires_a_new_explicit_consent_marker():
@@ -550,11 +550,11 @@ def test_release_source_ships_an_empty_node_name_and_status():
     assert rows["Convoystatus"].get("value") in (None, "Disabled")
 
 
-def test_release_source_ships_no_node_rows():
-    """The Convoy Nodes sequence is a runtime projection. Shipping rows would
-    leak another machine's names, addresses and presence."""
+def test_release_source_ships_no_machine_rows():
+    """The Convoy Machines sequence is a runtime projection. Shipping rows
+    would leak another machine's names, addresses and presence."""
     rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDXN)))
-    for name in ("Nodename", "Ipaddress", "Nodestatus", "Lastseen"):
+    for name in ("Machinename", "Toefiles", "Machinestatus"):
         assert rows[name].get("value") in (None, ""),             "%s must ship empty" % name
 
 
