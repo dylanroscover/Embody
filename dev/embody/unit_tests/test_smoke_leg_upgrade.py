@@ -323,7 +323,8 @@ class TestHappyPath(_Case):
         for name in ('installed_version', 'dialog_guard', 'manifest',
                      'stage_update', 'apply_update', 'verify_update',
                      'update_identity', 'update_health', 'externalizations',
-                     'up_to_date', 'backup', 'rollback_trigger', 'rollback',
+                     'custom_pars', 'up_to_date', 'backup', 'rollback_trigger',
+                     'rollback',
                      'rollback_version', 'rollback_identity',
                      'rollback_health', 'stage_reupdate',
                      'apply_reupdate', 'verify_reupdate', 'reupdate_identity',
@@ -704,6 +705,41 @@ class TestFailureModes(_Case):
         self.assertFalse(res['ok'])
         self.assertIn('installed_version', res['error'])
         self.assertEqual(len(self.td.applies), 0, 'nothing was installed')
+
+    def _declare_pars(self, declared):
+        path = os.path.join(self.root, 'repo', 'release',
+                            'embody-release.json')
+        with open(path, encoding='utf-8') as f:
+            manifest = json.load(f)
+        manifest['custom_pars'] = declared
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f)
+
+    def _ctx_with_pars(self, live):
+        ctx = self._ctx()
+        base = ctx['py']
+
+        def py(code, timeout=30):
+            if 'customPars' in code:
+                return json.dumps(live)
+            return base(code, timeout)
+        ctx['py'] = py
+        return ctx
+
+    def test_an_updated_page_holding_what_the_build_declares_passes(self):
+        self._declare_pars(['Convoymachines', 'Status'])
+        res = self._run(self._ctx_with_pars(['Convoymachines', 'Status']))
+        self.assertTrue(self._step(res, 'custom_pars')['ok'], res['error'])
+
+    def test_a_retired_par_left_on_an_updated_page_fails(self):
+        """Destroying a sequence header keeps block 0 as plain pars: an update
+        once left Nodename and its last machine's value on the page."""
+        self._declare_pars(['Convoymachines', 'Status'])
+        res = self._run(self._ctx_with_pars(
+            ['Convoymachines', 'Nodename', 'Status']))
+        self.assertFalse(res['ok'])
+        self.assertIn('custom_pars', res['error'])
+        self.assertIn('Nodename', self._step(res, 'custom_pars')['detail'])
 
     def test_a_check_that_does_not_read_up_to_date_fails(self):
         ctx = self._ctx()

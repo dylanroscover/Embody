@@ -156,6 +156,14 @@ u._finishCheck({'tag': %r, 'assets': {}, 'manifest': None}, False, False)
 result = str(op.Embody.par.Updatestatus.eval())
 """
 
+# Custom pars a build declares: runtime sequence blocks are not a declaration.
+_CUSTOM_PARS = """
+import json
+result = json.dumps(sorted(
+    p.name for p in op.Embody.customPars
+    if p.isSequence or p.sequence is None))
+"""
+
 _ROLLBACK_ARM = """
 import json, td
 u = op.Embody.op('updater').ext.UpdaterExt
@@ -542,6 +550,19 @@ class _Upgrade:
                     f"(was {self.errors_before}) "
                     f"Envoystatus={state['envoy']!r}")
 
+    def _check_custom_pars(self, manifest):
+        """An updated page holds exactly what the new build declares. A retired
+        par left behind keeps its value there and ships in the next export."""
+        declared = set(manifest.get('custom_pars') or ())
+        if not declared:
+            self._ok('custom_pars', 'this manifest declares none')
+            return
+        live = set(json.loads(self._py(_CUSTOM_PARS, 30)))
+        self._check('custom_pars', live == declared,
+                    f'{len(live)} live, {len(declared)} declared; '
+                    f'left behind {sorted(live - declared)}, '
+                    f'missing {sorted(declared - live)}')
+
     def _rollback(self, updates_dir, was):
         """Drive the user-visible recovery: a leftover sentinel naming the
         backup, then CheckForUpdate -> 'Restore Backup' -> _rollback."""
@@ -637,6 +658,7 @@ class _Upgrade:
                     ext_before is not None and ext_after == ext_before,
                     f'{ext_before} rows before, {ext_after} after (None means '
                     f'the table was never read)')
+        self._check_custom_pars(manifest)
         self._check('up_to_date',
                     self._py(_UPTODATE % (f'v{self.new}',), 30)
                     == f'Up to date (v{self.new})',
