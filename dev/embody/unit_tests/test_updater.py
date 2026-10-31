@@ -341,6 +341,9 @@ class _StubUpdater:
         self.dialogs.append(body)
         return buttons[0]
 
+    def _sequenceTemplateNames(self, par):
+        return _updater_cls()._sequenceTemplateNames(self, par)
+
     def _setPar(self, par, value):
         was = par.readOnly
         par.readOnly = False
@@ -818,6 +821,29 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
         stub = _StubUpdater(comp)
         _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Rows']})
         self.assertEqual(6, comp.seq.Rows.numBlocks)
+
+    def test_a_retired_sequence_leaves_nothing_behind(self):
+        """Destroying a header keeps block 0 as plain pars (measured): 6.3.0
+        retired Convoynodes, and its last machine's name and address would have
+        stayed on every updated page, and in the next export."""
+        comp = self._comp_with_sequence(blocks=3)
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Goneme']})
+        self.assertEqual([], [p.name for p in comp.customPars
+                              if 'row' in p.name.lower()],
+                         'the retired sequence must leave no par behind')
+        self.assertEqual(['Rows'], retired)
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+
+    def test_a_read_only_table_is_not_reported_as_a_lost_setting(self):
+        comp = self._comp_with_sequence()
+        comp.par.Rows.readOnly = True
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Goneme']})
+        self.assertEqual([], retired)
+        self.assertIsNone(getattr(comp.par, 'Rows', None))
 
     def test_a_genuinely_retired_plain_par_still_goes(self):
         """The guard must not disable pruning -- only exempt sequences."""
