@@ -894,8 +894,8 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
             self.skipTest('execute_src_ctrl not resolvable from Embody')
         declared = dat.module._declaredCustomPars(op.Embody)
         leaked = sorted(n for n in declared
-                        if n.lower().startswith('convoynodes')
-                        and n.lower() != 'convoynodes')
+                        if n.lower().startswith('convoymachines')
+                        and n.lower() != 'convoymachines')
         self.assertEqual([], leaked,
                          'the exporter is still declaring live sequence '
                          'blocks: %r' % (leaked,))

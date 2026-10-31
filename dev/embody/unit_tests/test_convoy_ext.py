@@ -700,12 +700,14 @@ class TestNetworkStatusProjection(ConvoyExtBase):
         heartbeat -- so writing it once and leaving it made the page show
         "15s ago" minutes later. The tick must age it with no new data."""
         import time as _t
-        self.convoy._applyNetworkNodes({
+        real_apply = type(self.convoy)._applyNetworkNodes
+        real_apply(self.convoy, {
             'state': 'nodes', 'nodes': [],
             'machines': [{'hostname': 'a', 'ip': '1', 'online': True,
                           'status': 'online', 'last_seen_age_s': 5.0,
                           'toes': []}]})
-        self.convoy._machine_status_at = _t.time() - 120.0  # data is 2 min old
+        self._patch(self.convoy, '_machine_status_at',
+                    _t.time() - 120.0)      # data is 2 min old
         self.convoy._refreshMachineStatus()
         seq = self._parts()
         status = self.convoy._sequenceBlockPar(
@@ -715,7 +717,7 @@ class TestNetworkStatusProjection(ConvoyExtBase):
                          'a 5s age captured 2 minutes ago must now read 2m')
 
     def test_one_block_per_machine_with_its_open_toes(self):
-        self.convoy._applyNetworkNodes({
+        type(self.convoy)._applyNetworkNodes(self.convoy, {
             'state': 'nodes', 'nodes': [],
             'machines': [
                 {'hostname': 'a', 'ip': '1', 'online': True, 'status': 'online',

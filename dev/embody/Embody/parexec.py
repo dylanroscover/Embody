@@ -110,12 +110,10 @@ def onValueChange(par, prev):
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			if par.eval():
-				# The explicit toggle is the one gesture that may raise
-				# the realm-rejoin dialog; arm its bounded window here.
-				convoy.ext.ConvoyExt.armRejoinOffer()
-				# register() also turns Enable Envoy on when it is off:
-				# Convoy runs on Envoy (ConvoyExt._ensureEnvoy).
-				convoy.ext.ConvoyExt.register()
+				# The explicit toggle is the one gesture that may raise the
+				# realm-rejoin dialog or turn Enable Envoy on; a tick's
+				# auto-join flips this par too and must do neither.
+				convoy.ext.ConvoyExt.enableToggledOn()
 			else:
 				convoy.ext.ConvoyExt.unregister()
 				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)

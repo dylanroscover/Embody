@@ -44,7 +44,8 @@ Convoy has two levels, and they keep separate hours:
 - Nodes discover changes and reconnect without a manual refresh.
 - Membership is remembered locally across ordinary restarts. Network-visible node status converges automatically, while dangerous permissions and resource limits remain local settings that peers cannot overwrite.
 - Every node is a sibling. A host going offline makes its own nodes unavailable, but reachable siblings continue communicating.
-- Once a machine has accepted Convoy, every saved project opened there joins by itself. Saying no sticks: turn **Enable Convoy** off for that project, or answer no in the Setup Wizard, and it stays out. Opening a project never restarts a host app you stopped.
+- Once a project has joined from a machine, every saved project opened there joins by itself and is listed. Joining this way only registers the project: it turns no other setting on and builds nothing, so a project with Envoy off reads `e1.toe (Envoy off)` and takes no remote work until you turn Envoy on for it. Saying no sticks: turn **Enable Convoy** off for that project, or answer no in the Setup Wizard or the first-enable confirmation, and it stays out. Opening a project never restarts a host app you stopped.
+- A machine whose projects were all turned off before 6.3 stays out after updating, until you turn one on: an update does not reopen a LAN someone closed.
 - Turning **Enable Convoy** off stops that project sending and receiving Convoy work. The machine stays in the Convoy. To take the whole computer off the network, press **Stop Convoy App**; it stays out across logins and project opens until you press **Start Convoy App**.
 - Convoy remembers every project that has opened on a machine, with its approvals and launch record, until its `.toe` is deleted or you forget it. A closed project is simply not listed.
 
@@ -90,12 +91,14 @@ The read-only **Convoy Machines** sequence shows one row per computer, so an add
 | Column | Meaning |
 |---|---|
 | **Machine** | The computer's name and current address, for example `TEC-B4A / 192.168.88.20` |
-| **Open Projects** | The `.toe` files active on it right now, for example `Project.1.toe, Moonshine.toe, e1.toe`. `None open` is normal: the machine is still in the Convoy |
+| **Open Projects** | The `.toe` files open on it right now, for example `Project.1.toe, Moonshine.toe, e1.toe`. `None open` is normal: the machine is still in the Convoy. A project that is open but cannot take work says why: `e1.toe (Envoy off)`, `e1.toe (not cooking)` |
 | **Status** | Reachability and age together, for example `Online / 5s ago` or `Offline / 2h ago -- peer unreachable`. A machine whose host app cannot prove every operation adds it, for example `Online / 5s ago -- limited: 12 of 19 operations shared with host app 6.0.280`. `convoy_list_nodes` carries the same as `compatibility`, `compatibility_reason` and `host_app_version` |
 
 Per-project detail lives in `convoy_list_nodes`: its `machines` list mirrors this table, and its `nodes` list has every project the machines know about, including closed ones, with `offline_reason`, approvals and versions. Convoy routes with stable identities, not names or IP addresses.
 
-A closed project stays known so it can still be started remotely and keeps its TD Python approval. It clears itself about half an hour after its project file is deleted (an unplugged or unmounted drive never counts as deleted, and a node with a delivery that has not finished is always spared). To remove something sooner, press **Forget Offline...** on the Convoy page: it names the closed projects and offline machines it would remove before anything is forgotten, or use the `convoy_forget_node` tool for a single known id. **A project is forgotten by the computer that owns it, from wherever you press**: other machines' rows are relayed to them over their live session, and only a machine that is not connected right now is left for later and named. Forgetting a machine removes this computer's record of it and its trust in that identity until it rejoins.
+Two versions of one project open at once stay two nodes. The second, `e1.6.toe` beside a running `e1.5.toe`, gets a temporary row for as long as it runs: it inherits no approvals, and it cannot be started remotely.
+
+A closed project stays known so it can still be started remotely and keeps its TD Python approval. It clears itself about half an hour after every save of it is deleted (an older save moving to another folder does not count, an unplugged or unmounted drive never counts as deleted, and a node with a delivery that has not finished is always spared). To remove something sooner, press **Forget Offline...** on the Convoy page: it names the closed projects and offline machines it would remove before anything is forgotten, or use the `convoy_forget_node` tool for a single known id. **A project is forgotten by the computer that owns it, from wherever you press**: other machines' rows are relayed to them over their live session, and only a machine that is not connected right now is left for later and named. Forgetting a machine removes this computer's record of it and its trust in that identity until it rejoins.
 
 ## Use Convoy from an AI client
 

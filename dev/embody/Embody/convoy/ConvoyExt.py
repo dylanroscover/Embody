@@ -237,7 +237,6 @@ class ConvoyExt:
         self._network_rows_digest = None
         self._machine_status = None
         self._machine_status_at = 0.0
-        self._auto_join_frame = None
         self._wake_record = None
         self._wake_poll_gen = 0
 
@@ -920,36 +919,61 @@ class ConvoyExt:
     def _mayJoinMachineConvoy(self):
         """Should this project join because its machine already has?
 
-        Convoy is set up once per machine. A project opened on a machine that
-        accepted Convoy joins by itself, unless someone said no for it. No
-        running host app means Convoy was stopped on purpose: joining would
-        restart what Stop Convoy App stopped. A socket probe costs seconds on a
-        closed Windows port, so the check reads the live portfile instead. One
-        attempt per run: a join that failed, or a toggle turned back off before
-        config.json caught up, must not come back on the next tick.
+        Convoy is set up once per machine: a project opened on a machine that
+        has joined follows it, unless someone said no for it. A host app that
+        is not running means Convoy was stopped on purpose. One attempt per
+        run: a join that failed, or a toggle turned back off, must not come
+        back on the next tick. Cheap reads first, and no sockets: this runs on
+        the main thread every tick while a project is off.
         """
+        session = self._session()
+        if session.get('auto_join_tried') or self._performing():
+            return False
         try:
-            if (self._session().get('auto_join_tried')
-                    or self._performing() or not self._savedToe()
-                    or not self._installConsentGiven()):
-                return False
             client = self._safeClient()
-            if (client is None or client.read_live_portfile(
-                    client.data_dir()) is None):
+            embody = self._embody.ext.Embody
+            if (client is None or not self._installConsentGiven()
+                    or not client.machine_joined(client.data_dir())
+                    or client.read_live_portfile(client.data_dir()) is None
+                    or not embody._convoyMayAutoJoinNow()
+                    or not self._savedToe()):
                 return False
-            return not self._embody.ext.Embody._convoyDeclinedHere()
+            scope = self._readConsentScope()
+            if (embody._convoyDeclinedHere()
+                    or (self._readConvoyId() and scope != self._CONSENT_SCOPE)):
+                session['auto_join_tried'] = True
+                return False
+            return True
         except Exception as e:
             self._log('could not check Convoy auto-join: %s' % (e,), 'DEBUG')
             return False
 
     def _joinMachineConvoy(self):
-        """Turn this project on from a tick: no modal, consent is on record."""
-        self._session()['auto_join_tried'] = True
-        self._auto_join_frame = absTime.frame
+        """Turn this project on from a tick: the registration and nothing else.
+
+        No modal (consent is on record), no Enable Envoy, no virtual
+        environment and no AI-client files: opening a project must not do what
+        turning the toggle on by hand does. The project is listed, and reads
+        Needs Envoy until someone turns Envoy on for it.
+        """
+        session = self._session()
+        session['auto_join_tried'] = True
+        session['auto_join_at'] = time.monotonic()
         self._setEnabled(True)
         self._log('joining this machine\'s Convoy: turn Enable Convoy off to '
                   'keep this project out', 'INFO')
-        self.register()
+        if self._ensureConsent():
+            self._ensureWakeListener()
+            self._reconcile(force=True)
+
+    def enableToggledOn(self):
+        """Enable Convoy just went on (parexec). The explicit-enable path, unless
+        this tick's auto-join flipped it: TD delivers that callback deferred."""
+        flipped_at = self._session().pop('auto_join_at', None)
+        if flipped_at is not None and time.monotonic() - flipped_at < 30.0:
+            return {'state': 'joined'}
+        self.armRejoinOffer()
+        return self.register()
 
     def _setEnabled(self, value):
         """Flip the canonical gate (Toggle pars are 0/1)."""
@@ -4096,7 +4120,7 @@ class ConvoyExt:
             # rows the user needs told about.
             level = ('SUCCESS' if forgotten and not kept and ok
                      else 'INFO' if forgotten else 'WARNING')
-            self._log('Forget Offline Nodes: %s'
+            self._log('Forget Offline: %s'
                       % (result.get('detail') or 'done'), level)
             if kept:
                 self._reportKeptNodes(kept, forgotten)
@@ -4424,12 +4448,12 @@ class ConvoyExt:
             '    TOUCHDESIGNER IS OPEN\n'
             '%s'
             'Network behavior:\n'
-            '  - while at least one local node has Enable Convoy On, the\n'
-            '    app advertises on the trusted LAN and opens Convoy\'s\n'
-            '    authenticated, encrypted peer listener on one selected\n'
-            '    LAN interface. It never exposes Envoy itself.\n'
-            '  - turning the final local Enable Convoy Off withdraws the\n'
-            '    advertisement and closes the LAN listener.\n'
+            '  - once a project has joined, the app advertises on the\n'
+            '    trusted LAN and opens Convoy\'s authenticated, encrypted\n'
+            '    peer listener on one selected LAN interface, whether or\n'
+            '    not TouchDesigner is open. It never exposes Envoy itself.\n'
+            '  - Stop Convoy App withdraws the advertisement and closes the\n'
+            '    LAN listener.\n'
             '  - Embody does not modify your firewall. Windows or macOS may\n'
             '    ask you to allow local-network access; denying it leaves\n'
             '    local Embody/Envoy usable but remote nodes unreachable.\n'
@@ -4847,7 +4871,7 @@ class ConvoyExt:
         conflict (field, 2026-08-12: one un-admitted MacBook broadcast
         wedged every registration on this LAN) had no way out short of
         hand-crafting an authenticated loopback POST. Two phases on the
-        host slot, mirroring Forget Offline Nodes: plan (alters
+        host slot, mirroring Forget Offline: plan (alters
         nothing), a confirmation that NAMES the preserved realm, the
         conflicting ids and the live announcers, then apply (denylist
         the announcers, reset, re-register).
@@ -5000,11 +5024,7 @@ class ConvoyExt:
         returns from _ensureConsent before its tail (review finding:
         the original arming was unreachable for the exact clone
         scenario the feature exists for). The toggle an auto-join flips is
-        no explicit gesture: its callback lands within a frame or two, and
-        no dialog may fire on project open."""
-        joined = self._auto_join_frame
-        if joined is not None and absTime.frame - joined <= 2:
-            return
+        no explicit gesture, and enableToggledOn never arms it."""
         self._session()['offer_rejoin_until'] = (
             time.monotonic() + self._REJOIN_OFFER_WINDOW_S)
 
@@ -5094,7 +5114,7 @@ class ConvoyExt:
         apply -- the daemon's refusal rules still run, and a row back
         online between dialog and apply is skipped, never killed.
         """
-        if not self._hostActionAllowed('Forget Offline Nodes'):
+        if not self._hostActionAllowed('Forget Offline'):
             return {'state': 'busy'}
         ctx = self._safeHostContext()
         if ctx is None:
@@ -5140,7 +5160,7 @@ class ConvoyExt:
                 else:
                     where = ', '.join(names[:5])
                     howto = ('That machine is not connected to this one '
-                             'right now: run Forget Offline Nodes there, '
+                             'right now: run Forget Offline there, '
                              'or press this again once it reconnects.')
                 message = (
                     'No offline nodes to forget from here. A node is '
@@ -5149,7 +5169,7 @@ class ConvoyExt:
                     'A row also clears itself about half an hour after its '
                     'project file is deleted.'
                     % (where, howto))
-            self._dialog('Forget Offline Nodes', message, ['OK'])
+            self._dialog('Forget Offline', message, ['OK'])
             return
 
         def _age(row):
@@ -5197,9 +5217,9 @@ class ConvoyExt:
         message = '\n\n'.join(sections)
         count = len(rows) + len(machines)
         label = 'Forget %d' % (count,)
-        if self._dialog('Forget Offline Nodes', message,
+        if self._dialog('Forget Offline', message,
                         ['Cancel', label]) != 1:
-            self._log('Forget Offline Nodes cancelled', 'INFO')
+            self._log('Forget Offline cancelled', 'INFO')
             return
         ctx = self._safeHostContext()
         if ctx is None:
@@ -5256,12 +5276,12 @@ class ConvoyExt:
             'reached a verdict -- a finished result never holds a node, '
             'because results are fetched by delivery id and outlive the '
             'row. Cancel a queued delivery, or wait for the node to answer, '
-            'then run Forget Offline Nodes again.'
+            'then run Forget Offline again.'
             % (header, len(kept), '\n'.join(lines)))
         # A DISTINCT title: _messageBox keys its seeded auto-responses by
         # title, so sharing one with the confirmation would let this
         # report eat the confirmation's seeded answer in a scripted run.
-        self._dialog('Forget Offline Nodes - Nodes Kept', message, ['OK'])
+        self._dialog('Forget Offline - Nodes Kept', message, ['OK'])
 
     def uninstallHost(self, confirm=True):
         """Remove the host app: preview (worker), then confirm, then run.
@@ -5504,9 +5524,13 @@ class ConvoyExt:
              'Envoy builds (.venv), and remote work reaches this '
              'TouchDesigner through Envoy\'s local command service. '
              'Enabling Convoy turns Enable Envoy on if it is off.\n\n'
+             'Once a project has joined, this computer stays in the Convoy '
+             'at every login, with or without TouchDesigner open, and other '
+             'projects opened here join by themselves. Turn Enable Convoy off '
+             'to keep one project out; Stop Convoy App takes the computer '
+             'out.\n\n'
              'Allow Execute TD Python and Allow Full Shell remain separate, '
-             'local, default-Off approvals. Turn Enable Convoy off at any '
-             'time to withdraw this node.\n\n'
+             'local, default-Off approvals.\n\n'
              'Scope granted: ' + self._CONSENT_SCOPE + '.'),
             ['Cancel', 'Enable Convoy'])
         if choice != 1:
@@ -5514,8 +5538,12 @@ class ConvoyExt:
             # non-affirmative value means no (UpdaterExt._dialog's contract).
             # Declining a feature is not an error: INFO, no dialog, no status
             # beyond the resting one.
-            self._log('Convoy enable cancelled -- no consent change was '
-                      'written', 'INFO')
+            self._log('Convoy enable cancelled -- this project stays out of '
+                      'Convoy until you turn it on', 'INFO')
+            self._session()['auto_join_tried'] = True
+            mod_admin = getattr(embody, '_recordConvoyDeclined', None)
+            if mod_admin is not None:
+                mod_admin()
             self._setEnabled(False)
             self._apply({'state': 'disabled'}, self._safeClient())
             return False
@@ -5800,6 +5828,9 @@ class ConvoyExt:
         """
         session = self._session()
         client = self._safeClient()
+        if str(reason).strip().lower() == 'disabled':
+            # Off stays off for this run, before config.json catches up.
+            session['auto_join_tried'] = True
         # ``TD exit`` is the label used by the existing execute DAT. Fold it
         # at this local API boundary; convoy_client and the wire accept only
         # the two protocol values and fail closed on anything else.
@@ -6674,8 +6705,11 @@ def _host_offline_rows(ctx):
                      'hostname': name if owner != host_id else ''})
     machines = []
     for machine in body.get('machines') or []:
-        if (not isinstance(machine, dict) or machine.get('online')
-                or machine.get('local') or not machine.get('host_id')):
+        # Offline only: a refused peer may be blocked, and forgetting its
+        # record would drop the block and re-open first contact.
+        if (not isinstance(machine, dict) or machine.get('local')
+                or machine.get('status') != 'offline'
+                or not machine.get('host_id')):
             continue
         parts = (machine.get('hostname'), machine.get('ip'))
         machines.append({'host_id': str(machine['host_id']),

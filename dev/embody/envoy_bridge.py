@@ -795,9 +795,10 @@ BRIDGE_TOOLS = [
             "and names the blocking delivery ids so they can be "
             "cancelled; a finished result never holds a row, because "
             "results are fetched by delivery id and outlive it; an "
-            "online row is never forgotten. Rows unseen for a week are "
-            "evicted automatically; this is the immediate manual path. "
-            "The Convoy page's Forget Offline Nodes... button is the "
+            "online row is never forgotten. A row clears itself once its "
+            ".toe is deleted; this is the immediate manual path, and it "
+            "resets the node's TD Python approval. "
+            "The Convoy page's Forget Offline... button is the "
             "in-TD bulk equivalent, fleet-wide, with an enumerating "
             "confirmation."
         ),

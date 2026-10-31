@@ -2010,6 +2010,8 @@ class EmbodyExt:
         #    Envoyenable deliberately remains on as an INTERNAL substrate.
         if assistant == 'none':
             self.my.par.Aiclient = 'none'
+            if convoy == 'disable':
+                self._recordConvoyDeclined()
             if convoy in ('enable', 'disable'):
                 self.my.par.Convoyenable = (convoy == 'enable')
             if bool(self.my.par.Convoyenable.eval()):
@@ -2062,7 +2064,7 @@ class EmbodyExt:
             else:
                 # A no here must outlast the machine's yes from another
                 # project, which would otherwise join this one on its next open.
-                mod.embody_admin.record_convoy_declined(self)
+                self._recordConvoyDeclined()
             self.my.par.Convoyenable = (convoy == 'enable')
 
         # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred
@@ -3567,6 +3569,21 @@ class EmbodyExt:
         """The 'convoy' object from .embody/project.json, or {} -- see
         embody_admin. Never raises."""
         return mod.embody_admin.read_convoy_entry(self)
+
+    def _recordConvoyDeclined(self) -> bool:
+        """Record an explicit no to Convoy for this project. See embody_admin."""
+        return mod.embody_admin.record_convoy_declined(self)
+
+    def _convoyMayAutoJoinNow(self) -> bool:
+        """Is this a settled session? Not before settings restore (the restored
+        off would read as a no this join caused), and not during a save, a test
+        run, a release session or the Setup Wizard, which asks for itself."""
+        if (getattr(self, '_restoring_settings', False)
+                or not self.my.fetch('_init_complete', False, search=False)
+                or self._suppressDialogs()):
+            return False
+        wizard = self.my.op('window_wizard')
+        return wizard is None or not wizard.isOpen
 
     def _convoyDeclinedHere(self) -> bool:
         """Did someone say no to Convoy for this project? See embody_admin."""
@@ -11167,14 +11184,14 @@ class EmbodyExt:
 
     def reconstructTDXNComps(self) -> None:
         """Reconstruct all TDXN-strategy COMPs from .tdn files on project open."""
-        # Convoy: registration lives in ConvoyExt's tick, which starts at
-        # extension CONSTRUCTION -- and TD constructs extensions lazily. In
-        # TDXN mode off/export nothing touches the convoy COMP at open, so an
-        # enabled node sat 'Disabled' until first incidental access (field
-        # 2026-08-19: 18 min dormant after a relaunch). Touch .ext past the
-        # TDXN window; construction never raises a consent dialog.
+        # Convoy: registration and auto-join live in ConvoyExt's tick, which
+        # starts at extension CONSTRUCTION -- and TD constructs extensions
+        # lazily. In TDXN mode off/export nothing touches the convoy COMP at
+        # open, so an enabled node sat 'Disabled' until first incidental access
+        # (field 2026-08-19: 18 min dormant after a relaunch). Touch .ext past
+        # the TDXN window; construction never raises a consent dialog.
         run("o = op(%r)\n"
-            "if o and o.valid and o.par.Convoyenable.eval() and o.op('convoy'):\n"
+            "if o and o.valid and o.op('convoy'):\n"
             "    o.op('convoy').ext.ConvoyExt" % (self.my.path,),
             delayFrames=15)
         # Fingerprint baselines persisted into the .toe reflect the LAST

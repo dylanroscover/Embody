@@ -1069,6 +1069,25 @@ def test_a_newer_save_the_restart_did_not_write_is_not_relaunched(tmp_path):
     assert cl._path_same(store.get_profile(NODE)["toe_path"], str(toe))
 
 
+def test_a_save_that_moved_away_starts_from_the_newest(tmp_path):
+    system = make_system(tmp_path)
+    manager, store, _, _, launcher, _, toe, _ = system
+    offline(system)
+    newer = toe.with_name(toe.stem + ".1.toe")
+    newer.write_bytes(b"toe-the-newest-save")
+    toe.unlink()
+    launcher.callback = auto_confirm(manager)
+    result = manager.start_node(NODE, CONVOY, "start-moved", timeout_s=5)
+    assert result["ok"] is True, result
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(newer))
+
+
+def test_newest_save_ignores_a_name_with_no_lineage(tmp_path):
+    path = tmp_path / ".5.toe"
+    (tmp_path / "notes.txt").write_text("x")
+    assert cl._newest_save(str(path)) == str(path)
+
+
 def test_a_different_project_in_the_folder_still_aborts_the_restart(tmp_path):
     manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
     runtime.value = dict(runtime.value)

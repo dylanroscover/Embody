@@ -1204,10 +1204,15 @@ NETWORK_QUERY_WORKERS = 32
 # enough for ordinary frame stalls, finite enough that a hard-killed process
 # does not remain "online" forever because its old Envoy port was retained.
 NODE_HEARTBEAT_GRACE_S = 60.0
+# Written once a project has joined from this machine. Read by ConvoyExt too.
+MACHINE_FILE = "machine.json"
 # Why a public node row is offline (_node_offline_reason). A closed
 # vocabulary: peers may only relay one of these tokens, never free text.
 NODE_OFFLINE_REASONS = ("no_relay_port", "heartbeat_stale", "no_runtime",
                         "stalled")
+# A TD that is alive but cannot take work, as the machine directory words it.
+_INACTIVE_TOE_NOTES = {"no_relay_port": "Envoy off",
+                       "stalled": "not cooking"}
 
 # Cap on the in-memory (peer -> controller) map, matching the drain and
 # poll maps: nothing prunes it on a host whose peers churn, and an
@@ -2159,6 +2164,8 @@ class HostApp:
         # pretending it stopped something.
         self._shutdown_hook = None
         self._merge_rows_into_lineages()
+        self._machine_joined = False
+        self._load_machine_joined()
         self._initialize_realm_from_directory()
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
         self._auditIdentityAtBoot()
@@ -3055,8 +3062,7 @@ class HostApp:
     def active_realm_states(self):
         """One atomic discovery projection: {realm_id: wire state}."""
         with self.lock:
-            if not any(bool(record.get("enabled", True))
-                       for record in self.directory.nodes()):
+            if not self._machine_in_convoy_locked():
                 return {}
             snapshot = self.realm.snapshot()
             if not snapshot or not snapshot.get("convoy_id"):
@@ -3883,6 +3889,7 @@ class HostApp:
                     wake_active=live_bools["wake_active"],
                     wake_grace_s=wake_grace_s)
                 self.directory.set_enabled(record["node_id"], True)
+                self._note_machine_joined_locked()
                 if metadata_present:
                     self.directory.set_metadata(record["node_id"],
                                                 clean_metadata)
@@ -3936,7 +3943,8 @@ class HostApp:
                                       "yet be confirmed; registration was "
                                       "not accepted",
                         }
-                elif self.lifecycle is not None and td_executable:
+                elif (self.lifecycle is not None and td_executable
+                        and not self._is_temporary_row(record)):
                     # Audited on TRANSITION only: register is the 30s
                     # heartbeat, and a standing failure repeated per beat
                     # buried the audit log (~5.7k lines/day/node, field
@@ -4074,41 +4082,58 @@ class HostApp:
                                      runtime_id, metadata):
         """Which row this registration belongs to. Probes: NO LOCK HELD.
 
-        The lineage row, unless another live TD holds it with a different
-        version of the file: e1.5.toe and e1.6.toe open together stay two
-        nodes, so the second takes a row of its own under the exact-path hash
-        the client sent and inherits nothing. A registration without a saved
-        toe_path keeps the old exact-path identity.
+        The lineage row is the project's node, and only it holds a launch
+        record and a lasting grant. Another live TD holding it with a different
+        version of the file keeps it: e1.5.toe and e1.6.toe open together stay
+        two nodes, and the second takes a temporary row under the exact-path
+        hash the client sent, for as long as that run lives. It inherits
+        nothing. A registration without a saved toe_path keeps the old
+        exact-path identity.
         """
         metadata = metadata or {}
         lineage = identity.toe_lineage_discriminator(metadata.get("toe_path"))
         if lineage is None:
             return exact
         try:
+            root = identity.normalize_project_root(project_root)
             with self.lock:
-                sibling = (self.directory.lookup_location(
-                    project_root, comp_path, node_discriminator=exact)
-                    if exact and exact != lineage else None)
+                for record in self.directory.nodes():
+                    if (runtime_id and record.get("runtime_id") == runtime_id
+                            and record.get("project_root") == root
+                            and record.get("comp_path") == comp_path
+                            and self._record_lineage(record) == lineage):
+                        return record.get("node_discriminator") or exact
                 owner = self.directory.lookup_location(
                     project_root, comp_path, node_discriminator=lineage)
         except identity.IdentityError:
             return exact    # the register path refuses it by name
-        if (sibling is not None and runtime_id
-                and sibling.get("runtime_id") == runtime_id):
-            return exact    # a heartbeat of the second live version
-        if (owner is None or not exact or not runtime_id
-                or not owner.get("runtime_id")
-                or owner.get("runtime_id") == runtime_id):
+        if owner is None or not exact or not runtime_id:
             return lineage
         owner_metadata = owner.get("metadata") or {}
         if self._same_toe(owner_metadata.get("toe_path"),
                           metadata.get("toe_path")):
             return lineage  # one file opened twice: node_runtime_conflict
-        if self._runtime_owner_alive(owner_metadata.get("process_id"),
-                                     metadata.get("process_id"),
+        owner_pid = owner_metadata.get("process_id")
+        claimant_pid = metadata.get("process_id")
+        if not owner.get("runtime_id"):
+            # Free, unless the daemon just restarted and has not heard from a
+            # TD that is still running: replay forgets runtimes, and the first
+            # version to heartbeat must not take the other's address and grant.
+            return (exact if self._replayed_owner_is_running(
+                owner_pid, claimant_pid) else lineage)
+        if owner.get("runtime_id") == runtime_id:
+            return lineage
+        if self._runtime_owner_alive(owner_pid, claimant_pid,
                                      owner.get("envoy_port")):
             return exact
         return lineage
+
+    def _replayed_owner_is_running(self, owner_pid, claimant_pid):
+        if (not owner_pid or owner_pid == claimant_pid
+                or self._now() - self.started
+                >= 2 * NODE_HEARTBEAT_GRACE_S):
+            return False
+        return bool(platform_mod.pid_is_alive(owner_pid))
 
     @staticmethod
     def _same_toe(left, right):
@@ -4127,64 +4152,86 @@ class HostApp:
             return "%s (%s)" % (name, toe)
         return name or toe or "node %s" % (record.get("node_id") or "")[:8]
 
+    @classmethod
+    def _is_temporary_row(cls, record):
+        """A second live version's row: see _node_location_discriminator."""
+        lineage = cls._record_lineage(record)
+        return bool(lineage) and record.get("node_discriminator") != lineage
+
     @staticmethod
     def _record_lineage(record):
         return identity.toe_lineage_discriminator(
             (record.get("metadata") or {}).get("toe_path"))
 
     def _merge_rows_into_lineages(self):
-        """Move rows from exact-path to lineage identity. Once, at startup.
+        """Settle every project on its one lineage row. At each start.
 
-        One survivor per lineage: the row holding a TD Python grant, else the
-        lineage row, else the most recently seen. A loser with unfinished work
-        or a launch in flight keeps its row; nothing here terminalises a
-        delivery. A failure leaves the row as it was, and the next start tries
-        again.
+        The survivor is the row already on the lineage, else the one holding a
+        TD Python grant, else the most recently seen, and it takes the newest
+        row's file, launch record and enabled state: the grant often sits on an
+        old version and a version-up minted the row that knows the current
+        file. A row with unfinished work or a launch in flight is left alone;
+        nothing here terminalises a delivery. Rows in different realms never
+        merge. One bad row, or a failure, leaves that project as it was and the
+        next start tries again; it can never stop the daemon booting.
         """
         groups = {}
         for record in list(self.directory.nodes()):
             lineage = self._record_lineage(record)
-            if lineage:
+            if lineage and identity.is_valid_id(record.get("node_id")):
                 key = (record.get("project_root"), record.get("comp_path"),
-                       lineage)
+                       record.get("convoy_id"), lineage)
                 groups.setdefault(key, []).append(record)
 
-        def rank(record):
-            node_id = record.get("node_id")
-            canonical = record.get("node_discriminator") == self._record_lineage(
-                record)
-            return (not self.policy.allow_td_python(node_id), not canonical,
-                    -(self.db.node_last_seen(node_id) or 0.0), node_id)
-
         merged = []
-        for (_root, _comp, lineage), rows in groups.items():
-            rows.sort(key=rank)
-            survivor, losers = rows[0], rows[1:]
+        for (_root, _comp, _convoy, lineage), rows in groups.items():
             try:
-                for loser in losers:
-                    node_id = loser["node_id"]
-                    census = self._node_work_census(node_id)
-                    if (census.get("unreadable") or census.get("pending")
-                            or self.lifecycle_runtime.reservation_for_node(
-                                node_id)):
-                        continue
-                    self.db.delete_node(node_id)
-                    self.directory.forget(node_id)
-                    self._forget_launch_profile(node_id)
-                    self._drop_retired_node_policy(node_id)
-                    merged.append(node_id)
-                if survivor.get("node_discriminator") != lineage:
-                    self.directory.rekey(survivor["node_id"], lineage)
-                    self.db.save_node(survivor)
+                self._merge_lineage_rows(lineage, rows, merged)
             except Exception as exc:
                 self._audit_best_effort(
                     "node_lineage_migration_failed",
-                    {"node_id": survivor.get("node_id"),
+                    {"lineage": lineage,
                      "error": "%s: %s" % (type(exc).__name__, exc)})
         if merged:
             self._audit_best_effort(
                 "node_rows_merged",
                 {"retired": merged[:8], "count": len(merged)})
+
+    def _merge_lineage_rows(self, lineage, rows, merged):
+        seen = {r["node_id"]: self.db.node_last_seen(r["node_id"]) or 0.0
+                for r in rows}
+        rows.sort(key=lambda r: (
+            r.get("node_discriminator") != lineage,
+            not self.policy.allow_td_python(r["node_id"]),
+            -seen[r["node_id"]], r["node_id"]))
+        survivor = rows[0]
+        newest = max(rows, key=lambda r: seen[r["node_id"]])
+        if newest is not survivor:
+            self._adopt_newest_row(survivor, newest)
+        for loser in rows[1:]:
+            node_id = loser["node_id"]
+            census = self._node_work_census(node_id)
+            if (census.get("unreadable") or census.get("pending")
+                    or self.lifecycle_runtime.reservation_for_node(node_id)):
+                continue
+            self.db.delete_node(node_id)
+            self.directory.forget(node_id)
+            self._forget_launch_profile(node_id)
+            self._drop_retired_node_policy(node_id)
+            merged.append(node_id)
+        if survivor.get("node_discriminator") != lineage:
+            self.directory.rekey(survivor["node_id"], lineage)
+        self.db.save_node(survivor)
+
+    def _adopt_newest_row(self, survivor, newest):
+        survivor["metadata"] = dict(newest.get("metadata") or {})
+        survivor["enabled"] = bool(newest.get("enabled", True))
+        if self.lifecycle is None:
+            return
+        profile = self.lifecycle.store.get_profile(newest["node_id"])
+        if profile is not None:
+            self.lifecycle.store.put_profile(
+                dict(profile, node_id=survivor["node_id"]))
 
     def _retire_superseded_nodes_locked(self, live):
         """Drop node records the just-registered node REPLACES. Lock held.
@@ -4193,8 +4240,8 @@ class HostApp:
         lineage is a different project and is never retired, whatever it
         shares with the live row (a repo root, a process, a port). Only its
         stale claim on this run's presence is cleared. The same lineage leaves
-        one thing to retire: a second live version's exact-path row once its
-        TD has gone. The lineage row and any row holding a grant stay.
+        one thing to retire: a second live version's temporary row once its TD
+        has gone. A project's lineage row always stays.
 
         A row without a saved toe_path has no lineage and keeps the match
         below: same HOST, same project root, same COMP path. Not "same IP and
@@ -4269,9 +4316,8 @@ class HostApp:
                     same_port = bool(old_port and live_port
                                      and old_port == live_port)
                     if (old_lineage == live_lineage and same_root and same_comp
-                            and record.get("node_discriminator") != old_lineage
-                            and not self.policy.allow_td_python(node_id)):
-                        if old_port and not same_port:
+                            and self._is_temporary_row(record)):
+                        if record.get("runtime_id"):
                             latest = self._node_last_activity(record)
                             if (latest is None or (self._now() - latest)
                                     < self.node_dead_grace_s):
@@ -4744,7 +4790,7 @@ class HostApp:
             return self._refuse(
                 "forget_node", "peer_unreachable",
                 "the owning host has no live session with this one; run "
-                "Forget Offline Nodes there, or wait for it to reconnect",
+                "Forget Offline there, or wait for it to reconnect",
                 503)
         code = int(result.get("http_status") or 200)
         payload = dict(result)
@@ -4920,10 +4966,11 @@ class HostApp:
 
         Offline is NOT stale: a closed TD stays known, remotely launchable and
         keeps its grant for as long as its .toe exists, and the machine
-        directory hides it. A row is evicted only when it is silent AND its
-        .toe is provably deleted (dead_project, after node_dead_grace_s of
-        silence), or it names no .toe to check and has been silent past
-        node_retention_s (retired_unseen). Every eviction honors the /nodes/forget idle
+        directory hides it. A row is evicted only when it is silent AND every
+        save of its project is provably deleted (dead_project, after
+        node_dead_grace_s of silence), or it is a second live version's
+        temporary row (version_closed), or it names no .toe to check and has
+        been silent past node_retention_s (retired_unseen). Every eviction honors the /nodes/forget idle
         rules: no live Envoy port, no unresolved or unacknowledged work
         (fail closed on an unreadable job store -- and this is also what
         spares an in-flight remote start: the start job stays
@@ -4959,14 +5006,18 @@ class HostApp:
                     continue
                 toe = str((record.get("metadata") or {})
                           .get("toe_path") or "")
-                candidates.append((node_id, silent_s, toe))
+                candidates.append((node_id, silent_s, toe,
+                                   self._is_temporary_row(record)))
         if not candidates:
             return []
         # Phase 2: judge OUTSIDE the lock -- this is where stats happen.
         judged = []
-        for node_id, silent_s, toe in candidates:
-            if toe and os.path.isabs(toe):
-                if self._path_provably_deleted(toe):
+        for node_id, silent_s, toe, temporary in candidates:
+            if temporary:
+                judged.append((node_id, "version_closed", silent_s))
+            elif toe and os.path.isabs(toe):
+                if (self._path_provably_deleted(toe)
+                        and not lifecycle_mod.another_save_exists(toe)):
                     judged.append((node_id, "dead_project", silent_s))
             elif silent_s >= self.node_retention_s:
                 judged.append((node_id, "retired_unseen", silent_s))
@@ -6067,15 +6118,18 @@ class HostApp:
                 if node.get("convoy_id") == convoy_id
                 and bool(node.get("enabled", True))
             ]
-        if len(rows) > MAX_PUBLIC_NODES_PER_HOST:
-            return 503, {
-                "ok": False,
-                "reason": "node_directory_too_large",
-                "detail": "peer directory exceeds %d nodes"
-                          % MAX_PUBLIC_NODES_PER_HOST,
-            }
+        # Closed projects are kept until their files go, so a long-lived
+        # machine can remember more than one answer carries. Active rows first.
+        truncated = len(rows) > MAX_PUBLIC_NODES_PER_HOST
+        rows.sort(key=lambda row: (
+            not row.get("online"),
+            row.get("offline_reason") not in _INACTIVE_TOE_NOTES,
+            float("inf") if row.get("last_seen_age_s") is None
+            else row["last_seen_age_s"]))
         return 200, {"ok": True, "host_id": self.host_id,
-                     "convoy_id": convoy_id, "nodes": rows,
+                     "convoy_id": convoy_id,
+                     "nodes": rows[:MAX_PUBLIC_NODES_PER_HOST],
+                     "truncated": truncated,
                      "machine": {"hostname": socket.gethostname()}}
 
     def network_nodes(self, convoy_id=None):
@@ -6483,8 +6537,9 @@ class HostApp:
         if not isinstance(name, str):
             return ""
         name = name.strip()
-        if (not name or len(name) > 255
-                or any(ord(char) < 32 or ord(char) == 127 for char in name)):
+        # isprintable also refuses line and paragraph separators and bidi
+        # controls: this text reaches a confirmation dialog.
+        if not name or len(name) > 255 or not name.isprintable():
             return ""
         return name
 
@@ -6502,17 +6557,24 @@ class HostApp:
         peer_status already names every machine in this view, this one first.
         A dormant ghost is a previous identity of a machine at the same
         address, and an offline record sharing an address with a listed machine
-        is the same: one computer is listed once. Closed projects stay known in
-        `nodes` and are not listed here.
+        is the same: one computer is listed once. Two machines answering online
+        are two machines, whatever they report. A project is active while its
+        TD is alive, so one that cannot take work right now is listed and says
+        why; a closed one stays known in `nodes` and is not listed here.
         """
         toes = {}
         reported = {}
         for row in rows:
             host_id = row.get("host_id")
-            if row.get("hostname"):
-                reported.setdefault(host_id, row["hostname"])
+            name = self._clean_machine_name({"hostname": row.get("hostname")})
+            if name:
+                reported.setdefault(host_id, name)
             toe = row.get("toe_name") or row.get("node_name")
-            if row.get("online") and toe:
+            note = (None if row.get("online")
+                    else _INACTIVE_TOE_NOTES.get(row.get("offline_reason"), ""))
+            if toe and note is not None and note != "":
+                toes.setdefault(host_id, set()).add("%s (%s)" % (toe, note))
+            elif toe and note is None:
                 toes.setdefault(host_id, set()).add(toe)
         now = self._now()
         machines = {}
@@ -6558,7 +6620,8 @@ class HostApp:
                 machines.values(),
                 key=lambda m: (not m["local"], not m["online"],
                                m["hostname"].lower(), m["host_id"] or "")):
-            if machine["ip"] and machine["ip"] in addresses:
+            if (not machine["online"] and machine["ip"]
+                    and machine["ip"] in addresses):
                 continue
             addresses.add(machine["ip"])
             listed.append(machine)
@@ -11696,9 +11759,48 @@ class HostApp:
         registered or even remembered. Stop Convoy App ends it; lan.json's
         killswitch closes the listener without ending it.
         """
+        if not self._machine_in_convoy_locked():
+            return ()
         snapshot = self.realm.snapshot()
         return ((snapshot["convoy_id"],)
                 if snapshot and snapshot.get("convoy_id") else ())
+
+    def _machine_in_convoy_locked(self):
+        """Has a project ever joined from this machine, on this host app?
+
+        Written by the first enabled registration and read back by
+        ConvoyExt, which joins other projects only once it is set. A machine
+        whose rows were all turned off before this marker existed stays out: an
+        update must not reopen a LAN someone closed.
+        """
+        return self._machine_joined or any(
+            bool(record.get("enabled", True))
+            for record in self.directory.nodes())
+
+    def _note_machine_joined_locked(self):
+        if self._machine_joined:
+            return
+        self._machine_joined = True
+        try:
+            platform_mod._write_private(
+                os.path.join(self.data_dir, MACHINE_FILE),
+                json.dumps({"joined": True}))
+        except Exception as exc:
+            self._machine_joined = False
+            self._audit_best_effort(
+                "machine_join_persist_failed",
+                {"error": "%s: %s" % (type(exc).__name__, exc)})
+
+    def _load_machine_joined(self):
+        try:
+            with open(os.path.join(self.data_dir, MACHINE_FILE), "r",
+                      encoding="utf-8") as handle:
+                self._machine_joined = json.load(handle).get("joined") is True
+        except (OSError, ValueError, AttributeError):
+            self._machine_joined = False
+        if any(bool(record.get("enabled", True))
+               for record in self.directory.nodes()):
+            self._note_machine_joined_locked()
 
     def active_convoy_ids(self):
         """Enabled local namespaces, detached and safe for discovery."""

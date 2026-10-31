@@ -2083,14 +2083,14 @@ class TestForgetOfflineNodes(ConvoyHostBase):
             self._logs)
         # One row forgotten, one kept -> a partial run, never SUCCESS.
         levels = [l for m, l in self._logs
-                  if 'Forget Offline Nodes:' in m and 'kept 1' in m]
+                  if 'Forget Offline:' in m and 'kept 1' in m]
         self.assertTrue(levels and levels[0] != 'SUCCESS',
                         'a run that kept a row must not log SUCCESS: %r'
                         % (levels,))
         # ...and the keep is on screen, under its own title so it cannot
         # consume the confirmation's seeded response.
         reports = [d for d in self.dialogs
-                   if d[0] == 'Forget Offline Nodes - Nodes Kept']
+                   if d[0] == 'Forget Offline - Nodes Kept']
         self.assertLen(reports, 1)
         _title, message, buttons = reports[0]
         self.assertEqual(buttons, ['OK'])
@@ -2194,7 +2194,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('also reports the computer name', message,
                       'the all-clear must explain that a DIFFERENT host '
                       'carries this machine name, not send the user here')
-        self.assertNotIn('Forget Offline Nodes there', message,
+        self.assertNotIn('Forget Offline there', message,
                          'never instruct the user to walk to the machine '
                          'they are already using')
         self.assertEqual(self.client.count('host_post'), 0,
@@ -2221,10 +2221,10 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('No offline nodes', message)
         self.assertIn('TEC-B4A', message,
                       'the machine that owns the offline rows is named')
-        self.assertIn('Forget Offline Nodes there', message)
+        self.assertIn('Forget Offline there', message)
         self.assertIn('forgotten by the computer that owns it', message,
                       'the all-clear states the ownership rule plainly')
-        self.assertIn('clear themselves', message,
+        self.assertIn('clears itself', message,
                       'the all-clear still explains self-cleanup')
         self.assertNotIn('about an hour).', message,
                          'the old blanket "ghosts clear within an hour" '

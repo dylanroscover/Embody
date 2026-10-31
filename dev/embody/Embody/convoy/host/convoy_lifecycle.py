@@ -361,13 +361,14 @@ def _newest_save(toe_path):
     listing failure answers toe_path, which is what the caller pinned.
     """
     newest, newest_mtime = toe_path, None
+    lineage = node_identity.toe_lineage_discriminator(toe_path)
+    if lineage is None:
+        return toe_path
     try:
-        lineage = node_identity.toe_lineage_discriminator(toe_path)
-        folder = os.path.dirname(toe_path)
-        for name in os.listdir(folder):
+        for name in os.listdir(os.path.dirname(toe_path)):
             if name.lower().startswith("crashautosave."):
                 continue
-            candidate = os.path.join(folder, name)
+            candidate = os.path.join(os.path.dirname(toe_path), name)
             if node_identity.toe_lineage_discriminator(candidate) != lineage:
                 continue
             mtime = os.path.getmtime(candidate)
@@ -376,6 +377,12 @@ def _newest_save(toe_path):
     except OSError:
         return toe_path
     return newest
+
+
+def another_save_exists(toe_path):
+    """Is any save of this project still on disk? Older saves move away."""
+    newest = _newest_save(toe_path)
+    return newest != toe_path and os.path.isfile(newest)
 
 
 def _file_identity(path):
@@ -1752,6 +1759,24 @@ class LifecycleManager:
         if not _identity_same(executable_identity, profile["executable_identity"]):
             raise LifecycleError("executable_changed")
 
+    def _follow_moved_save(self, profile):
+        """Start a project whose pinned save has moved away from its newest.
+
+        Older saves leave the folder (dev/Backup here): that is not a deleted
+        project, and refusing project_missing would strand a launchable node.
+        """
+        if _file_identity(profile["toe_path"]) is not None:
+            return profile
+        newest = _newest_save(profile["toe_path"])
+        identity = _file_identity(newest)
+        if identity is None:
+            return profile
+        moved = _clone(profile)
+        moved["toe_path"] = newest
+        moved["toe_identity"] = identity
+        moved["updated_at"] = float(self._clock())
+        return self.store.put_profile(moved)
+
     def _refresh_saved_toe(self, profile, pre_save_identity):
         """Re-pin the saved file after an approved in-TD save.
 
@@ -2503,7 +2528,8 @@ class LifecycleManager:
                     return self._wait_for_launch(attempt, None, deadline,
                                                  cancel_event)
                 self._remaining(deadline, cancel_event)
-                profile = self._profile(node_id, convoy_id)
+                profile = self._follow_moved_save(
+                    self._profile(node_id, convoy_id))
                 self._ready(profile)
                 self._remaining(deadline, cancel_event)
                 runtime = self._current(node_id)

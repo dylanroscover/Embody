@@ -2666,7 +2666,8 @@ def convoy_declined_here(ext) -> bool:
 
     A project joined once and now off was turned off: its local config.json
     (gitignored, so a fresh clone has none) says so. A project that never
-    joined declined only through the Setup Wizard's explicit no. Total.
+    joined declined only through an explicit no: the Setup Wizard's, or Cancel
+    on the first-enable confirmation. Total.
     """
     entry = read_convoy_entry(ext)
     if not _clean_convoy_id(entry.get('id')):
@@ -2681,7 +2682,7 @@ def convoy_declined_here(ext) -> bool:
 
 
 def record_convoy_declined(ext) -> bool:
-    """Record the Setup Wizard's no. Owns the 'convoy' key and nothing else."""
+    """Record an explicit no. Owns the 'convoy' key and nothing else."""
     data, readable = _load_project_json(ext, 'recording the Convoy choice')
     if not readable:
         return False

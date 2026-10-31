@@ -5,6 +5,8 @@ version-up of a .toe is not a new node, and the directory lists machines with
 the projects open on them. See docs/reports/convoy-version-up-loses-node-2026-10-31.md.
 """
 import hashlib
+import json
+import os
 import socket
 import time
 
@@ -167,6 +169,73 @@ def test_two_live_versions_stay_two_nodes_and_the_second_inherits_nothing(
         assert _grant(server, first) is True
 
 
+def test_a_second_live_version_saving_again_keeps_its_row(server):
+    with _listening_port() as port:
+        first = _register(server, "e1.5.toe", "rt_one", port=port)
+        second = _register(server, "e1.6.toe", "rt_two", port=_closed_port())
+        again = _register(server, "e1.7.toe", "rt_two", port=_closed_port())
+        assert again["node_id"] == second["node_id"]
+        assert first["node_id"] in _rows(server)
+
+
+def test_a_second_live_version_with_no_port_survives_the_others_heartbeat(
+        server):
+    with _listening_port() as port:
+        _register(server, "e1.5.toe", "rt_one", port=port)
+        second = _register(server, "e1.6.toe", "rt_two")
+        _register(server, "e1.5.toe", "rt_one", port=port)
+        assert second["node_id"] in _rows(server)
+
+
+def test_a_second_versions_row_goes_when_its_td_does(server):
+    with _listening_port() as port:
+        first = _register(server, "e1.5.toe", "rt_one", port=port)
+        second = _register(server, "e1.6.toe", "rt_two", port=_closed_port())
+        server.call("/unregister", {"node_id": second["node_id"]})
+        _register(server, "e1.5.toe", "rt_one", port=port)
+        rows = _rows(server)
+        assert second["node_id"] not in rows
+        assert first["node_id"] in rows
+
+
+def test_a_second_version_has_no_launch_record(tmp_path, monkeypatch):
+    """A launch of it would land on the project's own row, so it never
+    offers one."""
+    server = Server(str(tmp_path / "state"))
+    try:
+        record = {"node_discriminator": _exact(ROOT + "/e1.6.toe"),
+                  "metadata": {"toe_path": ROOT + "/e1.6.toe"}}
+        assert server.app._is_temporary_row(record) is True
+        record["node_discriminator"] = identity.toe_lineage_discriminator(
+            ROOT + "/e1.6.toe")
+        assert server.app._is_temporary_row(record) is False
+    finally:
+        server.stop()
+
+
+def test_after_a_daemon_restart_the_first_heartbeat_cannot_take_a_live_grant(
+        tmp_path):
+    directory = str(tmp_path / "state")
+    first = Server(directory)
+    try:
+        owner = _register(first, "e1.5.toe", "rt_one", port=9981,
+                          pid=os.getpid())
+        approve_td_python(first.app, owner["node_id"])
+    finally:
+        first.stop()
+    second = Server(directory)
+    try:
+        other = _register(second, "e1.6.toe", "rt_two", port=9982, pid=1)
+        assert other["node_id"] != owner["node_id"]
+        assert other["td_python_approved"] is False
+        back = _register(second, "e1.5.toe", "rt_one", port=9981,
+                         pid=os.getpid())
+        assert back["node_id"] == owner["node_id"]
+        assert back["td_python_approved"] is True
+    finally:
+        second.stop()
+
+
 def test_the_same_file_opened_twice_is_still_refused(server):
     with _listening_port() as port:
         _register(server, "e1.toe", "rt_one", port=port)
@@ -228,35 +297,68 @@ def test_a_row_survives_until_its_toe_is_deleted(server, tmp_path):
     assert [e["cause"] for e in evicted] == ["dead_project"]
 
 
+def test_an_older_save_moving_away_does_not_cost_the_project_its_row(
+        server, tmp_path):
+    older = tmp_path / "show.5.toe"
+    older.write_bytes(b"x")
+    (tmp_path / "show.6.toe").write_bytes(b"y")
+    code, node = server.call("/register", {
+        "project_root": str(tmp_path), "convoy_id": "cv", "comp_path": COMP,
+        "runtime_id": "rt_one", "envoy_port": 9981,
+        "metadata": {"toe_path": str(older), "toe_name": older.name},
+        "node_discriminator": _exact(str(older))})
+    assert code == 200, node
+    approve_td_python(server.app, node["node_id"])
+    server.call("/unregister", {"node_id": node["node_id"]})
+    older.unlink()
+    server.app.started = 0
+    assert server.app._evict_stale_nodes(time.time() + 365 * 86400) == []
+    assert _grant(server, node) is True
+
+
 # -- rows written before lineage identity ------------------------------
 
-def _seed_exact_row(server, toe, runtime, node_id=None):
-    answer = _register(server, toe, runtime, port=None)
-    record = server.app.directory.lookup(answer["node_id"])
-    exact = _exact(ROOT + "/" + toe)
-    server.app.directory.rekey(answer["node_id"], exact)
-    server.app.db.save_node(record)
-    return answer
+def _seed_legacy_rows(directory, rows):
+    """A host.json as 6.2 left it: one exact-path row per save of a project.
+
+    rows: (toe, granted), oldest first. Registered under distinct names so this
+    server keeps them all, then rewritten on disk to the shape being migrated.
+    """
+    server = Server(directory)
+    ids = []
+    try:
+        for index, (_toe, granted) in enumerate(rows):
+            node = _register(server, "seed%d.toe" % index, "rt_%d" % index)
+            if granted:
+                approve_td_python(server.app, node["node_id"])
+            server.call("/unregister", {"node_id": node["node_id"]})
+            ids.append(node["node_id"])
+    finally:
+        server.stop()
+    path = os.path.join(directory, "host.json")
+    with open(path, encoding="utf-8") as handle:
+        state = json.load(handle)
+    for index, (node_id, (toe, _granted)) in enumerate(zip(ids, rows)):
+        row = state["nodes"][node_id]
+        row["node_discriminator"] = _exact(ROOT + "/" + toe)
+        row["metadata"] = dict(row["metadata"], toe_path=ROOT + "/" + toe,
+                               toe_name=toe)
+        row["last_seen"] = 1000.0 + index
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle)
+    return ids
 
 
 def test_existing_rows_migrate_to_lineage_on_start_keeping_the_grant(
         tmp_path):
     directory = str(tmp_path / "state")
-    first = Server(directory)
-    try:
-        old = _seed_exact_row(first, "e1.5.toe", "rt_one")
-        approve_td_python(first.app, old["node_id"])
-        server_call = first.call("/unregister", {"node_id": old["node_id"]})
-        assert server_call[0] == 200
-    finally:
-        first.stop()
+    node_id, = _seed_legacy_rows(directory, [("e1.5.toe", True)])
     second = Server(directory)
     try:
-        record = second.app.directory.lookup(old["node_id"])
-        assert record["node_discriminator"] == \
-            identity.toe_lineage_discriminator(ROOT + "/e1.5.toe")
+        record = second.app.directory.lookup(node_id)
+        assert record["node_discriminator"] ==             identity.toe_lineage_discriminator(ROOT + "/e1.5.toe")
         new = _register(second, "e1.6.toe", "rt_two", port=9982)
-        assert new["node_id"] == old["node_id"]
+        assert new["node_id"] == node_id
         assert new["td_python_approved"] is True
     finally:
         second.stop()
@@ -265,41 +367,44 @@ def test_existing_rows_migrate_to_lineage_on_start_keeping_the_grant(
 def test_duplicate_rows_of_one_lineage_merge_to_the_one_holding_the_grant(
         tmp_path):
     directory = str(tmp_path / "state")
-    first = Server(directory)
-    try:
-        ungranted = _seed_exact_row(first, "e1.5.toe", "rt_one")
-        granted = _seed_exact_row(first, "e1.6.toe", "rt_two")
-        approve_td_python(first.app, granted["node_id"])
-        for row in (ungranted, granted):
-            first.call("/unregister", {"node_id": row["node_id"]})
-    finally:
-        first.stop()
+    _ungranted, granted = _seed_legacy_rows(
+        directory, [("e1.5.toe", False), ("e1.6.toe", True)])
     second = Server(directory)
     try:
-        ids = [r["node_id"] for r in second.app.directory.nodes()]
-        assert ids == [granted["node_id"]]
-        assert second.app.policy.allow_td_python(granted["node_id"])
+        assert [r["node_id"] for r in second.app.directory.nodes()] == [granted]
+        assert second.app.policy.allow_td_python(granted)
     finally:
         second.stop()
 
 
-def test_a_grant_on_the_exact_row_survives_a_lineage_row_without_one(tmp_path):
+def test_the_merged_row_keeps_the_grant_and_takes_the_newest_file(tmp_path):
+    """The field shape: the grant sits on an old version, and a version-up
+    minted the row that knows the current file."""
     directory = str(tmp_path / "state")
-    first = Server(directory)
-    try:
-        canonical = _register(first, "e1.5.toe", "rt_one")
-        sibling = _seed_exact_row(first, "e1.6.toe", "rt_two")
-        assert canonical["node_id"] != sibling["node_id"]
-        approve_td_python(first.app, sibling["node_id"])
-    finally:
-        first.stop()
+    granted, _newest = _seed_legacy_rows(
+        directory, [("e1.5.toe", True), ("e1.6.toe", False)])
     second = Server(directory)
     try:
-        ids = [r["node_id"] for r in second.app.directory.nodes()]
-        assert ids == [sibling["node_id"]]
-        assert second.app.policy.allow_td_python(sibling["node_id"])
-        record = second.app.directory.lookup(sibling["node_id"])
-        assert record["node_discriminator"] ==             identity.toe_lineage_discriminator(ROOT + "/e1.6.toe")
+        assert [r["node_id"] for r in second.app.directory.nodes()] == [granted]
+        assert second.app.policy.allow_td_python(granted)
+        record = second.app.directory.lookup(granted)
+        assert record["metadata"]["toe_name"] == "e1.6.toe"
+    finally:
+        second.stop()
+
+
+def test_a_malformed_row_cannot_stop_the_daemon_booting(tmp_path):
+    directory = str(tmp_path / "state")
+    good, = _seed_legacy_rows(directory, [("e1.5.toe", False)])
+    path = os.path.join(directory, "host.json")
+    with open(path, encoding="utf-8") as handle:
+        state = json.load(handle)
+    state["nodes"]["not-a-valid-id"] = dict(state["nodes"][good])
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle)
+    second = Server(directory)
+    try:
+        assert second.app.directory.lookup(good) is not None
     finally:
         second.stop()
 
@@ -335,6 +440,55 @@ def test_disabling_one_project_does_not_take_the_machine_off(server):
     assert server.app.active_convoy_ids()
 
 
+def test_a_machine_with_no_project_keeps_announcing(server):
+    """Discovery reads this: bound and silent is not available."""
+    node = _establish(server)
+    server.call("/unregister",
+                {"node_id": node["node_id"], "reason": "disabled"})
+    code, answer = server.call("/nodes/forget", {"node_id": node["node_id"]})
+    assert code == 200, answer
+    assert server.app.active_realm_states()
+
+
+def test_joining_is_durable_and_readable_beside_the_host_app(tmp_path):
+    directory = str(tmp_path / "state")
+    first = Server(directory)
+    try:
+        node = _establish(first)
+        first.call("/unregister",
+                   {"node_id": node["node_id"], "reason": "disabled"})
+    finally:
+        first.stop()
+    with open(os.path.join(directory, "machine.json"),
+              encoding="utf-8") as handle:
+        assert json.load(handle) == {"joined": True}
+    second = Server(directory)
+    try:
+        assert second.app.active_convoy_ids()
+    finally:
+        second.stop()
+
+
+def test_an_update_does_not_reopen_a_lan_someone_closed(tmp_path):
+    """Every row turned off under the old rule, and no record of joining: the
+    machine stays out until a project joins again."""
+    directory = str(tmp_path / "state")
+    first = Server(directory)
+    try:
+        node = _establish(first)
+        first.call("/unregister",
+                   {"node_id": node["node_id"], "reason": "disabled"})
+    finally:
+        first.stop()
+    os.unlink(os.path.join(directory, "machine.json"))
+    second = Server(directory)
+    try:
+        assert second.app.active_convoy_ids() == ()
+        assert second.app.active_realm_states() == {}
+    finally:
+        second.stop()
+
+
 def test_a_machine_that_never_joined_stays_off_the_lan(server):
     assert server.app.active_convoy_ids() == ()
 
@@ -364,6 +518,13 @@ def test_only_active_toes_are_listed(server):
     server.call("/unregister", {"node_id": closed["node_id"]})
     assert _machines(server)[0]["toes"] == ["show.toe"]
     assert closed["node_id"] in _rows(server), "known, just not listed"
+
+
+def test_a_project_that_cannot_take_work_is_listed_and_says_why(server):
+    _establish(server)
+    _register(server, "needs-envoy.toe", "rt_two")
+    assert _machines(server)[0]["toes"] == ["needs-envoy.toe (Envoy off)",
+                                            "show.toe"]
 
 
 def test_a_version_up_lists_the_new_file_name_once(server):

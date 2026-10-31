@@ -345,6 +345,16 @@ def pid_is_alive(pid, platform=None, kill=None, kernel32=None):
         return False
 
 
+def machine_joined(directory):
+    """Has a project joined from this machine? The host app's own record."""
+    try:
+        with open(os.path.join(directory, 'machine.json'), 'r',
+                  encoding='utf-8') as handle:
+            return json.load(handle).get('joined') is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def read_live_portfile(directory, platform=None, kill=None):
     """The portfile ONLY if the process that wrote it is still alive.
 

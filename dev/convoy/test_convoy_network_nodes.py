@@ -840,11 +840,49 @@ def test_one_address_is_listed_once(app, tmp_path, monkeypatch):
     assert [m["host_id"] for m in listed] == [new_host_id]
 
 
+def test_two_machines_answering_at_one_address_are_both_listed(
+        app, tmp_path, monkeypatch):
+    _established(app)
+    shared = "192.168.88.40:47600"
+    ids = []
+    for number in (13, 14):
+        host_id = "%032x" % number
+        peer = hostkeys.load_or_create(str(tmp_path / ("peer-%d" % number)))
+        with app.lock:
+            app.peers.admit(host_id, peer.fingerprint,
+                            cert_pem=peer.certificate_pem,
+                            endpoints=[shared], convoy_ids=[CONVOY_A])
+        ids.append(host_id)
+    _peer_answers(monkeypatch, lambda target, convoy_id: {
+        "ok": True, "host_id": target.host_id, "convoy_id": convoy_id,
+        "nodes": []})
+    _code, body = app.network_nodes(CONVOY_A)
+    listed = {m["host_id"] for m in body["machines"]
+              if m["ip"] == "192.168.88.40"}
+    assert listed == set(ids)
+
+
+def test_a_peer_directory_serves_active_rows_first_past_its_cap(
+        app, tmp_path, monkeypatch):
+    _established(app)
+    peer_host_id, peer_identity = _admit_peer(app, tmp_path, 15)
+    monkeypatch.setattr(ha, "MAX_PUBLIC_NODES_PER_HOST", 1)
+    _register(app, discriminator="nd_" + "4" * 32, root="/shows/closed",
+              runtime_id="rt_closed", envoy_port=9801)
+    code, body = app.peer_nodes_view(
+        peer_host_id, CONVOY_A,
+        authenticated_fingerprint=peer_identity.fingerprint)
+    assert code == 200, body
+    assert body["truncated"] is True
+    assert len(body["nodes"]) == 1
+
+
 def test_a_peers_reported_name_is_untrusted_text(app):
     clean = ha.HostApp._clean_machine_name
     assert clean({"hostname": " TEC-C3A "}) == "TEC-C3A"
     for bad in (None, "x", {}, {"hostname": 7}, {"hostname": ""},
-                {"hostname": "a\nb"}, {"hostname": "x" * 256}):
+                {"hostname": "a\nb"}, {"hostname": "x" * 256},
+                {"hostname": "a\u2028b"}, {"hostname": "a\u202eb"}):
         assert clean(bad) == ""
 
 
