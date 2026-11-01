@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.3.0-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.3.2-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-70-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -211,7 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
-- **6.3.1** — Convoy is set up once per computer: machines stay on with no project open, a version-up keeps a node's address and approvals, and the page lists one row per machine
+- **6.3.2** — Convoy is set up once per computer: machines stay on with no project open, a version-up keeps a node's address and approvals, and the page lists one row per machine
 - **6.2.77** — the update-complete dialog offers Save Now, so the saved `.toe` keeps the new Embody
 - **6.2.76** — Externalize Full Project keeps Embody and TouchDesigner's own COMPs out of your files, older over-tagged projects clean up after the update, and a project saved before its first externalization reopens with its tracking (issue #176)
 - **6.2.73** — a `.mcp.json` Embody cannot parse is left untouched instead of replaced, so your other MCP servers survive (issue #159)
