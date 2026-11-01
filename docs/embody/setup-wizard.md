@@ -72,9 +72,9 @@ Sets the **Tool Permissions** (`Toolpermissions`) parameter, which you can chang
 | Option | Meaning |
 |---|---|
 | **Enable Convoy** | Lets this Embody node discover, inspect, and control other Convoy-enabled siblings on the same trusted LAN, and lets those siblings address this node. |
-| **Keep Convoy Off** | Leaves the node disconnected. You can enable it later on the Convoy parameter page. |
+| **Keep Convoy Off** | Keeps this project out, even on a computer that is already in the Convoy. You can enable it later on the Convoy parameter page. |
 
-This choice sets **Enable Convoy** (`Convoyenable`). It is both the membership and exposure gate: there is no separate Create, Join, invitation, or “Expose This Node” step. Discovery and reconnect are automatic.
+This choice sets **Enable Convoy** (`Convoyenable`). The first project enabled on a computer puts that computer in the Convoy for good, and other saved projects opened there join by themselves unless you turn them off. For each project this setting is the exposure gate: there is no separate Create, Join, invitation, or “Expose This Node” step. Discovery and reconnect are automatic.
 
 Convoy is independent of the AI-assistant choice. If you selected **None** and enable Convoy, Embody starts only Envoy's internal loopback command service so siblings can execute registered TouchDesigner operations. It does not generate `.mcp.json` or AI rules, connect an MCP client, or launch a coding tool.
 
