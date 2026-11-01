@@ -182,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **165 test suites** (5,670 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **166 test suites** (5,670 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -211,7 +211,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
-- **6.3.0** — Convoy is set up once per computer: machines stay on with no project open, a version-up keeps a node's address and approvals, and the page lists one row per machine
+- **6.3.1** — Convoy is set up once per computer: machines stay on with no project open, a version-up keeps a node's address and approvals, and the page lists one row per machine
 - **6.2.77** — the update-complete dialog offers Save Now, so the saved `.toe` keeps the new Embody
 - **6.2.76** — Externalize Full Project keeps Embody and TouchDesigner's own COMPs out of your files, older over-tagged projects clean up after the update, and a project saved before its first externalization reopens with its tracking (issue #176)
 - **6.2.73** — a `.mcp.json` Embody cannot parse is left untouched instead of replaced, so your other MCP servers survive (issue #159)

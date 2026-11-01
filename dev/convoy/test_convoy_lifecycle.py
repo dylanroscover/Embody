@@ -137,6 +137,7 @@ class Runtime:
         self.dirty_values = [{"ok": True, "dirty": False}]
         self.saved = []
         self.quit_calls = []
+        self.quit_save_landed = []
         self.inspector = None
         self.quit_event = None
         self.reservations = {}
@@ -158,9 +159,10 @@ class Runtime:
         return {"ok": True}
 
     def quit(self, node_id, runtime_id, timeout_s, cancel_event, *, discard,
-             expected_dirty_revision=None):
+             expected_dirty_revision=None, save_landed=False):
         self.quit_calls.append((node_id, runtime_id, discard,
                                 expected_dirty_revision))
+        self.quit_save_landed.append(save_landed)
         if self.inspector and self.value:
             self.inspector.backend.processes.pop(self.value["process_id"], None)
         self.value = None
@@ -1067,6 +1069,55 @@ def test_a_newer_save_the_restart_did_not_write_is_not_relaunched(tmp_path):
         policy="save_then_restart", timeout_s=5)
     assert result["ok"] is True, result
     assert cl._path_same(store.get_profile(NODE)["toe_path"], str(toe))
+
+
+def test_a_landed_save_authorizes_the_quit(tmp_path):
+    """TD reports a project dirty again within seconds of a save, so the node
+    refuses a dirty quit unless the host says its save reached disk."""
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-landed", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_save_landed == [True]
+
+
+def test_a_clean_restart_claims_no_landed_save(tmp_path):
+    manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": False}]
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(NODE, CONVOY, "restart-clean", "runtime-1",
+                                  timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_save_landed == [False]
+
+
+def test_require_clean_on_a_dirty_project_never_quits(tmp_path):
+    manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True}]
+    result = manager.restart_node(NODE, CONVOY, "restart-dirty", "runtime-1",
+                                  timeout_s=5)
+    assert result["code"] == "project_dirty"
+    assert "save_then_restart" in result["detail"]
+    assert runtime.quit_calls == [] and launcher.spawns == []
+
+
+def test_recovery_after_a_crash_keeps_the_landed_save(tmp_path):
+    """The daemon can die between the durable commit and the quit: the proof
+    has to be on the attempt, or the replacement is refused forever."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    manager.restart_node(NODE, CONVOY, "restart-durable", "runtime-1",
+                         policy="save_then_restart", timeout_s=5)
+    attempt = store.get_attempt("restart-durable")
+    assert attempt["save_landed"] is True
 
 
 def test_a_save_that_moved_away_starts_from_the_newest(tmp_path):

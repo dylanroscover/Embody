@@ -203,7 +203,7 @@ The normal restart policies are:
 
 | Policy | Behavior |
 |---|---|
-| `require_clean` | Default. Refuses to restart if the project is dirty, unsaved, or its state cannot be verified. |
+| `require_clean` | Default. Refuses to restart if the project is dirty, unsaved, or its state cannot be verified. TouchDesigner 2025 reports project changes even right after a save, so expect `project_dirty` and use `save_then_restart`. |
 | `save_then_restart` | Saves first, verifies the saved state, and then restarts. A failed or uncertain save stops the restart; a dirty project on a node in Perform Mode is not saved, and the restart stops with `perform_mode`. |
 
 The public Convoy relay accepts only these two restart policies. Discard/force behavior is not exposed as a remote recovery shortcut. A restart also refuses when several Embody nodes share the same TouchDesigner process, because restarting one would silently interrupt the others.

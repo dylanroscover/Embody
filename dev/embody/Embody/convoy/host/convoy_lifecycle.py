@@ -151,7 +151,8 @@ _DETAILS = {
     "node_offline": "the node has no running TouchDesigner runtime",
     "orphan_runtime": "the prior exact process is still alive but is not registered",
     "dirty_state_unknown": "TouchDesigner project dirty state could not be proven",
-    "project_dirty": "TouchDesigner has unsaved project changes",
+    "project_dirty": ("TouchDesigner reports project changes; use "
+                      "save_then_restart to save them first"),
     "save_failed": "TouchDesigner could not save the project safely",
     "perform_mode": "the node is in Perform Mode, which refuses a save mid-show",
     "destructive_policy_disabled": "the requested destructive restart policy is not locally approved",
@@ -2724,7 +2725,8 @@ class LifecycleManager:
                     discard=policy in DESTRUCTIVE_RESTART_POLICIES,
                     expected_dirty_revision=(
                         None if policy in DESTRUCTIVE_RESTART_POLICIES
-                        else dirty_revision))
+                        else dirty_revision),
+                    save_landed=attempt.get("save_landed") is True)
         if not exited:
             exit_deadline = min(
                 recovery_deadline,
@@ -3082,7 +3084,7 @@ class LifecycleManager:
                             policy == "save_then_restart" and save_landed):
                         # A proven-landed save whose project.modified merely
                         # re-dirtied via Embody housekeeping is NOT a failed
-                        # save; the quit CAS still fences a genuine late edit.
+                        # save; the quit CAS still refuses a later save.
                         raise LifecycleError(
                             "save_failed" if policy == "save_then_restart"
                             else "project_dirty")
@@ -3113,6 +3115,7 @@ class LifecycleManager:
                     state="restart_committed", committed_at=float(self._clock()),
                     old_process=process, old_runtime_id=runtime_id,
                     dirty_revision=dirty_revision,
+                    save_landed=save_landed,
                     profile_fingerprint=_profile_fingerprint(profile),
                     restart_policy=policy,
                     requested_timeout_s=requested_timeout_s)

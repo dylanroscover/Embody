@@ -1679,11 +1679,13 @@ class _HostLifecycleRuntime:
         return result
 
     def quit(self, node_id, runtime_id, timeout_s, cancel_event, *, discard,
-             expected_dirty_revision=None):
-        return self._call(
-            node_id, runtime_id, "convoy_lifecycle_quit",
-            {"expected_dirty_revision": expected_dirty_revision,
-             "discard": bool(discard)}, timeout_s, cancel_event)
+             expected_dirty_revision=None, save_landed=False):
+        arguments = {"expected_dirty_revision": expected_dirty_revision,
+                     "discard": bool(discard)}
+        if save_landed:
+            arguments["save_landed"] = True
+        return self._call(node_id, runtime_id, "convoy_lifecycle_quit",
+                          arguments, timeout_s, cancel_event)
 
     def reservation_for_node(self, node_id):
         """Return a detached live reservation used by /register preflight."""

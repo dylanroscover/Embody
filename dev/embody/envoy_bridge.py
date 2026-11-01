@@ -508,8 +508,10 @@ BRIDGE_TOOLS = [
         "description": (
             "Restart one exact running TouchDesigner node. The default "
             "require_clean policy refuses dirty, unsaved, or unverifiable "
-            "state; save_then_restart explicitly saves first. Destructive "
-            "restart policies are not exposed by this build."
+            "state, and TouchDesigner 2025 always reports project changes, "
+            "so use save_then_restart: it saves a new version, proves it "
+            "reached disk and reopens it. Destructive restart policies are "
+            "not exposed by this build."
         ),
         "inputSchema": {
             "type": "object",
