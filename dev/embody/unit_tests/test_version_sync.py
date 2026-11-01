@@ -14,6 +14,7 @@ logic is covered without touching files.
 
 import os
 import re
+import tempfile
 from pathlib import Path
 
 
@@ -205,6 +206,36 @@ class TestVersionSync(EmbodyTestCase):
                     os.remove(abs_tdxn)
                 except OSError:
                     pass
+
+    def _synced_dat(self, name, text):
+        """A sandbox text DAT synced to a real temp file; returns (dat, path)."""
+        handle, path = tempfile.mkstemp(suffix='.py')
+        os.close(handle)
+        self.addCleanup(os.remove, path)
+        Path(path).write_text(text, encoding='utf-8')
+        dat = self.sandbox.create(textDAT, name)
+        dat.par.file = path
+        dat.par.syncfile = 1
+        self.assertEqual(dat.text.strip(), text.strip())
+        return dat, path
+
+    def test_export_gate_reloads_a_dat_behind_its_file(self):
+        """6.3.1's tox shipped two old host DATs: their files landed just before
+        the save, and no frame had reloaded them when the export ran."""
+        dat, path = self._synced_dat('behind', 'old')
+        Path(path).write_text('new', encoding='utf-8')
+        self.assertEqual(self._src_ctrl()._reloadStaleDats(self.sandbox), [])
+        self.assertEqual(dat.text.strip(), 'new')
+
+    def test_export_gate_ignores_line_endings(self):
+        dat, path = self._synced_dat('crlf', 'line\n')
+        Path(path).write_bytes(b'line\r\n')
+        self.assertEqual(self._src_ctrl()._reloadStaleDats(self.sandbox), [])
+
+    def test_export_gate_passes_a_dat_whose_file_is_gone(self):
+        dat, _path = self._synced_dat('orphan', 'kept')
+        dat.par.file = str(Path(tempfile.gettempdir()) / 'embody_no_such_file.py')
+        self.assertEqual(self._src_ctrl()._reloadStaleDats(self.sandbox), [])
 
     def test_version_target_is_reached_or_empty(self):
         """A VERSION_TARGET left armed BELOW the current version would jump

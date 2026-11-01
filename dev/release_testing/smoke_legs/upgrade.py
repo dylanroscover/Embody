@@ -164,6 +164,18 @@ result = json.dumps(sorted(
     if p.isSequence or p.sequence is None))
 """
 
+# What each text DAT holds, keyed by its path under the COMP.
+_SOURCE_DATS = """
+# source dats
+import hashlib, json, td
+emb = op.Embody
+result = json.dumps({
+    d.path[len(emb.path) + 1:]: hashlib.sha256(
+        d.text.replace('\\r\\n', '\\n').strip().encode('utf-8', 'replace')
+    ).hexdigest()
+    for d in emb.findChildren(type=td.DAT) if d.type == 'text'})
+"""
+
 _ROLLBACK_ARM = """
 import json, td
 u = op.Embody.op('updater').ext.UpdaterExt
@@ -181,6 +193,14 @@ _ROLLED_BACK = 'Update failed -- previous version restored'
 def _sha256(path):
     with open(path, 'rb') as f:  # release toxes are ~2MB
         return hashlib.sha256(f.read()).hexdigest()
+
+
+def text_digest(text):
+    """Line endings are not a difference: Embody writes CRLF on Windows and
+    git stores LF. Same form as _SOURCE_DATS."""
+    return hashlib.sha256(
+        text.replace('\r\n', '\n').strip().encode('utf-8', 'replace')
+    ).hexdigest()
 
 
 def _brief(state):
@@ -563,6 +583,30 @@ class _Upgrade:
                     f'left behind {sorted(live - declared)}, '
                     f'missing {sorted(declared - live)}')
 
+    def _check_source_dats(self):
+        """The build holds the source it was cut from: a save can beat a DAT's
+        reload, and nothing else in the smoke reads the difference (6.3.1
+        shipped two old host DATs through a green run, field 2026-10-31)."""
+        repo = self.ctx.get('repo') or self.ctx['build'].get('repo') or ''
+        source = os.path.join(str(repo), 'dev', 'embody', 'Embody')
+        live = json.loads(self._py(_SOURCE_DATS, 30))
+        compared, behind = 0, []
+        for folder, _dirs, names in os.walk(source):
+            for name in names:
+                path = os.path.join(folder, name)
+                key = os.path.relpath(path, source).replace(
+                    '\\', '/').rsplit('.', 1)[0]
+                if key not in live:
+                    continue
+                compared += 1
+                with open(path, 'rb') as f:
+                    text = f.read().decode('utf-8', 'replace')
+                if text_digest(text) != live[key]:
+                    behind.append(key)
+        self._check('source_dats', compared > 0 and not behind,
+                    f'{compared} compared; behind their source: '
+                    f'{sorted(behind)}')
+
     def _rollback(self, updates_dir, was):
         """Drive the user-visible recovery: a leftover sentinel naming the
         backup, then CheckForUpdate -> 'Restore Backup' -> _rollback."""
@@ -659,6 +703,7 @@ class _Upgrade:
                     f'{ext_before} rows before, {ext_after} after (None means '
                     f'the table was never read)')
         self._check_custom_pars(manifest)
+        self._check_source_dats()
         self._check('up_to_date',
                     self._py(_UPTODATE % (f'v{self.new}',), 30)
                     == f'Up to date (v{self.new})',

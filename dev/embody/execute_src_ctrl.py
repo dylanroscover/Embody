@@ -171,6 +171,36 @@ def onPlayStateChange(state):
 def onDeviceChange():
     return
 
+def _sameText(a, b):
+    return a.replace('\r\n', '\n').strip() == b.replace('\r\n', '\n').strip()
+
+
+def _reloadStaleDats(owner):
+    """Reload file-synced DATs behind their files; returns the paths still behind.
+
+    A file landed just before a save has had no frame to reload, and the export
+    captures the live DAT (6.3.1 shipped two old host DATs, 2026-10-31). The
+    pulse lands synchronously. A DAT already current is left alone: reloading
+    an extension's source reinitializes it.
+    """
+    stale = []
+    for dat in owner.findChildren(type=DAT):
+        sync = dat.par['syncfile']
+        if dat.type not in ('text', 'table') or sync is None or not sync.eval():
+            continue
+        path = Path(project.folder) / dat.par.file.eval()
+        if not path.is_file():
+            continue
+        disk = path.read_bytes().decode('utf-8', 'replace')
+        if _sameText(dat.text, disk):
+            continue
+        dat.par.loadonstartpulse.pulse()
+        comp.Log(f"Reloaded {dat.path}: it was behind {path.name}", "INFO")
+        if not _sameText(dat.text, disk):
+            stale.append(dat.path)
+    return stale
+
+
 def onProjectPreSave():
     # set page for component
     comp.currentPage = 'Embody'
@@ -207,11 +237,15 @@ def onProjectPreSave():
     # ever exist directly under the Embody COMP -- this export runs on
     # EVERY project.save via onProjectPreSave.
     save_path = Path(project.folder).parents[0] / 'release' / f"{comp.name}-v{new_version}.tox"
-    ok = comp.ExportPortableTox(save_path=str(save_path))
+    stale = _reloadStaleDats(comp)
+    if stale:
+        comp.Log(f"DATs behind their files, nothing exported: {stale}", "ERROR")
+    ok = not stale and comp.ExportPortableTox(save_path=str(save_path))
     if not ok:
-        # Three False cases: pre_release abort or save failure (no tox on
-        # disk), or a post_release failure AFTER a successful save (tox
-        # exists). Either way the manifest is NOT written, and the prior
+        # Four False cases: a DAT behind its file, pre_release abort or save
+        # failure (no tox on disk), or a post_release failure AFTER a
+        # successful save (tox exists). Either way the manifest is NOT
+        # written, and the prior
         # version's manifest -- now pointing at the tox unlinked above --
         # is removed so nothing stale ships.
         if save_path.is_file():
@@ -222,9 +256,9 @@ def onProjectPreSave():
                 "ERROR")
         else:
             comp.Log(
-                f"Release export FAILED for v{new_version} (pre_release "
-                f"hook abort or save failure) -- release/ has no tox for "
-                f"this version and the manifest was NOT written. Fix and "
+                f"Release export FAILED for v{new_version} (stale DATs, "
+                f"pre_release hook abort or save failure) -- release/ has no "
+                f"tox for this version and the manifest was NOT written. Fix and "
                 f"re-save.", "ERROR")
         try:
             (Path(project.folder).parents[0] / 'release'
