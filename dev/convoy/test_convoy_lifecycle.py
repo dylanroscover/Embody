@@ -10,6 +10,7 @@ import threading
 import time
 
 import pytest
+import sys
 
 import convoy_lifecycle as cl
 
@@ -608,6 +609,96 @@ def test_unknown_old_pid_state_cannot_be_treated_as_dead_and_duplicated(tmp_path
     result = manager.start_node(NODE, CONVOY, "unknown-old-pid", timeout_s=5)
     assert result["code"] == "runtime_unverifiable"
     assert launcher.spawns == []
+
+
+def _pid_refuses_inspection(inspector, birth):
+    """A reboot handed the recorded pid to a system process: OpenProcess is
+    denied, and the kernel's process list still names its creation time."""
+    original = inspector.backend.inspect_status
+    inspector.backend.inspect_status = lambda pid: (
+        {"status": "unknown"} if pid == 100 else original(pid))
+    inspector.backend.birth_id = lambda pid: birth if pid == 100 else None
+
+
+def test_a_reused_pid_that_refuses_inspection_does_not_block_a_start(tmp_path):
+    """B4A 2026-10-31: after a reboot pid 3608 was svchost.exe and start_node
+    refused the node with runtime_unverifiable until that pid freed up."""
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, "birth:svchost")
+    launcher.callback = auto_confirm(manager)
+    result = manager.start_node(NODE, CONVOY, "start-after-reboot", timeout_s=5)
+    assert result["ok"] is True, result
+    assert len(launcher.spawns) == 1
+
+
+def test_the_same_birth_behind_a_refusal_is_still_not_proof_of_death(tmp_path):
+    """An elevated TouchDesigner refuses inspection too. It must not be opened
+    a second time."""
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, "birth:100")
+    result = manager.start_node(NODE, CONVOY, "elevated-td", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def test_no_birth_behind_a_refusal_is_still_not_proof_of_death(tmp_path):
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, None)
+    result = manager.start_node(NODE, CONVOY, "no-birth", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def test_a_backend_that_cannot_read_a_birth_fails_closed(tmp_path):
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, None)
+
+    def broken(pid):
+        raise OSError("snapshot unavailable")
+
+    inspector.backend.birth_id = broken
+    result = manager.start_node(NODE, CONVOY, "broken-birth", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def _native_backend():
+    if sys.platform == "win32":
+        return cl._WindowsNativeBackend()
+    if sys.platform == "darwin":
+        return cl._MacNativeBackend()
+    pytest.skip("TouchDesigner lifecycle supports Windows and macOS")
+
+
+def test_a_native_birth_is_the_one_inspection_reads():
+    backend = _native_backend()
+    for pid in (os.getpid(), os.getppid()):
+        status = backend.inspect_status(pid)
+        assert status["status"] == "alive"
+        assert backend.birth_id(pid) == status["process"]["birth_id"]
+
+
+def test_a_native_birth_of_no_process_is_none():
+    assert _native_backend().birth_id(2 ** 31 - 3) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="OpenProcess refusal")
+def test_a_process_that_refuses_opening_still_has_a_readable_birth():
+    backend = _native_backend()
+    refusing = [pid for pid in range(4, 20000, 4)
+                if backend.inspect_status(pid)["status"] == "unknown"]
+    if not refusing:
+        pytest.skip("this session can open every process")
+    births = [backend.birth_id(pid) for pid in refusing]
+    assert any(birth and birth.startswith("winfiletime:") for birth in births)
 
 
 def test_runtime_directory_error_cannot_be_treated_as_offline(tmp_path):

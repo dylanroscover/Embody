@@ -33,7 +33,9 @@ Integration contract (kept explicit so absent proof fails closed):
 ``LocalProcessInspector``
     ``inspect_status(pid)`` is the authoritative tri-state API (``alive`` +
     exact snapshot, ``dead``, or ``unknown``). ``unknown`` is never treated as
-    offline. ``current_session()`` returns user/session/interactive proof.
+    offline. ``recorded_status(process)`` is the same question about a process
+    recorded earlier. ``current_session()`` returns user/session/interactive
+    proof.
 
 ``runtime_adapter`` supplied to :class:`LifecycleManager`
     ``current(node_id)`` returns the current host directory/runtime snapshot
@@ -85,6 +87,7 @@ import re
 import secrets
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import threading
@@ -1141,6 +1144,37 @@ class _WindowsNativeBackend:
         finally:
             self.kernel32.CloseHandle(handle)
 
+    def birth_id(self, pid):
+        """Creation time of any process, or None. OpenProcess refuses system
+        processes (137 of 217 on TEC-B4A, measured 2026-10-31) but the kernel's
+        process list gives every user this field. x64 layout."""
+        c = self.ctypes
+        if c.sizeof(c.c_void_p) != 8:
+            return None
+        query = c.WinDLL("ntdll").NtQuerySystemInformation
+        size = 1 << 20
+        for _ in range(4):
+            buffer = c.create_string_buffer(size)
+            needed = c.c_ulong()
+            code = query(5, buffer, c.c_ulong(size), c.byref(needed)) & 0xFFFFFFFF
+            if code == 0:
+                break
+            if code != 0xC0000004:  # STATUS_INFO_LENGTH_MISMATCH
+                return None
+            size = max(needed.value + 65536, size * 2)
+        else:
+            return None
+        offset = 0
+        while True:
+            step, = struct.unpack_from("<I", buffer, offset)
+            created, = struct.unpack_from("<q", buffer, offset + 32)
+            found, = struct.unpack_from("<Q", buffer, offset + 80)
+            if found == pid:
+                return "winfiletime:%d" % created
+            if not step:
+                return None
+            offset += step
+
     def inspect(self, pid):
         status = self.inspect_status(pid)
         return status.get("process") if status.get("status") == "alive" else None
@@ -1297,6 +1331,19 @@ class _MacNativeBackend:
             "session_id": "macos:%s" % self.getsid(int(pid)),
         }}
 
+    def birth_id(self, pid):
+        """Start time of any process, or None: libproc refuses another user's
+        process, the kern.proc sysctl does not. p_starttime leads kinfo_proc."""
+        c = self.ctypes
+        mib = (c.c_int * 4)(1, 14, 1, int(pid))  # CTL_KERN KERN_PROC KERN_PROC_PID
+        buffer = c.create_string_buffer(1024)
+        size = c.c_size_t(1024)
+        if (c.CDLL(None).sysctl(mib, 4, buffer, c.byref(size), None, 0) != 0
+                or not size.value):
+            return None
+        seconds, micros = struct.unpack_from("<qi", buffer, 0)
+        return "mac-time:%d.%06d" % (seconds, micros)
+
     def inspect(self, pid):
         status = self.inspect_status(pid)
         return status.get("process") if status.get("status") == "alive" else None
@@ -1374,6 +1421,24 @@ class LocalProcessInspector:
         except Exception:
             return {"status": "unknown"}
 
+    def recorded_status(self, process):
+        """inspect_status for a process recorded earlier: a refused pid with a
+        different birth is another process, so the recorded one is dead (a reboot
+        gave pid 3608 to svchost.exe, TEC-B4A 2026-10-31). The same birth or no
+        birth stays unknown: an elevated TouchDesigner refuses too."""
+        pid = process.get("pid") if isinstance(process, dict) else None
+        status = self.inspect_status(pid)
+        if status["status"] != "unknown" or pid is None:
+            return status
+        try:
+            birth = self.backend.birth_id(pid)
+        except Exception:
+            return status
+        if (isinstance(birth, str) and birth
+                and birth != process.get("birth_id")):
+            return {"status": "dead"}
+        return status
+
     def inspect(self, pid):
         result = self.inspect_status(pid)
         return result.get("process") if result["status"] == "alive" else None
@@ -1400,7 +1465,7 @@ class LocalProcessInspector:
             timeout_s = _timeout(timeout_s, DEFAULT_QUIT_TIMEOUT_S)
         except LifecycleError:
             return False
-        status = self.inspect_status(expected["pid"])
+        status = self.recorded_status(expected)
         if status["status"] == "dead":
             return True
         if status["status"] != "alive":
@@ -1419,7 +1484,7 @@ class LocalProcessInspector:
             return False
         deadline = self._clock() + timeout_s
         while self._clock() < deadline:
-            status = self.inspect_status(expected["pid"])
+            status = self.recorded_status(expected)
             if status["status"] == "dead":
                 return True
             if (status["status"] == "alive"
@@ -1969,7 +2034,7 @@ class LifecycleManager:
         last = profile["last_runtime"]
         if last["runtime_id"] != runtime_id:
             return _result(False, "runtime_changed", node_id=node_id)
-        status = self.inspector.inspect_status(last["process"]["pid"])
+        status = self.inspector.recorded_status(last["process"])
         if (status["status"] == "unknown"
                 or (status["status"] == "alive"
                     and _process_same(status["process"], last["process"]))):
@@ -2357,7 +2422,7 @@ class LifecycleManager:
             last = candidate.get("last_runtime")
             if last is None:
                 continue
-            status = self.inspector.inspect_status(last["process"]["pid"])
+            status = self.inspector.recorded_status(last["process"])
             if status["status"] == "unknown":
                 raise LifecycleError("runtime_unverifiable")
             if (status["status"] == "alive"
@@ -2378,7 +2443,7 @@ class LifecycleManager:
                     # no safe fact from which to infer that no child exists.
                     raise LifecycleError("indeterminate")
                 continue
-            status = self.inspector.inspect_status(process.get("pid"))
+            status = self.inspector.recorded_status(process)
             if status["status"] == "unknown":
                 raise LifecycleError("runtime_unverifiable")
             if (status["status"] == "alive"
@@ -2391,7 +2456,7 @@ class LifecycleManager:
         ``dead`` or a different birth at the same PID both mean gone; an
         ``unknown`` probe is never treated as death.
         """
-        status = self.inspector.inspect_status(spawned.get("pid"))
+        status = self.inspector.recorded_status(spawned)
         return status["status"] == "dead" or (
             status["status"] == "alive"
             and not _process_same(status["process"], spawned))
@@ -2541,8 +2606,7 @@ class LifecycleManager:
                                          operation_id=operation_id))
                 last = profile.get("last_runtime")
                 if last is not None:
-                    status = self.inspector.inspect_status(
-                        last["process"]["pid"])
+                    status = self.inspector.recorded_status(last["process"])
                     if status["status"] == "unknown":
                         raise LifecycleError("runtime_unverifiable")
                     if (status["status"] == "alive"
@@ -2611,7 +2675,7 @@ class LifecycleManager:
 
     def _wait_exact_exit(self, process, deadline):
         while self._monotonic() < deadline:
-            status = self.inspector.inspect_status(process["pid"])
+            status = self.inspector.recorded_status(process)
             if status["status"] == "dead":
                 return True
             if (status["status"] == "alive"
@@ -2693,7 +2757,7 @@ class LifecycleManager:
                     state="indeterminate")
             should_request_quit = True
 
-        status = self.inspector.inspect_status(process["pid"])
+        status = self.inspector.recorded_status(process)
         if status["status"] == "unknown":
             return terminal(
                 _result(False, "indeterminate", node_id=node_id,

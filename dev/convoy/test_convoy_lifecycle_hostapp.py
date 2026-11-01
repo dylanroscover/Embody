@@ -493,7 +493,7 @@ def test_dead_registered_runtime_is_atomically_reconciled_offline(tmp_path):
             "last_runtime": {"runtime_id": "runtime-1",
                              "process": process}})
         lifecycle.inspector = SimpleNamespace(
-            inspect_status=lambda pid: {"status": "dead"})
+            recorded_status=lambda process: {"status": "dead"})
 
         assert app.lifecycle_runtime.current(node["node_id"]) is None
         record = app.directory.lookup(node["node_id"])

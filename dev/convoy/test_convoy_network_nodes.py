@@ -705,6 +705,21 @@ def test_a_stale_row_whose_process_lives_reads_stalled(tmp_path):
         instance.db.close()
 
 
+def test_a_row_with_no_runtime_is_not_stalled_by_a_reused_pid(tmp_path):
+    """B4A 2026-10-31: after a reboot the recorded pid was svchost.exe, and the
+    machine row listed a project that was not running as 'not cooking'."""
+    clock = [1000.0]
+    instance = ha.HostApp(str(tmp_path / "reused"), now=lambda: clock[0])
+    instance._pid_is_alive = lambda pid: pid == 4242
+    try:
+        reason = instance._node_offline_reason(
+            {"last_heartbeat_unix": 0.0, "runtime_id": "",
+             "metadata": {"process_id": 4242}})
+        assert reason == "heartbeat_stale"
+    finally:
+        instance.db.close()
+
+
 def test_an_online_row_carries_no_offline_reason(app):
     node = _register(app)
     code, directory = app.network_nodes(CONVOY_A)

@@ -1526,7 +1526,7 @@ class _HostLifecycleRuntime:
                 or process.get("pid") != pid):
             return record
         try:
-            status = lifecycle.inspector.inspect_status(pid)
+            status = lifecycle.inspector.recorded_status(process)
         except Exception:
             return record
         definitively_gone = (
@@ -5881,10 +5881,12 @@ class HostApp:
             # frame loop is not running (paused, minimized with Stop
             # Playing when Minimized, or behind a modal). Read as a dead
             # machine fleet-wide until now (TEC-A4D, 2026-09-22). Local
-            # records only -- a peer's row carries its own reason.
+            # records only -- a peer's row carries its own reason. No runtime
+            # means no live process: that pid is someone else's after a reboot.
             pid = (record.get("metadata") or {}).get("process_id")
             try:
-                if pid and self._pid_is_alive(int(pid)):
+                if (pid and record.get("runtime_id")
+                        and self._pid_is_alive(int(pid))):
                     return "stalled"
             except (TypeError, ValueError, OSError):
                 pass
