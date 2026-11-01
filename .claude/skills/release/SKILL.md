@@ -43,7 +43,8 @@ Don't pass a path (TD increments from *your* path's build, desyncing by one). Do
 save can ship old** (v6.0.133 `palette_catalog`, v6.3.1 two Convoy host DATs).
 `onProjectPreSave` reloads any synced DAT behind its file first and writes no
 tox if one stays behind; the `upgrade` leg's `source_dats` step compares the
-installed build against the repo.
+installed build against the repo, excusing only files changed after the commit
+that cut the tox.
 
 If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, and do **not** save again -- the hook will delete the just-correct release `.tox`. The rename fixes git, not the session: a `.toe` keeps its own name, so the renamed file reopens under the OLD one (`Embody-6.379.toe` reopened as `Embody-6.378.toe`, 2026-10-26). Make the NEXT release save `project.save('<dev>/Embody-6.<N-1>.toe')`, where N is the build the new version belongs to: TD increments the number in the path it is given, so it writes N and the session is back in lock-step.
 

@@ -59,6 +59,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import time
 
 from . import _probe as P
@@ -201,6 +202,27 @@ def text_digest(text):
     return hashlib.sha256(
         text.replace('\r\n', '\n').strip().encode('utf-8', 'replace')
     ).hexdigest()
+
+
+def _changed_since_cut(repo):
+    """Repo paths the release tox cannot hold: changed after the commit that cut
+    it. A tox saved but not committed is newer than everything, and with no
+    history nothing is excused."""
+    def git(*args):
+        return subprocess.run(
+            ('git', '-C', str(repo)) + args, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=30, check=True).stdout
+
+    manifest = 'release/embody-release.json'
+    try:
+        if git('status', '--porcelain', '--', manifest).strip():
+            return set()
+        cut = git('log', '-1', '--format=%H', '--', manifest).strip()
+        if not cut:
+            return set()
+        return set(git('diff', '--name-only', cut, '--').split('\n')) - {''}
+    except (OSError, subprocess.SubprocessError):
+        return set()
 
 
 def _brief(state):
@@ -586,11 +608,13 @@ class _Upgrade:
     def _check_source_dats(self):
         """The build holds the source it was cut from: a save can beat a DAT's
         reload, and nothing else in the smoke reads the difference (6.3.1
-        shipped two old host DATs through a green run, field 2026-10-31)."""
+        shipped two old host DATs through a green run, field 2026-10-31).
+        Source changed after the cut is not expected in it."""
         repo = self.ctx.get('repo') or self.ctx['build'].get('repo') or ''
         source = os.path.join(str(repo), 'dev', 'embody', 'Embody')
         live = json.loads(self._py(_SOURCE_DATS, 30))
-        compared, behind = 0, []
+        later = _changed_since_cut(repo)
+        compared, excused, behind = 0, 0, []
         for folder, _dirs, names in os.walk(source):
             for name in names:
                 path = os.path.join(folder, name)
@@ -598,14 +622,17 @@ class _Upgrade:
                     '\\', '/').rsplit('.', 1)[0]
                 if key not in live:
                     continue
+                if os.path.relpath(path, str(repo)).replace('\\', '/') in later:
+                    excused += 1
+                    continue
                 compared += 1
                 with open(path, 'rb') as f:
                     text = f.read().decode('utf-8', 'replace')
                 if text_digest(text) != live[key]:
                     behind.append(key)
         self._check('source_dats', compared > 0 and not behind,
-                    f'{compared} compared; behind their source: '
-                    f'{sorted(behind)}')
+                    f'{compared} compared, {excused} changed since the tox '
+                    f'was cut; behind their source: {sorted(behind)}')
 
     def _rollback(self, updates_dir, was):
         """Drive the user-visible recovery: a leftover sentinel naming the
