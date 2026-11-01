@@ -39,14 +39,11 @@ user projects during updates.
 
 Don't pass a path (TD increments from *your* path's build, desyncing by one). Don't pre-set `par.Version`. Don't call `ExportPortableTox` directly.
 
-**If externalized files changed on disk while TD was closed** (e.g. a landed
-worktree diff), verify the affected DATs re-synced into the live network
-BEFORE saving: table DATs load their file only on the post-launch refresh
-sweep, which can run AFTER an early save -- and the portable export captures
-LIVE DAT state, shipping stale content (observed v6.0.133: the exported
-`palette_catalog` was missing all 267 just-landed 33070 rows). Pulse
-`op.Embody.par.Refresh` and spot-check the changed DATs (row counts, code
-markers), then save.
+**The portable export captures LIVE DAT state, so a file landed just before a
+save can ship old** (v6.0.133 `palette_catalog`, v6.3.1 two Convoy host DATs).
+`onProjectPreSave` reloads any synced DAT behind its file first and writes no
+tox if one stays behind; the `upgrade` leg's `source_dats` step compares the
+installed build against the repo.
 
 If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, and do **not** save again -- the hook will delete the just-correct release `.tox`. The rename fixes git, not the session: a `.toe` keeps its own name, so the renamed file reopens under the OLD one (`Embody-6.379.toe` reopened as `Embody-6.378.toe`, 2026-10-26). Make the NEXT release save `project.save('<dev>/Embody-6.<N-1>.toe')`, where N is the build the new version belongs to: TD increments the number in the path it is given, so it writes N and the session is back in lock-step.
 
@@ -304,7 +301,7 @@ quits that TD, so those files are the only evidence left.
 |---|---|---|
 | Embody | `Status` par, `get_op_errors('/embody/Embody', recurse=True)` | `Enabled`, 0 errors, 0 warnings, no script errors |
 | Envoy | `Envoystatus` par, `get_td_status`, one real tool round-trip | `Running on port N`, `connected: true`, the call answers |
-| Convoy (when enabled) | `Convoystatus` par, `op.Embody.seq.Convoynodes.numBlocks` (the node table), `get_convoy_status`, `convoy_list_nodes` | `Connected`, this node listed `online` by the host with `last_seen_age_s` under a minute, host `running` at THIS version, no `Install failed` / `timed out`; the panel's node table populated |
+| Convoy (when enabled) | `Convoystatus` par, `op.Embody.seq.Convoymachines.numBlocks` (the machine table), `get_convoy_status`, `convoy_list_nodes` | `Connected`, this node listed `online` by the host with `last_seen_age_s` under a minute, host `running` at THIS version, no `Install failed` / `timed out`; the panel's machine table populated |
 | Externalization | `get_externalizations` + `Externalizations` par | the table resolves, link relative, no `Invalid path` warning |
 | Settings | `Filecleanup`, `Toxdropexpr`, `Autosave` | the user's values, never the runner's (`delete` / `ignore`) |
 | Frame rate | `get_project_performance` | back at the project's cook rate, no dropped-frame climb |

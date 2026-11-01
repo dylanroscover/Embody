@@ -235,11 +235,8 @@ class ConvoyExt:
         self._logged = ''        # last logged status class (transitions only)
         self._tick_ms = self._TICK_MIN_MS
         self._network_rows_digest = None
-        self._last_nodes_result = None
-        # Rows a confirmed Forget removed from the sequence optimistically,
-        # held only until the daemon's verdict lands (_restoreNodeRowsNow
-        # puts back whatever was not actually forgotten, then clears this).
-        self._optimistically_dropped = []
+        self._machine_status = None
+        self._machine_status_at = 0.0
         self._wake_record = None
         self._wake_poll_gen = 0
 
@@ -292,7 +289,7 @@ class ConvoyExt:
             self._publishId(self._readConvoyId())
             if not self._enabled() and not self._performing():
                 self._status('Disabled')
-                self._projectNodeRows([], 'Convoy is disabled')
+                self._projectMachineRows([], 'Convoy is disabled')
         except Exception as e:
             self._log('post-init readout failed: %s' % (e,), 'DEBUG')
 
@@ -728,245 +725,184 @@ class ConvoyExt:
         return '%dd ago' % int(age // 86400)
 
     @staticmethod
-    def _nodeStatusRows(result, client=None):
-        """Turn a bounded client directory result into UI-only row values.
+    def _machinesFromNodes(nodes):
+        """Group node rows by machine, for a host app older than 6.3.0.
 
-        Deliberately minimal -- Node Name, IP, Status, Last Seen. The node's
-        Embody version is folded INTO Status only when it is the point (an
-        incompatibility); it is noise as a standing column otherwise. Per-node
-        controller counts live in convoy_list_controllers, not here.
+        Such a host sends no machines list and updates itself within seconds
+        of this registration; the page should not be blank meanwhile.
         """
-        if not isinstance(result, dict) or result.get('state') != 'nodes':
-            return None
-        rows = []
-        nodes = result.get('nodes') or ()
-        # `client` is the convoy_client module the CALLER resolved on the
-        # main thread (see _client); without it, or on an older module that
-        # lacks the helper, the raw list is shown.
-        collapse = getattr(client, 'collapse_same_process_nodes', None)
-        if collapse is not None:
-            try:
-                nodes = collapse(nodes, result.get('host_id'))
-            except Exception:
-                pass
+        machines = {}
         for node in nodes:
             if not isinstance(node, dict):
                 continue
-            online = bool(node.get('online'))
-            raw_status = str(node.get('status') or
-                             ('online' if online else 'offline')).strip()
-            status = raw_status[:1].upper() + raw_status[1:64]
-            version = str(node.get('embody_version') or '').strip()
-            if version and 'incompat' in raw_status.lower():
-                status = '%s (v%s)' % (status, version[:32])
-            if not online and node.get('offline_reason') == 'no_relay_port':
-                # Newer hosts say why: the node heartbeats, but its Envoy
-                # serves no relay port -- off, or still starting.
-                status += ' -- no Envoy relay port'
-            elif not online and node.get('offline_reason') == 'stalled':
-                # The process is alive but not cooking: paused, minimized
-                # with Stop Playing when Minimized, or behind a dialog.
-                status += ' -- TD running but not cooking'
-            compat = str(node.get('compatibility') or '').strip().lower()
-            if (compat in ('limited', 'incompatible')
-                    and 'incompat' not in raw_status.lower()):
-                # 'limited' alone sent an operator to read the other
-                # machine's log for the version (2026-09-21).
-                reason = str(node.get('compatibility_reason') or '').strip()
-                host_ver = str(node.get('host_app_version') or '').strip()
-                status += ' -- %s' % compat
-                if reason:
-                    status += ': %s' % reason[:96]
-                elif host_ver:
-                    status += ' (host app %s)' % host_ver[:32]
-            name = str(node.get('node_name') or node.get('hostname') or
-                       node.get('toe_name') or 'Unnamed node')[:512]
-            host = str(node.get('hostname') or '').strip()
-            if host and host.lower() not in name.lower():
-                # A traveled auto-stamp wears another machine's name
-                # (.toe-travel leak: a whole fleet read 'TEC-A4D /
-                # Render.36', 2026-08-19). The row's live hostname is the
-                # ground truth that tells nodes apart.
-                name = ('%s (%s)' % (host, name))[:512]
-            ip = str(node.get('ip') or '-')[:255]
+            machine = machines.setdefault(node.get('host_id'), {
+                'hostname': node.get('hostname') or '',
+                'ip': node.get('ip') or '',
+                'online': False,
+                'status': 'offline',
+                'last_seen_age_s': None,
+                'toes': [],
+            })
+            if node.get('online'):
+                machine['online'] = True
+                machine['status'] = 'online'
+                machine['last_seen_age_s'] = node.get('last_seen_age_s')
+                toe = node.get('toe_name') or node.get('node_name')
+                if toe:
+                    machine['toes'].append(toe)
+            elif not machine['online'] and machine['last_seen_age_s'] is None:
+                machine['last_seen_age_s'] = node.get('last_seen_age_s')
+        return list(machines.values())
+
+    @staticmethod
+    def _machineStatusParts(machine):
+        """(state, detail) either side of the age in 'Online / 5s ago'.
+
+        The detail is only ever what an operator must act on: why a machine
+        is not reachable, or how far its host app is from this one.
+        """
+        online = bool(machine.get('online'))
+        raw = str(machine.get('status')
+                  or ('online' if online else 'offline')).strip()
+        state = raw[:1].upper() + raw[1:64]
+        reason = str(machine.get('reason') or '').strip()
+        detail = ''
+        if not online and reason:
+            detail = ' -- %s' % reason.replace('_', ' ')[:96]
+        compat = str(machine.get('compatibility') or '').strip().lower()
+        if compat in ('limited', 'incompatible'):
+            why = str(machine.get('compatibility_reason') or '').strip()
+            version = str(machine.get('host_app_version') or '').strip()
+            detail += ' -- %s' % compat
+            if why:
+                detail += ': %s' % why[:96]
+            elif version:
+                detail += ' (host app %s)' % version[:32]
+        return state or 'Unknown', detail
+
+    @staticmethod
+    def _machineStatusText(state, age_s, online, detail):
+        return '%s / %s%s' % (state, ConvoyExt._lastSeenText(age_s, online),
+                              detail)
+
+    @staticmethod
+    def _machineRows(result):
+        """Turn a bounded client directory result into UI-only row values.
+
+        One row per machine: 'Hostname / IP', the projects active on it, and
+        one status line. A closed project is known to the host and not listed.
+        """
+        if not isinstance(result, dict) or result.get('state') != 'nodes':
+            return None
+        machines = result.get('machines')
+        if not isinstance(machines, list):
+            machines = ConvoyExt._machinesFromNodes(result.get('nodes') or ())
+        rows = []
+        for machine in machines:
+            if not isinstance(machine, dict):
+                continue
+            host = str(machine.get('hostname') or '').strip()
+            ip = str(machine.get('ip') or '').strip()
+            online = bool(machine.get('online'))
+            age = machine.get('last_seen_age_s')
+            state, detail = ConvoyExt._machineStatusParts(machine)
+            toes = [str(toe) for toe in machine.get('toes') or ()]
             rows.append({
-                'Nodename': name,
-                'Ipaddress': ip,
-                'Nodestatus': status or 'Unknown',
-                # The host may expose a bounded AGE, never a raw wall-clock
-                # timestamp. Older hosts omit it, in which case the observed
-                # online/offline state remains the honest fallback.
-                'Lastseen': ConvoyExt._lastSeenText(
-                    node.get('last_seen_age_s'), online),
+                'Machinename': (' / '.join(p for p in (host, ip) if p)
+                                or 'Unknown machine')[:512],
+                'Toefiles': ', '.join(toes)[:1024] or 'None open',
+                'Machinestatus': ConvoyExt._machineStatusText(
+                    state, age, online, detail),
+                'parts': (state, age, online, detail),
             })
         return rows
 
-    def _projectNodeRows(self, rows, empty_detail='No nodes discovered'):
-        """Populate the read-only Convoy Nodes sequence. MAIN THREAD ONLY."""
-        fields = ('Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen')
+    def _projectMachineRows(self, rows, empty_detail='No machines discovered'):
+        """Populate the read-only Convoy Machines sequence. MAIN THREAD ONLY."""
         if not rows:
             rows = [{
-                'Nodename': str(empty_detail or 'No nodes discovered')[:512],
-                'Ipaddress': '-',
-                'Nodestatus': 'Offline',
-                'Lastseen': 'Never',
+                'Machinename': str(empty_detail or
+                                   'No machines discovered')[:512],
+                'Toefiles': 'None open',
+                'Machinestatus': 'Offline',
+                'parts': None,
             }]
-        # A stable tuple prevents 30-second heartbeats from dirtying/redrawing
-        # an unchanged custom parameter page.
-        digest = tuple(tuple(row.get(field) for field in fields)
+        # Ages stay out of the digest: _refreshMachineStatus moves them, and a
+        # heartbeat with nothing new must not redraw the page.
+        self._machine_status = [row['parts'] for row in rows]
+        self._machine_status_at = time.time()
+        digest = tuple((row['Machinename'], row['Toefiles'],
+                        row['parts'] and (row['parts'][0], row['parts'][2],
+                                          row['parts'][3]))
                        for row in rows)
         if digest == self._network_rows_digest:
             return
-        seq = self._sequenceByName(self._embody, 'Convoynodes')
+        seq = self._sequenceByName(self._embody, 'Convoymachines')
         if seq is None:
             return
         try:
             seq.numBlocks = len(rows)
             blocks = list(seq.blocks)
         except Exception as e:
-            self._log('could not size Convoy Status sequence: %s' % (e,),
+            self._log('could not size Convoy Machines sequence: %s' % (e,),
                       'DEBUG')
             return
         try:
             for index, row in enumerate(rows, 1):
                 block = blocks[index - 1]
-                for field in fields:
+                for field in ('Machinename', 'Toefiles', 'Machinestatus'):
                     par = self._sequenceBlockPar(
                         self._embody, seq, block, index, field)
                     if par is not None:
                         self._setPar(par, row.get(field))
         except Exception as e:
-            self._log('could not populate Convoy Status sequence: %s' % (e,),
-                      'DEBUG')
+            self._log('could not populate Convoy Machines sequence: %s'
+                      % (e,), 'DEBUG')
             return
         self._network_rows_digest = digest
 
     def _applyNetworkNodes(self, result):
         """Apply one worker-fetched directory without erasing good stale data."""
-        rows = self._nodeStatusRows(result, client=self._safeClient())
+        rows = self._machineRows(result)
         if rows is not None:
-            # The raw node dicts (with node_id) back the readout's
-            # synchronous edits: a confirmed Forget filters THIS cache
-            # and re-projects in the same frame (_dropNodeRowsNow).
-            self._last_nodes_result = result
-            # Keep the RAW ages plus the moment they were true, so the tick
-            # can age the "Last Seen" column between fetches. Without this the
-            # column is a relative time frozen at write time: the directory is
-            # only fetched on the 30s heartbeat, so a user reading the page in
-            # between sees a number that is minutes old but says "15s ago".
-            try:
-                self._node_ages = [
-                    (n.get('last_seen_age_s'), bool(n.get('online')))
-                    for n in (result.get('nodes') or ())
-                    if isinstance(n, dict)]
-                self._node_ages_at = time.time()
-            except Exception:
-                self._node_ages = None
-            detail = ('No enabled nodes in this Convoy' if not rows
-                      else 'No nodes discovered')
-            self._projectNodeRows(rows, detail)
+            self._projectMachineRows(rows, 'No machines in this Convoy')
             return
-        # A transient directory failure must not make every known node
+        # A transient directory failure must not make every known machine
         # disappear.  Only initialize the untouched placeholder with an
         # actionable reason; the next successful heartbeat replaces it.
         if self._network_rows_digest is None:
             reason = str((result or {}).get('reason') or
                          (result or {}).get('detail') or
                          'status unavailable')[:160]
-            self._projectNodeRows([], 'Status unavailable: %s' % reason)
+            self._projectMachineRows([], 'Status unavailable: %s' % reason)
 
-    def _dropNodeRowsNow(self, node_ids):
-        """Remove rows from the Convoy Nodes sequence THIS FRAME.
+    def _refreshMachineStatus(self):
+        """Age the status line between directory fetches. MAIN THREAD.
 
-        The visual contract of a confirmed Forget is immediate: the
-        block the user just dismissed leaves the sequence parameters in
-        the same frame, with NO daemon round trip in the visual path --
-        the row sticking around until the background reconciled it is
-        exactly what read as a broken button (field feedback 2026-08-05,
-        three rounds). The daemon apply runs in the background as
-        reconciliation; a row it refuses to forget is put BACK
-        synchronously by _restoreNodeRowsNow, with the reason on screen,
-        rather than silently reappearing seconds later (field feedback
-        2026-08-06: "it clears and after 2-3 sec they show up again").
+        Without this the age is frozen at write time: the directory is only
+        fetched on the 30s heartbeat, so the page would say "15s ago" about
+        data minutes old. Writes one parameter, only when its text changes.
         """
-        cached = getattr(self, '_last_nodes_result', None)
-        if not isinstance(cached, dict):
+        parts = getattr(self, '_machine_status', None)
+        if not parts:
             return
-        drop = {str(i) for i in (node_ids or ())}
-        dropped = [n for n in (cached.get('nodes') or ())
-                   if isinstance(n, dict)
-                   and str(n.get('node_id') or '') in drop]
-        kept = [n for n in (cached.get('nodes') or ())
-                if isinstance(n, dict)
-                and str(n.get('node_id') or '') not in drop]
-        # Remember what was optimistically removed, so a daemon refusal
-        # can restore exactly those rows without waiting for a fetch.
-        self._optimistically_dropped = dropped
-        filtered = dict(cached)
-        filtered['nodes'] = kept
-        # One path draws this readout: the same apply the register drain
-        # uses recomputes rows, ages and digest, and re-caches, so a
-        # second Forget in the same session filters the already-filtered
-        # set.
-        self._applyNetworkNodes(filtered)
-
-    def _restoreNodeRowsNow(self, node_ids):
-        """Put optimistically-dropped rows BACK, this frame. MAIN THREAD.
-
-        Sync twin of _dropNodeRowsNow for daemon-refused forgets (else a
-        refused row vanishes and reappears seconds later, unexplained).
-        Invalidate _network_rows_digest first -- drop-then-restore
-        round-trips the digest and the unchanged-digest suppression
-        would swallow the restore. Set to (), not None: None means
-        "never drawn" and would let a transient failure blank real rows.
-        """
-        restore = {str(i) for i in (node_ids or ())}
-        cached = getattr(self, '_last_nodes_result', None)
-        dropped = getattr(self, '_optimistically_dropped', None) or ()
-        coming_back = [n for n in dropped
-                       if isinstance(n, dict)
-                       and str(n.get('node_id') or '') in restore]
-        # One Forget owns this snapshot; release it either way so a later
-        # run can never restore rows from a previous one.
-        self._optimistically_dropped = []
-        if not isinstance(cached, dict) or not coming_back:
-            return
-        present = {str(n.get('node_id') or '')
-                   for n in (cached.get('nodes') or ()) if isinstance(n, dict)}
-        merged = list(cached.get('nodes') or ())
-        merged.extend(n for n in coming_back
-                      if str(n.get('node_id') or '') not in present)
-        restored = dict(cached)
-        restored['nodes'] = merged
-        self._network_rows_digest = ()
-        self._applyNetworkNodes(restored)
-
-    def _refreshLastSeen(self):
-        """Age the Last Seen column between directory fetches. MAIN THREAD.
-
-        Cheap and bounded: it writes only the one column, only when the text
-        actually changes, and only for blocks that already exist. Everything
-        else on the page still redraws on the digest, so this cannot cause
-        the per-frame parameter churn the digest exists to prevent.
-        """
-        ages = getattr(self, '_node_ages', None)
-        if not ages:
-            return
-        seq = self._sequenceByName(self._embody, 'Convoynodes')
+        seq = self._sequenceByName(self._embody, 'Convoymachines')
         if seq is None or not seq.numBlocks:
             return
-        elapsed = max(0.0, time.time() - getattr(self, '_node_ages_at', 0.0))
+        elapsed = max(0.0, time.time() - getattr(self, '_machine_status_at',
+                                                 0.0))
         try:
             blocks = list(seq.blocks)
         except Exception:
             return
-        for index, (age, online) in enumerate(ages):
-            if index >= len(blocks):
-                break
+        for index, row in enumerate(parts):
+            if row is None or index >= len(blocks):
+                continue
+            state, age, online, detail = row
             aged = None if age is None else float(age) + elapsed
-            text = self._lastSeenText(aged, online)
+            text = self._machineStatusText(state, aged, online, detail)
             par = self._sequenceBlockPar(
-                self._embody, seq, blocks[index], index + 1, 'Lastseen')
+                self._embody, seq, blocks[index], index + 1, 'Machinestatus')
             try:
                 if par is not None and str(par.eval()) != text:
                     self._setPar(par, text)
@@ -979,6 +915,65 @@ class ConvoyExt:
             return bool(par.eval()) if par is not None else False
         except Exception:
             return False
+
+    def _mayJoinMachineConvoy(self):
+        """Should this project join because its machine already has?
+
+        Convoy is set up once per machine: a project opened on a machine that
+        has joined follows it, unless someone said no for it. A host app that
+        is not running means Convoy was stopped on purpose. One attempt per
+        run: a join that failed, or a toggle turned back off, must not come
+        back on the next tick. Cheap reads first, and no sockets: this runs on
+        the main thread every tick while a project is off.
+        """
+        session = self._session()
+        if session.get('auto_join_tried') or self._performing():
+            return False
+        try:
+            client = self._safeClient()
+            embody = self._embody.ext.Embody
+            if (client is None or not self._installConsentGiven()
+                    or not client.machine_joined(client.data_dir())
+                    or client.read_live_portfile(client.data_dir()) is None
+                    or not embody._convoyMayAutoJoinNow()
+                    or not self._savedToe()):
+                return False
+            scope = self._readConsentScope()
+            if (embody._convoyDeclinedHere()
+                    or (self._readConvoyId() and scope != self._CONSENT_SCOPE)):
+                session['auto_join_tried'] = True
+                return False
+            return True
+        except Exception as e:
+            self._log('could not check Convoy auto-join: %s' % (e,), 'DEBUG')
+            return False
+
+    def _joinMachineConvoy(self):
+        """Turn this project on from a tick: the registration and nothing else.
+
+        No modal (consent is on record), no Enable Envoy, no virtual
+        environment and no AI-client files: opening a project must not do what
+        turning the toggle on by hand does. The project is listed, and reads
+        Needs Envoy until someone turns Envoy on for it.
+        """
+        session = self._session()
+        session['auto_join_tried'] = True
+        session['auto_join_at'] = time.monotonic()
+        self._setEnabled(True)
+        self._log('joining this machine\'s Convoy: turn Enable Convoy off to '
+                  'keep this project out', 'INFO')
+        if self._ensureConsent():
+            self._ensureWakeListener()
+            self._reconcile(force=True)
+
+    def enableToggledOn(self):
+        """Enable Convoy just went on (parexec). The explicit-enable path, unless
+        this tick's auto-join flipped it: TD delivers that callback deferred."""
+        flipped_at = self._session().pop('auto_join_at', None)
+        if flipped_at is not None and time.monotonic() - flipped_at < 30.0:
+            return {'state': 'joined'}
+        self.armRejoinOffer()
+        return self.register()
 
     def _setEnabled(self, value):
         """Flip the canonical gate (Toggle pars are 0/1)."""
@@ -1658,12 +1653,11 @@ class ConvoyExt:
         MAIN THREAD ONLY. Never raises out of the ordinary paths -- the tick
         wraps it, but every branch here is meant to be total.
         """
-        # Age the Last Seen column first, on EVERY tick, including the ticks
-        # that issue no network call at all (steady state is deliberately
-        # call-free). Otherwise the column only moves when the directory
-        # happens to be refetched.
+        # Age the status line first, on EVERY tick, including the ticks that
+        # issue no network call at all (steady state is deliberately
+        # call-free).
         try:
-            self._refreshLastSeen()
+            self._refreshMachineStatus()
         except Exception:
             pass
         # Capability pars reconcile on EVERY tick too: a change whose
@@ -1709,11 +1703,14 @@ class ConvoyExt:
                 # or a scripted par write). Clear the host's port once.
                 self._beginCall('unregister', client, session)
                 return
+            if self._mayJoinMachineConvoy():
+                self._joinMachineConvoy()
+                return
             session['sent'] = None
             session['next_call_at'] = None
             self._tick_ms = self._TICK_MAX_MS
             self._apply({'state': client.STATE_DISABLED}, client)
-            self._projectNodeRows([], 'Convoy is disabled')
+            self._projectMachineRows([], 'Convoy is disabled')
             return
 
         if not self._savedToe():
@@ -1738,7 +1735,7 @@ class ConvoyExt:
             self._publishId(convoy_id)
             self._tick_ms = self._TICK_MAX_MS
             self._status('Consent required -- enable Convoy again')
-            self._projectNodeRows([], 'Trusted-LAN consent required')
+            self._projectMachineRows([], 'Trusted-LAN consent required')
             self._logOnce(
                 'convoy_scope_upgrade_required',
                 'Convoy stayed off because this project only recorded the '
@@ -1890,7 +1887,21 @@ class ConvoyExt:
             value = str(par.eval() if par is not None else '').strip()
         except Exception:
             value = ''
+        # This project's own stamp at an older version is not an override: a
+        # version-up must not leave the name one save behind (field 2026-10-31).
+        if value and self._isOwnNameStamp(value, hostname, toe_name):
+            value = ''
         return (value or automatic)[:512]
+
+    @staticmethod
+    def _isOwnNameStamp(value, hostname, toe_stem):
+        """True for '<this host> / <this project's stem at any version>'."""
+        match = re.fullmatch(r'(\S+) / (.+)', str(value))
+        if not match or match.group(1) != hostname:
+            return False
+        base = re.sub(r'\.\d+$', '', str(toe_stem))
+        return bool(re.fullmatch(re.escape(base) + r'(\.\d+)?',
+                                 match.group(2)))
 
     def _ensureNodeName(self):
         """Fill Node Name with `hostname / toe-stem`. Idempotent.
@@ -1942,10 +1953,8 @@ class ConvoyExt:
                 if m.group(1) == hostname:
                     if value == automatic:
                         return
-                    base = re.sub(r'\.\d+$', '', toe_stem)
                     own_auto = (
-                        re.fullmatch(re.escape(base) + r'(\.\d+)?',
-                                     m.group(2))
+                        self._isOwnNameStamp(value, hostname, toe_stem)
                         or re.fullmatch(r'NewProject(\.\d+)?', m.group(2)))
                     if not own_auto:
                         return
@@ -3287,7 +3296,7 @@ class ConvoyExt:
                     self._log('unregister on disable reported %r -- the node '
                               'is off locally regardless' % (state,), 'DEBUG')
                 self._apply({'state': 'unregistered'}, client)
-                self._projectNodeRows([], 'Convoy is disabled')
+                self._projectMachineRows([], 'Convoy is disabled')
             else:
                 self._apply(result, client)
             return
@@ -3972,7 +3981,8 @@ class ConvoyExt:
             if ok:
                 self._confirmForgetOffline(
                     result.get('rows'),
-                    remote_hosts=result.get('remote_offline_hosts'))
+                    remote_hosts=result.get('remote_offline_hosts'),
+                    machines=result.get('machines'))
             return
 
         if action == 'realm_conflict_plan':
@@ -4095,25 +4105,13 @@ class ConvoyExt:
             return
 
         if action == 'forget_offline':
-            # ARM THE REDRAW FIRST, before any modal, regardless of ok:
-            # a dialog blocks the drain, and a host that vanished after
-            # the optimistic drop would leave rows missing until the
-            # next heartbeat.
+            # ARM THE REFETCH FIRST, before any modal, regardless of ok:
+            # a dialog blocks the drain.
             session['next_call_at'] = None
             self._tick_ms = self._TICK_MIN_MS
             self._kickTick()
             kept = [k for k in (result.get('kept_busy') or ())]
             forgotten = list(result.get('forgotten') or ())
-            # Restore = dropped MINUS confirmed-gone, never derived from
-            # the outcome lists (failed carries strings not ids; a future
-            # bucket would silently stop restoring). skipped rows may be
-            # back ONLINE -- the worst to leave missing.
-            forgotten_set = {str(f) for f in forgotten}
-            self._restoreNodeRowsNow([
-                str(n.get('node_id') or '')
-                for n in (getattr(self, '_optimistically_dropped', None) or ())
-                if isinstance(n, dict)
-                and str(n.get('node_id') or '') not in forgotten_set])
             # Grade by OUTCOME, not by the absence of a hard failure:
             # `ok` is "nothing errored", so a run that forgot NOTHING
             # used to log green while the user watched every row come
@@ -4122,7 +4120,7 @@ class ConvoyExt:
             # rows the user needs told about.
             level = ('SUCCESS' if forgotten and not kept and ok
                      else 'INFO' if forgotten else 'WARNING')
-            self._log('Forget Offline Nodes: %s'
+            self._log('Forget Offline: %s'
                       % (result.get('detail') or 'done'), level)
             if kept:
                 self._reportKeptNodes(kept, forgotten)
@@ -4450,12 +4448,12 @@ class ConvoyExt:
             '    TOUCHDESIGNER IS OPEN\n'
             '%s'
             'Network behavior:\n'
-            '  - while at least one local node has Enable Convoy On, the\n'
-            '    app advertises on the trusted LAN and opens Convoy\'s\n'
-            '    authenticated, encrypted peer listener on one selected\n'
-            '    LAN interface. It never exposes Envoy itself.\n'
-            '  - turning the final local Enable Convoy Off withdraws the\n'
-            '    advertisement and closes the LAN listener.\n'
+            '  - once a project has joined, the app advertises on the\n'
+            '    trusted LAN and opens Convoy\'s authenticated, encrypted\n'
+            '    peer listener on one selected LAN interface, whether or\n'
+            '    not TouchDesigner is open. It never exposes Envoy itself.\n'
+            '  - Stop Convoy App withdraws the advertisement and closes the\n'
+            '    LAN listener.\n'
             '  - Embody does not modify your firewall. Windows or macOS may\n'
             '    ask you to allow local-network access; denying it leaves\n'
             '    local Embody/Envoy usable but remote nodes unreachable.\n'
@@ -4873,7 +4871,7 @@ class ConvoyExt:
         conflict (field, 2026-08-12: one un-admitted MacBook broadcast
         wedged every registration on this LAN) had no way out short of
         hand-crafting an authenticated loopback POST. Two phases on the
-        host slot, mirroring Forget Offline Nodes: plan (alters
+        host slot, mirroring Forget Offline: plan (alters
         nothing), a confirmation that NAMES the preserved realm, the
         conflicting ids and the live announcers, then apply (denylist
         the announcers, reset, re-register).
@@ -5025,7 +5023,8 @@ class ConvoyExt:
         in _ensureConsent, because every already-consented install
         returns from _ensureConsent before its tail (review finding:
         the original arming was unreachable for the exact clone
-        scenario the feature exists for)."""
+        scenario the feature exists for). The toggle an auto-join flips is
+        no explicit gesture, and enableToggledOn never arms it."""
         self._session()['offer_rejoin_until'] = (
             time.monotonic() + self._REJOIN_OFFER_WINDOW_S)
 
@@ -5115,7 +5114,7 @@ class ConvoyExt:
         apply -- the daemon's refusal rules still run, and a row back
         online between dialog and apply is skipped, never killed.
         """
-        if not self._hostActionAllowed('Forget Offline Nodes'):
+        if not self._hostActionAllowed('Forget Offline'):
             return {'state': 'busy'}
         ctx = self._safeHostContext()
         if ctx is None:
@@ -5124,11 +5123,13 @@ class ConvoyExt:
                             lambda: _host_forget_offline_plan(ctx))
         return {'state': 'listing'}
 
-    def _confirmForgetOffline(self, rows, remote_hosts=None):
+    def _confirmForgetOffline(self, rows, remote_hosts=None, machines=None):
         """Stage two: name the rows, ask, then apply. MAIN THREAD."""
         rows = [r for r in (rows or [])
                 if isinstance(r, dict) and r.get('node_id')]
-        if not rows:
+        machines = [m for m in (machines or [])
+                    if isinstance(m, dict) and m.get('host_id')]
+        if not rows and not machines:
             # Visible, not just logged (a log-only nothing-to-do reads
             # as a broken button) -- and name other machines' offline
             # rows, else "nothing to forget" contradicts the list
@@ -5159,23 +5160,16 @@ class ConvoyExt:
                 else:
                     where = ', '.join(names[:5])
                     howto = ('That machine is not connected to this one '
-                             'right now: run Forget Offline Nodes there, '
+                             'right now: run Forget Offline there, '
                              'or press this again once it reconnects.')
-                # Say what self-cleanup ACTUALLY does. The old text promised
-                # "short-lived ghosts within about an hour", which is false
-                # for any row that ran longer than node_transient_lived_s --
-                # those wait out the 30-day retention, and the user was
-                # looking at 2h and 17h rows while being told to just wait.
                 message = (
                     'No offline nodes to forget from here. A node is '
                     'forgotten by the computer that owns it, and the '
                     'offline row(s) here belong to %s. %s\n\n'
-                    'Rows also clear themselves: about half an hour after '
-                    'their project file is deleted, about an hour if the '
-                    'node only ever ran for a few minutes, and after a '
-                    'week of silence otherwise.'
+                    'A row also clears itself about half an hour after its '
+                    'project file is deleted.'
                     % (where, howto))
-            self._dialog('Forget Offline Nodes', message, ['OK'])
+            self._dialog('Forget Offline', message, ['OK'])
             return
 
         def _age(row):
@@ -5198,42 +5192,50 @@ class ConvoyExt:
                 label, _age(r), (' -- on %s' % owner) if owner else ''))
         if len(rows) > len(shown):
             lines.append('- ...and %d more' % (len(rows) - len(shown)))
-        noun = ('This offline node' if len(rows) == 1
-                else 'These offline nodes')
-        message = (
-            '%s will be forgotten, each by the machine that owns it:\n'
-            '\n%s\n\n'
-            'A forgotten node rejoins as a NEW identity the next time its '
-            'project opens, and its TD Python approval resets. A node with '
-            'a delivery still unfinished is kept -- it will be named '
-            'afterwards. If any of these is a machine or project you still '
-            'start remotely, Cancel.'
-            % (noun, '\n'.join(lines)))
-        label = 'Forget %d Node%s' % (len(rows),
-                                      's' if len(rows) != 1 else '')
-        if self._dialog('Forget Offline Nodes', message,
+        sections = []
+        if rows:
+            noun = ('This closed project' if len(rows) == 1
+                    else 'These closed projects')
+            sections.append(
+                '%s will be forgotten, each by the machine that owns it:\n'
+                '\n%s\n\n'
+                'A forgotten project rejoins as a NEW identity the next time '
+                'it opens, and its TD Python approval resets. One with a '
+                'delivery still unfinished is kept -- it will be named '
+                'afterwards.' % (noun, '\n'.join(lines)))
+        if machines:
+            names = ['- %s' % (m.get('label') or m['host_id'][:8])
+                     for m in machines[:8]]
+            if len(machines) > 8:
+                names.append('- ...and %d more' % (len(machines) - 8))
+            sections.append(
+                'These offline machines will leave this computer\'s list, '
+                'and it will stop trusting their identity until they '
+                'rejoin:\n\n%s' % ('\n'.join(names),))
+        sections.append('If any of these is something you still start '
+                        'remotely, Cancel.')
+        message = '\n\n'.join(sections)
+        count = len(rows) + len(machines)
+        label = 'Forget %d' % (count,)
+        if self._dialog('Forget Offline', message,
                         ['Cancel', label]) != 1:
-            self._log('Forget Offline Nodes cancelled', 'INFO')
+            self._log('Forget Offline cancelled', 'INFO')
             return
         ctx = self._safeHostContext()
         if ctx is None:
             return
         ids = [r['node_id'] for r in rows]
-        # THE VISUAL CONTRACT: the confirmed blocks leave the sequence
-        # NOW, in this frame. The daemon apply below is reconciliation
-        # the user never waits on.
-        self._dropNodeRowsNow(ids)
+        peers = [m['host_id'] for m in machines]
         self._beginHostCall('forget_offline',
-                            lambda: _host_forget_offline_apply(ctx, ids))
+                            lambda: _host_forget_offline_apply(ctx, ids,
+                                                               peers))
 
     def _reportKeptNodes(self, kept, forgotten):
         """Say WHICH rows the daemon kept and why. MAIN THREAD.
 
         The field's exact failure was silence here: the apply answered
-        "forgot 0, kept 8 with unresolved jobs", that line was logged
-        SUCCESS, and the eight rows -- optimistically removed on the
-        click -- reappeared two or three seconds later with nothing on
-        screen. A keep is a real outcome and gets said out loud, with
+        "forgot 0, kept 8 with unresolved jobs" and that line was logged
+        SUCCESS. A keep is a real outcome and gets said out loud, with
         the delivery ids the daemon named, so the work can actually be
         found and cancelled.
         """
@@ -5274,12 +5276,12 @@ class ConvoyExt:
             'reached a verdict -- a finished result never holds a node, '
             'because results are fetched by delivery id and outlive the '
             'row. Cancel a queued delivery, or wait for the node to answer, '
-            'then run Forget Offline Nodes again.'
+            'then run Forget Offline again.'
             % (header, len(kept), '\n'.join(lines)))
         # A DISTINCT title: _messageBox keys its seeded auto-responses by
         # title, so sharing one with the confirmation would let this
         # report eat the confirmation's seeded answer in a scripted run.
-        self._dialog('Forget Offline Nodes - Nodes Kept', message, ['OK'])
+        self._dialog('Forget Offline - Nodes Kept', message, ['OK'])
 
     def uninstallHost(self, confirm=True):
         """Remove the host app: preview (worker), then confirm, then run.
@@ -5522,9 +5524,13 @@ class ConvoyExt:
              'Envoy builds (.venv), and remote work reaches this '
              'TouchDesigner through Envoy\'s local command service. '
              'Enabling Convoy turns Enable Envoy on if it is off.\n\n'
+             'Once a project has joined, this computer stays in the Convoy '
+             'at every login, with or without TouchDesigner open, and other '
+             'projects opened here join by themselves. Turn Enable Convoy off '
+             'to keep one project out; Stop Convoy App takes the computer '
+             'out.\n\n'
              'Allow Execute TD Python and Allow Full Shell remain separate, '
-             'local, default-Off approvals. Turn Enable Convoy off at any '
-             'time to withdraw this node.\n\n'
+             'local, default-Off approvals.\n\n'
              'Scope granted: ' + self._CONSENT_SCOPE + '.'),
             ['Cancel', 'Enable Convoy'])
         if choice != 1:
@@ -5532,8 +5538,11 @@ class ConvoyExt:
             # non-affirmative value means no (UpdaterExt._dialog's contract).
             # Declining a feature is not an error: INFO, no dialog, no status
             # beyond the resting one.
-            self._log('Convoy enable cancelled -- no consent change was '
-                      'written', 'INFO')
+            self._log('Convoy enable cancelled -- this project stays out of '
+                      'Convoy until you turn it on', 'INFO')
+            self._session()['auto_join_tried'] = True
+            if choice == 0:     # an answer: -1 is no answer at all
+                embody._recordConvoyDeclined()
             self._setEnabled(False)
             self._apply({'state': 'disabled'}, self._safeClient())
             return False
@@ -5818,6 +5827,9 @@ class ConvoyExt:
         """
         session = self._session()
         client = self._safeClient()
+        if str(reason).strip().lower() == 'disabled':
+            # Off stays off for this run, before config.json catches up.
+            session['auto_join_tried'] = True
         # ``TD exit`` is the label used by the existing execute DAT. Fold it
         # at this local API boundary; convoy_client and the wire accept only
         # the two protocol values and fail closed on anything else.
@@ -6642,18 +6654,22 @@ def _host_offline_rows(ctx):
     say WHERE to act instead of reading as a button that did nothing
     (field feedback 2026-08-05: the only offline rows on the dev box
     belonged to another machine).
-    Returns (rows, remote_hosts, None) or (None, None, detail).
+    Also the machines this host lists as offline: those are this host's own
+    peer records, so forgetting one needs nobody else.
+    Returns (rows, remote_hosts, machines, None) or
+    (None, None, None, detail).
     """
     client = ctx['client']
     try:
         probe = client.probe(data_dir=ctx['data_dir'])
     except Exception as e:
-        return None, None, '%s: %s' % (type(e).__name__, e)
+        return None, None, None, '%s: %s' % (type(e).__name__, e)
     if not probe.use_convoy:
-        return None, None, 'no host app answered (%s)' % (probe.status,)
+        return None, None, None, ('no host app answered (%s)'
+                                  % (probe.status,))
     code, body = client.host_get(probe.handle, '/network/nodes')
     if code != 200 or not isinstance(body, dict):
-        return None, None, 'node listing failed (HTTP %s)' % (code,)
+        return None, None, None, 'node listing failed (HTTP %s)' % (code,)
     host_id = body.get('host_id')
     # A peer's row is forgettable from here when its owner has a live
     # session with this host (the daemon relays the forget to it). An
@@ -6686,7 +6702,18 @@ def _host_offline_rows(ctx):
                      'last_seen_age_s': row.get('last_seen_age_s'),
                      'host_id': owner if owner != host_id else '',
                      'hostname': name if owner != host_id else ''})
-    return rows, sorted(remote_hosts), None
+    machines = []
+    for machine in body.get('machines') or []:
+        # Offline only: a refused peer may be blocked, and forgetting its
+        # record would drop the block and re-open first contact.
+        if (not isinstance(machine, dict) or machine.get('local')
+                or machine.get('status') != 'offline'
+                or not machine.get('host_id')):
+            continue
+        parts = (machine.get('hostname'), machine.get('ip'))
+        machines.append({'host_id': str(machine['host_id']),
+                         'label': ' / '.join(str(p) for p in parts if p)})
+    return rows, sorted(remote_hosts), machines, None
 
 
 # The dialog renders at most this many sender lines; nothing beyond the
@@ -7147,16 +7174,17 @@ def _host_realm_join_apply(ctx, adopt_id, senders=None):
 
 def _host_forget_offline_plan(ctx):
     """List this host's offline rows for the confirmation. Alters nothing."""
-    rows, remote_hosts, err = _host_offline_rows(ctx)
+    rows, remote_hosts, machines, err = _host_offline_rows(ctx)
     if rows is None:
         return {'ok': False, 'action': 'forget_offline_plan',
                 'reason': 'no_host', 'detail': err}
     return {'ok': True, 'action': 'forget_offline_plan', 'rows': rows,
-            'remote_offline_hosts': remote_hosts,
-            'detail': '%d offline node(s) listed' % len(rows)}
+            'remote_offline_hosts': remote_hosts, 'machines': machines,
+            'detail': '%d offline node(s) and %d machine(s) listed'
+                      % (len(rows), len(machines))}
 
 
-def _host_forget_offline_apply(ctx, node_ids):
+def _host_forget_offline_apply(ctx, node_ids, peer_host_ids=()):
     """Forget the confirmed rows, re-verifying each is STILL offline.
 
     The daemon re-checks its own refusal rules per node (/nodes/forget:
@@ -7169,11 +7197,12 @@ def _host_forget_offline_apply(ctx, node_ids):
     prose was previously read off the wire and thrown away.
     """
     client = ctx['client']
-    rows, _remote, err = _host_offline_rows(ctx)
+    rows, _remote, machines, err = _host_offline_rows(ctx)
     if rows is None:
         return {'ok': False, 'action': 'forget_offline',
                 'reason': 'no_host', 'detail': err}
     still_offline = {r['node_id'] for r in rows}
+    machines_offline = {m['host_id'] for m in machines}
     try:
         probe = client.probe(data_dir=ctx['data_dir'])
     except Exception as e:
@@ -7218,6 +7247,20 @@ def _host_forget_offline_apply(ctx, node_ids):
         else:
             failed.append('%s (HTTP %s: %s)' % (
                 node_id[:8], code,
+                (body or {}).get('reason') or 'unknown'))
+    for peer_host_id in peer_host_ids:
+        if peer_host_id not in machines_offline:
+            skipped.append(peer_host_id)
+            continue
+        code, body = client.host_post(probe.handle, '/peers/forget',
+                                      {'host_id': peer_host_id})
+        if code == 200:
+            forgotten.append(peer_host_id)
+        elif code == 404:
+            skipped.append(peer_host_id)
+        else:
+            failed.append('%s (HTTP %s: %s)' % (
+                peer_host_id[:8], code,
                 (body or {}).get('reason') or 'unknown'))
     bits = ['forgot %d' % len(forgotten)]
     if kept_busy:

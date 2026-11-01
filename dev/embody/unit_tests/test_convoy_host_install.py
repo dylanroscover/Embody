@@ -2083,14 +2083,14 @@ class TestForgetOfflineNodes(ConvoyHostBase):
             self._logs)
         # One row forgotten, one kept -> a partial run, never SUCCESS.
         levels = [l for m, l in self._logs
-                  if 'Forget Offline Nodes:' in m and 'kept 1' in m]
+                  if 'Forget Offline:' in m and 'kept 1' in m]
         self.assertTrue(levels and levels[0] != 'SUCCESS',
                         'a run that kept a row must not log SUCCESS: %r'
                         % (levels,))
         # ...and the keep is on screen, under its own title so it cannot
         # consume the confirmation's seeded response.
         reports = [d for d in self.dialogs
-                   if d[0] == 'Forget Offline Nodes - Nodes Kept']
+                   if d[0] == 'Forget Offline - Nodes Kept']
         self.assertLen(reports, 1)
         _title, message, buttons = reports[0]
         self.assertEqual(buttons, ['OK'])
@@ -2161,45 +2161,6 @@ class TestForgetOfflineNodes(ConvoyHostBase):
             # (scheduled under orig_gen) survives this test.
             self.comp.store('_convoy_gen', orig_gen)
 
-    def test_confirmed_blocks_leave_the_sequence_synchronously(self):
-        """THE visual contract (field feedback 2026-08-05, three
-        rounds): the block the user just confirmed away leaves the
-        sequence parameters in the SAME frame as the confirmation --
-        no daemon round trip, no drain, no tick in the visual path.
-        The projection is driven from the cached raw nodes; the drain
-        that later reconciles is invisible because the panel already
-        shows the result."""
-        projected = []
-        self._patch(self.convoy, '_projectNodeRows',
-                    lambda rows, detail='': projected.append(rows))
-        self._patch(self.convoy, '_last_nodes_result', {
-            'state': 'nodes',
-            'nodes': [
-                {'node_id': 'a' * 32, 'node_name': 'TEC-X / e2',
-                 'ip': '10.0.0.1', 'online': False,
-                 'last_seen_age_s': 7200.0},
-                {'node_id': 'b' * 32, 'node_name': 'TEC-X / e3',
-                 'ip': '10.0.0.1', 'online': False,
-                 'last_seen_age_s': 3600.0},
-                {'node_id': 'c' * 32, 'node_name': 'TEC-X / live',
-                 'ip': '10.0.0.1', 'online': True,
-                 'last_seen_age_s': 3.0},
-            ]})
-        self.choice = 1
-        self.convoy.forgetOfflineNodes()
-        self.assertTrue(projected, 'the confirm must re-project the rows '
-                                   'itself, synchronously')
-        names = [r['Nodename'] for r in projected[-1]]
-        self.assertNotIn('TEC-X / e2', names)
-        self.assertNotIn('TEC-X / e3', names)
-        self.assertIn('TEC-X / live', names,
-                      'the online row is untouched')
-        cached = self.convoy._last_nodes_result
-        self.assertEqual([n['node_id'] for n in cached['nodes']],
-                         ['c' * 32],
-                         'the cache re-filters too, so a second Forget '
-                         'starts from what the panel shows')
-
     def test_a_cancelled_forget_leaves_the_schedule_alone(self):
         import time as _time
         later = _time.monotonic() + 999.0
@@ -2233,7 +2194,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('also reports the computer name', message,
                       'the all-clear must explain that a DIFFERENT host '
                       'carries this machine name, not send the user here')
-        self.assertNotIn('Forget Offline Nodes there', message,
+        self.assertNotIn('Forget Offline there', message,
                          'never instruct the user to walk to the machine '
                          'they are already using')
         self.assertEqual(self.client.count('host_post'), 0,
@@ -2260,10 +2221,10 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('No offline nodes', message)
         self.assertIn('TEC-B4A', message,
                       'the machine that owns the offline rows is named')
-        self.assertIn('Forget Offline Nodes there', message)
+        self.assertIn('Forget Offline there', message)
         self.assertIn('forgotten by the computer that owns it', message,
                       'the all-clear states the ownership rule plainly')
-        self.assertIn('clear themselves', message,
+        self.assertIn('clears itself', message,
                       'the all-clear still explains self-cleanup')
         self.assertNotIn('about an hour).', message,
                          'the old blanket "ghosts clear within an hour" '

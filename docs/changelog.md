@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.3.3
+
+Convoy is set up once per computer, and a computer stays in the Convoy.
+
+- **Machines stay on.** Open one project once and the computer stays reachable at every login, with or without TouchDesigner open. **Stop Convoy App** takes it out.
+- **A version-up is the same node.** Every save of a `.toe` keeps its address, TD Python approval and queued work until the file is deleted.
+- **Convoy Machines replaces Convoy Nodes.** One row per computer: `Hostname / IP`, its open `.toe` files, `Online / 5s ago`. `convoy_list_nodes` gains `machines`.
+- **Projects join by themselves** on a joined machine, registering without turning anything else on. Turn **Enable Convoy** off to keep one out.
+- **Fixes.** Remote restart works again with `save_then_restart`; it was refusing every restart on TouchDesigner 2025. A node starts after a reboot even when Windows reused its old process id. Projects in one repo no longer delete each other's rows. +115 tests.
+
 ## v6.2.77
 
 Updating Embody offers to save the project.

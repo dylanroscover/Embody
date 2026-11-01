@@ -33,7 +33,9 @@ Integration contract (kept explicit so absent proof fails closed):
 ``LocalProcessInspector``
     ``inspect_status(pid)`` is the authoritative tri-state API (``alive`` +
     exact snapshot, ``dead``, or ``unknown``). ``unknown`` is never treated as
-    offline. ``current_session()`` returns user/session/interactive proof.
+    offline. ``recorded_status(process)`` is the same question about a process
+    recorded earlier. ``current_session()`` returns user/session/interactive
+    proof.
 
 ``runtime_adapter`` supplied to :class:`LifecycleManager`
     ``current(node_id)`` returns the current host directory/runtime snapshot
@@ -85,10 +87,13 @@ import re
 import secrets
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import threading
 import time
+
+import convoy_identity as node_identity
 
 
 HOST_LIFECYCLE_CAPABILITY = "host.td-lifecycle/v1"
@@ -149,7 +154,8 @@ _DETAILS = {
     "node_offline": "the node has no running TouchDesigner runtime",
     "orphan_runtime": "the prior exact process is still alive but is not registered",
     "dirty_state_unknown": "TouchDesigner project dirty state could not be proven",
-    "project_dirty": "TouchDesigner has unsaved project changes",
+    "project_dirty": ("TouchDesigner reports project changes; use "
+                      "save_then_restart to save them first"),
     "save_failed": "TouchDesigner could not save the project safely",
     "perform_mode": "the node is in Perform Mode, which refuses a save mid-show",
     "destructive_policy_disabled": "the requested destructive restart policy is not locally approved",
@@ -344,6 +350,45 @@ def _path_within(root, candidate):
         return False
 
 
+def _same_project(left, right):
+    """True when two .toe paths are saves of one project (see convoy_identity)."""
+    lineage = node_identity.toe_lineage_discriminator(left)
+    if lineage is None:
+        return _path_same(left, right)
+    return lineage == node_identity.toe_lineage_discriminator(right)
+
+
+def _newest_save(toe_path):
+    """The most recently written save of toe_path's project.
+
+    CrashAutoSave shares the lineage and is never what a save wrote. Any
+    listing failure answers toe_path, which is what the caller pinned.
+    """
+    newest, newest_mtime = toe_path, None
+    lineage = node_identity.toe_lineage_discriminator(toe_path)
+    if lineage is None:
+        return toe_path
+    try:
+        for name in os.listdir(os.path.dirname(toe_path)):
+            if name.lower().startswith("crashautosave."):
+                continue
+            candidate = os.path.join(os.path.dirname(toe_path), name)
+            if node_identity.toe_lineage_discriminator(candidate) != lineage:
+                continue
+            mtime = os.path.getmtime(candidate)
+            if newest_mtime is None or mtime > newest_mtime:
+                newest, newest_mtime = candidate, mtime
+    except OSError:
+        return toe_path
+    return newest
+
+
+def another_save_exists(toe_path):
+    """Is any save of this project still on disk? Older saves move away."""
+    newest = _newest_save(toe_path)
+    return newest != toe_path and os.path.isfile(newest)
+
+
 def _file_identity(path):
     """JSON-safe identity for one exact regular file, following no guesses."""
     try:
@@ -423,14 +468,18 @@ def _lock_unit_id(profile):
     :meth:`_refresh_saved_toe`, so a launch-unit-keyed lock would change
     identity while the live thread still held the lock minted from the old
     id -- letting the recovery loop acquire a *different* Lock object and race
-    the live post-commit restart it is meant to exclude. Keying on the exact
-    paths + platform + session is stable across a save yet still groups every
-    node that shares one TouchDesigner process (a shared runtime).
+    the live post-commit restart it is meant to exclude. Keying on the project
+    (a versioned save moves toe_path too) + executable + platform + session is
+    stable across a save yet still groups every node that shares one
+    TouchDesigner process (a shared runtime).
     """
     profile = _validate_profile(profile)
     return _content_digest({
-        name: profile[name] for name in (
-            "toe_path", "executable_path", "platform", "session")
+        "project": (node_identity.toe_lineage_discriminator(profile["toe_path"])
+                    or profile["toe_path"]),
+        "executable_path": profile["executable_path"],
+        "platform": profile["platform"],
+        "session": profile["session"],
     })
 
 
@@ -1095,6 +1144,37 @@ class _WindowsNativeBackend:
         finally:
             self.kernel32.CloseHandle(handle)
 
+    def birth_id(self, pid):
+        """Creation time of any process, or None. OpenProcess refuses system
+        processes (137 of 217 on TEC-B4A, measured 2026-10-31) but the kernel's
+        process list gives every user this field. x64 layout."""
+        c = self.ctypes
+        if c.sizeof(c.c_void_p) != 8:
+            return None
+        query = c.WinDLL("ntdll").NtQuerySystemInformation
+        size = 1 << 20
+        for _ in range(4):
+            buffer = c.create_string_buffer(size)
+            needed = c.c_ulong()
+            code = query(5, buffer, c.c_ulong(size), c.byref(needed)) & 0xFFFFFFFF
+            if code == 0:
+                break
+            if code != 0xC0000004:  # STATUS_INFO_LENGTH_MISMATCH
+                return None
+            size = max(needed.value + 65536, size * 2)
+        else:
+            return None
+        offset = 0
+        while True:
+            step, = struct.unpack_from("<I", buffer, offset)
+            created, = struct.unpack_from("<q", buffer, offset + 32)
+            found, = struct.unpack_from("<Q", buffer, offset + 80)
+            if found == pid:
+                return "winfiletime:%d" % created
+            if not step:
+                return None
+            offset += step
+
     def inspect(self, pid):
         status = self.inspect_status(pid)
         return status.get("process") if status.get("status") == "alive" else None
@@ -1251,6 +1331,19 @@ class _MacNativeBackend:
             "session_id": "macos:%s" % self.getsid(int(pid)),
         }}
 
+    def birth_id(self, pid):
+        """Start time of any process, or None: libproc refuses another user's
+        process, the kern.proc sysctl does not. p_starttime leads kinfo_proc."""
+        c = self.ctypes
+        mib = (c.c_int * 4)(1, 14, 1, int(pid))  # CTL_KERN KERN_PROC KERN_PROC_PID
+        buffer = c.create_string_buffer(1024)
+        size = c.c_size_t(1024)
+        if (c.CDLL(None).sysctl(mib, 4, buffer, c.byref(size), None, 0) != 0
+                or not size.value):
+            return None
+        seconds, micros = struct.unpack_from("<qi", buffer, 0)
+        return "mac-time:%d.%06d" % (seconds, micros)
+
     def inspect(self, pid):
         status = self.inspect_status(pid)
         return status.get("process") if status.get("status") == "alive" else None
@@ -1328,6 +1421,24 @@ class LocalProcessInspector:
         except Exception:
             return {"status": "unknown"}
 
+    def recorded_status(self, process):
+        """inspect_status for a process recorded earlier: a refused pid with a
+        different birth is another process, so the recorded one is dead (a reboot
+        gave pid 3608 to svchost.exe, TEC-B4A 2026-10-31). The same birth or no
+        birth stays unknown: an elevated TouchDesigner refuses too."""
+        pid = process.get("pid") if isinstance(process, dict) else None
+        status = self.inspect_status(pid)
+        if status["status"] != "unknown" or pid is None:
+            return status
+        try:
+            birth = self.backend.birth_id(pid)
+        except Exception:
+            return status
+        if (isinstance(birth, str) and birth
+                and birth != process.get("birth_id")):
+            return {"status": "dead"}
+        return status
+
     def inspect(self, pid):
         result = self.inspect_status(pid)
         return result.get("process") if result["status"] == "alive" else None
@@ -1354,7 +1465,7 @@ class LocalProcessInspector:
             timeout_s = _timeout(timeout_s, DEFAULT_QUIT_TIMEOUT_S)
         except LifecycleError:
             return False
-        status = self.inspect_status(expected["pid"])
+        status = self.recorded_status(expected)
         if status["status"] == "dead":
             return True
         if status["status"] != "alive":
@@ -1373,7 +1484,7 @@ class LocalProcessInspector:
             return False
         deadline = self._clock() + timeout_s
         while self._clock() < deadline:
-            status = self.inspect_status(expected["pid"])
+            status = self.recorded_status(expected)
             if status["status"] == "dead":
                 return True
             if (status["status"] == "alive"
@@ -1714,12 +1825,41 @@ class LifecycleManager:
         if not _identity_same(executable_identity, profile["executable_identity"]):
             raise LifecycleError("executable_changed")
 
-    def _refresh_saved_toe(self, profile):
-        """Re-pin the exact file identity after an approved in-TD save."""
-        identity = _file_identity(profile["toe_path"])
+    def _follow_moved_save(self, profile):
+        """Start a project whose pinned save has moved away from its newest.
+
+        Older saves leave the folder (dev/Backup here): that is not a deleted
+        project, and refusing project_missing would strand a launchable node.
+        """
+        if _file_identity(profile["toe_path"]) is not None:
+            return profile
+        newest = _newest_save(profile["toe_path"])
+        identity = _file_identity(newest)
+        if identity is None:
+            return profile
+        moved = _clone(profile)
+        moved["toe_path"] = newest
+        moved["toe_identity"] = identity
+        moved["updated_at"] = float(self._clock())
+        return self.store.put_profile(moved)
+
+    def _refresh_saved_toe(self, profile, pre_save_identity):
+        """Re-pin the saved file after an approved in-TD save.
+
+        A versioned save wrote a new file beside the old one, so the file to
+        relaunch is the one this save wrote, not the one pinned before it
+        (field 2026-10-31). A newer file that was already there when the save
+        began is someone else's: reopening e1.5 and saving must not relaunch
+        an e1.6 that save never touched.
+        """
+        toe_path = _newest_save(profile["toe_path"])
+        if _identity_same(_file_identity(toe_path), pre_save_identity):
+            toe_path = profile["toe_path"]
+        identity = _file_identity(toe_path)
         if identity is None:
             raise LifecycleError("save_failed")
         refreshed = _clone(profile)
+        refreshed["toe_path"] = toe_path
         refreshed["toe_identity"] = identity
         refreshed["updated_at"] = float(self._clock())
         return self.store.put_profile(refreshed)
@@ -1734,7 +1874,7 @@ class LifecycleManager:
         fact ``_refresh_saved_toe`` re-pins -- is durable evidence the save
         landed regardless of that housekeeping dirt.
         """
-        current = _file_identity(toe_path)
+        current = _file_identity(_newest_save(toe_path))
         return current is not None and not _identity_same(
             current, pre_save_identity)
 
@@ -1773,7 +1913,9 @@ class LifecycleManager:
                 limit=128)
         except LifecycleError:
             raise LifecycleError("runtime_changed")
-        if (not _path_same(toe_path, profile["toe_path"])
+        # Every save of one project is one node: the heartbeat after a versioned
+        # save reports the new file while this attempt still holds the old one.
+        if (not _same_project(toe_path, profile["toe_path"])
                 or td_build != profile["td_build"]):
             raise LifecycleError("runtime_changed")
         runtime_id = _runtime_id(runtime.get("runtime_id"))
@@ -1892,7 +2034,7 @@ class LifecycleManager:
         last = profile["last_runtime"]
         if last["runtime_id"] != runtime_id:
             return _result(False, "runtime_changed", node_id=node_id)
-        status = self.inspector.inspect_status(last["process"]["pid"])
+        status = self.inspector.recorded_status(last["process"])
         if (status["status"] == "unknown"
                 or (status["status"] == "alive"
                     and _process_same(status["process"], last["process"]))):
@@ -2280,7 +2422,7 @@ class LifecycleManager:
             last = candidate.get("last_runtime")
             if last is None:
                 continue
-            status = self.inspector.inspect_status(last["process"]["pid"])
+            status = self.inspector.recorded_status(last["process"])
             if status["status"] == "unknown":
                 raise LifecycleError("runtime_unverifiable")
             if (status["status"] == "alive"
@@ -2301,7 +2443,7 @@ class LifecycleManager:
                     # no safe fact from which to infer that no child exists.
                     raise LifecycleError("indeterminate")
                 continue
-            status = self.inspector.inspect_status(process.get("pid"))
+            status = self.inspector.recorded_status(process)
             if status["status"] == "unknown":
                 raise LifecycleError("runtime_unverifiable")
             if (status["status"] == "alive"
@@ -2314,7 +2456,7 @@ class LifecycleManager:
         ``dead`` or a different birth at the same PID both mean gone; an
         ``unknown`` probe is never treated as death.
         """
-        status = self.inspector.inspect_status(spawned.get("pid"))
+        status = self.inspector.recorded_status(spawned)
         return status["status"] == "dead" or (
             status["status"] == "alive"
             and not _process_same(status["process"], spawned))
@@ -2452,7 +2594,8 @@ class LifecycleManager:
                     return self._wait_for_launch(attempt, None, deadline,
                                                  cancel_event)
                 self._remaining(deadline, cancel_event)
-                profile = self._profile(node_id, convoy_id)
+                profile = self._follow_moved_save(
+                    self._profile(node_id, convoy_id))
                 self._ready(profile)
                 self._remaining(deadline, cancel_event)
                 runtime = self._current(node_id)
@@ -2463,8 +2606,7 @@ class LifecycleManager:
                                          operation_id=operation_id))
                 last = profile.get("last_runtime")
                 if last is not None:
-                    status = self.inspector.inspect_status(
-                        last["process"]["pid"])
+                    status = self.inspector.recorded_status(last["process"])
                     if status["status"] == "unknown":
                         raise LifecycleError("runtime_unverifiable")
                     if (status["status"] == "alive"
@@ -2533,7 +2675,7 @@ class LifecycleManager:
 
     def _wait_exact_exit(self, process, deadline):
         while self._monotonic() < deadline:
-            status = self.inspector.inspect_status(process["pid"])
+            status = self.inspector.recorded_status(process)
             if status["status"] == "dead":
                 return True
             if (status["status"] == "alive"
@@ -2615,7 +2757,7 @@ class LifecycleManager:
                     state="indeterminate")
             should_request_quit = True
 
-        status = self.inspector.inspect_status(process["pid"])
+        status = self.inspector.recorded_status(process)
         if status["status"] == "unknown":
             return terminal(
                 _result(False, "indeterminate", node_id=node_id,
@@ -2647,7 +2789,8 @@ class LifecycleManager:
                     discard=policy in DESTRUCTIVE_RESTART_POLICIES,
                     expected_dirty_revision=(
                         None if policy in DESTRUCTIVE_RESTART_POLICIES
-                        else dirty_revision))
+                        else dirty_revision),
+                    save_landed=attempt.get("save_landed") is True)
         if not exited:
             exit_deadline = min(
                 recovery_deadline,
@@ -2921,7 +3064,8 @@ class LifecycleManager:
                     save_may_have_run = True
                     # Snapshot the exact .toe identity so a successful save is
                     # proven by the file being rewritten, not by project dirt.
-                    pre_save_toe_identity = _file_identity(profile["toe_path"])
+                    pre_save_toe_identity = _file_identity(
+                        _newest_save(profile["toe_path"]))
                     saved = self._runtime_call_before_commit(
                         "save", node_id, runtime_id, deadline, cancel_event)
                     if saved.get("ok") is not True:
@@ -2970,7 +3114,8 @@ class LifecycleManager:
                             profile["toe_path"], pre_save_toe_identity):
                         raise LifecycleError("save_failed")
                     save_landed = True
-                    profile = self._refresh_saved_toe(profile)
+                    profile = self._refresh_saved_toe(
+                        profile, pre_save_toe_identity)
                 if policy in DESTRUCTIVE_RESTART_POLICIES:
                     if self.local_policy(node_id, policy) is not True:
                         raise LifecycleError("destructive_policy_disabled")
@@ -3003,7 +3148,7 @@ class LifecycleManager:
                             policy == "save_then_restart" and save_landed):
                         # A proven-landed save whose project.modified merely
                         # re-dirtied via Embody housekeeping is NOT a failed
-                        # save; the quit CAS still fences a genuine late edit.
+                        # save; the quit CAS still refuses a later save.
                         raise LifecycleError(
                             "save_failed" if policy == "save_then_restart"
                             else "project_dirty")
@@ -3034,6 +3179,7 @@ class LifecycleManager:
                     state="restart_committed", committed_at=float(self._clock()),
                     old_process=process, old_runtime_id=runtime_id,
                     dirty_revision=dirty_revision,
+                    save_landed=save_landed,
                     profile_fingerprint=_profile_fingerprint(profile),
                     restart_policy=policy,
                     requested_timeout_s=requested_timeout_s)

@@ -958,7 +958,7 @@ class TestTransientParScrub(EmbodyTestCase):
         would claim an empty string is a state.
         """
         # A registered name is either a single status par or a custom
-        # SEQUENCE (e.g. Convoynodes, the read-only network-status rows).
+        # SEQUENCE (e.g. Convoymachines, the read-only network-status rows).
         # A sequence exists in comp.seq, not comp.par, and its None resting
         # means "reset every block value to its template default" (the
         # _scrubTransientPars sequence branch), so the empty-default check
@@ -1084,7 +1084,7 @@ class TestTransientParScrub(EmbodyTestCase):
         session while its resting is 'Disabled', so the snapshot is
         guaranteed non-empty -- this test cannot pass vacuously."""
         registry = self._orig_registry['Embody']
-        # Sequence-registered names (Convoynodes) have no comp.par entry --
+        # Sequence-registered names (Convoymachines) have no comp.par entry --
         # they roundtrip through the scrub snapshot per block, covered by
         # test_registered_sequence_count_kept_values_dropped. This live
         # roundtrip pins the single status readout pars.

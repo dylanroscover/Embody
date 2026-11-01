@@ -341,6 +341,9 @@ class _StubUpdater:
         self.dialogs.append(body)
         return buttons[0]
 
+    def _sequenceTemplateNames(self, par):
+        return _updater_cls()._sequenceTemplateNames(self, par)
+
     def _setPar(self, par, value):
         was = par.readOnly
         par.readOnly = False
@@ -819,6 +822,29 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
         _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Rows']})
         self.assertEqual(6, comp.seq.Rows.numBlocks)
 
+    def test_a_retired_sequence_leaves_nothing_behind(self):
+        """Destroying a header keeps block 0 as plain pars (measured): 6.3.0
+        retired Convoynodes, and its last machine's name and address would have
+        stayed on every updated page, and in the next export."""
+        comp = self._comp_with_sequence(blocks=3)
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Goneme']})
+        self.assertEqual([], [p.name for p in comp.customPars
+                              if 'row' in p.name.lower()],
+                         'the retired sequence must leave no par behind')
+        self.assertEqual(['Rows'], retired)
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+
+    def test_a_read_only_table_is_not_reported_as_a_lost_setting(self):
+        comp = self._comp_with_sequence()
+        comp.par.Rows.readOnly = True
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Goneme']})
+        self.assertEqual([], retired)
+        self.assertIsNone(getattr(comp.par, 'Rows', None))
+
     def test_a_genuinely_retired_plain_par_still_goes(self):
         """The guard must not disable pruning -- only exempt sequences."""
         comp = self._comp_with_sequence()
@@ -860,7 +886,7 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
     def test_the_release_manifest_declares_no_sequence_block(self):
         """The test that would have caught v6.0.245 and v6.0.246 at commit
         time. Phrased against every sequence the Embody COMP carries, not
-        as a Convoynodes blacklist, so a sequence added later inherits it.
+        as a Convoymachines blacklist, so a sequence added later inherits it.
         """
         import json
         import re
@@ -894,12 +920,12 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
             self.skipTest('execute_src_ctrl not resolvable from Embody')
         declared = dat.module._declaredCustomPars(op.Embody)
         leaked = sorted(n for n in declared
-                        if n.lower().startswith('convoynodes')
-                        and n.lower() != 'convoynodes')
+                        if n.lower().startswith('convoymachines')
+                        and n.lower() != 'convoymachines')
         self.assertEqual([], leaked,
                          'the exporter is still declaring live sequence '
                          'blocks: %r' % (leaked,))
-        self.assertIn('Convoynodes', declared, 'the header is a declaration')
+        self.assertIn('Convoymachines', declared, 'the header is a declaration')
         self.assertIn('Version', declared)
         self.assertEqual(sorted(set(declared)), declared,
                          'the manifest list must be sorted and duplicate-free')
@@ -925,7 +951,7 @@ class TestSequenceParsAreNeverRetired(EmbodyTestCase):
             self.skipTest('no release manifest in this checkout')
         declared = json.loads(mf.read_text(encoding='utf-8')).get(
             'custom_pars') or []
-        for name in ('Convoynodes', 'Version', 'Autoupdate'):
+        for name in ('Convoymachines', 'Version', 'Autoupdate'):
             self.assertIn(name, declared)
 
 

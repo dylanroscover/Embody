@@ -1066,13 +1066,23 @@ def test_eviction_never_touches_a_live_node(server, tmp_path):
     assert node["node_id"] in [n["node_id"] for n in listing["nodes"]]
 
 
-def test_retention_horizon_evicts_a_long_unseen_node(server, tmp_path):
+def test_an_intact_project_outlives_the_retention_horizon(server, tmp_path):
+    """A closed project stays known, launchable and approved for as long as
+    its .toe exists, however long the machine sits idle (field 2026-10-31)."""
     node, _toe = _register_with_toe(server, tmp_path, "ancient", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    assert _sweep(server, server.app.node_retention_s + 60) == []
+
+
+def test_a_row_naming_no_toe_ages_out_at_the_retention_horizon(server):
+    _, node = server.call("/register", {
+        "project_root": "/Work/legacy", "convoy_id": "cv",
+        "comp_path": "/Embody", "runtime_id": "rt_old", "envoy_port": 9981,
+        "node_discriminator": "nd_" + "1" * 32})
     server.call("/unregister", {"node_id": node["node_id"]})
     evicted = _sweep(server, server.app.node_retention_s + 60)
     assert [e["node_id"] for e in evicted] == [node["node_id"]]
-    assert evicted[0]["cause"] == "retired_unseen", \
-        "even an intact project ages out past the retention horizon"
+    assert evicted[0]["cause"] == "retired_unseen"
 
 
 def test_the_reap_cadence_actually_runs_the_eviction_sweep(server, tmp_path):
@@ -1126,58 +1136,28 @@ def test_no_eviction_during_the_daemon_boot_grace(server, tmp_path):
         server.app.started = original
 
 
-# -- transient-ghost fast retention (field 2026-08-19) ------------------
-#
-# Fleet pages filled with Offline rows nobody could clear: smoke runs,
-# install probes, and one-shot registrations each minted a row that then
-# waited out the full 30-day horizon. A row that never LIVED is debris,
-# not a launchable node -- unless the user explicitly configured it.
-
-def test_transient_ghost_clears_after_its_own_short_horizon(
-        server, tmp_path):
-    node, _toe = _register_with_toe(server, tmp_path, "smoke", port=9981)
-    server.call("/unregister", {"node_id": node["node_id"]})
-    evicted = _sweep(server, server.app.node_transient_retention_s + 60)
-    assert [e["node_id"] for e in evicted] == [node["node_id"]]
-    assert evicted[0]["cause"] == "transient_unseen", \
-        "a never-lived row must not wait out 30 days on an intact project"
-
-
-def test_transient_ghost_rides_out_the_transient_window(server, tmp_path):
-    node, _toe = _register_with_toe(server, tmp_path, "young", port=9981)
-    server.call("/unregister", {"node_id": node["node_id"]})
-    assert _sweep(server, server.app.node_transient_retention_s - 60) == [], \
-        "inside the transient window the row is still a comeback candidate"
-
-
-def test_a_node_that_lived_is_not_transient(server, tmp_path):
-    """An established node that heartbeat past the lived threshold keeps
-    the full 30-day launchable retention."""
-    node, _toe = _register_with_toe(server, tmp_path, "veteran", port=9981)
-    server.call("/unregister", {"node_id": node["node_id"]})
-    row = server.app.db._state["nodes"][node["node_id"]]
-    row["first_seen"] = row["last_seen"] - (
-        server.app.node_transient_lived_s + 60)
-    assert _sweep(server, server.app.node_transient_retention_s + 60) == []
-
-
-def test_td_python_grant_spares_a_transient_row(server, tmp_path):
-    """An explicit approval is deliberate setup, not debris."""
-    node, _toe = _register_with_toe(server, tmp_path, "granted", port=9981)
+def test_a_session_that_only_lived_minutes_is_not_debris(server, tmp_path):
+    """Evicting a short session cost a project its grant and, as the machine's
+    last row, took the whole machine off the LAN (field 2026-10-26)."""
+    node, _toe = _register_with_toe(server, tmp_path, "brief", port=9981)
     approve_td_python(server.app, node["node_id"])
     server.call("/unregister", {"node_id": node["node_id"]})
-    assert _sweep(server, server.app.node_transient_retention_s + 60) == []
+    assert _sweep(server, 2 * server.app.node_dead_grace_s) == []
+    assert server.app.policy.allow_td_python(node["node_id"])
 
 
-def test_a_row_with_no_heartbeat_ages_from_first_seen(server, tmp_path):
+def test_a_row_with_no_heartbeat_ages_from_first_seen(server):
     """A row with no liveness stamp at all used to be spared FOREVER; its
     durable first_seen is still provable age."""
-    node, _toe = _register_with_toe(server, tmp_path, "stampless", port=9981)
+    _, node = server.call("/register", {
+        "project_root": "/Work/stampless", "convoy_id": "cv",
+        "comp_path": "/Embody", "runtime_id": "rt_old", "envoy_port": 9981,
+        "node_discriminator": "nd_" + "1" * 32})
     server.call("/unregister", {"node_id": node["node_id"]})
     server.app.db._state["nodes"][node["node_id"]].pop("last_seen", None)
     for record in server.app.directory.nodes():
         record.pop("last_heartbeat_unix", None)
-    evicted = _sweep(server, server.app.node_transient_retention_s + 60)
+    evicted = _sweep(server, server.app.node_retention_s + 60)
     assert [e["node_id"] for e in evicted] == [node["node_id"]]
 
 

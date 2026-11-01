@@ -4560,7 +4560,8 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def convoy_lifecycle_quit(expected_dirty_revision: str = None,
-                                  discard: bool = False) -> dict:
+                                  discard: bool = False,
+                                  save_landed: bool = False) -> dict:
             """Host-private CAS-guarded quit for exact-node restart."""
             sid, _label = _SESSION_CTX.get()
             if sid != 'convoy-lifecycle':
@@ -4568,6 +4569,7 @@ class EnvoyMCPServer:
             return self._execute_in_td('convoy_lifecycle_quit', {
                 'expected_dirty_revision': expected_dirty_revision,
                 'discard': discard,
+                'save_landed': save_landed,
             })
 
         # --- Batch Operations ---
@@ -9020,18 +9022,23 @@ class EnvoyExt:
     def _convoy_lifecycle_state(self) -> dict:
         """Main-thread, fail-closed project state used by Convoy restart.
 
-        TouchDesigner exposes ``project.modified`` but Embody's own post-save
-        maintenance can conservatively set it again.  That may refuse a safe
-        restart; it can never authorize a dirty one.  The revision is a CAS
-        token over the only stable facts available from TD: modified state,
-        saved-file identity, and TD's last-save marker.  It contains no path.
+        ``project.modified`` is a list of operator paths on TD 2025 (a bool on
+        older builds), and it is not empty even right after a save: 648 entries
+        measured 2026-10-31. So dirty can refuse a safe restart, never authorize
+        a dirty one, and only a save the host proved on disk gets past it (see
+        _convoy_lifecycle_quit). The revision is a CAS token over the stable
+        facts: dirty or not, saved-file identity and TD's last-save marker. The
+        list itself stays out, or Embody's housekeeping would trip it. It
+        contains no path. After a versioned save project.name is the NEXT name,
+        with no file yet, so the file comes from the resolver.
         """
         try:
             modified = getattr(project, 'modified', None)
-            if type(modified) is not bool:
+            if not isinstance(modified, (bool, list, tuple)):
                 return {'error': 'TouchDesigner dirty state is unavailable',
                         'code': 'dirty_state_unknown'}
-            toe_path = os.path.join(str(project.folder), str(project.name))
+            modified = bool(modified)
+            toe_path = self.ownerComp.ext.Embody._resolveProjectToe()
             try:
                 stat = os.stat(toe_path)
                 unsaved = False
@@ -9062,17 +9069,22 @@ class EnvoyExt:
                     'code': 'dirty_state_unknown'}
 
     def _convoy_lifecycle_quit(self, expected_dirty_revision=None,
-                               discard=False) -> dict:
-        """Schedule an exact-process quit after a final clean-state CAS.
+                               discard=False, save_landed=False) -> dict:
+        """Schedule an exact-process quit after a final state CAS.
 
         The host already verified PID birth, executable, user/session, node,
-        and runtime.  This final in-process check prevents a late edit between
-        the host's dirty read and the quit commit.  ``force=True`` suppresses
-        TD's modal save prompt only after that clean proof, or after the local
-        destructive policy explicitly authorized discard.
+        and runtime.  This final in-process check refuses a save or a project
+        state change between the host's read and the quit commit.  ``force=True``
+        suppresses TD's modal save prompt only after that proof, or after the
+        local destructive policy explicitly authorized discard.
+
+        ``save_landed``: the host saw this restart's own save rewrite the file,
+        so dirty alone no longer refuses (TD never reports clean). An edit made
+        after that save and before the quit is lost; only an explicit
+        save_then_restart accepts that window.
         """
-        if type(discard) is not bool:
-            return {'error': 'discard must be boolean',
+        if type(discard) is not bool or type(save_landed) is not bool:
+            return {'error': 'discard and save_landed must be boolean',
                     'code': 'invalid_arguments'}
         state = self._convoy_lifecycle_state()
         if state.get('ok') is not True:
@@ -9085,7 +9097,8 @@ class EnvoyExt:
             if expected_dirty_revision != state.get('revision'):
                 return {'error': 'project changed before quit',
                         'code': 'dirty_revision_changed'}
-            if state.get('dirty') or state.get('unsaved'):
+            if (state.get('unsaved')
+                    or (state.get('dirty') and not save_landed)):
                 return {'error': 'project is dirty or unsaved',
                         'code': 'project_dirty'}
         try:
@@ -9095,8 +9108,9 @@ class EnvoyExt:
             # delayed callback repeats the clean-state CAS at the actual
             # destructive boundary and refuses a late edit.
             callback = (
-                "op(%r).ext.Envoy._convoy_lifecycle_commit_quit(%r, %r)" %
-                (self.ownerComp.path, expected_dirty_revision, discard))
+                "op(%r).ext.Envoy._convoy_lifecycle_commit_quit(%r, %r, %r)" %
+                (self.ownerComp.path, expected_dirty_revision, discard,
+                 save_landed))
             run(callback, fromOP=self.ownerComp, delayFrames=2)
         except Exception as e:
             self._log('Convoy lifecycle quit scheduling failed: %s' %
@@ -9108,7 +9122,8 @@ class EnvoyExt:
                 'discard': discard}
 
     def _convoy_lifecycle_commit_quit(self, expected_dirty_revision=None,
-                                      discard=False) -> dict:
+                                      discard=False,
+                                      save_landed=False) -> dict:
         """Revalidate and quit at the delayed destructive boundary.
 
         ``_convoy_lifecycle_quit`` necessarily acknowledges before TD exits.
@@ -9131,7 +9146,8 @@ class EnvoyExt:
             elif expected_dirty_revision != state.get('revision'):
                 result = {'error': 'project changed before quit',
                           'code': 'dirty_revision_changed'}
-            elif state.get('dirty') or state.get('unsaved'):
+            elif (state.get('unsaved')
+                    or (state.get('dirty') and not save_landed)):
                 result = {'error': 'project is dirty or unsaved',
                           'code': 'project_dirty'}
             else:

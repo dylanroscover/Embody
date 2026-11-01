@@ -1363,7 +1363,7 @@ class UpdaterExt:
         """True for a par that lives inside a custom SEQUENCE block.
 
         Sequence blocks are a RUNTIME projection, never a setting: ConvoyExt
-        sizes the Convoy Nodes sequence to this machine's live Convoy mesh
+        sizes the Convoy Machines sequence to this machine's live Convoy mesh
         (`seq.numBlocks = len(rows)`), so the block count differs on every
         install and drifts within a session. The sequence HEADER par is
         authored and static, so it is NOT a block par and stays prunable
@@ -1382,6 +1382,21 @@ class UpdaterExt:
             return getattr(par, 'sequence', None) is not None
         except Exception:
             return True
+
+    def _sequenceTemplateNames(self, par):
+        """The names a sequence header's destroy leaves behind, or [].
+
+        Destroying the header dissolves the sequence and keeps its first block
+        as ordinary pars under their base names: Rows0rowlabel stays on the page
+        as Rowlabel, value and all (measured 2025.33230). Retiring a sequence
+        has to take those too, or it strands the last machine's readout there.
+        """
+        if not getattr(par, 'isSequence', False):
+            return []
+        prefix = par.name + '0'
+        return [p.name[len(prefix):].capitalize()
+                for p in self._embody.customPars
+                if p.name.startswith(prefix) and self._isSequenceBlockPar(p)]
 
     def _pruneRetiredPars(self, manifest):
         """Remove custom pars this build no longer declares; return the names.
@@ -1462,8 +1477,16 @@ class UpdaterExt:
             if par is None:
                 continue
             try:
+                template = self._sequenceTemplateNames(par)
+                # A read-only runtime table is not a setting the user lost.
+                report = not (template and par.readOnly)
                 par.destroy()
-                retired.append(name)
+                for leftover in template:
+                    stray = getattr(embody.par, leftover, None)
+                    if stray is not None and leftover not in declared:
+                        stray.destroy()
+                if report:
+                    retired.append(name)
             except Exception as e:
                 self._log(f'could not remove retired par {name}: {e}',
                           'WARNING')

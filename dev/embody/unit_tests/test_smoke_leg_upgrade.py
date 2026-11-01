@@ -110,6 +110,7 @@ class _FakeTD:
         self.busy_traps = 0     # latches armed between a probe and an apply
         self.errors = 0
         self.ext_count = 3
+        self.source_dats = {}
         self.log_n = 0
         self.settle_at = 0.0
         self.envoy_settle_s = 0.0
@@ -224,6 +225,8 @@ class _FakeTD:
                        port=self.port + 1, token=self.update_token,
                        clear=self.update_clear)
             return json.dumps({'status': 'applying'})
+        if 'source dats' in code:
+            return json.dumps(self.source_dats)
         if '_finishCheck' in code:
             self.state['update_status'] = f"Up to date (v{self.state['version']})"
             return self.state['update_status']
@@ -269,6 +272,10 @@ class _Case(EmbodyTestCase):
         self.clock = _Clock()
         self.td = _FakeTD(self.clock, self.run_dir, self.updates)
         self.ports = []
+        self.source = os.path.join(self.root, 'repo', 'dev', 'embody', 'Embody')
+        self._source_file('convoy/host/convoy_lifecycle.py', 'new code\n')
+        self.td.source_dats = {
+            'convoy/host/convoy_lifecycle': upgrade.text_digest('new code\n')}
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -301,6 +308,12 @@ class _Case(EmbodyTestCase):
             'wait_for_flag': lambda n, t, d: ('', False),
         }
 
+    def _source_file(self, rel, text):
+        path = os.path.join(self.source, *rel.split('/'))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+
     def _run(self, ctx=None):
         return upgrade.run(ctx or self._ctx(), clock=self.clock,
                            sleep=self.clock.advance)
@@ -323,7 +336,9 @@ class TestHappyPath(_Case):
         for name in ('installed_version', 'dialog_guard', 'manifest',
                      'stage_update', 'apply_update', 'verify_update',
                      'update_identity', 'update_health', 'externalizations',
-                     'up_to_date', 'backup', 'rollback_trigger', 'rollback',
+                     'custom_pars', 'source_dats', 'up_to_date', 'backup',
+                     'rollback_trigger',
+                     'rollback',
                      'rollback_version', 'rollback_identity',
                      'rollback_health', 'stage_reupdate',
                      'apply_reupdate', 'verify_reupdate', 'reupdate_identity',
@@ -704,6 +719,70 @@ class TestFailureModes(_Case):
         self.assertFalse(res['ok'])
         self.assertIn('installed_version', res['error'])
         self.assertEqual(len(self.td.applies), 0, 'nothing was installed')
+
+    def _declare_pars(self, declared):
+        path = os.path.join(self.root, 'repo', 'release',
+                            'embody-release.json')
+        with open(path, encoding='utf-8') as f:
+            manifest = json.load(f)
+        manifest['custom_pars'] = declared
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f)
+
+    def _ctx_with_pars(self, live):
+        ctx = self._ctx()
+        base = ctx['py']
+
+        def py(code, timeout=30):
+            if 'customPars' in code:
+                return json.dumps(live)
+            return base(code, timeout)
+        ctx['py'] = py
+        return ctx
+
+    def test_an_updated_page_holding_what_the_build_declares_passes(self):
+        self._declare_pars(['Convoymachines', 'Status'])
+        res = self._run(self._ctx_with_pars(['Convoymachines', 'Status']))
+        self.assertTrue(self._step(res, 'custom_pars')['ok'], res['error'])
+
+    def test_a_retired_par_left_on_an_updated_page_fails(self):
+        """Destroying a sequence header keeps block 0 as plain pars: an update
+        once left Nodename and its last machine's value on the page."""
+        self._declare_pars(['Convoymachines', 'Status'])
+        res = self._run(self._ctx_with_pars(
+            ['Convoymachines', 'Nodename', 'Status']))
+        self.assertFalse(res['ok'])
+        self.assertIn('custom_pars', res['error'])
+        self.assertIn('Nodename', self._step(res, 'custom_pars')['detail'])
+
+    def test_a_shipped_dat_behind_its_source_fails(self):
+        """6.3.1's tox shipped two old host DATs: the save beat their reload,
+        and every other check in the smoke passed."""
+        self.td.source_dats['convoy/host/convoy_lifecycle'] = (
+            upgrade.text_digest('old code\n'))
+        res = self._run()
+        self.assertFalse(res['ok'])
+        self.assertIn('source_dats', res['error'])
+        self.assertIn('convoy/host/convoy_lifecycle',
+                      self._step(res, 'source_dats')['detail'])
+        self.assertEqual(len(self.td.applies), 1, 'stops before the rollback')
+
+    def test_line_endings_are_not_a_difference(self):
+        """Embody writes CRLF on Windows; git stores LF."""
+        self._source_file('convoy/host/convoy_lifecycle.py', 'new code\r\n')
+        self.assertTrue(self._step(self._run(), 'source_dats')['ok'])
+
+    def test_a_source_file_with_no_dat_is_not_compared(self):
+        self._source_file('notes/readme.md', 'not a dat')
+        step = self._step(self._run(), 'source_dats')
+        self.assertTrue(step['ok'])
+        self.assertIn('1 compared', step['detail'])
+
+    def test_comparing_nothing_is_not_a_pass(self):
+        self.td.source_dats = {}
+        res = self._run()
+        self.assertFalse(res['ok'])
+        self.assertIn('source_dats', res['error'])
 
     def test_a_check_that_does_not_read_up_to_date_fails(self):
         ctx = self._ctx()

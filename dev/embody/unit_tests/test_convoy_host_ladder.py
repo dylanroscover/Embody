@@ -1113,8 +1113,9 @@ class TestStartupConstructsConvoyExt(EmbodyTestCase):
         head = body.split('def ', 1)[0]
         self.assertIn('.ext.ConvoyExt', head,
                       'the startup construction kick is gone')
-        self.assertIn('Convoyenable', head,
-                      'the kick must stay gated on the enable toggle')
+        self.assertNotIn('Convoyenable', head,
+                         'a project that is off still needs its tick, to '
+                         'join a machine that has joined')
         self.assertLess(
             head.index('.ext.ConvoyExt'), head.index('unstore'),
             'the kick must precede the mode branches so off/export '

@@ -1,6 +1,6 @@
 # Convoy Setup and Troubleshooting
 
-Convoy uses a small background **host app** on each participating computer. One host app serves every Convoy-enabled TouchDesigner project for the logged-in user. It is a local helper, not a central Convoy server: if it stops, only the nodes on that computer become unavailable, while other reachable siblings continue communicating.
+Convoy uses a small background **host app** on each participating computer. One host app serves every Convoy-enabled TouchDesigner project for the logged-in user, and it is what keeps the computer in the Convoy: once set up it starts at login and stays reachable with no project open. It is a local helper, not a central Convoy server: if it stops, only that computer becomes unavailable, while other reachable machines continue communicating.
 
 !!! warning "Development preview"
     The controls and runtime are still being completed. Windows acceptance testing is in progress. On macOS, host-app install and the daemon runtime have been validated on Apple Silicon hardware; login supervision, the firewall flow, and node-to-node LAN operation have not yet completed physical acceptance there. Use a development test deployment, not a show-critical machine, until the relevant release notes say otherwise.
@@ -8,11 +8,11 @@ Convoy uses a small background **host app** on each participating computer. One 
 ## Checklist for each computer
 
 1. Connect the computer to the same trusted LAN as the other Convoy machines.
-2. Save and open each `.toe` that should appear as a node.
-3. Choose an AI assistant if desired, then turn on **Enable Convoy** on each participating Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client. Convoy runs on Envoy either way: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through that command service. Enabling Convoy turns **Enable Envoy** on if it is off. A project that arrives with Convoy already enabled but Envoy off (a clone whose local settings kept Envoy off) shows `Needs Envoy` in **Status** until you turn Envoy on.
+2. Save and open a `.toe`. One project is enough: this sets up the whole computer, and other saved projects join by themselves when they open.
+3. Choose an AI assistant if desired, then turn on **Enable Convoy** on the Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client. Convoy runs on Envoy either way: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through that command service. Enabling Convoy turns **Enable Envoy** on if it is off. A project that arrives with Convoy already enabled but Envoy off (a clone whose local settings kept Envoy off) shows `Needs Envoy` in **Status** until you turn Envoy on.
 4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the Setup Wizard's Convoy step) is the consent for the app and its login persistence.
 5. Allow the host app on the operating system's private/trusted network profile. Do not open Envoy's local-only port to the LAN.
-6. Confirm **Status** and the **Convoy Nodes** sequence on the Embody COMP.
+6. Confirm **Status** and the **Convoy Machines** sequence on the Embody COMP.
 7. Repeat on the next computer, using the same Embody version.
 
 There is no invitation code or everyday Create/Join decision -- an explicit Join appears only in the [Resolve Realm Conflict recovery dialog](#recovering-from-a-realm-conflict). Enabled nodes find the Convoy automatically and reconnect after ordinary process, address, or network interruptions.
@@ -24,9 +24,9 @@ There is no invitation code or everyday Create/Join decision -- an explicit Join
 | **Status** | One combined readout: a blocking or in-flight host-app state (`Not installed`, `Installing...`, `Needs repair ...`) wins; otherwise the node's own registration state shows (`Connected`, `Waiting for project save`, ...) |
 | **Repair Convoy App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically and updates keep themselves current (see below), so this pulse is the manual repair path |
 | **Start Convoy App** | Starts the installed app now |
-| **Stop Convoy App** | Stops it and disables automatic restart; queued job records are retained |
+| **Stop Convoy App** | Takes the computer out of the Convoy: stops the app and disables automatic restart, and projects opened here do not bring it back. Queued job records are retained |
 | **Uninstall Convoy App** | Removes the app and login registration while retaining the local host identity, job history, the host log, and the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the runtime. The confirmation names each retained path before anything is removed |
-| **Forget Offline Nodes...** | Removes this machine's offline node rows after a confirmation that names them (the first eight, then a count); the node list refreshes within a few seconds of confirming. A forgotten node rejoins as a new identity (TD Python approval resets); a node with a delivery that has not FINISHED is kept and named afterwards (a finished result never holds a row -- results are fetched by delivery id and outlive it), and a node back online before you confirm is skipped. **Rows on other machines are forgotten there, for you.** Each row is forgotten by the host that owns it, so the dialog lists every offline row in the fleet with its owner and relays each one over that owner's live session; only a row whose owner is not connected right now is left, and the dialog names that machine. This is the manual path for offline rows whose project files still exist -- deleted projects and long-unseen rows clear automatically |
+| **Forget Offline...** | Removes closed projects and offline machines after a confirmation that names them (the first eight of each, then a count). A forgotten project rejoins as a new identity (TD Python approval resets); one with a delivery that has not FINISHED is kept and named afterwards (a finished result never holds a row -- results are fetched by delivery id and outlive it), and anything back online before you confirm is skipped. **Rows on other machines are forgotten there, for you.** Each project is forgotten by the host that owns it, so the dialog lists every closed project in the fleet with its owner and relays each one over that owner's live session; only a row whose owner is not connected right now is left, and the dialog names that machine. A forgotten machine loses this computer's trust until it rejoins, which is the way to clear a computer that has left for good. Projects whose files are deleted clear automatically |
 
 Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, deliberate stop/start, and uninstall.
 
@@ -104,14 +104,14 @@ Exact wording can vary by release, but these are the useful categories:
 | **Waiting for project save** | Save the `.toe`, then wait for automatic registration |
 | **Connected -- N admitted peer(s) reject this host's certificate ...** | This host's Convoy identity changed (its data directory was lost or reinstalled) and those peers still pin the old one, so every connection they open to this host fails the TLS handshake. On EACH of those machines press **Re-pin Changed Peers...** -- see [Identity changes and re-pinning](#identity-changes-and-re-pinning) |
 | **Connected -- N admitted peer(s) still dial a previous identity of this host ...** | Those peers already trust this host's current identity (a live session proves it) but also keep an older record of it at the same address, from before its `host.json` was lost. Each peer parks that ghost as dormant on its next failed dial (`peer_dormant` in its audit); a peer on an older host app needs `POST /peers/forget` for the old host_id -- see [Identity changes and re-pinning](#identity-changes-and-re-pinning) |
-| **Offline -- TD running but not cooking** (a node row) | The node's TouchDesigner process is alive but has sent no heartbeat for a minute: its frame loop stopped. Usually the window is minimized with TouchDesigner's "Stop Playing when Minimized" preference on, or the timeline is paused, or a modal dialog is up. Restore the window or dismiss the dialog; the node is back within one heartbeat. `offline_reason` reads `stalled` |
+| **`e1.toe (not cooking)`** (in **Open Projects**) | The project's TouchDesigner process is alive but has sent no heartbeat for a minute: its frame loop stopped. Usually the window is minimized with TouchDesigner's "Stop Playing when Minimized" preference on, or the timeline is paused, or a modal dialog is up. Restore the window or dismiss the dialog; it is back within one heartbeat. `offline_reason` reads `stalled` |
 | **Connected -- N dormant peer(s): their address now serves another pinned identity ...** | This host stopped dialing N pinned peers because the address on their record answers with a different pinned identity (a re-minted host, or an address reassigned to another Convoy machine). Nothing about them changed but the dialing: the pin, state and queued work stay. They wake on their own the moment the identity connects or announces again; if a machine is gone for good, `POST /peers/forget {host_id}` removes its record |
 | **Connected -- new host identity: N pinned peer(s) refuse this host ...** | The same fact seen from the host that re-minted: it found pinned peers on record when it minted a new identity. Re-pin it on each of those machines; the line clears after 14 days |
 | **Connected -- N pinned peer(s) changed identity: use Re-pin Changed Peers...** | A peer of this machine announces a new identity. Confirm the change with its operator, then press **Re-pin Changed Peers...** here |
 | **Connected -- realm conflict (N realms): use Resolve Realm Conflict...** | An admitted peer of a realm this machine once shared now advertises that realm while this machine sits in another: the split is latched. Follow [Recovering from a realm conflict](#recovering-from-a-realm-conflict); this node keeps working in the preserved realm meanwhile |
 | **Connected -- LAN listener on <address> (<adapter>, tunnel adapter): set bind in lan.json to move it** | `lan.json` names a VPN, virtual or Public-network adapter explicitly. Peers on the real LAN cannot reach it; change or remove `bind` |
 | **Connected -- LAN listener refused: lan tunnel only / lan public network** | Auto-bind found only a tunnel adapter, or the routed adapter sits on a Windows network classed Public, and refused to expose the listener there. Connect the LAN, set the network profile to Private, or name the interface in `lan.json` deliberately -- see [The LAN listener and VPNs](#the-lan-listener-and-vpns) |
-| **Needs Envoy** | **Enable Envoy** is off. Convoy runs on Envoy: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through Envoy's local command service. Turn **Enable Envoy** on; the host app then installs or updates itself and the node registers. Until then the node is registered but offline to every controller, and its row on other machines reads `Offline -- no Envoy relay port` |
+| **Needs Envoy** | **Enable Envoy** is off. Convoy runs on Envoy: the host app runs in the Python environment Envoy builds, and remote work reaches TouchDesigner through Envoy's local command service. Turn **Enable Envoy** on; the host app then installs or updates itself and the node registers. Until then the project is registered but cannot take work, and other machines list it as `e1.toe (Envoy off)`. A project that joined by itself on open stays this way until you turn Envoy on for it: opening a project never builds a Python environment by itself |
 | **Host app not installed / unavailable** | Install, repair, or start the local host app |
 | **Online / Registered** | The node and host app are ready |
 | **Offline** | The node is known but its TD process, host app, or network path is unavailable; automatic reconnect continues |
@@ -121,14 +121,14 @@ Exact wording can vary by release, but these are the useful categories:
 | **Permission denied / approval required** | Enable the required setting locally on the target; a peer cannot grant itself TD Python or Full Shell |
 | **Error** | Read **Details**, then check version, firewall, host-app health, and the troubleshooting cases below |
 
-Several rows with the same IP address are normal when one computer has multiple `.toe` files or TouchDesigner processes. Use **Node Name**, version, and details to select the intended row.
+One computer is one row in **Convoy Machines**, with its open projects listed together. `convoy_list_nodes` lists each project separately; use **Node Name**, version, and details to select the intended one.
 
 ## When nodes do not appear
 
 Work through this list on both computers:
 
-1. Confirm **Enable Convoy** is on and the project has been saved. Disabling the last enabled node on a computer withdraws that whole computer from the LAN: the host app keeps running for local use but closes its LAN listener and stops announcing, so none of its rows can be seen, pinged, or remotely started until a node there is enabled again.
-2. Confirm **Enable Envoy** is on. **Status** reads `Needs Envoy` while it is off, and the node's row on other machines reads `Offline -- no Envoy relay port`.
+1. Confirm the computer has joined at least once, and that **Stop Convoy App** has not been pressed there. A joined computer stays on the LAN with no project open; to see a project on it, confirm **Enable Convoy** is on for that project and the project has been saved.
+2. Confirm **Enable Envoy** is on. **Status** reads `Needs Envoy` while it is off, and other machines list the project as `e1.toe (Envoy off)`.
 3. Confirm **Host App** says it is running for the same logged-in user that runs TouchDesigner.
 4. Confirm both machines use the same Embody version.
 5. Confirm both are on the same trusted LAN and are not isolated guest clients.
@@ -185,7 +185,7 @@ When the whole data directory was lost (not just the key), the host also mints a
 
 ## The LAN listener and VPNs
 
-With no `lan.json`, the host app binds its LAN listener automatically as soon as one local node has **Enable Convoy** on. The address comes from the interface the OS would route outbound traffic through -- which is the LAN on a plain machine and a VPN's tunnel adapter the moment a VPN pushes routes (TEC-A4D sat on an OpenVPN TAP adapter, unreachable from the LAN, for eight days in September 2026 while every panel read Connected). Since 6.2.61 the host app also asks the OS what owns that address (PowerShell's NetAdapter cmdlets on Windows, `ifconfig`/`route` on macOS, `ip` and sysfs on Linux, refreshed every ten minutes):
+With no `lan.json`, the host app binds its LAN listener automatically once the computer has joined a Convoy, and keeps it bound with or without a project open. The address comes from the interface the OS would route outbound traffic through -- which is the LAN on a plain machine and a VPN's tunnel adapter the moment a VPN pushes routes (TEC-A4D sat on an OpenVPN TAP adapter, unreachable from the LAN, for eight days in September 2026 while every panel read Connected). Since 6.2.61 the host app also asks the OS what owns that address (PowerShell's NetAdapter cmdlets on Windows, `ifconfig`/`route` on macOS, `ip` and sysfs on Linux, refreshed every ten minutes):
 
 - a physical adapter on a Private or domain network keeps the probe's answer;
 - a tunnel or virtual adapter (TAP-Windows, Wintun, WireGuard, OpenVPN, Tailscale, Hyper-V, VMware, ...) or a Windows network classed Public is skipped for a physical adapter that is up, holds a usable IPv4 and is not Public -- the one holding the default route first;
@@ -199,9 +199,9 @@ Set `EMBODY_CONVOY_DATA_DIR` to a throwaway directory and every Convoy data-dir 
 
 ## When a node keeps going offline
 
-An offline row is retained intentionally. Common causes are a closed `.toe`, a sleeping computer, a stopped host app, Wi-Fi roaming, DHCP renewal, or a temporary cable/switch interruption. Convoy reconnects and refreshes the row when the node returns.
+A closed project is not an error, and the machine stays online without it. A machine reading Offline usually means a sleeping computer, a stopped host app, Wi-Fi roaming, DHCP renewal, or a temporary cable/switch interruption. Convoy reconnects by itself when it returns.
 
-Retention has two automatic limits: a node whose `.toe` has been **deleted from disk** is forgotten by the host app's retention sweep after about half an hour of silence, and any node **unseen for 7 days** is forgotten regardless. Both respect the same safety rules as manual forgetting -- a node with a delivery that has not finished is never removed, and an unplugged or unmounted drive is never treated as a deletion (recognized by drive letters and the standard mount locations `/Volumes`, `/mnt`, `/media`; a volume mounted at a custom path is not distinguishable from a deleted folder, so prefer keeping such projects on standard mounts). For immediate cleanup of a specific stale row, an AI session can call `convoy_forget_node` with the node's id (from `convoy_list_nodes`), adding its `host_id` for a row another machine owns; it refuses while the node still has an unfinished delivery, and names the blocking delivery ids so they can be cancelled.
+Retention has one automatic limit: a node whose `.toe` has been **deleted from disk** is forgotten by the host app's retention sweep after about half an hour of silence. A registration with no saved `.toe` to check is forgotten after 7 days unseen. Both respect the same safety rules as manual forgetting -- a node with a delivery that has not finished is never removed, and an unplugged or unmounted drive is never treated as a deletion (recognized by drive letters and the standard mount locations `/Volumes`, `/mnt`, `/media`; a volume mounted at a custom path is not distinguishable from a deleted folder, so prefer keeping such projects on standard mounts). For immediate cleanup of a specific stale row, an AI session can call `convoy_forget_node` with the node's id (from `convoy_list_nodes`), adding its `host_id` for a row another machine owns; it refuses while the node still has an unfinished delivery, and names the blocking delivery ids so they can be cancelled.
 
 For unattended machines:
 
@@ -216,7 +216,7 @@ Remote Wake only leaves Perform Mode temporarily; it does not reopen a closed `.
 
 `convoy_start_node` works from a previously confirmed local launch record. If it reports an unknown or incomplete profile, open that `.toe` normally, let the node register, and verify its status before testing remote start again. A moved or deleted `.toe`, changed TouchDesigner installation, disabled node, or repeated crash loop is refused instead of guessed around.
 
-For `convoy_restart_node`, use the node's current runtime ID from `convoy_list_nodes` and a unique `idempotency_key`. The default `require_clean` policy refuses dirty, unsaved, or unverifiable project state. Use `save_then_restart` only when saving is intended. If several Embody nodes share one TouchDesigner process, Convoy refuses a single-node restart; restart that shared application through your normal local operating procedure.
+For `convoy_restart_node`, use the node's current runtime ID from `convoy_list_nodes` and a unique `idempotency_key`. The default `require_clean` policy refuses dirty, unsaved, or unverifiable project state, and TouchDesigner 2025 reports project changes even right after a save, so in practice it refuses with `project_dirty`. Use `save_then_restart`: it saves as a new version, proves the save reached disk, quits, and reopens that version. An edit made in the moment between that save and the quit is lost. If several Embody nodes share one TouchDesigner process, Convoy refuses a single-node restart; restart that shared application through your normal local operating procedure.
 
 If cancellation or the deadline arrives before the old process commits to exiting, Convoy stops without deliberately quitting that process. Under `save_then_restart`, `save_may_have_run` means the save request was accepted but its final acknowledgement was uncertain; inspect the project file before deciding whether to retry.
 
@@ -230,7 +230,7 @@ After the final remote operation and edit lease finish, **Remote Wake Idle Grace
 
 ## Controller or edit-lease conflicts
 
-Per-node controller counts are not a column in the **Convoy Nodes** sequence; use `convoy_list_controllers` for the live client sessions attached to a node. Read-only work can overlap, but mutations acquire an edit lease for the target scope. A lease conflict means another controller currently owns the required mutation scope.
+Per-node controller counts are not a column in the **Convoy Machines** sequence; use `convoy_list_controllers` for the live client sessions attached to a node. Read-only work can overlap, but mutations acquire an edit lease for the target scope. A lease conflict means another controller currently owns the required mutation scope.
 
 - Do not bypass the refusal by switching to a less specific target name.
 - Check the detailed controller list if `convoy_list_controllers` is present in your build.
@@ -301,7 +301,7 @@ Project-saved artifacts are not counted against this quota and are never removed
 
 **Repair Convoy App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
 
-**Stop Convoy App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Convoy App** to resume.
+**Stop Convoy App** takes the computer out of the Convoy: it prevents the login supervisor from starting the app again, and opening a project does not bring it back. Existing queued job records remain. Press **Start Convoy App** to resume.
 
 **Uninstall Convoy App** removes the background app and login registration but retains the local host identity, job history, the host log, and the dedicated Convoy runtime venv when one was built (macOS always builds one; Windows now prefers a per-user one too), so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
 

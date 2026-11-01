@@ -2661,6 +2661,39 @@ def read_convoy_entry(ext) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+def convoy_declined_here(ext) -> bool:
+    """Did someone say no to Convoy for this project?
+
+    A project joined once and now off was turned off: its local config.json
+    (gitignored, so a fresh clone has none) says so. A project that never
+    joined declined only through an explicit no: the Setup Wizard's, or Cancel
+    on the first-enable confirmation. Total.
+    """
+    entry = read_convoy_entry(ext)
+    if not _clean_convoy_id(entry.get('id')):
+        return entry.get('declined') is True
+    try:
+        import json
+        with open(settings_path(ext), 'r', encoding='utf-8') as handle:
+            saved = json.load(handle)['params']['Convoyenable']['val']
+    except Exception:
+        return False
+    return not saved
+
+
+def record_convoy_declined(ext) -> bool:
+    """Record an explicit no. Owns the 'convoy' key and nothing else."""
+    data, readable = _load_project_json(ext, 'recording the Convoy choice')
+    if not readable:
+        return False
+    data = dict(data or {})
+    entry = data.get(CONVOY_KEY)
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    entry['declined'] = True
+    data[CONVOY_KEY] = entry
+    return _save_project_json(project_json_path(ext), data)
+
+
 def read_convoy_id(ext) -> str:
     """This project's convoy id, or '' when none is recorded."""
     return _clean_convoy_id(read_convoy_entry(ext).get('id'))

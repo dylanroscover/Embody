@@ -10,6 +10,7 @@ import threading
 import time
 
 import pytest
+import sys
 
 import convoy_lifecycle as cl
 
@@ -137,6 +138,7 @@ class Runtime:
         self.dirty_values = [{"ok": True, "dirty": False}]
         self.saved = []
         self.quit_calls = []
+        self.quit_save_landed = []
         self.inspector = None
         self.quit_event = None
         self.reservations = {}
@@ -158,9 +160,10 @@ class Runtime:
         return {"ok": True}
 
     def quit(self, node_id, runtime_id, timeout_s, cancel_event, *, discard,
-             expected_dirty_revision=None):
+             expected_dirty_revision=None, save_landed=False):
         self.quit_calls.append((node_id, runtime_id, discard,
                                 expected_dirty_revision))
+        self.quit_save_landed.append(save_landed)
         if self.inspector and self.value:
             self.inspector.backend.processes.pop(self.value["process_id"], None)
         self.value = None
@@ -608,6 +611,96 @@ def test_unknown_old_pid_state_cannot_be_treated_as_dead_and_duplicated(tmp_path
     assert launcher.spawns == []
 
 
+def _pid_refuses_inspection(inspector, birth):
+    """A reboot handed the recorded pid to a system process: OpenProcess is
+    denied, and the kernel's process list still names its creation time."""
+    original = inspector.backend.inspect_status
+    inspector.backend.inspect_status = lambda pid: (
+        {"status": "unknown"} if pid == 100 else original(pid))
+    inspector.backend.birth_id = lambda pid: birth if pid == 100 else None
+
+
+def test_a_reused_pid_that_refuses_inspection_does_not_block_a_start(tmp_path):
+    """B4A 2026-10-31: after a reboot pid 3608 was svchost.exe and start_node
+    refused the node with runtime_unverifiable until that pid freed up."""
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, "birth:svchost")
+    launcher.callback = auto_confirm(manager)
+    result = manager.start_node(NODE, CONVOY, "start-after-reboot", timeout_s=5)
+    assert result["ok"] is True, result
+    assert len(launcher.spawns) == 1
+
+
+def test_the_same_birth_behind_a_refusal_is_still_not_proof_of_death(tmp_path):
+    """An elevated TouchDesigner refuses inspection too. It must not be opened
+    a second time."""
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, "birth:100")
+    result = manager.start_node(NODE, CONVOY, "elevated-td", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def test_no_birth_behind_a_refusal_is_still_not_proof_of_death(tmp_path):
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, None)
+    result = manager.start_node(NODE, CONVOY, "no-birth", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def test_a_backend_that_cannot_read_a_birth_fails_closed(tmp_path):
+    system = make_system(tmp_path)
+    manager, _, runtime, inspector, launcher, _, _, _ = system
+    runtime.value = None
+    _pid_refuses_inspection(inspector, None)
+
+    def broken(pid):
+        raise OSError("snapshot unavailable")
+
+    inspector.backend.birth_id = broken
+    result = manager.start_node(NODE, CONVOY, "broken-birth", timeout_s=5)
+    assert result["code"] == "runtime_unverifiable"
+    assert launcher.spawns == []
+
+
+def _native_backend():
+    if sys.platform == "win32":
+        return cl._WindowsNativeBackend()
+    if sys.platform == "darwin":
+        return cl._MacNativeBackend()
+    pytest.skip("TouchDesigner lifecycle supports Windows and macOS")
+
+
+def test_a_native_birth_is_the_one_inspection_reads():
+    backend = _native_backend()
+    for pid in (os.getpid(), os.getppid()):
+        status = backend.inspect_status(pid)
+        assert status["status"] == "alive"
+        assert backend.birth_id(pid) == status["process"]["birth_id"]
+
+
+def test_a_native_birth_of_no_process_is_none():
+    assert _native_backend().birth_id(2 ** 31 - 3) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="OpenProcess refusal")
+def test_a_process_that_refuses_opening_still_has_a_readable_birth():
+    backend = _native_backend()
+    refusing = [pid for pid in range(4, 20000, 4)
+                if backend.inspect_status(pid)["status"] == "unknown"]
+    if not refusing:
+        pytest.skip("this session can open every process")
+    births = [backend.birth_id(pid) for pid in refusing]
+    assert any(birth and birth.startswith("winfiletime:") for birth in births)
+
+
 def test_runtime_directory_error_cannot_be_treated_as_offline(tmp_path):
     system = make_system(tmp_path)
     manager, _, runtime, _, launcher, _, _, _ = system
@@ -993,6 +1086,159 @@ def test_save_then_restart_repins_toe_identity_after_real_save(tmp_path):
     assert result["ok"] is True
     assert store.get_profile(NODE)["toe_identity"] == cl._file_identity(str(toe))
     assert runtime.quit_calls[0][3] == "after"
+
+
+def _versioned_save(runtime, toe):
+    """TouchDesigner's save: writes project.1.toe beside project.toe."""
+    newer = toe.with_name(toe.stem + ".1.toe")
+
+    def save(node_id, runtime_id, timeout_s, cancel_event):
+        runtime.saved.append((node_id, runtime_id))
+        newer.write_bytes(b"toe-saved-as-the-next-version")
+        os.utime(newer, (time.time() + 5, time.time() + 5))
+        return {"ok": True}
+
+    runtime.save = save
+    return newer
+
+
+def test_save_then_restart_relaunches_the_file_the_save_wrote(tmp_path):
+    """A versioned save leaves the pinned file untouched: relaunching it would
+    reopen the project as it was before the save (field 2026-10-31)."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    newer = _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-versioned", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    profile = store.get_profile(NODE)
+    assert cl._path_same(profile["toe_path"], str(newer))
+    assert profile["toe_identity"] == cl._file_identity(str(newer))
+
+
+def test_a_heartbeat_reporting_the_new_version_does_not_abort_the_restart(
+        tmp_path):
+    """The node re-registers the moment the save renames its file, so the
+    runtime can report the new path while this attempt holds the old one."""
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    newer = _versioned_save(runtime, toe)
+    plain_save = runtime.save
+
+    def save(*args):
+        answer = plain_save(*args)
+        runtime.value = dict(runtime.value)
+        runtime.value["metadata"] = dict(runtime.value["metadata"],
+                                         toe_path=str(newer))
+        return answer
+
+    runtime.save = save
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-heartbeat", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_calls and launcher.spawns
+
+
+def test_a_newer_save_the_restart_did_not_write_is_not_relaunched(tmp_path):
+    """Reopening e1.5 with e1.6 beside it, then a save that writes nothing: the
+    project reopens as e1.5, and a dirty project still fails the save."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    newer = toe.with_name(toe.stem + ".1.toe")
+    newer.write_bytes(b"toe-already-here")
+    os.utime(newer, (time.time() + 5, time.time() + 5))
+    runtime.dirty_values = [{"ok": True, "dirty": True},
+                            {"ok": True, "dirty": False}]
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-no-write", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(toe))
+
+
+def test_a_landed_save_authorizes_the_quit(tmp_path):
+    """TD reports a project dirty again within seconds of a save, so the node
+    refuses a dirty quit unless the host says its save reached disk."""
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-landed", "runtime-1",
+        policy="save_then_restart", timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_save_landed == [True]
+
+
+def test_a_clean_restart_claims_no_landed_save(tmp_path):
+    manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": False}]
+    launcher.callback = auto_confirm(manager)
+    result = manager.restart_node(NODE, CONVOY, "restart-clean", "runtime-1",
+                                  timeout_s=5)
+    assert result["ok"] is True, result
+    assert runtime.quit_save_landed == [False]
+
+
+def test_require_clean_on_a_dirty_project_never_quits(tmp_path):
+    manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True}]
+    result = manager.restart_node(NODE, CONVOY, "restart-dirty", "runtime-1",
+                                  timeout_s=5)
+    assert result["code"] == "project_dirty"
+    assert "save_then_restart" in result["detail"]
+    assert runtime.quit_calls == [] and launcher.spawns == []
+
+
+def test_recovery_after_a_crash_keeps_the_landed_save(tmp_path):
+    """The daemon can die between the durable commit and the quit: the proof
+    has to be on the attempt, or the replacement is refused forever."""
+    manager, store, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.dirty_values = [{"ok": True, "dirty": True, "revision": "r%d" % i}
+                            for i in range(1, 6)]
+    _versioned_save(runtime, toe)
+    launcher.callback = auto_confirm(manager)
+    manager.restart_node(NODE, CONVOY, "restart-durable", "runtime-1",
+                         policy="save_then_restart", timeout_s=5)
+    attempt = store.get_attempt("restart-durable")
+    assert attempt["save_landed"] is True
+
+
+def test_a_save_that_moved_away_starts_from_the_newest(tmp_path):
+    system = make_system(tmp_path)
+    manager, store, _, _, launcher, _, toe, _ = system
+    offline(system)
+    newer = toe.with_name(toe.stem + ".1.toe")
+    newer.write_bytes(b"toe-the-newest-save")
+    toe.unlink()
+    launcher.callback = auto_confirm(manager)
+    result = manager.start_node(NODE, CONVOY, "start-moved", timeout_s=5)
+    assert result["ok"] is True, result
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(newer))
+
+
+def test_newest_save_ignores_a_name_with_no_lineage(tmp_path):
+    path = tmp_path / ".5.toe"
+    (tmp_path / "notes.txt").write_text("x")
+    assert cl._newest_save(str(path)) == str(path)
+
+
+def test_a_different_project_in_the_folder_still_aborts_the_restart(tmp_path):
+    manager, _, runtime, _, launcher, _, toe, _ = make_system(tmp_path)
+    runtime.value = dict(runtime.value)
+    runtime.value["metadata"] = dict(
+        runtime.value["metadata"], toe_path=str(toe.with_name("rig.toe")))
+    result = manager.restart_node(
+        NODE, CONVOY, "restart-other", "runtime-1", timeout_s=5)
+    assert result["ok"] is False
+    assert runtime.quit_calls == [] and launcher.spawns == []
 
 
 def test_unsaved_flag_is_dirty_even_when_generic_dirty_flag_is_false(tmp_path):
@@ -2101,13 +2347,26 @@ def test_lock_identity_is_stable_across_toe_identity_change(tmp_path):
     manager, store, _, _, _, _, toe, _ = make_system(tmp_path)
     before = manager._lock_for(NODE)
     unit_before = cl._launch_unit_id(store.get_profile(NODE))
+    pre_save = cl._file_identity(str(toe))
     toe.write_bytes(b"toe-rewritten-by-a-save-with-a-different-size")
-    manager._refresh_saved_toe(store.get_profile(NODE))
+    manager._refresh_saved_toe(store.get_profile(NODE), pre_save)
     after = manager._lock_for(NODE)
     assert before is after
     # The launch-unit id (reservation namespace) DID change with the file
     # identity, proving the lock is keyed on something more stable.
     assert cl._launch_unit_id(store.get_profile(NODE)) != unit_before
+
+
+def test_lock_identity_is_stable_across_a_versioned_save(tmp_path):
+    # A versioned save moves toe_path as well as toe_identity: the same race.
+    manager, store, runtime, _, _, _, toe, _ = make_system(tmp_path)
+    before = manager._lock_for(NODE)
+    pre_save = cl._file_identity(str(toe))
+    newer = _versioned_save(runtime, toe)
+    runtime.save(NODE, "runtime-1", 1, None)
+    manager._refresh_saved_toe(store.get_profile(NODE), pre_save)
+    assert cl._path_same(store.get_profile(NODE)["toe_path"], str(newer))
+    assert manager._lock_for(NODE) is before
 
 
 def test_recovery_skips_operation_owned_by_a_live_in_process_op(tmp_path):

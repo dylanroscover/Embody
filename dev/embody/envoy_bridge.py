@@ -375,12 +375,15 @@ BRIDGE_TOOLS = [
     {
         "name": "convoy_list_nodes",
         "description": (
-            "List the local and reachable remote Embody nodes known to "
-            "this machine's Convoy host. Returns stable host/node/runtime "
-            "identities, connection state, address, and version metadata. "
-            "Local nodes carry a capabilities field (td_python, "
-            "full_shell); remote nodes deliberately do not -- absent "
-            "means unknown, never allowed."
+            "List the machines in this Convoy and the Embody nodes known "
+            "to this machine's Convoy host. `machines` has one row per "
+            "computer, online with or without a project open, with the "
+            ".toe files active on it. `nodes` has one row per project "
+            "(every save of one .toe is one node), including closed "
+            "projects, with stable host/node/runtime identities, connection "
+            "state, address, and version metadata. Local nodes carry a "
+            "capabilities field (td_python, full_shell); remote nodes "
+            "deliberately do not -- absent means unknown, never allowed."
         ),
         "inputSchema": {
             "type": "object",
@@ -505,8 +508,10 @@ BRIDGE_TOOLS = [
         "description": (
             "Restart one exact running TouchDesigner node. The default "
             "require_clean policy refuses dirty, unsaved, or unverifiable "
-            "state; save_then_restart explicitly saves first. Destructive "
-            "restart policies are not exposed by this build."
+            "state, and TouchDesigner 2025 always reports project changes, "
+            "so use save_then_restart: it saves a new version, proves it "
+            "reached disk and reopens it. Destructive restart policies are "
+            "not exposed by this build."
         ),
         "inputSchema": {
             "type": "object",
@@ -792,9 +797,10 @@ BRIDGE_TOOLS = [
             "and names the blocking delivery ids so they can be "
             "cancelled; a finished result never holds a row, because "
             "results are fetched by delivery id and outlive it; an "
-            "online row is never forgotten. Rows unseen for a week are "
-            "evicted automatically; this is the immediate manual path. "
-            "The Convoy page's Forget Offline Nodes... button is the "
+            "online row is never forgotten. A row clears itself once its "
+            ".toe is deleted; this is the immediate manual path, and it "
+            "resets the node's TD Python approval. "
+            "The Convoy page's Forget Offline... button is the "
             "in-TD bulk equivalent, fleet-wide, with an enumerating "
             "confirmation."
         ),

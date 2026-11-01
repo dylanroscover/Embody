@@ -345,6 +345,16 @@ def pid_is_alive(pid, platform=None, kill=None, kernel32=None):
         return False
 
 
+def machine_joined(directory):
+    """Has a project joined from this machine? The host app's own record."""
+    try:
+        with open(os.path.join(directory, 'machine.json'), 'r',
+                  encoding='utf-8') as handle:
+            return json.load(handle).get('joined') is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def read_live_portfile(directory, platform=None, kill=None):
     """The portfile ONLY if the process that wrote it is still alive.
 
@@ -641,6 +651,42 @@ def _status_text_field(value, limit):
     return text[:limit]
 
 
+def _clean_status_machine(row):
+    """Detach and bound one host-authored machine row for TD projection."""
+    if not isinstance(row, dict):
+        return None
+    age = row.get("last_seen_age_s")
+    if isinstance(age, bool):
+        age = None
+    else:
+        try:
+            age = float(age)
+            if not math.isfinite(age) or age < 0:
+                age = None
+        except (TypeError, ValueError, OverflowError):
+            age = None
+    toes = row.get("toes")
+    return {
+        "host_id": _status_text_field(row.get("host_id"), 128),
+        "hostname": _status_text_field(row.get("hostname"), 255),
+        "ip": _status_text_field(row.get("ip"), 255),
+        "local": row.get("local") is True,
+        "status": _status_text_field(row.get("status"), 64),
+        "online": row.get("online") is True,
+        "reason": _status_text_field(row.get("reason"), 64) or None,
+        "compatibility": _status_text_field(
+            row.get("compatibility"), 32) or None,
+        "compatibility_reason": _status_text_field(
+            row.get("compatibility_reason"), 160) or None,
+        "host_app_version": _status_text_field(
+            row.get("host_app_version"), 64) or None,
+        "last_seen_age_s": age,
+        "toes": ([_status_text_field(toe, 512)
+                  for toe in toes[:MAX_STATUS_NODES]]
+                 if isinstance(toes, list) else []),
+    }
+
+
 def _clean_status_node(row):
     """Detach and bound one host-authored status row for TD projection."""
     if not isinstance(row, dict):
@@ -737,11 +783,19 @@ def network_nodes(handle, convoy_id, opener=None,
         clean = _clean_status_node(row)
         if clean is not None and clean["convoy_id"] == convoy_id:
             nodes.append(clean)
+    raw_machines = answer.get("machines")
+    machines = None
+    if isinstance(raw_machines, list):
+        machines = [clean for clean in
+                    (_clean_status_machine(row)
+                     for row in raw_machines[:MAX_STATUS_NODES])
+                    if clean is not None]
     return {
         "state": NETWORK_NODES_RESULT,
         "http_status": status,
         "convoy_id": convoy_id,
         "nodes": nodes,
+        "machines": machines,
         "truncated": bool(answer.get("truncated"))
                      or len(raw_nodes) > MAX_STATUS_NODES,
         "remote_nodes_available": bool(answer.get(
@@ -1269,50 +1323,15 @@ def normalize_toe_path(toe_path, platform=None):
     return text
 
 
-def collapse_same_process_nodes(nodes, local_host_id=None):
-    """Panel-side mirror of the host's collapse_same_process_rows (canonical
-    explanation there): one row per remote process, so a daemon older than
-    that rule still renders TEC-C3A / transmon.1 once. Local rows (this
-    host's) are left to the directory."""
-    groups = {}
-    order = []
-    out = []
-    for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        host = str(node.get("host_id") or "")
-        if local_host_id and host == str(local_host_id):
-            out.append(node)
-            continue
-        key = (host, str(node.get("toe_name") or ""))
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(node)
-
-    def freshness(node):
-        try:
-            age = float(node.get("last_seen_age_s"))
-        except (TypeError, ValueError):
-            age = float("inf")
-        version = tuple(int(p) if p.isdigit() else 0
-                        for p in str(node.get("embody_version") or "").split("."))
-        return (age, tuple(-v for v in version), str(node.get("node_id") or ""))
-
-    for key in order:
-        group = groups[key]
-        online = [n for n in group if n.get("online")]
-        out.extend(online if online else [min(group, key=freshness)])
-    return out
-
-
 def stable_node_discriminator(toe_path, platform=None):
     """Opaque stable discriminator for one saved .toe launch profile.
 
     It is deterministic across restarts and deliberately independent of
     runtime_id, which remains fresh for every TD process. The host combines
     it with canonical project_root and comp_path; this value alone is not a
-    node identity and carries no authority.
+    node identity and carries no authority. A 6.3.0 host identifies a saved
+    .toe by its lineage instead (convoy_identity.toe_lineage_discriminator)
+    and keeps this exact-path value for a second live version of one project.
     """
     canonical = normalize_toe_path(toe_path, platform=platform)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]

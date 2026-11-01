@@ -561,6 +561,8 @@ class ConvoyExtBase(EmbodyTestCase):
         self._patch(self.convoy, '_applyNetworkNodes',
                     lambda result: self.network_writes.append(result))
         self._patch(self.convoy, '_session', lambda: self.session)
+        # A disabled project on this dev machine would really join its Convoy.
+        self._patch(self.convoy, '_mayJoinMachineConvoy', lambda: False)
         self._patch(self.convoy, '_enabled', lambda: True)
         self._patch(self.convoy, '_performing', lambda: False)
         self._patch(self.convoy, '_savedToe', lambda: 'C:/fake/project.toe')
@@ -684,172 +686,51 @@ class ConvoyExtBase(EmbodyTestCase):
 
 
 class TestNetworkStatusProjection(ConvoyExtBase):
+    """Writing the Convoy Machines sequence on a real panel. The row values
+    themselves run on CI: test_convoy_machine_rows.py."""
 
-    def test_online_and_cached_nodes_have_honest_ui_values(self):
-        result = {
-            'state': 'nodes',
-            'nodes': [
-                {
-                    'node_id': '1' * 32, 'host_id': 'a' * 32,
-                    'node_name': 'render-a / show', 'ip': '10.0.0.2',
-                    'status': 'online', 'online': True,
-                    'embody_version': '6.0.178',
-                    'touchdesigner_version': '2025.32180',
-                    'controller_count': 2,
-                    'last_seen_age_s': 8.9,
-                },
-                {
-                    'node_id': '2' * 32, 'host_id': 'b' * 32,
-                    'hostname': 'render-b', 'ip': '10.0.0.3',
-                    'status': 'offline', 'online': False,
-                    'controller_count': 1,
-                    'last_seen_age_s': 125,
-                },
-            ],
-        }
-        rows = self.convoy._nodeStatusRows(result)
-        self.assertLen(rows, 2)
-        # Deliberately minimal: 4 columns only (Node Name, IP, Status, Last
-        # Seen). Controllers / Details / Embody Version were removed.
-        self.assertEqual(set(rows[0]),
-                         {'Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen'})
-        self.assertEqual(rows[0]['Nodename'], 'render-a / show')
-        self.assertEqual(rows[0]['Ipaddress'], '10.0.0.2')
-        self.assertEqual(rows[0]['Nodestatus'], 'Online')
-        self.assertEqual(rows[0]['Lastseen'], '8s ago')
-        self.assertEqual(rows[1]['Nodename'], 'render-b')
-        self.assertEqual(rows[1]['Nodestatus'], 'Offline')
-        self.assertEqual(rows[1]['Lastseen'], '2m ago')
-
-    def test_limited_compatibility_names_the_reason_and_version(self):
-        """'limited' alone sent an operator to read the other machine's
-        log for the version (2026-09-21)."""
-        rows = self.convoy._nodeStatusRows({
-            'state': 'nodes', 'host_id': HOST_ID, 'nodes': [{
-                'node_id': 'b' * 32, 'host_id': OTHER_HOST_ID,
-                'node_name': 'TEC-C3A / moonshine', 'hostname': 'TEC-C3A',
-                'ip': '192.168.88.36', 'status': 'online', 'online': True,
-                'compatibility': 'limited',
-                'compatibility_reason': '12 of 19 operations shared with '
-                                        'host app 6.0.280',
-                'host_app_version': '6.0.280'}]}, self.client)
-        self.assertEqual(rows[0]['Nodestatus'],
-                         'Online -- limited: 12 of 19 operations shared '
-                         'with host app 6.0.280')
-
-    def test_offline_without_a_relay_port_says_so(self):
-        rows = self.convoy._nodeStatusRows({
-            'state': 'nodes', 'host_id': HOST_ID, 'nodes': [{
-                'node_id': 'b' * 32, 'host_id': OTHER_HOST_ID,
-                'node_name': 'TEC-C3A / moonshine', 'hostname': 'TEC-C3A',
-                'ip': '192.168.88.36', 'status': 'offline', 'online': False,
-                'offline_reason': 'no_relay_port'}]}, self.client)
-        self.assertEqual(rows[0]['Nodestatus'],
-                         'Offline -- no Envoy relay port')
-
-    def test_a_remote_process_seen_under_two_ids_is_one_row(self):
-        """TEC-C3A / transmon.1 sat as rows 7 and 8 for a week (2026-09-05):
-        two node_ids, one .toe, one unreachable host. The panel folds them
-        even when the local daemon predates the host-side collapse; local
-        rows are never folded here."""
-        remote = lambda nid, ver: {
-            'node_id': nid * 32, 'host_id': 'c' * 32,
-            'node_name': 'TEC-C3A / transmon.1', 'toe_name': 'transmon.1.toe',
-            'ip': '192.168.88.36', 'status': 'offline', 'online': False,
-            'embody_version': ver, 'last_seen_age_s': 697369.7}
-        local = lambda nid: {
-            'node_id': nid * 32, 'host_id': 'a' * 32,
-            'node_name': 'TEC-A4D / smoke_template', 'toe_name': 'smoke_template.5.toe',
-            'ip': '192.168.88.10', 'status': 'offline', 'online': False,
-            'last_seen_age_s': 100.0}
-        rows = self.convoy._nodeStatusRows({
-            'state': 'nodes', 'host_id': 'a' * 32,
-            'nodes': [remote('7', '6.0.232'), remote('4', '6.0.233'),
-                      local('1'), local('2')]},
-            client=self.convoy._safeClient())
-        names = [r['Nodename'] for r in rows]
-        self.assertEqual(names.count('TEC-C3A / transmon.1'), 1,
-                         'one process, one row')
-        self.assertEqual(names.count('TEC-A4D / smoke_template'), 2,
-                         'local rows are the directory\'s business')
-
-    def test_a_traveled_stamp_cannot_mask_the_real_hostname(self):
-        """A node_name stamped on another machine travels inside the .toe;
-        a whole fleet read 'TEC-A4D / Render.36' (2026-08-19). The row's
-        live hostname is prefixed whenever the name does not contain it,
-        so nodes stay tellable-apart even before the stamp heals."""
-        rows = self.convoy._nodeStatusRows({
-            'state': 'nodes',
-            'nodes': [
-                {'node_id': '1' * 32, 'host_id': 'a' * 32,
-                 'hostname': 'INF-FLEX-2',
-                 'node_name': 'TEC-A4D / Render.36', 'ip': '10.0.0.4',
-                 'status': 'online', 'online': True,
-                 'last_seen_age_s': 3.0},
-                {'node_id': '2' * 32, 'host_id': 'b' * 32,
-                 'hostname': 'INF-FLEX-3',
-                 'node_name': 'INF-FLEX-3 / Render', 'ip': '10.0.0.5',
-                 'status': 'online', 'online': True,
-                 'last_seen_age_s': 3.0},
-            ],
-        })
-        self.assertEqual(rows[0]['Nodename'],
-                         'INF-FLEX-2 (TEC-A4D / Render.36)')
-        self.assertEqual(rows[1]['Nodename'], 'INF-FLEX-3 / Render',
-                         'a name already carrying its hostname is not '
-                         'double-prefixed')
-
-    def test_last_seen_without_an_age_reads_never(self):
-        """'Unavailable' read like an error state (field 2026-08-19);
-        'Never' says what is known. Online rows still read 'Now'."""
-        self.assertEqual(self.convoy._lastSeenText(None, False), 'Never')
-        self.assertEqual(self.convoy._lastSeenText(None, True), 'Now')
-
-    def test_a_failed_directory_read_means_leave_existing_rows(self):
-        for value in (None, {}, {'state': 'unreachable'},
-                      {'state': 'host_error'}):
-            self.assertIsNone(self.convoy._nodeStatusRows(value))
-
-    def test_last_seen_ages_between_directory_fetches(self):
-        """The column is a RELATIVE time, but the directory is only refetched
-        on the 30s heartbeat -- so writing it once and leaving it made the page
-        show "15s ago" minutes later. The tick must age it with no new data."""
-        import time as _t
-        self.convoy._node_ages = [(5.0, True), (None, False)]
-        self.convoy._node_ages_at = _t.time() - 120.0   # data is 2 min old
-        self.convoy._projectNodeRows([
-            {'Nodename': 'a', 'Ipaddress': '1', 'Nodestatus': 'Online',
-             'Lastseen': '5s ago'},
-            {'Nodename': 'b', 'Ipaddress': '2', 'Nodestatus': 'Offline',
-             'Lastseen': 'Unavailable'}])
-        self.convoy._refreshLastSeen()
-        seq = self.convoy._sequenceByName(self.embody, 'Convoynodes')
+    def _parts(self):
+        seq = self.convoy._sequenceByName(self.embody, 'Convoymachines')
         if seq is None or not seq.numBlocks:
-            self.skipTest('the Convoy Nodes sequence is not on this build')
-        first = self.convoy._sequenceBlockPar(
-            self.embody, seq, list(seq.blocks)[0], 1, 'Lastseen')
-        self.assertIsNotNone(first)
-        self.assertEqual(
-            first.eval(), '2m ago',
-            'a 5s age captured 2 minutes ago must now read 2m ago, not 5s')
+            self.skipTest('the Convoy Machines sequence is not on this build')
+        return seq
 
-    def test_node_status_rows_are_bounded_plain_values(self):
-        rows = self.convoy._nodeStatusRows({
-            'state': 'nodes',
-            'nodes': [{
-                'node_id': 'n' * 1000, 'host_id': 'h' * 1000,
-                'node_name': 'x' * 2000, 'ip': '1' * 1000,
-                'status': 'online' * 100, 'online': True,
-                'embody_version': 'v' * 500,
-                'touchdesigner_version': 't' * 500,
-            }],
-        })
-        self.assertLen(rows, 1)
-        self.assertEqual(set(rows[0]),
-                         {'Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen'})
-        self.assertLessEqual(len(rows[0]['Nodename']), 512)
-        self.assertLessEqual(len(rows[0]['Ipaddress']), 255)
-        self.assertLessEqual(len(rows[0]['Nodestatus']), 70)
+    def test_status_ages_between_directory_fetches(self):
+        """The age is RELATIVE, but the directory is only refetched on the 30s
+        heartbeat -- so writing it once and leaving it made the page show
+        "15s ago" minutes later. The tick must age it with no new data."""
+        import time as _t
+        real_apply = type(self.convoy)._applyNetworkNodes
+        real_apply(self.convoy, {
+            'state': 'nodes', 'nodes': [],
+            'machines': [{'hostname': 'a', 'ip': '1', 'online': True,
+                          'status': 'online', 'last_seen_age_s': 5.0,
+                          'toes': []}]})
+        self._patch(self.convoy, '_machine_status_at',
+                    _t.time() - 120.0)      # data is 2 min old
+        self.convoy._refreshMachineStatus()
+        seq = self._parts()
+        status = self.convoy._sequenceBlockPar(
+            self.embody, seq, list(seq.blocks)[0], 1, 'Machinestatus')
+        self.assertIsNotNone(status)
+        self.assertEqual(status.eval(), 'Online / 2m ago',
+                         'a 5s age captured 2 minutes ago must now read 2m')
+
+    def test_one_block_per_machine_with_its_open_toes(self):
+        type(self.convoy)._applyNetworkNodes(self.convoy, {
+            'state': 'nodes', 'nodes': [],
+            'machines': [
+                {'hostname': 'a', 'ip': '1', 'online': True, 'status': 'online',
+                 'last_seen_age_s': 0.0, 'toes': ['e1.toe', 'show.toe']},
+                {'hostname': 'b', 'ip': '2', 'online': True, 'status': 'online',
+                 'last_seen_age_s': 0.0, 'toes': []}]})
+        seq = self._parts()
+        self.assertEqual(seq.numBlocks, 2)
+        first = list(seq.blocks)[0]
+        read = lambda name: self.convoy._sequenceBlockPar(
+            self.embody, seq, first, 1, name).eval()
+        self.assertEqual(read('Machinename'), 'a / 1')
+        self.assertEqual(read('Toefiles'), 'e1.toe, show.toe')
 
 
 class TestReconcileCalls(ConvoyExtBase):
@@ -1752,6 +1633,9 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
                     lambda: self.candidate)
         self._patch(self.embody_target, '_ensureConvoyId', _ensureConvoyId)
         self._patch(self.embody_target, '_messageBox', _messageBox)
+        self.declined = []
+        self._patch(self.embody_target, '_recordConvoyDeclined',
+                    lambda: self.declined.append(True))
 
     def test_consent_scope_is_the_lan_scope(self):
         self.assertEqual(self.convoy._CONSENT_SCOPE, CONSENT_SCOPE,
@@ -1797,7 +1681,9 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.choice = 0
         self.assertFalse(self.convoy._ensureConsent())
         self.assertEqual(self.recorded, [],
-                         'nothing may be written on a decline')
+                         'no id or consent may be written on a decline')
+        self.assertEqual(self.declined, [True],
+                         'but the no itself is kept, or the next open joins')
         self.assertEqual(self.enable_writes, [False])
         self.assertEqual(self.status_writes[-1], 'Disabled')
         self.assertEqual(self._warnings(), [],
@@ -1809,6 +1695,8 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.choice = -1
         self.assertFalse(self.convoy._ensureConsent())
         self.assertEqual(self.recorded, [])
+        self.assertEqual(self.declined, [],
+                         'nobody answered, so nobody said no')
         self.assertEqual(self.enable_writes, [False])
 
     def test_an_already_recorded_convoy_never_re_prompts(self):

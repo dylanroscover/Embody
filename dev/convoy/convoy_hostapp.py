@@ -1204,10 +1204,15 @@ NETWORK_QUERY_WORKERS = 32
 # enough for ordinary frame stalls, finite enough that a hard-killed process
 # does not remain "online" forever because its old Envoy port was retained.
 NODE_HEARTBEAT_GRACE_S = 60.0
+# Written once a project has joined from this machine. Read by ConvoyExt too.
+MACHINE_FILE = "machine.json"
 # Why a public node row is offline (_node_offline_reason). A closed
 # vocabulary: peers may only relay one of these tokens, never free text.
 NODE_OFFLINE_REASONS = ("no_relay_port", "heartbeat_stale", "no_runtime",
                         "stalled")
+# A TD that is alive but cannot take work, as the machine directory words it.
+_INACTIVE_TOE_NOTES = {"no_relay_port": "Envoy off",
+                       "stalled": "not cooking"}
 
 # Cap on the in-memory (peer -> controller) map, matching the drain and
 # poll maps: nothing prunes it on a host whose peers churn, and an
@@ -1521,7 +1526,7 @@ class _HostLifecycleRuntime:
                 or process.get("pid") != pid):
             return record
         try:
-            status = lifecycle.inspector.inspect_status(pid)
+            status = lifecycle.inspector.recorded_status(process)
         except Exception:
             return record
         definitively_gone = (
@@ -1674,11 +1679,13 @@ class _HostLifecycleRuntime:
         return result
 
     def quit(self, node_id, runtime_id, timeout_s, cancel_event, *, discard,
-             expected_dirty_revision=None):
-        return self._call(
-            node_id, runtime_id, "convoy_lifecycle_quit",
-            {"expected_dirty_revision": expected_dirty_revision,
-             "discard": bool(discard)}, timeout_s, cancel_event)
+             expected_dirty_revision=None, save_landed=False):
+        arguments = {"expected_dirty_revision": expected_dirty_revision,
+                     "discard": bool(discard)}
+        if save_landed:
+            arguments["save_landed"] = True
+        return self._call(node_id, runtime_id, "convoy_lifecycle_quit",
+                          arguments, timeout_s, cancel_event)
 
     def reservation_for_node(self, node_id):
         """Return a detached live reservation used by /register preflight."""
@@ -2085,24 +2092,13 @@ class HostApp:
         # parent directory is still reachable -- an unmounted volume has
         # no reachable ancestry and is spared) is evicted once it has
         # been silent for node_dead_grace_s; any node silent for
-        # node_retention_s is evicted regardless. Offline alone is NEVER
-        # stale -- a closed TD stays listed and remotely launchable.
-        # A WEEK. Thirty days was a cautious guess against rows vanishing
-        # while a machine sat unplugged; in a real fleet it filled every
-        # node list with debris 10-28 days old that nobody could clear
-        # from where they stood (field 2026-09-22). A machine off for
-        # longer than a week rejoins as a new row.
+        # node_retention_s applies only to a row naming no .toe to check.
+        # Offline alone is NEVER stale -- a closed TD stays known and remotely
+        # launchable, and the machine directory lists only active projects,
+        # so a retained row is not list debris (field 2026-10-31: a grant and
+        # the machine's LAN presence both died with an evicted row).
         self.node_retention_s = 7 * 24 * 3600.0
         self.node_dead_grace_s = 1800.0
-        # TRANSIENT rows are the exception to "offline is never stale": a
-        # row that never LIVED past node_transient_lived_s (a smoke run,
-        # a one-shot registration, an install probe) is debris, not a
-        # launchable node, and waiting out 30 days on it is what filled
-        # fleet pages with dead Offline rows (field 2026-08-19). Cleared
-        # after node_transient_retention_s of silence -- unless the user
-        # explicitly granted it td_python, which proves deliberate setup.
-        self.node_transient_lived_s = 900.0
-        self.node_transient_retention_s = 3600.0
         # lifecycle_profile_unavailable transitions per node_id: the same
         # failure used to be audited on EVERY 30s heartbeat (~5.7k
         # lines/day/node, field 2026-08-19). Process-local by design --
@@ -2169,6 +2165,9 @@ class HostApp:
         # builds one without serve()) refuses the route instead of
         # pretending it stopped something.
         self._shutdown_hook = None
+        self._merge_rows_into_lineages()
+        self._machine_joined = False
+        self._load_machine_joined()
         self._initialize_realm_from_directory()
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
         self._auditIdentityAtBoot()
@@ -3065,8 +3064,7 @@ class HostApp:
     def active_realm_states(self):
         """One atomic discovery projection: {realm_id: wire state}."""
         with self.lock:
-            if not any(bool(record.get("enabled", True))
-                       for record in self.directory.nodes()):
+            if not self._machine_in_convoy_locked():
                 return {}
             snapshot = self.realm.snapshot()
             if not snapshot or not snapshot.get("convoy_id"):
@@ -3742,6 +3740,9 @@ class HostApp:
                 "register", "malformed",
                 "wake_grace_s must be an integer from 0 through 3600", 400)
 
+        discriminator = self._node_location_discriminator(
+            project_root, comp_path, discriminator, runtime_id, clean_metadata)
+
         # Snapshot a possible incumbent, then test its old port without
         # holding the coordination lock.  Same port is a normal process
         # restart (the old process could not still own it); different live
@@ -3789,23 +3790,9 @@ class HostApp:
         ownership_checked = False
         incumbent_alive = False
         if runtime_changed:
-            if incumbent_pid and claimant_pid and incumbent_pid == claimant_pid:
-                # Extension reinitialization inside the same TD process.
-                ownership_checked = True
-                incumbent_alive = False
-            elif incumbent_pid:
-                ownership_checked = True
-                incumbent_alive = platform_mod.pid_is_alive(incumbent_pid)
-            elif incumbent.get("envoy_port"):
-                ownership_checked = True
-                incumbent_alive = _loopback_port_open(
-                    incumbent.get("envoy_port"))
-            else:
-                # A legacy/no-port incumbent cannot prove it went away. The
-                # safe answer is to preserve its claim until clean unregister
-                # or host restart, not silently redirect its stable address.
-                ownership_checked = True
-                incumbent_alive = True
+            ownership_checked = True
+            incumbent_alive = self._runtime_owner_alive(
+                incumbent_pid, claimant_pid, incumbent.get("envoy_port"))
 
         with self.lock:
             try:
@@ -3904,6 +3891,7 @@ class HostApp:
                     wake_active=live_bools["wake_active"],
                     wake_grace_s=wake_grace_s)
                 self.directory.set_enabled(record["node_id"], True)
+                self._note_machine_joined_locked()
                 if metadata_present:
                     self.directory.set_metadata(record["node_id"],
                                                 clean_metadata)
@@ -3957,7 +3945,8 @@ class HostApp:
                                       "yet be confirmed; registration was "
                                       "not accepted",
                         }
-                elif self.lifecycle is not None and td_executable:
+                elif (self.lifecycle is not None and td_executable
+                        and not self._is_temporary_row(record)):
                     # Audited on TRANSITION only: register is the 30s
                     # heartbeat, and a standing failure repeated per beat
                     # buried the audit log (~5.7k lines/day/node, field
@@ -4016,7 +4005,10 @@ class HostApp:
             if newly_minted:
                 register_cause = "minted"
             elif previous is not None:
-                if previous.get("runtime_id") != record.get("runtime_id"):
+                if ((previous.get("metadata") or {}).get("toe_path")
+                        != (record.get("metadata") or {}).get("toe_path")):
+                    register_cause = "toe_changed"
+                elif previous.get("runtime_id") != record.get("runtime_id"):
                     register_cause = "new_runtime"
                 elif previous.get("envoy_port") != record.get("envoy_port"):
                     register_cause = "port_changed"
@@ -4073,20 +4065,192 @@ class HostApp:
                 "advisories": self._advisories_locked(),
             }
 
+    @staticmethod
+    def _runtime_owner_alive(owner_pid, claimant_pid, owner_port):
+        """Is a row's recorded runtime still running? Probes: NO LOCK HELD."""
+        if owner_pid and claimant_pid and owner_pid == claimant_pid:
+            # Extension reinitialization inside the same TD process.
+            return False
+        if owner_pid:
+            return platform_mod.pid_is_alive(owner_pid)
+        if owner_port:
+            return _loopback_port_open(owner_port)
+        # A legacy/no-port incumbent cannot prove it went away. The safe
+        # answer is to preserve its claim until clean unregister or host
+        # restart, not silently redirect its stable address.
+        return True
+
+    def _node_location_discriminator(self, project_root, comp_path, exact,
+                                     runtime_id, metadata):
+        """Which row this registration belongs to. Probes: NO LOCK HELD.
+
+        The lineage row is the project's node, and only it holds a launch
+        record and a lasting grant. Another live TD holding it with a different
+        version of the file keeps it: e1.5.toe and e1.6.toe open together stay
+        two nodes, and the second takes a temporary row under the exact-path
+        hash the client sent, for as long as that run lives. It inherits
+        nothing. A registration without a saved toe_path keeps the old
+        exact-path identity.
+        """
+        metadata = metadata or {}
+        lineage = identity.toe_lineage_discriminator(metadata.get("toe_path"))
+        if lineage is None:
+            return exact
+        try:
+            root = identity.normalize_project_root(project_root)
+            with self.lock:
+                for record in self.directory.nodes():
+                    if (runtime_id and record.get("runtime_id") == runtime_id
+                            and record.get("project_root") == root
+                            and record.get("comp_path") == comp_path
+                            and self._record_lineage(record) == lineage):
+                        return record.get("node_discriminator") or exact
+                owner = self.directory.lookup_location(
+                    project_root, comp_path, node_discriminator=lineage)
+        except identity.IdentityError:
+            return exact    # the register path refuses it by name
+        if owner is None or not exact or not runtime_id:
+            return lineage
+        owner_metadata = owner.get("metadata") or {}
+        if self._same_toe(owner_metadata.get("toe_path"),
+                          metadata.get("toe_path")):
+            return lineage  # one file opened twice: node_runtime_conflict
+        owner_pid = owner_metadata.get("process_id")
+        claimant_pid = metadata.get("process_id")
+        if not owner.get("runtime_id"):
+            # Free, unless the daemon just restarted and has not heard from a
+            # TD that is still running: replay forgets runtimes, and the first
+            # version to heartbeat must not take the other's address and grant.
+            return (exact if self._replayed_owner_is_running(
+                owner_pid, claimant_pid) else lineage)
+        if owner.get("runtime_id") == runtime_id:
+            return lineage
+        if self._runtime_owner_alive(owner_pid, claimant_pid,
+                                     owner.get("envoy_port")):
+            return exact
+        return lineage
+
+    def _replayed_owner_is_running(self, owner_pid, claimant_pid):
+        if (not owner_pid or owner_pid == claimant_pid
+                or self._now() - self.started
+                >= 2 * NODE_HEARTBEAT_GRACE_S):
+            return False
+        return bool(platform_mod.pid_is_alive(owner_pid))
+
+    @staticmethod
+    def _same_toe(left, right):
+        if not left or not right:
+            return False
+        return (os.path.normcase(os.path.normpath(str(left)))
+                == os.path.normcase(os.path.normpath(str(right))))
+
+    @staticmethod
+    def _node_label(record):
+        """Which node, in the words an operator would look for it by."""
+        metadata = record.get("metadata") or {}
+        name = metadata.get("node_name") or metadata.get("hostname") or ""
+        toe = metadata.get("toe_name") or ""
+        if name and toe:
+            return "%s (%s)" % (name, toe)
+        return name or toe or "node %s" % (record.get("node_id") or "")[:8]
+
+    @classmethod
+    def _is_temporary_row(cls, record):
+        """A second live version's row: see _node_location_discriminator."""
+        lineage = cls._record_lineage(record)
+        return bool(lineage) and record.get("node_discriminator") != lineage
+
+    @staticmethod
+    def _record_lineage(record):
+        return identity.toe_lineage_discriminator(
+            (record.get("metadata") or {}).get("toe_path"))
+
+    def _merge_rows_into_lineages(self):
+        """Settle every project on its one lineage row. At each start.
+
+        The survivor is the row already on the lineage, else the one holding a
+        TD Python grant, else the most recently seen, and it takes the newest
+        row's file, launch record and enabled state: the grant often sits on an
+        old version and a version-up minted the row that knows the current
+        file. A row with unfinished work or a launch in flight is left alone;
+        nothing here terminalises a delivery. Rows in different realms never
+        merge. One bad row, or a failure, leaves that project as it was and the
+        next start tries again; it can never stop the daemon booting.
+        """
+        groups = {}
+        for record in list(self.directory.nodes()):
+            lineage = self._record_lineage(record)
+            if lineage and identity.is_valid_id(record.get("node_id")):
+                key = (record.get("project_root"), record.get("comp_path"),
+                       record.get("convoy_id"), lineage)
+                groups.setdefault(key, []).append(record)
+
+        merged = []
+        for (_root, _comp, _convoy, lineage), rows in groups.items():
+            try:
+                self._merge_lineage_rows(lineage, rows, merged)
+            except Exception as exc:
+                self._audit_best_effort(
+                    "node_lineage_migration_failed",
+                    {"lineage": lineage,
+                     "error": "%s: %s" % (type(exc).__name__, exc)})
+        if merged:
+            self._audit_best_effort(
+                "node_rows_merged",
+                {"retired": merged[:8], "count": len(merged)})
+
+    def _merge_lineage_rows(self, lineage, rows, merged):
+        seen = {r["node_id"]: self.db.node_last_seen(r["node_id"]) or 0.0
+                for r in rows}
+        rows.sort(key=lambda r: (
+            r.get("node_discriminator") != lineage,
+            not self.policy.allow_td_python(r["node_id"]),
+            -seen[r["node_id"]], r["node_id"]))
+        survivor = rows[0]
+        newest = max(rows, key=lambda r: seen[r["node_id"]])
+        if newest is not survivor:
+            self._adopt_newest_row(survivor, newest)
+        for loser in rows[1:]:
+            node_id = loser["node_id"]
+            census = self._node_work_census(node_id)
+            if (census.get("unreadable") or census.get("pending")
+                    or self.lifecycle_runtime.reservation_for_node(node_id)):
+                continue
+            self.db.delete_node(node_id)
+            self.directory.forget(node_id)
+            self._forget_launch_profile(node_id)
+            self._drop_retired_node_policy(node_id)
+            merged.append(node_id)
+        if survivor.get("node_discriminator") != lineage:
+            self.directory.rekey(survivor["node_id"], lineage)
+        self.db.save_node(survivor)
+
+    def _adopt_newest_row(self, survivor, newest):
+        survivor["metadata"] = dict(newest.get("metadata") or {})
+        survivor["enabled"] = bool(newest.get("enabled", True))
+        if self.lifecycle is None:
+            return
+        profile = self.lifecycle.store.get_profile(newest["node_id"])
+        if profile is not None:
+            self.lifecycle.store.put_profile(
+                dict(profile, node_id=survivor["node_id"]))
+
     def _retire_superseded_nodes_locked(self, live):
         """Drop node records the just-registered node REPLACES. Lock held.
 
-        Node identity includes the project file, so every Save As, rename or
-        versioned save mints a NEW node and leaves the old one listed offline
-        for ever. Users read that as "Convoy is showing me duplicates", and
-        they are right -- it is one node wearing two names.
+        When both rows name a saved .toe, the lineage decides: a different
+        lineage is a different project and is never retired, whatever it
+        shares with the live row (a repo root, a process, a port). Only its
+        stale claim on this run's presence is cleared. The same lineage leaves
+        one thing to retire: a second live version's temporary row once its TD
+        has gone. A project's lineage row always stays.
 
-        The match is deliberately narrow: same HOST, same project root, same
-        COMP path. Not "same IP and offline", which is the tempting rule and
-        the wrong one -- two genuinely different projects on one machine share
-        an IP, and retiring one of those would delete a real node that is
-        still remotely launchable. Same host + root + COMP is the same logical
-        node, re-identified.
+        A row without a saved toe_path has no lineage and keeps the match
+        below: same HOST, same project root, same COMP path. Not "same IP and
+        offline", which is the tempting rule and the wrong one -- two
+        genuinely different projects on one machine share an IP, and retiring
+        one of those would delete a real node that is still remotely
+        launchable.
 
         A candidate is retired only when it is provably idle OR provably
         THIS registration's own past self: an old row still holding an
@@ -4119,6 +4283,7 @@ class HostApp:
             live_port = live.get("envoy_port")
             live_rt = live.get("runtime_id")
             live_disc = live.get("node_discriminator")
+            live_lineage = self._record_lineage(live)
             # ONE jobs scan for the whole sweep -- and only once a
             # candidate actually exists. Building it up front put a full
             # parse of the jobs directory on EVERY register, inside the
@@ -4146,6 +4311,28 @@ class HostApp:
                 same_root = str(record.get("project_root") or "") == root
                 same_comp = str(record.get("comp_path") or "") == comp
                 old_port = record.get("envoy_port")
+                old_lineage = self._record_lineage(record)
+                if live_lineage and old_lineage:
+                    same_process = bool(live_rt) and (
+                        record.get("runtime_id") == live_rt)
+                    same_port = bool(old_port and live_port
+                                     and old_port == live_port)
+                    if (old_lineage == live_lineage and same_root and same_comp
+                            and self._is_temporary_row(record)):
+                        if record.get("runtime_id"):
+                            latest = self._node_last_activity(record)
+                            if (latest is None or (self._now() - latest)
+                                    < self.node_dead_grace_s):
+                                continue
+                        if self._retire_superseded_row_locked(
+                                node_id, live=live, census=_census(node_id)):
+                            retired.append(node_id)
+                    elif (old_port or record.get("runtime_id")) and (
+                            (same_process and same_comp)
+                            or (same_port and not same_process)):
+                        self.directory.clear_envoy_port(node_id)
+                        ports_cleared.append(node_id)
+                    continue
                 if same_root and same_comp:
                     if old_port and not (live_port
                                          and old_port == live_port):
@@ -4605,7 +4792,7 @@ class HostApp:
             return self._refuse(
                 "forget_node", "peer_unreachable",
                 "the owning host has no live session with this one; run "
-                "Forget Offline Nodes there, or wait for it to reconnect",
+                "Forget Offline there, or wait for it to reconnect",
                 503)
         code = int(result.get("http_status") or 200)
         payload = dict(result)
@@ -4779,14 +4966,13 @@ class HostApp:
     def _evict_stale_nodes(self, now):
         """Forget provably-dead node rows on the reap cadence.
 
-        Offline is NOT stale (a closed TD stays remotely launchable); a row
-        is evicted only when it is silent AND either its .toe is provably
-        deleted (dead_project, after node_dead_grace_s of silence), it
-        has been silent past node_retention_s (retired_unseen), or it
-        never LIVED past node_transient_lived_s and has been silent past
-        node_transient_retention_s (transient_unseen -- smoke runs and
-        one-shot registrations; an explicit td_python grant spares it as
-        deliberate setup). Every eviction honors the /nodes/forget idle
+        Offline is NOT stale: a closed TD stays known, remotely launchable and
+        keeps its grant for as long as its .toe exists, and the machine
+        directory hides it. A row is evicted only when it is silent AND every
+        save of its project is provably deleted (dead_project, after
+        node_dead_grace_s of silence), or it is a second live version's
+        temporary row (version_closed), or it names no .toe to check and has
+        been silent past node_retention_s (retired_unseen). Every eviction honors the /nodes/forget idle
         rules: no live Envoy port, no unresolved or unacknowledged work
         (fail closed on an unreadable job store -- and this is also what
         spares an in-flight remote start: the start job stays
@@ -4820,25 +5006,23 @@ class HostApp:
                 silent_s = now - latest
                 if silent_s < self.node_dead_grace_s:
                     continue
-                lived_s = (max(0.0, latest - first)
-                           if first is not None else None)
                 toe = str((record.get("metadata") or {})
                           .get("toe_path") or "")
-                candidates.append((node_id, silent_s, toe, lived_s))
+                candidates.append((node_id, silent_s, toe,
+                                   self._is_temporary_row(record)))
         if not candidates:
             return []
         # Phase 2: judge OUTSIDE the lock -- this is where stats happen.
         judged = []
-        for node_id, silent_s, toe, lived_s in candidates:
-            if silent_s >= self.node_retention_s:
+        for node_id, silent_s, toe, temporary in candidates:
+            if temporary:
+                judged.append((node_id, "version_closed", silent_s))
+            elif toe and os.path.isabs(toe):
+                if (self._path_provably_deleted(toe)
+                        and not lifecycle_mod.another_save_exists(toe)):
+                    judged.append((node_id, "dead_project", silent_s))
+            elif silent_s >= self.node_retention_s:
                 judged.append((node_id, "retired_unseen", silent_s))
-            elif (lived_s is not None
-                    and lived_s < self.node_transient_lived_s
-                    and silent_s >= self.node_transient_retention_s):
-                judged.append((node_id, "transient_unseen", silent_s))
-            elif toe and os.path.isabs(toe) \
-                    and self._path_provably_deleted(toe):
-                judged.append((node_id, "dead_project", silent_s))
         if not judged:
             return []
         # Phase 3: re-acquire, re-verify every guard, then forget.
@@ -4858,12 +5042,6 @@ class HostApp:
                     latest = self.db.node_first_seen(node_id)
                 if latest is None or now - latest < self.node_dead_grace_s:
                     continue
-                if cause == "transient_unseen":
-                    try:
-                        if self.policy.allow_td_python(node_id):
-                            continue    # deliberate setup, not debris
-                    except Exception:
-                        continue        # unknowable grant state: spare
                 census = self._node_work_census(
                     node_id, evict_index, evict_unreadable)
                 if census["unreadable"] or census["pending"]:
@@ -5703,10 +5881,12 @@ class HostApp:
             # frame loop is not running (paused, minimized with Stop
             # Playing when Minimized, or behind a modal). Read as a dead
             # machine fleet-wide until now (TEC-A4D, 2026-09-22). Local
-            # records only -- a peer's row carries its own reason.
+            # records only -- a peer's row carries its own reason. No runtime
+            # means no live process: that pid is someone else's after a reboot.
             pid = (record.get("metadata") or {}).get("process_id")
             try:
-                if pid and self._pid_is_alive(int(pid)):
+                if (pid and record.get("runtime_id")
+                        and self._pid_is_alive(int(pid))):
                     return "stalled"
             except (TypeError, ValueError, OSError):
                 pass
@@ -5942,15 +6122,19 @@ class HostApp:
                 if node.get("convoy_id") == convoy_id
                 and bool(node.get("enabled", True))
             ]
-        if len(rows) > MAX_PUBLIC_NODES_PER_HOST:
-            return 503, {
-                "ok": False,
-                "reason": "node_directory_too_large",
-                "detail": "peer directory exceeds %d nodes"
-                          % MAX_PUBLIC_NODES_PER_HOST,
-            }
+        # Closed projects are kept until their files go, so a long-lived
+        # machine can remember more than one answer carries. Active rows first.
+        truncated = len(rows) > MAX_PUBLIC_NODES_PER_HOST
+        rows.sort(key=lambda row: (
+            not row.get("online"),
+            row.get("offline_reason") not in _INACTIVE_TOE_NOTES,
+            float("inf") if row.get("last_seen_age_s") is None
+            else row["last_seen_age_s"]))
         return 200, {"ok": True, "host_id": self.host_id,
-                     "convoy_id": convoy_id, "nodes": rows}
+                     "convoy_id": convoy_id,
+                     "nodes": rows[:MAX_PUBLIC_NODES_PER_HOST],
+                     "truncated": truncated,
+                     "machine": {"hostname": socket.gethostname()}}
 
     def network_nodes(self, convoy_id=None):
         """Return a cached/coalesced local-and-peer node directory.
@@ -6200,6 +6384,7 @@ class HostApp:
         peer_status.extend(refused)
         remote_rows = []
         cache_updates = {}
+        machine_names = {}
 
         def fetch(item):
             projection, targets, namespace, target_error = item
@@ -6271,6 +6456,9 @@ class HostApp:
             peer_status.append(entry)
 
             if status == "online":
+                name = self._clean_machine_name(result.get("machine"))
+                if name:
+                    machine_names[target.host_id] = name
                 clean_rows = []
                 if (result.get("convoy_id") == namespace
                         and isinstance(result.get("nodes"), list)):
@@ -6314,9 +6502,11 @@ class HostApp:
                     stale["offline_reason"] = None
                     remote_rows.append(stale)
 
-        if cache_updates:
-            with self.lock:
+        with self.lock:
+            if cache_updates:
                 self._peer_node_cache.update(cache_updates)
+            for peer_host_id, name in machine_names.items():
+                self.peers.note_display_name(peer_host_id, name)
 
         # A PROCESS can wear two node_ids on a stale peer (see
         # collapse_same_process_rows); fold those before the address dedupe.
@@ -6339,9 +6529,109 @@ class HostApp:
             "convoy_id": convoy_id,
             "nodes": rows,
             "peers": peer_status,
+            "machines": self._machine_rows(peer_status, rows),
             "remote_nodes_available": keys is not None,
             "truncated": len(deduped) >= MAX_NETWORK_NODE_ROWS,
         }
+
+    @staticmethod
+    def _clean_machine_name(machine):
+        """A peer's self-reported computer name, or ''. Untrusted input."""
+        name = machine.get("hostname") if isinstance(machine, dict) else None
+        if not isinstance(name, str):
+            return ""
+        name = name.strip()
+        # isprintable also refuses line and paragraph separators and bidi
+        # controls: this text reaches a confirmation dialog.
+        if not name or len(name) > 255 or not name.isprintable():
+            return ""
+        return name
+
+    @staticmethod
+    def _peer_endpoint_address(record):
+        """The newest address on a peer record ('host:port' text), or ''."""
+        for raw in (record or {}).get("endpoints") or ():
+            if isinstance(raw, str) and ":" in raw:
+                return raw.rsplit(":", 1)[0][:255]
+        return ""
+
+    def _machine_rows(self, peer_status, rows):
+        """One row per machine, with the projects active on it.
+
+        peer_status already names every machine in this view, this one first.
+        A dormant ghost is a previous identity of a machine at the same
+        address, and an offline record sharing an address with a listed machine
+        is the same: one computer is listed once. Two machines answering online
+        are two machines, whatever they report. A project is active while its
+        TD is alive, so one that cannot take work right now is listed and says
+        why; a closed one stays known in `nodes` and is not listed here.
+        """
+        toes = {}
+        reported = {}
+        for row in rows:
+            host_id = row.get("host_id")
+            name = self._clean_machine_name({"hostname": row.get("hostname")})
+            if name:
+                reported.setdefault(host_id, name)
+            toe = row.get("toe_name") or row.get("node_name")
+            note = (None if row.get("online")
+                    else _INACTIVE_TOE_NOTES.get(row.get("offline_reason"), ""))
+            if toe and note is not None and note != "":
+                toes.setdefault(host_id, set()).add("%s (%s)" % (toe, note))
+            elif toe and note is None:
+                toes.setdefault(host_id, set()).add(toe)
+        now = self._now()
+        machines = {}
+        for entry in peer_status:
+            host_id = entry.get("host_id")
+            if entry.get("reason") == "dormant":
+                continue
+            local = bool(entry.get("local"))
+            online = entry.get("status") == "online"
+            held = machines.get(host_id)
+            if held is not None and (held["online"] or not online):
+                continue
+            record = None
+            if not local:
+                with self.lock:
+                    record = self.peers.get(host_id)
+            seen = (record or {}).get("last_seen")
+            try:
+                age = 0.0 if online else max(0.0, now - float(seen))
+            except (TypeError, ValueError):
+                age = None
+            hostname = (socket.gethostname() if local
+                        else ((record or {}).get("display_name")
+                              or reported.get(host_id) or ""))
+            machines[host_id] = {
+                "host_id": host_id,
+                "hostname": str(hostname)[:255],
+                "ip": (entry.get("ip")
+                       or self._peer_endpoint_address(record))[:255],
+                "local": local,
+                "status": entry.get("status"),
+                "online": online,
+                "reason": entry.get("reason"),
+                "compatibility": entry.get("compatibility"),
+                "compatibility_reason": entry.get("compatibility_reason"),
+                "host_app_version": entry.get("host_app_version"),
+                "last_seen_age_s": age,
+                "toes": sorted(toes.get(host_id, ()), key=str.lower),
+            }
+        listed = []
+        addresses = set()
+        for machine in sorted(
+                machines.values(),
+                key=lambda m: (not m["local"], not m["online"],
+                               m["hostname"].lower(), m["host_id"] or "")):
+            if (not machine["online"] and machine["ip"]
+                    and machine["ip"] in addresses):
+                continue
+            addresses.add(machine["ip"])
+            listed.append(machine)
+        return sorted(listed, key=lambda m: (not m["local"],
+                                             m["hostname"].lower(),
+                                             m["host_id"] or ""))
 
     def shutdown_network_queries(self, wait=True):
         """Release the process-wide directory workers during final teardown."""
@@ -10187,7 +10477,7 @@ class HostApp:
             return self._refuse(
                 source, "td_python_not_approved",
                 f"{operation!r} can execute Python; enable Allow Execute "
-                f"TD Python on the target node before relaying it",
+                f"TD Python on {self._node_label(node)} before relaying it",
                 403, node, {"operation": operation[:MAX_OPERATION_CHARS]})
         if (operation == "convoy_shell"
                 and self.policy.allow_full_shell() is not True):
@@ -11467,12 +11757,54 @@ class HostApp:
                        % (version or "unknown"))
 
     def _active_convoy_ids_locked(self):
-        if not any(bool(record.get("enabled", True))
-                   for record in self.directory.nodes()):
+        """The realm this machine serves on the LAN.
+
+        A machine that has joined stays joined: no project needs to be open,
+        registered or even remembered. Stop Convoy App ends it; lan.json's
+        killswitch closes the listener without ending it.
+        """
+        if not self._machine_in_convoy_locked():
             return ()
         snapshot = self.realm.snapshot()
         return ((snapshot["convoy_id"],)
                 if snapshot and snapshot.get("convoy_id") else ())
+
+    def _machine_in_convoy_locked(self):
+        """Has a project ever joined from this machine, on this host app?
+
+        Written by the first enabled registration and read back by
+        ConvoyExt, which joins other projects only once it is set. A machine
+        whose rows were all turned off before this marker existed stays out: an
+        update must not reopen a LAN someone closed.
+        """
+        return self._machine_joined or any(
+            bool(record.get("enabled", True))
+            for record in self.directory.nodes())
+
+    def _note_machine_joined_locked(self):
+        if self._machine_joined:
+            return
+        self._machine_joined = True
+        try:
+            platform_mod._write_private(
+                os.path.join(self.data_dir, MACHINE_FILE),
+                json.dumps({"joined": True}))
+        except Exception as exc:
+            self._machine_joined = False
+            self._audit_best_effort(
+                "machine_join_persist_failed",
+                {"error": "%s: %s" % (type(exc).__name__, exc)})
+
+    def _load_machine_joined(self):
+        try:
+            with open(os.path.join(self.data_dir, MACHINE_FILE), "r",
+                      encoding="utf-8") as handle:
+                self._machine_joined = json.load(handle).get("joined") is True
+        except (OSError, ValueError, AttributeError):
+            self._machine_joined = False
+        if any(bool(record.get("enabled", True))
+               for record in self.directory.nodes()):
+            self._note_machine_joined_locked()
 
     def active_convoy_ids(self):
         """Enabled local namespaces, detached and safe for discovery."""
@@ -11540,7 +11872,7 @@ class HostApp:
         if not active:
             if self.lan_server is not None:
                 self.stop_lan_server()
-            self.lan_reason = "no_enabled_nodes"
+            self.lan_reason = "no_realm"
             return
         if self.lan_server is None:
             start_lan_if_configured(self, log=log)
@@ -14099,7 +14431,7 @@ def start_lan_if_configured(app, log=None):
     if app.lan_server is not None:
         return True
     if not app.active_convoy_ids():
-        app.lan_reason = "no_enabled_nodes"
+        app.lan_reason = "no_realm"
         return False
     # TLS needs the derived certificate, not just the signing key. No
     # cert -> the identity still signs envelopes locally, but no mutual
@@ -14222,9 +14554,9 @@ def main(argv=None):
     # restart commit must restore the exact TouchDesigner node even when the
     # ordinary queue is configured for manual dispatch only.
     app.start_lifecycle_recovery_loop()
-    # Membership drives LAN exposure dynamically.  With no enabled node the
-    # lifecycle thread owns no socket; first registration binds/advertises,
-    # and disabling the final node withdraws both discovery and peer TLS.
+    # A machine's realm drives LAN exposure.  Until the first project joins,
+    # the lifecycle thread owns no socket; after that the machine stays bound
+    # and announcing, with or without TouchDesigner open.
     app.start_lan_lifecycle()
     _stamp(f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
            f"(data: {directory})")
