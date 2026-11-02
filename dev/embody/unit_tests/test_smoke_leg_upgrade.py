@@ -42,6 +42,7 @@ import importlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -783,6 +784,64 @@ class TestFailureModes(_Case):
         res = self._run()
         self.assertFalse(res['ok'])
         self.assertIn('source_dats', res['error'])
+
+    def _git(self, *args):
+        subprocess.run(
+            ('git', '-c', 'user.name=t', '-c', 'user.email=t@t') + args,
+            cwd=os.path.join(self.root, 'repo'), check=True,
+            stdin=subprocess.DEVNULL, capture_output=True)
+
+    def _cut_release_in_git(self):
+        self._git('init', '-q')
+        self._git('add', '-A')
+        self._git('commit', '-qm', 'cut the release')
+
+    def _old_tox_holds_old_code(self):
+        self.td.source_dats['convoy/host/convoy_lifecycle'] = (
+            upgrade.text_digest('old code\n'))
+
+    def test_a_source_change_committed_after_the_cut_is_not_stale(self):
+        """Committing source between releases is normal: the smoke runs on every
+        such push, and the tox was never meant to hold it (CI 2026-11-01)."""
+        self._source_file('convoy/host/convoy_ws.py', 'ws code\n')
+        self.td.source_dats['convoy/host/convoy_ws'] = (
+            upgrade.text_digest('ws code\n'))
+        self._cut_release_in_git()
+        self._old_tox_holds_old_code()
+        self._source_file('convoy/host/convoy_lifecycle.py', 'later code\n')
+        self._git('add', '-A')
+        self._git('commit', '-qm', 'later source')
+        step = self._step(self._run(), 'source_dats')
+        self.assertTrue(step['ok'], step['detail'])
+        self.assertIn('1 changed since the tox was cut', step['detail'])
+
+    def test_a_source_change_committed_before_the_cut_is_stale(self):
+        """The 6.3.1 case: the source landed, the save beat its reload."""
+        self._cut_release_in_git()
+        self._old_tox_holds_old_code()
+        res = self._run()
+        self.assertFalse(res['ok'])
+        self.assertIn('source_dats', res['error'])
+
+    def test_a_tox_saved_but_not_committed_answers_for_all_source(self):
+        """Right after a release save the manifest is dirty and the tox is newer
+        than every commit: nothing is excused."""
+        self._cut_release_in_git()
+        self._source_file('convoy/host/convoy_lifecycle.py', 'landed code\n')
+        self._git('add', '-A')
+        self._git('commit', '-qm', 'landed just before the save')
+        self._old_tox_holds_old_code()
+        manifest = os.path.join(self.root, 'repo', 'release',
+                                'embody-release.json')
+        with open(manifest, 'a', encoding='utf-8') as f:
+            f.write('\n')
+        res = self._run()
+        self.assertFalse(res['ok'])
+        self.assertIn('source_dats', res['error'])
+
+    def test_no_git_history_answers_for_all_source(self):
+        self._old_tox_holds_old_code()
+        self.assertFalse(self._run()['ok'])
 
     def test_a_check_that_does_not_read_up_to_date_fails(self):
         ctx = self._ctx()

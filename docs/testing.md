@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **163 test suites** and **5,528 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **166 test suites** and **5,720 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 
@@ -196,11 +196,11 @@ unattended run can never fall through to a blocking modal.
 
 ## Test Coverage
 
-The tables below cover 151 suites. The remaining three are the
+The tables below cover 163 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
-### Core Embody (42 suites, 780 tests)
+### Core Embody (43 suites, 831 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -209,7 +209,7 @@ AI-client connectivity tier, listed separately under
 | `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDXN controls, Logs, Envoy) |
 | `test_tag_management` | 29 | Tagging operators for externalization |
 | `test_rename_move_lifecycle` | 28 | Rename and move tracking |
-| `test_crud_operators` | 21 | Create, read, update, delete operations |
+| `test_crud_operators` | 23 | Create, read, update, delete operations |
 | `test_git_status` | 23 | Git status / uncommitted-file detection |
 | `test_param_tracker` | 20 | Parameter change tracking |
 | `test_v6_hardening` | 20 | v6 community-paste + strip/restore hardening |
@@ -246,27 +246,28 @@ AI-client connectivity tier, listed separately under
 | `test_save_path_contracts` | 20 | Save-path write contracts: `_updateRowCells` is the sole writer of the build, timestamp, dirty and position cells |
 | `test_no_console_window` | 3 | No stray console windows when Embody spawns console programs (git, uv, pip, schtasks) on Windows |
 | `test_thread_safety_guards` | 7 | Runtime guards from the 2026-08-17 Derivative threading advisory; TD-import-free, so they also run on the pytest matrix |
+| `test_project_externalize_scope` | 49 | Externalize Full Project keeps Embody and system COMPs out (issue #176) |
 
-### MCP Tools (23 suites, 433 tests)
+### MCP Tools (24 suites, 454 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_envoy_tool_guards` | 66 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid, host-destroy refusals) |
+| `test_envoy_tool_guards` | 67 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid, host-destroy refusals) |
 | `test_recovery_hints` | 22 | Recovery-hint match table vs. real error strings + the additive `_attachRecoveryHints` decorator |
 | `test_mcp_externalization` | 26 | Embody integration via MCP (tag, save, status) |
-| `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
+| `test_mcp_operators` | 27 | Create, delete, copy, rename, query, find |
 | `test_mcp_annotations` | 31 | Creating and managing annotations |
 | `test_mcp_dat_content` | 19 | DAT text/table ops + surgical `edit_dat_content` + wipe guards |
 | `test_mcp_diagnostics` | 21 | Error checking across all three surfaces (cook, script tracebacks, shader), class introspection, module help, log retrieval |
-| `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
+| `test_mcp_flags_position` | 17 | Operator flags, positioning, and `get_network_layout` |
 | `test_mcp_project_performance` | 14 | Project-level FPS, memory, hotspots |
 | `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
 | `test_mcp_top_capture` | 15 | TOP image capture (format, quality, resolution) + black/flat/transparent quality verdict |
-| `test_mcp_tdxn_tools` | 11 | `read_tdn`, `export_network`/`import_network` round-trip |
+| `test_mcp_tdxn_tools` | 12 | `read_tdn`, `export_network`/`import_network` round-trip |
 | `test_mcp_batch` | 9 | Batched multi-operation requests |
 | `test_mcp_connections` | 10 | Wiring operators together |
 | `test_mcp_code_execution` | 7 | Executing Python in TD |
-| `test_mcp_extensions` | 6 | Extension creation and setup |
+| `test_mcp_extensions` | 7 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
 | `test_tool_permissions` | 15 | Tool-permissions posture writer (EnvoyExt) |
 | `test_envoy_viz_gates` | 54 | Issue-57 viz activation gates in `envoy_viz` |
@@ -274,15 +275,16 @@ AI-client connectivity tier, listed separately under
 | `test_data_readers` | 22 | `get_chop_data` / `get_pop_data`: reduced reads (per-channel stats, channel globs and caps, relational diffs), never a raw dump |
 | `test_mcp_capture_op` | 9 | `capture_op`: any operator through a transient OP Viewer TOP, waiting out the empty frames a freshly aimed viewer returns |
 | `test_shader_diagnostics` | 16 | GLSL compile failures surfaced on `get_op_errors` (TD only warns; the details live in the Info DAT) |
+| `test_mcp_describe_op_type` | 10 | `describe_op_type`: the parameter catalog for an operator type |
 
-### TDXN Format (24 suites, 902 tests)
+### TDXN Format (24 suites, 915 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_tdxn_reconstruction` | 236 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
+| `test_tdxn_reconstruction` | 240 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
 | `test_tdxn_file_io` | 107 | TDXN file output, per-comp splitting, tdn_ref / tox_ref pointers, the save cycle |
 | `test_tdxn_helpers` | 120 | TDXN serialization utility functions, locked-content source classification and Switch to TOX |
-| `test_tdxn_export_import` | 65 | Network export/import + storage round-trip |
+| `test_tdxn_export_import` | 68 | Network export/import + storage round-trip |
 | `test_tdxn_crash_safety` | 50 | Atomic writes, backup rotation, validation |
 | `test_tdxn_sequences` | 31 | Parameter / operator sequence round-trip |
 | `test_tdxn_diff_engine` | 25 | TDXN structural diff engine |
@@ -290,11 +292,11 @@ AI-client connectivity tier, listed separately under
 | `test_tdxn_exclude` | 27 | `tdxn_exclude` tag (app-managed subtree invisibility) |
 | `test_tdxn_stability_hardening` | 20 | Import validation, DAT editability capture, flag defaults, orphan shell recovery |
 | `test_tdxn_mode` | 16 | Tdxnmode gating (off / export / full) |
-| `test_dat_restoration` | 20 | DAT restoration from disk on startup |
+| `test_dat_restoration` | 23 | DAT restoration from disk on startup |
 | `test_tdxn_safety_guards` | 35 | Save-time TDXN content report: storage severity per mode, the DAT tripwire, deferred filing, managed-type filters |
 | `test_tdxn_yaml` | 14 | TDXN v2.0 YAML emitter / parser |
 | `test_tdxn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
-| `test_tdxn_fingerprint` | 20 | Param-aware dirty detection (fingerprint) |
+| `test_tdxn_fingerprint` | 23 | Param-aware dirty detection (fingerprint) |
 | `test_tdxn_annotation_export` | 10 | Annotation-only `.tdxn` export (annotateCOMP not double-captured) |
 | `test_tdxn_external_connections` | 6 | External wire capture/restore across strip |
 | `test_tdxn_export_progress` | 6 | Chunked TDXN export progress dialog + cancellation (and that it leaves no transient state behind) |
@@ -316,31 +318,32 @@ AI-client connectivity tier, listed separately under
 | `test_clipboard_watch` | 9 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 | `test_scanner_parity` | 5 | Capability-scanner parity between `scanner.py` and `scanner-ts` over the shared fixture corpus (contract C8) |
 
-### Envoy Server & Bridge (19 suites, 1181 tests)
+### Envoy Server & Bridge (20 suites, 1251 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_envoy_bridge` | 490 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
-| `test_claude_config` | 140 | AI client config generation and the restore-on-open probes (Claude Code/OpenCode/Codex/Gemini/VS Code/Cursor/Windsurf/GitHub Copilot) |
+| `test_envoy_bridge` | 526 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
+| `test_claude_config` | 142 | AI client config generation and the restore-on-open probes (Claude Code/OpenCode/Codex/Gemini/VS Code/Cursor/Windsurf/GitHub Copilot) |
 | `test_envoy_sessions` | 57 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
 | `test_server_lifecycle` | 24 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 80 | Envoy liveness watchdog (revive on dropped socket / save) |
-| `test_version_sync` | 19 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
+| `test_version_sync` | 22 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
 | `test_launch_aiclient` | 54 | Launch AI Client launcher (launch table with per-OS install specs, CLI resolution, `.command`/`.bat` generation, missing-CLI install guards and their shell escaping, failure dialogs, env sanitization) |
 | `test_envoy_setup_environment` | 47 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 18 | Instance registry and PID liveness |
-| `test_opencode_config` | 17 | OpenCode client config writer (`envoy_setup.write_opencode_config`) |
-| `test_ai_clients` | 56 | The `ai_clients` registry (row schema, launch-alias resolution, uninstall footprint) and the per-client MCP config writers -- Cursor/VS Code/Copilot/Gemini/Codex/Antigravity dialects, conservative merging, JSONC safety, and the launch-target vs Configure-For split |
+| `test_opencode_config` | 20 | OpenCode client config writer (`envoy_setup.write_opencode_config`) |
+| `test_ai_clients` | 58 | The `ai_clients` registry (row schema, launch-alias resolution, uninstall footprint) and the per-client MCP config writers -- Cursor/VS Code/Copilot/Gemini/Codex/Antigravity dialects, conservative merging, JSONC safety, and the launch-target vs Configure-For split |
 | `test_agent_runner` | 15 | AGENT-tier runner machinery in TestRunnerExt (the runner itself, no LLM) |
-| `test_envoy_lifecycle_hardening` | 8 | Save/reinit lifecycle hardening, and the cached-repo-root guard (a non-absolute root must never reach the job layer, task ledger, or docs catalog) |
+| `test_envoy_lifecycle_hardening` | 15 | Save/reinit lifecycle hardening, and the cached-repo-root guard (a non-absolute root must never reach the job layer, task ledger, or docs catalog) |
 | `test_envoy_agent_ux` | 60 | Agent-ergonomics surface: `get_guidance`, the write-effect footer, `get_focus` |
-| `test_job_layer` | 29 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
+| `test_job_layer` | 30 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
 | `test_task_ledger` | 15 | Shared task ledger (`.embody/tasks.json`): work-STATE across AI sessions, including `done_uncommitted` |
 | `test_envoy_bridge_dialogs` | 22 | `list_dialogs` / `dismiss_dialog` bridge meta-tools: finding TD-drawn dialogs by window ownership and closing them |
-| `test_envoy_bridge_instance_arg` | 10 | Per-call `instance` routing in the STDIO bridge: one call reaches a named instance without moving the session pin |
+| `test_envoy_bridge_instance_arg` | 12 | Per-call `instance` routing in the STDIO bridge: one call reaches a named instance without moving the session pin |
+| `test_envoy_first_run` | 14 | The first-run Envoy consent decision |
 
-### Convoy (9 suites, 850 tests)
+### Convoy (10 suites, 911 tests)
 
 The LAN work relay: the node-side reconciler, the host-app client and installer, and the panel contracts. The host app itself is stdlib-only by design, so most of this tier also runs under plain pytest on the windows+macos CI matrix -- see `pytest.ini`.
 
@@ -348,15 +351,16 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 |-------|-------|----------|
 | `test_convoy_install` | 308 | Host-app installer: Scheduled Task XML, LaunchAgent plist, the launcher, and the per-user daemon venv preference |
 | `test_convoy_client` | 180 | Host-app client, and its PARITY with the daemon-side probe the two copies must not drift from |
-| `test_convoy_host_install` | 108 | ConvoyExt's host-app orchestration (install plan) |
-| `test_convoy_ext` | 81 | ConvoyExt, the node-side Convoy reconciler |
+| `test_convoy_host_install` | 119 | ConvoyExt's host-app orchestration (install plan) |
+| `test_convoy_ext` | 90 | ConvoyExt, the node-side Convoy reconciler |
 | `test_convoy_parameter_contract` | 47 | Off-TD contract for Convoy's user-facing parameter scaffold |
-| `test_convoy_host_ladder` | 78 | The runtime ladder that decides WHICH interpreter the daemon runs under, the register-success revive, the spawn-blocked verdict (supervisor-launched TD), and the startup construction kick |
+| `test_convoy_host_ladder` | 86 | The runtime ladder that decides WHICH interpreter the daemon runs under, the register-success revive, the spawn-blocked verdict (supervisor-launched TD), and the startup construction kick |
 | `test_convoy_realm_recovery` | 23 | The TD-side realm-conflict recovery: `Resolve Realm Conflict` / `Join Other Realm` worker bodies and the rejoin rebind |
 | `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
+| `test_convoy_machine_rows` | 33 | The Convoy Machines page and project auto-join |
 
-### Install, Uninstall & Release (21 suites, 557 tests)
+### Install, Uninstall & Release (26 suites, 1019 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -366,27 +370,28 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_uninstall_preview` | 13 | Uninstall preview plan and protected-file handling |
 | `test_uninstall_handler` | 5 | Uninstall pulse confirm gate (cancel/suppress/confirm/review) |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
-| `test_catalog_palette_scan` | 39 | Palette scan time-state snapshot/restore |
+| `test_catalog_palette_scan` | 40 | Palette scan time-state snapshot/restore |
 | `test_template_sync` | 6 | Template map, disk, release-table, and orphan allowlist sync |
 | `test_release_hooks` | 59 | `ExportPortableTox` release hooks (issue #74) |
-| `test_updater` | 93 | UpdaterExt self-update logic (no network, no swap) |
-| `test_config_migration` | 41 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`), and retiring the old `.tdxn` git diff driver |
+| `test_updater` | 116 | UpdaterExt self-update logic (no network, no swap) |
+| `test_config_migration` | 49 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`), and retiring the old `.tdxn` git diff driver |
 | `test_embody_pyenv` | 79 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection, the venv interpreter probe and in-place repair |
-| `test_smoke_run` | 70 | The fresh-install smoke orchestrator and the pure helpers of its in-TD bootstrap: manifest-driven `.tox` selection, seeded-dialog parity + sentinel, sidecar/flag directory, flag parsing (PENDING vs SKIP), staging, the MCP probe with an injected transport (identity check, fail-closed replies, delete verification, budget), the pid ownership guard and the quit ladder, exit codes |
-| `test_smoke_leg_upgrade` | 39 | The `upgrade` smoke leg on a scripted TD: staged asset, `ApplyUpdate` driven through the product API, the port re-read across a swap, identity/health/rollback failure modes, a busy updater, a foreign project on the port |
-| `test_smoke_leg_faults` | 67 | The `faults` smoke leg on a fake TD (fake clock, fake ports, a real temp run dir): each of the four recoveries is a switch a test flips off, deferred-only kills, the target gate, the probe kit |
-| `test_smoke_leg_uninstall` | 81 | The `uninstall` smoke leg on a fake TD with a real run directory: the manifest-derived plan, planted user content that must survive, the summary handed back through a file once Envoy dies, the run-dir and plan-root gates, and the repo-checkout fence |
+| `test_smoke_run` | 103 | The fresh-install smoke orchestrator and the pure helpers of its in-TD bootstrap: manifest-driven `.tox` selection, seeded-dialog parity + sentinel, sidecar/flag directory, flag parsing (PENDING vs SKIP), staging, the MCP probe with an injected transport (identity check, fail-closed replies, delete verification, budget), the pid ownership guard and the quit ladder, exit codes |
+| `test_smoke_leg_upgrade` | 50 | The `upgrade` smoke leg on a scripted TD: staged asset, `ApplyUpdate` driven through the product API, the port re-read across a swap, identity/health/rollback failure modes, a busy updater, a foreign project on the port |
+| `test_smoke_leg_faults` | 103 | The `faults` smoke leg on a fake TD (fake clock, fake ports, a real temp run dir): each of the four recoveries is a switch a test flips off, deferred-only kills, the target gate, the probe kit |
+| `test_smoke_leg_uninstall` | 84 | The `uninstall` smoke leg on a fake TD with a real run directory: the manifest-derived plan, planted user content that must survive, the summary handed back through a file once Envoy dies, the run-dir and plan-root gates, and the repo-checkout fence |
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |
 | `test_embody_bootstrap` | 18 | `embody_bootstrap.py`: offline install of Embody into a `.toe` (toc parsing, graft planning, provisioning DAT, manifest verification) |
 | `test_release_artifact_contract` | 2 | What the shipped `.tox` must not carry: expands the newest release with `toeexpand` and checks its storage and table link |
-| `test_release_toe` | 69 | `ExportReleaseToe` planners, off-TD: one test per refusal, the save path, and the scrub plan |
+| `test_release_toe` | 93 | `ExportReleaseToe` planners, off-TD: one test per refusal, the save path, and the scrub plan |
 | `test_release_toe_live` | 4 | The read side of `ExportReleaseToe`, in TD (the export itself destroys Embody and quits, so it never runs under the runner) |
 | `test_catalog_default_patch` | 6 | CatalogManager cross-build default repair (`_patchComp`) for parameters whose default TD changed between builds |
 | `test_pyenv_context_live` | 9 | The live gating state machine around the TD pre-cook venv context (`_ensurePyEnvContext`) |
+| `test_smoke_bootstrap` | 50 | The in-TD half of the fresh-install smoke, on a frame-scheduled fake TouchDesigner |
 
-### pytest-only suites (8 suites, 179 tests)
+### pytest-only suites (9 suites, 201 tests)
 
 Plain pytest functions, which the in-TD runner does not collect: these run only under pytest, locally and on the CI matrix.
 
@@ -398,8 +403,9 @@ Plain pytest functions, which the in-TD runner does not collect: these run only 
 | `test_release_preflight` | 18 | The `/release` GitHub preflight: open alerts, Dependabot PRs, red CI and unmerged hotfixes block a release |
 | `test_pytest_kill_fence` | 20 | The repo-root `conftest.py` fence: a run may terminate only processes it spawned, and gets its own temp dir |
 | `test_specimen_bindings` | 6 | Published Specimens carry no dev-only file bindings, so a pasted Specimen never writes into the user project |
-| `test_skill_surface` | 14 | The shipped guidance surface as files: skill frontmatter, every shipped skill routed in the prerequisites table, the CLAUDE.md and AGENTS.md templates and the docs, reference files mapped both ways, client-neutral wording, dev-only rules declared, release sync table in step with the maps |
-| `test_envoy_soak` | 10 | The `run_soak_test` verdict math: perturbation exclusion, dropped-frame ratio, fps floor share, memory slope, GPU headroom, downsampling, heartbeat-aware staleness (its in-TD lifecycle class runs only in TouchDesigner) |
+| `test_skill_surface` | 15 | The shipped guidance surface as files: skill frontmatter, every shipped skill routed in the prerequisites table, the CLAUDE.md and AGENTS.md templates and the docs, reference files mapped both ways, client-neutral wording, dev-only rules declared, release sync table in step with the maps |
+| `test_envoy_soak` | 17 | The `run_soak_test` verdict math: perturbation exclusion, dropped-frame ratio, fps floor share, memory slope, GPU headroom, downsampling, heartbeat-aware staleness (its in-TD lifecycle class runs only in TouchDesigner) |
+| `test_envoy_lifecycle_state` | 14 | What a node tells the host before Convoy restarts it |
 
 ## Execution Modes
 
