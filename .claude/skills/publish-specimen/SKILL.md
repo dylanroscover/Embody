@@ -200,7 +200,8 @@ blobs only, off applies the SQL.
   dashboard > Workers > embody-web > Deployments.
 - D1 rows: the bookmark in the sync job's summary, then
   `npx wrangler d1 time-travel restore embody --bookmark=<id>` (30-day window;
-  the nightly `D1 Backup` workflow keeps 90-day SQL dumps as artifacts beyond it).
+  the nightly `D1 Backup` workflow keeps 90-day encrypted SQL dumps as artifacts
+  beyond it; decrypt with the `D1_BACKUP_PASSPHRASE` secret).
 - A wrong `.tdxn` or cover: fix it in the repo and publish again; the old
   blobs are unreferenced, not harmful.
 
