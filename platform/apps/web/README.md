@@ -69,7 +69,12 @@ rows. `first-party-sync.sql` is the production path (field 2026-09-11).
 The `D1 Backup` workflow dumps the production database nightly as a gzipped
 SQL file kept 90 days as a workflow artifact (`scripts/d1-dump.mjs`: schema
 plus INSERTs read through `d1 execute`, because `wrangler d1 export` refuses a
-database with an FTS5 table). Restore into an empty database with
+database with an FTS5 table). The dump holds every table, the auth ones
+included, and this repo is public, so the artifact is AES-256 encrypted with
+the `D1_BACKUP_PASSPHRASE` repository secret and the job fails when that
+secret is missing. Decrypt with
+`gpg --decrypt <artifact>.sql.gz.gpg | gunzip > dump.sql`, then restore into an
+empty database with
 `wrangler d1 execute embody --remote --file=<dump.sql>`; the file rebuilds the
 search mirror at the end. D1 Time Travel covers the last 30 days on its own
 (`wrangler d1 time-travel restore embody --timestamp=...`).

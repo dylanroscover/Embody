@@ -1,9 +1,18 @@
 name: D1 Backup
 
 # Nightly dump of the production `embody` D1 database -- the Collection's
-# rows (specimens, versions, scans, users, reactions, reports) -- as a gzipped
-# SQL file kept 90 days as a workflow artifact, with the current Time Travel
-# bookmark in the run summary. `wrangler d1 export` refuses a database with a
+# rows (specimens, versions, scans, users, reactions, reports) -- as a gzipped,
+# ENCRYPTED SQL file kept 90 days as a workflow artifact, with the current Time
+# Travel bookmark in the run summary.
+#
+# The dump is every table, auth included (emails, password hashes, session and
+# reset tokens), and this repository is public: any signed-in GitHub user can
+# download a workflow artifact. Until 2026-11-11 it was uploaded in the clear.
+# It is now AES-256 encrypted with the D1_BACKUP_PASSPHRASE secret before
+# upload, and the job fails closed when that secret is missing. Decrypt with
+#   gpg --decrypt embody-d1-<stamp>.sql.gz.gpg | gunzip > dump.sql
+#
+# `wrangler d1 export` refuses a database with a
 # virtual table and specimens_fts is FTS5 (first scheduled run, 2026-10-17), so
 # scripts/d1-dump.mjs reads schema + rows through `d1 execute --json` and
 # writes CREATE + INSERT statements itself; it rebuilds the FTS mirror at the
@@ -49,19 +58,29 @@ jobs:
         working-directory: platform
         run: npm ci
       - name: Dump production D1
+        env:
+          D1_BACKUP_PASSPHRASE: ${{ secrets.D1_BACKUP_PASSPHRASE }}
         run: |
+          if [ -z "$D1_BACKUP_PASSPHRASE" ]; then
+            echo "::error::D1_BACKUP_PASSPHRASE is not set. Refusing to publish an unencrypted database dump from a public repository."
+            exit 1
+          fi
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
           out="$RUNNER_TEMP/embody-d1-$stamp.sql"
           node scripts/d1-dump.mjs --remote --output "$out" | tee -a "$GITHUB_STEP_SUMMARY"
           gzip -9 "$out"
+          gpg --batch --yes --pinentry-mode loopback --symmetric \
+            --cipher-algo AES256 --passphrase-fd 3 \
+            --output "$out.gz.gpg" "$out.gz" 3<<<"$D1_BACKUP_PASSPHRASE"
+          rm -f "$out" "$out.gz"
           {
             echo "### D1 dump $stamp"
-            echo "gzip size: $(stat -c %s "$out.gz") bytes"
+            echo "encrypted size: $(stat -c %s "$out.gz.gpg") bytes"
             echo '```'
             npx wrangler d1 time-travel info embody < /dev/null
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "ARCHIVE=$out.gz" >> "$GITHUB_ENV"
+          echo "ARCHIVE=$out.gz.gpg" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: embody-d1-backup
