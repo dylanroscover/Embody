@@ -280,3 +280,20 @@ class TestSoakLifecycle(EmbodyTestCase):
         """The facade must expose _run_soak_test for the tool wrapper."""
         res = self.envoy._run_soak_test(stop=True)
         self.assertEqual(res.get('error_code'), 'envoy.soak.not_running')
+
+
+def test_a_run_with_no_clean_samples_is_not_a_pass():
+    # verdict(summarize([], ...)) answered PASS with "no dropped frames, fps
+    # held ..., memory flat": a soak that measured nothing passed the show
+    # (interval longer than the duration, or stop before the first sample).
+    empty = soak.summarize([], [], 60.0, frames_total=0)
+    level, reasons = soak.verdict(empty)
+    assert level == 'WARN'
+    assert 'no clean samples' in reasons[0]
+    # every sample inside a perturbation window is the same non-measurement
+    samples = _run(5)
+    perturbed = soak.summarize(
+        samples, [(s['t'], 'capture_top') for s in samples], 60.0,
+        frames_total=300)
+    assert perturbed['clean_samples'] == 0
+    assert soak.verdict(perturbed)[0] == 'WARN'

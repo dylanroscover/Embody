@@ -42,7 +42,6 @@ _SIGKILL = getattr(signal, 'SIGKILL', signal.SIGTERM)
 
 DEFAULT_PORT = 9870
 RETRY_INTERVALS = [0.5, 0.5, 1, 1, 2, 2, 3, 3, 5, 5, 8, 8]
-CONNECT_TIMEOUT_S = 60  # Max seconds to wait for Envoy during launch_td/restart_td
 INITIAL_PROBE_TIMEOUT_S = 3  # Quick probe on first tools/list -- reconciler handles recovery
 STDIN_POLL_INTERVAL_MS = 5000  # Watchdog poll timeout (ms) for stdin pipe closure
 WATCHDOG_MAX_FAILURES = 10     # Consecutive watchdog errors before giving up
@@ -1054,6 +1053,11 @@ class BridgeState:
         self.seen_epoch = seen_epoch
         # Launch tracking
         self.launch_timestamps = []
+        # The pid THIS bridge spawned (launch_td / restart_td). td_pid can
+        # also hold _resolve_from_registry's any-TD guess, which names
+        # whichever TouchDesigner is running; only a registered instance's
+        # pid or this one may be quit or have its dialogs dismissed.
+        self.launched_pid = None
         # Tool list cache (populated by main-thread forwards and reconciler)
         self.cached_tools = None
         self.cached_tools_hash = None
@@ -1260,7 +1264,9 @@ def find_latest_versioned_toe(toe_path):
     if not os.path.isdir(directory):
         return toe_path
     basename = os.path.basename(toe_path)
-    m = re.match(r"^(.*?)(\d+)\.toe$", basename)
+    # only TD's ".N" save suffix is a version (see _toe_lineage): a digit in
+    # the name itself (Embody-5, show2024) names a different project.
+    m = re.match(r"^(.*\.)(\d+)\.toe$", basename)
     if not m:
         return toe_path
     prefix = m.group(1)
@@ -2248,30 +2254,6 @@ def _convoy_native_batch_success(relay, expected_count):
         return False
     return all(isinstance(child, dict) and "error" not in child
                for child in children)
-
-
-def _convoy_local_scope(result, probe=None):
-    """Decorate an honest local-host-only management response."""
-    result = dict(result) if isinstance(result, dict) else {
-        "ok": False, "reason": "convoy_host_bad_response"}
-    result["scope"] = "local_host"
-    result["remote_supported"] = False
-    result["wakes_touchdesigner"] = False
-    if isinstance(probe, dict) and probe.get("host_id"):
-        result.setdefault("host_id", probe["host_id"])
-    return result
-
-
-def _convoy_probe_refusal(probe):
-    state = (probe.get("convoy", "absent")
-             if isinstance(probe, dict) else "absent")
-    return _convoy_local_scope({
-        "ok": False,
-        "reason": "convoy_host_%s" % state,
-        "detail": (probe.get("detail", "Convoy host unavailable")
-                   if isinstance(probe, dict)
-                   else "Convoy host unavailable"),
-    }, probe)
 
 
 def _convoy_add_provenance(result, body, include_operation=False):
@@ -4571,7 +4553,6 @@ def handle_switch_instance(params, state):
                     if config_pid and is_td_process_alive(config_pid)
                     else None)
     with state:
-        old_url = state.url
         state.url = f"http://127.0.0.1:{target_port}/mcp"
         state.connected = False  # Force reconnect + initialize handshake
         state.td_pid = resolved_pid
@@ -4825,6 +4806,7 @@ def handle_launch_td(params, state):
 
     with state:
         state.td_pid = pid
+        state.launched_pid = pid
         state.crash_detected = False
         state.launch_timestamps.append(time.monotonic())
     if own_toe:
@@ -4882,6 +4864,7 @@ def handle_restart_td(params, state):
     with state:
         cfg_path = state.config_path
         state_pid = state.td_pid
+        launched_pid = state.launched_pid
         pin = state.pinned_instance
     cfg = load_config(cfg_path)
     own_toe = bool(pin and not project_path)
@@ -4890,10 +4873,19 @@ def handle_restart_td(params, state):
         if not project_path:
             return _no_toe_error(pin)
     _port, reg_pid, active_name = _resolve_from_registry(cfg, None, pin=pin)
-    pid = reg_pid if reg_pid and is_td_process_alive(reg_pid) else None
+    # No name means no instance identity (an empty or old-format registry):
+    # the pid is then the resolver's any-TD guess, and a tracked pid seeded
+    # from it is the same guess. Neither is a process this session may quit
+    # -- it is whichever TouchDesigner happens to be running. A pid this
+    # bridge launched itself is its own with or without a registry row.
+    identified = bool(active_name)
+    pid = (reg_pid if identified and reg_pid and is_td_process_alive(reg_pid)
+           else None)
     # The tracked pid stands in only while the pin is registered: once it
     # left, a TD that reused that pid is another project's.
-    if (pid is None and state_pid and (not pin or active_name == pin)
+    if (pid is None and state_pid
+            and (identified or state_pid == launched_pid)
+            and (not pin or active_name == pin)
             and is_td_process_alive(state_pid)):
         pid = state_pid
     if not pid:
@@ -4936,6 +4928,7 @@ def handle_restart_td(params, state):
 
     with state:
         state.td_pid = new_pid
+        state.launched_pid = new_pid
         state.launch_timestamps.append(time.monotonic())
     if own_toe:
         _remember_launch(state, new_pid)
@@ -4987,7 +4980,6 @@ def handle_restart_td(params, state):
 # The backend is injectable (tests use a fake); the Win32 one is ctypes-only.
 # Idea adopted from td-mcp-rs's `dialogs` tool (credited in README).
 
-DIALOG_MAIN_CLASS = "TouchDesigner Window"
 DIALOG_STD_CLASS = "#32770"
 DIALOG_LADDER = ("close", "escape", "enter")
 DIALOG_SETTLE_S = 0.5          # wait after each rung before checking
@@ -5258,6 +5250,7 @@ def _dialog_target(params, state):
         config_path = state.config_path
         pinned = state.pinned_instance or state.active_name
         td_pid = state.td_pid
+        launched_pid = state.launched_pid
         no_target = state.url is None
     if name and name != pinned:
         if not config:
@@ -5283,6 +5276,14 @@ def _dialog_target(params, state):
             "no_process",
             "No live TouchDesigner process is tracked for this session; "
             "get_td_status shows what the bridge sees.")
+    if not pinned and td_pid != launched_pid:
+        # no registered instance and not our own launch: the tracked pid
+        # is the any-TD guess, i.e. possibly another project's process.
+        return None, pinned, _dialog_error(
+            "no_process",
+            "This session has no registered instance, so the running "
+            "TouchDesigner is not known to be its own. Open this project "
+            "(launch_td) or name a registered instance.")
     return int(td_pid), pinned, None
 
 
@@ -6379,7 +6380,13 @@ def wait_for_envoy(url, deadline):
     if url is None:
         return False
     attempt = 0
-    while time.monotonic() < deadline:
+    started = None
+    while True:
+        now = time.monotonic()
+        if started is None:
+            started = now
+        if now >= deadline:
+            break
         target = url() if callable(url) else url
         try:
             if not target:
@@ -6410,7 +6417,7 @@ def wait_for_envoy(url, deadline):
         if remaining <= 0:
             break
         actual_wait = min(wait, remaining)
-        elapsed = CONNECT_TIMEOUT_S - remaining
+        elapsed = (deadline - remaining) - started
         log(f"Waiting for Envoy ({elapsed:.0f}s elapsed, retry in {actual_wait:.1f}s). "
             f"Ensure TouchDesigner is running with Envoy enabled.")
         time.sleep(actual_wait)
@@ -7187,22 +7194,45 @@ def main():
             log(f"Ignoring malformed JSON: {line[:100]}")
             continue
 
+        if not isinstance(message, dict):
+            log(f"Ignoring non-object message: {line[:100]}")
+            continue
+
         is_notification = "id" not in message
         request_id = message.get("id")
         method = message.get("method", "")
-        params = message.get("params", {})
+        params = message.get("params")
+        if not isinstance(params, dict):    # absent, or an explicit null
+            params = {}
 
         # --- Intercept bridge meta-tool calls ---
         if method == "tools/call" and params.get("name") in BRIDGE_TOOL_NAMES:
             tool_name = params["name"]
-            tool_args = params.get("arguments", {})
+            tool_args = params.get("arguments")
+            if not isinstance(tool_args, dict):
+                tool_args = {}
             log(f"Handling bridge tool: {tool_name}")
-            content = handle_bridge_tool(tool_name, tool_args, state)
+            try:
+                result = {"content": handle_bridge_tool(
+                    tool_name, tool_args, state)}
+            except Exception as exc:
+                # same promise as the forward path below: a handler failure
+                # answers this one call, it never ends the session.
+                log(f"Bridge tool {tool_name} failed "
+                    f"(bridge staying alive): {type(exc).__name__}: {exc}")
+                result = {
+                    "content": [{"type": "text", "text": json.dumps({
+                        "ok": False,
+                        "error": "bridge tool %s failed (%s: %s)" % (
+                            tool_name, type(exc).__name__, exc),
+                    })}],
+                    "isError": True,
+                }
             if not is_notification:
                 send_response({
                     "jsonrpc": "2.0",
                     "id": request_id,
-                    "result": {"content": content},
+                    "result": result,
                 })
             continue
 

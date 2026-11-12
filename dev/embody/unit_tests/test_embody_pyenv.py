@@ -1161,3 +1161,33 @@ class TestRepairVenvInterpreter(_PyenvCase):
         self.assertIn('ERROR', self._levels())
         self.assertTrue(os.path.exists(self.spec['install_lock_path']),
                         "another holder's lock must survive")
+
+
+class TestAuditGuards(_PyenvCase):
+    """Two classifiers that misread their input (audit 2026-11-10)."""
+
+    def test_resolver_classifier_reads_bytes_stderr(self):
+        # POSIX TimeoutExpired carries stderr as bytes; `'no solution' in
+        # <bytes>` raised TypeError inside install_extras' except block, so
+        # the outcome was never recorded.
+        timed_out = subprocess.TimeoutExpired(['uv'], 300, stderr=b'')
+        self.assertFalse(pyenv._is_resolver_failure(timed_out))
+        permanent = subprocess.CalledProcessError(
+            1, ['uv'], stderr=b'error: No solution found when resolving')
+        self.assertTrue(pyenv._is_resolver_failure(permanent))
+
+    def test_pid_alive_reads_permission_denied_as_alive(self):
+        # os.kill(pid, 0) raising EPERM means the process exists under
+        # another user; reading it as dead steals a live install lock.
+        if sys.platform == 'win32':
+            self.skipTest('POSIX branch: win32 probes through OpenProcess')
+        real_kill = pyenv.os.kill
+
+        def denied(pid, sig):
+            raise PermissionError(1, 'Operation not permitted')
+
+        pyenv.os.kill = denied
+        try:
+            self.assertTrue(pyenv._pid_alive(424242))
+        finally:
+            pyenv.os.kill = real_kill

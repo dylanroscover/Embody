@@ -410,3 +410,15 @@ def test_remaining_budget_of_a_non_finite_deadline_is_zero(bad):
     env = _envelope(now=1000.0)
     env["deadline_unix"] = bad
     assert cp.remaining_budget(env, now=1000.0) == 0.0
+
+
+@pytest.mark.parametrize("bad", [12345, ["x"], "\u00e9" * 64])
+def test_resigned_malformed_argument_digest_is_a_named_refusal(bad):
+    # hmac.compare_digest raised TypeError on a non-ASCII or non-str digest,
+    # escaping the "every refusal is named" contract (audit 2026-11-10).
+    env = _envelope()
+    env["arguments_sha256"] = bad
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env)
+    assert e.value.reason == "malformed"

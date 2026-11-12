@@ -893,13 +893,19 @@ def _normal_type(op_type: str) -> str:
     return "".join(ch for ch in str(op_type).lower() if ch.isalnum())
 
 
+# Both predicates carry scanner.py's pattern rules as well as the fixed sets:
+# whatever the scanner flags by type, make_inert must disarm. The sets alone
+# missed opexecuteDAT, parametergroupexecuteDAT and websocketDAT.
 def _is_execute_dat_type(op_type: str) -> bool:
-    return _normal_type(op_type) in EXECUTE_DAT_TYPES
+    normal = _normal_type(op_type)
+    return normal in EXECUTE_DAT_TYPES or normal.endswith("executedat")
 
 
 def _is_io_type(op_type: str) -> bool:
     normal = _normal_type(op_type)
     if normal in IO_DENYLIST_TYPES:
+        return True
+    if normal.startswith("web") and normal.endswith(("dat", "top")):
         return True
     return any(normal.startswith(prefix) for prefix in IO_DENYLIST_PREFIXES)
 

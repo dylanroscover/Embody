@@ -761,6 +761,8 @@ def _pid_alive(pid) -> bool:
         return True
     except ProcessLookupError:
         return False
+    except PermissionError:
+        return True   # exists under another user (EPERM), like win32
     except OSError:
         return False
     except Exception:
@@ -1777,7 +1779,10 @@ def _is_resolver_failure(exc) -> bool:
     timeouts, sharing violations) is transient and worth retrying on a
     later cold start (2026-08-19 review: a one-off Windows sharing
     violation must not become a forever-suppressed package)."""
-    text = (getattr(exc, 'stderr', '') or str(exc)).lower()
+    text = getattr(exc, 'stderr', '') or str(exc)
+    if isinstance(text, bytes):     # POSIX TimeoutExpired carries bytes
+        text = text.decode('utf-8', 'replace')
+    text = text.lower()
     return any(marker in text for marker in (
         'no solution', 'not found in the package registry',
         'no matching distribution', 'no wheels are available',

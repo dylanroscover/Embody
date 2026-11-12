@@ -250,6 +250,14 @@ def _scan_tdxn_root(tdn, state):
     root_path = _root_path(tdn)
     _scan_operator_like(tdn, root_path, type_defaults, state)
 
+    # The importer merges a template into every custom page that names it
+    # ($t), so a template def is live code surface like an inline one. It was
+    # never visited: an expression parked in a template scanned clean.
+    templates = tdn.get("par_templates")
+    if isinstance(templates, dict):
+        for template in list(templates.values()):
+            _scan_custom_parameters(template, root_path, state)
+
     for child in _safe_list(tdn.get("operators")):
         if isinstance(child, dict):
             _scan_operator(child, root_path, type_defaults, state)

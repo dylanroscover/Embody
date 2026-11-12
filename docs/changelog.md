@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.3.4
+
+Fixes from a whole-project audit: Envoy keeps healing itself, and the bridge stays on its own project.
+
+- **Envoy stays up.** The liveness watchdog stopped at its first Convoy error; it now keeps reviving the server. `read_tdn` and `diff_tdn` work inside `batch_operations`, and a claim on `/` protects the whole project.
+- **The bridge stays on its own project.** `restart_td`, `list_dialogs` and `dismiss_dialog` act only on a registered instance or one the bridge launched. A malformed request returns an error instead of stopping the bridge.
+- **Safer pastes.** The Collection scanner reads parameter templates, and the inert import disarms OP Execute, Parameter Group Execute and WebSocket DATs.
+- **Convoy.** The host app starts after receiving a file with no name, and one malformed LAN packet no longer stops discovery.
+- **Fixes.** The tagger's Reload keeps TDXN COMPs on TDXN; the TDXN export progress dialog shows again; a soak with no clean samples reports WARN. +41 tests.
+
 ## v6.3.3
 
 Convoy is set up once per computer, and a computer stays in the Convoy.

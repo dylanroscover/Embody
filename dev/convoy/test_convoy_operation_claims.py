@@ -669,3 +669,14 @@ def test_cold_boot_unreadable_job_blocks_writes_then_recovers(tmp_path):
         assert code == 200, admitted
     finally:
         second.db.close()
+
+
+def test_controller_view_counts_unreadable_job_records(rig, monkeypatch):
+    # scan_jobs returns the unreadable ids as a list; int(list) raised and
+    # /network/controllers answered 500 (audit 2026-11-10).
+    app, node, clock, forwarded = rig
+    monkeypatch.setattr(
+        app.db, "scan_jobs", lambda: ([], ["cj_unreadable_a", "cj_b"]))
+    view = app._local_controller_view(CONVOY)
+    assert view["ok"] is True
+    assert view["jobs_unreadable"] == 2

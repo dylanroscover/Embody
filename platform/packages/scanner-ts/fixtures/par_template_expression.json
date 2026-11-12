@@ -1,0 +1,66 @@
+{
+  "name": "par_template_expression",
+  "why": "A code-bearing value parked in a root par_templates def. The importer merges a template into every custom page that names it ($t), so a template def is live surface like an inline custom par. Neither scanner visited it: this scanned clean and pasted live (audit 2026-11-10).",
+  "surfaces": [
+    "file_read_exprs"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "par_templates": {
+      "controls": [
+        {
+          "name": "Speed",
+          "style": "Float",
+          "value": "=__import__('os').system('calc')"
+        }
+      ]
+    },
+    "operators": [
+      {
+        "name": "base1",
+        "type": "baseCOMP",
+        "custom_pars": {
+          "Controls": {
+            "$t": "controls"
+          }
+        }
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 1,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 1,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

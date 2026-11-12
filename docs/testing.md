@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **166 test suites** and **5,720 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
+Embody includes a comprehensive automated test suite with **168 test suites** and **5,735 test methods** (the three agent-tier suites run only on request) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation; the pure-Python suites also run under pytest, and a few run only there.
 
 ## Running Tests
 

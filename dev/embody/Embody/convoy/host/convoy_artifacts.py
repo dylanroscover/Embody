@@ -168,7 +168,8 @@ def _finite_number(value, name: str) -> float:
 
 
 def _bounded_text(value, name: str, limit: int, *, optional=False) -> str:
-    if value is None and optional:
+    # "" is how an absent optional value is stored, so it must load back.
+    if optional and (value is None or value == ""):
         return ""
     if not isinstance(value, str):
         raise ArtifactValidationError(f"{name} must be text")
@@ -1322,6 +1323,10 @@ class ArtifactStore:
                 self._require_metadata_capacity_locked(
                     artifacts=1, owners=owner_count,
                     protections=protection_count)
+                # eviction drops a namespace it empties: re-fetch, or the
+                # record lands in a detached dict.
+                records = self._namespace_records_locked(
+                    namespace, create=True)
                 record = {
                     "artifact_id": artifact_id,
                     "sha256": actual_sha256,

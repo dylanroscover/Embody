@@ -597,3 +597,18 @@ def test_source_has_no_plaintext_or_credential_query_fallback():
     assert "http://" not in source
     assert "?api_key" not in source
     assert "x-api-key" not in source
+
+
+def test_unhashable_status_is_a_protocol_error_or_a_warning_not_a_crash():
+    # `status not in <frozenset>` raised TypeError for a list or dict status,
+    # losing outcome_unknown on the post-202 path (audit 2026-11-10).
+    c, unused_transport = client(response(200, {
+        "ok": True, "data": {"commandId": COMMAND, "status": []},
+    }))
+    with pytest.raises(ow.OwletteProtocolError):
+        c.get_command_status(SITE, MACHINE, COMMAND)
+    c, unused_transport = client(response(
+        202, {"ok": True, "data": {"commandId": COMMAND, "status": []}}))
+    got = c.submit_command(
+        SITE, MACHINE, "reboot_machine", idempotency_key="convoy-job-4")
+    assert got["warnings"] == ["status is not a documented command status"]

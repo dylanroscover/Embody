@@ -122,7 +122,7 @@ _RECOVERY_HINT_RULES = [
     (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
      'envoy.par.not_found',
      'no parameter by that name on the operator',
-     "List the operator's real parameters with get_op (or read_tdn for a TDXN "
+     "List the operator's real parameters with get_op (or read_tdxn for a TDXN "
      "COMP) before setting. Custom-parameter names are Capitalized; built-in "
      "names are lowercase.",
      ['get_op', 'get_parameter']),
@@ -886,7 +886,8 @@ def _scope_overlaps(a: str, b: str) -> bool:
         return True
     if a.startswith('/') and b.startswith('/'):
         shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
-        return longer.startswith(shorter + '/')
+        # the root is every op path's ancestor ('/' + '/' matches nothing)
+        return shorter == '/' or longer.startswith(shorter + '/')
     return False
 
 
@@ -4751,7 +4752,8 @@ class EnvoyMCPServer:
                             continue
                         index[op_type.lower()] = pars
         except Exception as e:
-            self._log(f'Docs catalog unreadable: {e}', 'DEBUG')
+            # worker thread, and this class has no _log: use the buffer.
+            _queueWorkerLog(f'Docs catalog unreadable: {e}', 'DEBUG')
 
         # 2. bootstrap tsv (only fills types the catalog did not supply)
         if not index:
@@ -4769,7 +4771,8 @@ class EnvoyMCPServer:
                         if len(r) > col and r[col]:
                             index.setdefault(r[0].lower(), {})[r[1]] = r[col]
             except Exception as e:
-                self._log(f'Docs defaults bootstrap unreadable: {e}', 'DEBUG')
+                _queueWorkerLog(
+                    f'Docs defaults bootstrap unreadable: {e}', 'DEBUG')
 
         self._docs_state['defaults'] = index
         return index
@@ -6302,7 +6305,7 @@ class EnvoyExt:
             self._log(
                 f'All ports {base_port}-{base_port + 9} in use. '
                 f'Close a TouchDesigner instance or change the Port parameter.', 'ERROR')
-            self.ownerComp.par.Envoystatus = f'Error: ports {base_port}\u2013{base_port + 9} in use'
+            self.ownerComp.par.Envoystatus = f'Error: ports {base_port}-{base_port + 9} in use'
             return
         if port != base_port:
             self._log(f'Port {base_port} in use by another instance, using {port}')
@@ -6644,7 +6647,7 @@ class EnvoyExt:
             if convoy is not None and self.ownerComp.par.Convoyenable.eval():
                 convoy.ext.ConvoyExt.ensureTickAlive()
         except Exception as e:
-            self.Log(f'Convoy loop check skipped: {e}', 'DEBUG')
+            self._log(f'Convoy loop check skipped: {e}', 'DEBUG')
 
     def _watchdogTick(self, gen: int = 0) -> None:
         """Self-healing liveness loop, one per extension instance.
@@ -7993,6 +7996,9 @@ class EnvoyExt:
             'import_network': self._import_network,
             'read_tdxn': self._read_tdxn,
             'diff_tdxn': self._diff_tdxn,
+            # deprecated aliases: a batch sub-op names the tool, not its op
+            'read_tdn': self._read_tdxn,
+            'diff_tdn': self._diff_tdxn,
             # Annotations
             'create_annotation': self._create_annotation,
             'get_annotations': self._get_annotations,

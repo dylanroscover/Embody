@@ -32,7 +32,7 @@ class TestTDXNExportProgress(EmbodyTestCase):
         # (_closeExportProgress resets these too, but this suite drives
         # _updateExportProgress directly and never closes.)
         try:
-            dlg = self.embody.op('tdn_export_progress')
+            dlg = self.tdn._exportProgressComp()
             if dlg:
                 status = dlg.op('dialog/status')
                 if status:
@@ -78,6 +78,15 @@ class TestTDXNExportProgress(EmbodyTestCase):
             'A done export must not be flagged for cancellation')
 
     # --- Progress dialog guards (must never break an export) ---
+
+    def test_progress_dialog_comp_resolves(self):
+        """Every helper guards on a missing dialog, so a lookup that names
+        the wrong COMP fails nothing: after the TDN -> TDXN rename it asked
+        for 'tdn_export_progress' and the dialog never opened (audit
+        2026-11-10)."""
+        self.assertIsNotNone(
+            self.tdn._exportProgressComp(),
+            'the export progress dialog COMP must resolve by name')
 
     def test_update_progress_guarded(self):
         """_updateExportProgress tolerates being called with live state."""

@@ -118,10 +118,14 @@ gap can never go quiet.
    Three more divergences found by review the same day were closed with fixtures rather than
    declared: script OPs (`script_op_top`), custom-par `default`/`menuSource` expressions
    (`custom_par_default_expr`) and non-Python DAT content (`dat_non_python_glsl`).
+   Root `par_templates` joined them on 2026-11-10 (`par_template_expression`): the importer
+   merges a template into every page that names it with `$t`, and neither scanner visited the
+   template defs, so an expression parked there scanned `clean` on both sides (a gap parity
+   could not see, because both implementations shared it).
 
 ## Cross-impl agreement
 `scanner-ts` and `scanner.py` run the SAME fixtures in CI and must return identical `verdict` +
-`counts` (26 fixtures, byte-mirrored between the two directories). Fixtures include evasion
+`counts` (27 fixtures, byte-mirrored between the two directories). Fixtures include evasion
 cases (code hidden in an expression, in storage, in a nested COMP, via dynamic attr access, a
 flat `ext0object`, an attacker-named `TDEvil` shortcut) - a single-surface scanner that misses
 these FAILS the suite.

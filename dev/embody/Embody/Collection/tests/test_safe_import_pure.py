@@ -361,5 +361,38 @@ class TestIssue94ReviewBypasses(unittest.TestCase):
         self.assertEqual(scanner._TD_PALETTE_REF.pattern, safe_import._TD_PALETTE_REF.pattern)
 
 
+class TestInertCoversEveryTypeTheScannerFlags(unittest.TestCase):
+    """The scanner matches execute DATs by suffix and web operators by prefix;
+    safe_import used fixed sets, so three flagged types stayed armed through
+    make_inert while is_inert() called the result inert (audit 2026-11-10)."""
+
+    ARMED = ("opexecuteDAT", "parametergroupexecuteDAT", "websocketDAT")
+
+    def test_each_type_is_flagged_by_the_scanner(self):
+        for op_type in self.ARMED:
+            with self.subTest(op_type=op_type):
+                res = scanner.scan_tdxn(tdn([{"name": "x", "type": op_type}]))
+                self.assertEqual(res["verdict"], "flagged")
+
+    def test_each_type_is_not_inert_as_it_arrives(self):
+        for op_type in self.ARMED:
+            with self.subTest(op_type=op_type):
+                net = tdn([{"name": "x", "type": op_type}])
+                self.assertFalse(safe_import.is_inert(net, is_pure_expr=PURE))
+
+    def test_make_inert_disarms_each_type(self):
+        for op_type in self.ARMED:
+            with self.subTest(op_type=op_type):
+                inert, summary = safe_import.make_inert(
+                    tdn([{"name": "x", "type": op_type}]), is_pure_expr=PURE)
+                node = inert["operators"][0]
+                disarmed = (node.get("parameters", {}).get("active") in (0, False)
+                            or "bypass" in node.get("flags", []))
+                self.assertTrue(disarmed, node)
+                self.assertEqual(
+                    summary["execute_dats_disabled"] + summary["io_ops_bypassed"], 1)
+                self.assertTrue(safe_import.is_inert(inert, is_pure_expr=PURE))
+
+
 if __name__ == "__main__":
     unittest.main()

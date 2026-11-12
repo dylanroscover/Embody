@@ -6687,6 +6687,7 @@ class HostApp:
             allowed_nodes.intersection_update({node_id})
         try:
             jobs, unreadable = self.db.scan_jobs()
+            unreadable = len(unreadable)    # scan_jobs lists the ids
         except Exception:
             jobs, unreadable = [], 1
 
@@ -6767,7 +6768,7 @@ class HostApp:
         return {
             "ok": True, "host_id": self.host_id, "convoy_id": convoy_id,
             "controllers": rows, "controller_count": len(rows),
-            "jobs_unreadable": int(unreadable or 0),
+            "jobs_unreadable": unreadable,
             "wakes_touchdesigner": False,
         }
 

@@ -189,7 +189,7 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `skills/visual-aesthetics/references/look-recipes.md` | `templates/text_skill_visual_aesthetics__look_recipes.md` |
 | `skills/merge-divergent-tox/references/procedure.md` | `templates/text_skill_merge_divergent_tox__procedure.md` |
 
-This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.py`) are orphans -- do not add them here.
+This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.md`) are orphans -- do not add them here.
 
 Templates should be UTF-8 with LF line endings and no BOM. Each template carries an Embody/Envoy generated-by HTML comment, and otherwise must match its `.claude/` counterpart in content -- diff them (normalizing any legacy BOM + line endings) and fix any drift.
 
