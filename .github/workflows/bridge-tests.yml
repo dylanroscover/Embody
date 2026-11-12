@@ -25,151 +25,87 @@ name: bridge-tests
 on:
   push:
     paths:
-      - 'dev/embody/envoy_bridge.py'
-      - 'dev/embody/Embody/templates/text_envoy_bridge.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge_instance_arg.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge_dialogs.py'
-      - 'dev/embody/unit_tests/test_pytest_kill_fence.py'
+      # Everything the pytest tier runs or reads. Test files are ONE glob on
+      # purpose: the per-file list this replaces had gone stale for seven
+      # listed suites, whose edits triggered no run at all (audit 2026-11-10).
+      - 'pytest.ini'
       - 'conftest.py'
-      - 'dev/embody/unit_tests/test_embody_bootstrap.py'
+      - 'dev/embody/unit_tests/**'
+      - 'dev/embody/Embody/Collection/tests/**'
+      - 'dev/convoy/**'
+      - 'dev/release_testing/**'
+      - 'dev/embody/envoy_bridge.py'
       - 'dev/embody/embody_bootstrap.py'
-      - 'dev/embody/unit_tests/fixtures/bare_project.toe'
+      - 'dev/embody/execute_src_ctrl.py'
       - 'platform/apps/web/public/bootstrap.py'
-      - 'dev/embody/unit_tests/test_convoy_client.py'
-      - 'dev/embody/unit_tests/test_convoy_install.py'
-      - 'dev/embody/unit_tests/test_convoy_host_ladder.py'
-      - 'dev/embody/unit_tests/test_convoy_forget_ux.py'
-      - 'dev/embody/unit_tests/test_convoy_realm_recovery.py'
-      - 'dev/embody/unit_tests/test_convoy_parameter_contract.py'
-      - 'dev/embody/unit_tests/test_startup_progress.py'
-      - 'dev/embody/unit_tests/test_wizard_convoy_contract.py'
-      - 'dev/embody/unit_tests/test_worker_run_lint.py'
-      - 'dev/embody/unit_tests/test_host_destroy_lint.py'
-      - 'dev/embody/unit_tests/test_thread_safety_guards.py'
-      - 'dev/embody/unit_tests/test_save_warnings.py'
-      - 'dev/embody/unit_tests/test_project_saved_gate.py'
-      - 'dev/embody/unit_tests/test_promoted_surface.py'
-      - 'dev/embody/unit_tests/test_release_toe.py'
-      - 'dev/embody/unit_tests/test_release_preflight.py'
-      - 'dev/embody/unit_tests/test_specimen_bindings.py'
       - 'dev/specimen_bindings.py'
       - 'dev/specimen_publish.py'
       - 'dev/release_preflight.py'
-      - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
+      - 'release/**'
       # The promoted-surface census reads the extension sources and the
       # caller index, so a change to either must trigger it.
       - 'dev/embody/Embody/**/*.py'
       - 'dev/embody/Embody/toolbar/toolbar_config.tsv'
       - 'docs/reports/issue-94-caller-index.json'
-      # 63 untrusted-import security tests that ran on no runner at all.
-      - 'dev/embody/Embody/Collection/tests/**'
+      - 'dev/embody/Embody/wizard.tdxn'
+      # The guidance-surface and promoted-surface suites validate these as
+      # files (skills, rules, shipped templates, documented op.Embody calls).
+      - '.claude/**'
+      - 'dev/embody/Embody/templates/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
       # C8 scanner parity: the shared corpus is ONE corpus in two directories,
       # so an edit to either side has to run the mirror + ledger checks.
-      - 'dev/embody/unit_tests/test_scanner_parity.py'
-      - 'dev/embody/unit_tests/fixtures/**'
       - 'platform/packages/scanner-ts/fixtures/**'
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
-      - 'dev/embody/unit_tests/test_tdxn_schema.py'
-      - 'docs/tdxn.schema.yaml'
       - 'dev/**/*.tdxn'
       - 'specimens/**'
       - 'platform/packages/contracts/fixtures/**'
-      - 'pytest.ini'
-      - 'dev/embody/unit_tests/test_embody_pyenv.py'
-      - 'dev/embody/unit_tests/test_smoke_run.py'
-      - 'dev/release_testing/smoke_run.py'
-      - 'dev/release_testing/smoke_bootstrap.py'
-      - 'dev/release_testing/smoke_legs/**'
-      - 'dev/embody/unit_tests/test_smoke_leg_upgrade.py'
-      - 'dev/embody/unit_tests/test_smoke_leg_faults.py'
-      - 'dev/embody/unit_tests/test_smoke_leg_uninstall.py'
-      - 'dev/embody/unit_tests/test_pyenv_context.py'
-      - 'dev/embody/Embody/embody_pyenv.py'
-      - 'dev/embody/Embody/embody_git.py'
-      - 'dev/embody/Embody/EnvoyExt.py'
-      - 'dev/embody/Embody/startup_progress.py'
-      - 'dev/embody/Embody/wizard.tdxn'
-      - 'dev/embody/Embody/wizard/**'
-      - 'dev/embody/unit_tests/conftest.py'
-      - 'dev/embody/Embody/convoy/**'
-      - 'dev/convoy/**'
-      - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'
   pull_request:
     paths:
-      - 'dev/embody/envoy_bridge.py'
-      - 'dev/embody/Embody/templates/text_envoy_bridge.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge_instance_arg.py'
-      - 'dev/embody/unit_tests/test_envoy_bridge_dialogs.py'
-      - 'dev/embody/unit_tests/test_pytest_kill_fence.py'
+      # Everything the pytest tier runs or reads. Test files are ONE glob on
+      # purpose: the per-file list this replaces had gone stale for seven
+      # listed suites, whose edits triggered no run at all (audit 2026-11-10).
+      - 'pytest.ini'
       - 'conftest.py'
-      - 'dev/embody/unit_tests/test_embody_bootstrap.py'
+      - 'dev/embody/unit_tests/**'
+      - 'dev/embody/Embody/Collection/tests/**'
+      - 'dev/convoy/**'
+      - 'dev/release_testing/**'
+      - 'dev/embody/envoy_bridge.py'
       - 'dev/embody/embody_bootstrap.py'
-      - 'dev/embody/unit_tests/fixtures/bare_project.toe'
+      - 'dev/embody/execute_src_ctrl.py'
       - 'platform/apps/web/public/bootstrap.py'
-      - 'dev/embody/unit_tests/test_convoy_client.py'
-      - 'dev/embody/unit_tests/test_convoy_install.py'
-      - 'dev/embody/unit_tests/test_convoy_host_ladder.py'
-      - 'dev/embody/unit_tests/test_convoy_forget_ux.py'
-      - 'dev/embody/unit_tests/test_convoy_realm_recovery.py'
-      - 'dev/embody/unit_tests/test_convoy_parameter_contract.py'
-      - 'dev/embody/unit_tests/test_startup_progress.py'
-      - 'dev/embody/unit_tests/test_wizard_convoy_contract.py'
-      - 'dev/embody/unit_tests/test_worker_run_lint.py'
-      - 'dev/embody/unit_tests/test_host_destroy_lint.py'
-      - 'dev/embody/unit_tests/test_thread_safety_guards.py'
-      - 'dev/embody/unit_tests/test_save_warnings.py'
-      - 'dev/embody/unit_tests/test_project_saved_gate.py'
-      - 'dev/embody/unit_tests/test_promoted_surface.py'
-      - 'dev/embody/unit_tests/test_release_toe.py'
-      - 'dev/embody/unit_tests/test_release_preflight.py'
-      - 'dev/embody/unit_tests/test_specimen_bindings.py'
       - 'dev/specimen_bindings.py'
       - 'dev/specimen_publish.py'
       - 'dev/release_preflight.py'
-      - 'dev/embody/unit_tests/test_tdxn_par_key_migration.py'
+      - 'release/**'
       # The promoted-surface census reads the extension sources and the
       # caller index, so a change to either must trigger it.
       - 'dev/embody/Embody/**/*.py'
       - 'dev/embody/Embody/toolbar/toolbar_config.tsv'
       - 'docs/reports/issue-94-caller-index.json'
-      # 63 untrusted-import security tests that ran on no runner at all.
-      - 'dev/embody/Embody/Collection/tests/**'
+      - 'dev/embody/Embody/wizard.tdxn'
+      # The guidance-surface and promoted-surface suites validate these as
+      # files (skills, rules, shipped templates, documented op.Embody calls).
+      - '.claude/**'
+      - 'dev/embody/Embody/templates/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
       # C8 scanner parity: the shared corpus is ONE corpus in two directories,
       # so an edit to either side has to run the mirror + ledger checks.
-      - 'dev/embody/unit_tests/test_scanner_parity.py'
-      - 'dev/embody/unit_tests/fixtures/**'
       - 'platform/packages/scanner-ts/fixtures/**'
       # C7 schema validation of every committed TDXN document, and the C1
       # canonical-serialization corpus shared with scanner-ts.
-      - 'dev/embody/unit_tests/test_tdxn_schema.py'
-      - 'docs/tdxn.schema.yaml'
       - 'dev/**/*.tdxn'
       - 'specimens/**'
       - 'platform/packages/contracts/fixtures/**'
-      - 'pytest.ini'
-      - 'dev/embody/unit_tests/test_embody_pyenv.py'
-      - 'dev/embody/unit_tests/test_smoke_run.py'
-      - 'dev/release_testing/smoke_run.py'
-      - 'dev/release_testing/smoke_bootstrap.py'
-      - 'dev/release_testing/smoke_legs/**'
-      - 'dev/embody/unit_tests/test_smoke_leg_upgrade.py'
-      - 'dev/embody/unit_tests/test_smoke_leg_faults.py'
-      - 'dev/embody/unit_tests/test_smoke_leg_uninstall.py'
-      - 'dev/embody/unit_tests/test_pyenv_context.py'
-      - 'dev/embody/Embody/embody_pyenv.py'
-      - 'dev/embody/Embody/embody_git.py'
-      - 'dev/embody/Embody/EnvoyExt.py'
-      - 'dev/embody/Embody/startup_progress.py'
-      - 'dev/embody/Embody/wizard.tdxn'
-      - 'dev/embody/Embody/wizard/**'
-      - 'dev/embody/unit_tests/conftest.py'
-      - 'dev/embody/Embody/convoy/**'
-      - 'dev/convoy/**'
-      - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'
   workflow_dispatch:
 
@@ -184,7 +120,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    # The suite is ~2740 tests and takes ~8 minutes on a fast local box; the
+    # The suite is ~4,770 tests and takes ~8 minutes on a fast local box; the
     # macOS runner has come in at 15m18s against a 15-minute ceiling, i.e.
     # timing out rather than failing. Convoy keeps adding coverage, so give it
     # real headroom instead of re-tuning this every few releases.
@@ -216,7 +152,7 @@ jobs:
       # that Convoy arrives disabled. That file is YAML. Without this the
       # module fails to IMPORT, which aborts collection for the whole run
       # rather than failing one test.
-      - name: Install pytest and the host-identity dependency
+      - name: Install the test requirements
         run: python -m pip install --quiet -r dev/embody/unit_tests/requirements-test.txt
       - name: Run the bridge suite
         run: python -m pytest -v

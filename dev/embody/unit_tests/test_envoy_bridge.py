@@ -665,6 +665,31 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         self.assertAlmostEqual(
             tail_sleep, bridge.RETRY_INTERVALS[-1], delta=0.01)
 
+    def test_wait_log_reports_time_since_the_wait_began(self):
+        """The elapsed figure was CONNECT_TIMEOUT_S minus the remainder, so a
+        3 s probe logged "57s elapsed" on its first retry (audit 2026-11-10)."""
+        import urllib.error
+        fake_time = [1000.0]
+        logged = []
+
+        def mock_sleep(duration):
+            fake_time[0] += duration
+
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.URLError('refused')), \
+             patch('time.sleep', side_effect=mock_sleep), \
+             patch('time.monotonic', side_effect=lambda: fake_time[0]), \
+             patch.object(bridge, 'log', side_effect=logged.append):
+            bridge.wait_for_envoy('http://localhost:9870/mcp', 1003.0)
+
+        waits = [line for line in logged
+                 if line.startswith('Waiting for Envoy')]
+        self.assertTrue(waits)
+        elapsed = [int(line.split('(')[1].split('s elapsed')[0])
+                   for line in waits]
+        self.assertEqual(elapsed[0], 0)
+        self.assertTrue(all(0 <= e <= 3 for e in elapsed), elapsed)
+
 
 # =====================================================================
 # Main Event Loop - Disconnection & Reconnection Scenarios
@@ -736,6 +761,51 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 3)
         self.assertEqual(responses[0]['result'], 'resp_1')
         self.assertEqual(responses[2]['result'], 'resp_3')
+
+    # --- A bad request answers itself; it never ends the session ---
+
+    def test_meta_tool_exception_is_an_error_result_not_a_dead_bridge(self):
+        """The meta-tool branch was the one dispatch path with no catch-all:
+        a handler exception exited the bridge process (audit 2026-11-10)."""
+        msgs = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+             'params': {'name': 'get_td_status', 'arguments': {}}},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'resources/list'},
+        ]
+        with patch.object(bridge, 'handle_bridge_tool',
+                          side_effect=RuntimeError('boom')):
+            responses = self._run_main(msgs)
+        self.assertLen(responses, 2)
+        self.assertEqual(responses[0]['id'], 1)
+        self.assertTrue(responses[0]['result']['isError'])
+        self.assertIn('RuntimeError', responses[0]['result']['content'][0]['text'])
+        self.assertEqual(responses[1]['result'], 'ok')
+
+    def test_null_arguments_reach_a_meta_tool_as_an_empty_object(self):
+        """"arguments": null arrived as None and the handler's params.get
+        raised AttributeError."""
+        seen = []
+
+        def handler(name, params, state):
+            seen.append(params)
+            return [{'type': 'text', 'text': '{}'}]
+
+        msgs = [{'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                 'params': {'name': 'launch_td', 'arguments': None}}]
+        with patch.object(bridge, 'handle_bridge_tool', side_effect=handler):
+            responses = self._run_main(msgs)
+        self.assertEqual(seen, [{}])
+        self.assertLen(responses, 1)
+
+    def test_null_params_and_non_object_messages_do_not_kill_the_loop(self):
+        msgs = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': None},
+            '[1, 2, 3]',
+            '42',
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'resources/list'},
+        ]
+        responses = self._run_main(msgs)
+        self.assertEqual([r.get('result') for r in responses], ['ok', 'ok'])
 
     # --- Initial connection failure ---
 
@@ -2055,6 +2125,43 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['status'], 'error')
         self.assertEqual(quit_calls, [],
                          'must never quit an unrelated TD process')
+
+    def test_restart_td_never_quits_a_guessed_process(self):
+        """An empty registry resolves to the resolver's any-TD guess. With
+        another project's TD running, restart_td quit THAT process: the same
+        wrong kill the pinned and registered paths already refuse, reached
+        after a clean exit emptied the registry (audit 2026-11-10)."""
+        quit_calls = []
+        for tracked in (None, 999):
+            with self.subTest(tracked_pid=tracked), \
+                 patch.object(bridge, 'load_config',
+                              return_value={'active': None, 'instances': {}}), \
+                 patch.object(bridge, 'is_td_process_alive', return_value=True), \
+                 patch.object(bridge, 'find_td_pid', return_value=999), \
+                 patch.object(bridge, 'quit_td',
+                              side_effect=lambda p: quit_calls.append(p)):
+                state = self._make_state(td_pid=tracked)
+                result = bridge.handle_restart_td({}, state)
+                self.assertEqual(result['status'], 'error')
+                self.assertIn('not running', result['message'])
+        self.assertEqual(quit_calls, [],
+                         "must never quit a TD this session cannot identify")
+
+    def test_restart_td_may_quit_the_process_this_bridge_launched(self):
+        """Before its Envoy registers, a TD this bridge spawned has no
+        registry row; it is still this session's own process."""
+        quit_calls = []
+
+        def quit_td(pid):
+            quit_calls.append(pid)
+            return False, 'stop here'
+
+        with patch.object(bridge, 'load_config',
+                          return_value={'active': None, 'instances': {}}),              patch.object(bridge, 'is_td_process_alive', return_value=True),              patch.object(bridge, 'find_td_pid', return_value=999),              patch.object(bridge, 'quit_td', side_effect=quit_td):
+            state = self._make_state(td_pid=555)
+            state.launched_pid = 555
+            bridge.handle_restart_td({}, state)
+        self.assertEqual(quit_calls, [555])
 
     def test_restart_td_quit_fails(self):
         """Error when TD cannot be terminated."""
@@ -6361,25 +6468,40 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
             'operations': [{'tool': 'query_network', 'params': {}}],
             'timeout_s': 0.15, 'wait': True,
         }
+        # fake clock: on the real one all eight workers had to start inside
+        # 50 ms, which a loaded runner misses (5 != 8, field 2026-11-10).
+        clock = {'t': 1000.0}
         release = threading.Event()
+        all_started = threading.Event()
         visited = []
         guard = threading.Lock()
 
         def relay(call_params):
             with guard:
                 visited.append(call_params['target_host_id'])
-            release.wait(1.0)
+                if len(visited) == 8:
+                    all_started.set()
+            release.wait(30.0)
             return {'ok': True, 'job': {'state': 'succeeded'}}
 
-        timer = threading.Timer(0.11, release.set)
-        timer.start()
+        def expire_then_release():
+            # the ninth target cannot start until a worker frees, and no
+            # worker frees before the deadline has passed.
+            all_started.wait(30.0)
+            clock['t'] += 0.11
+            release.set()
+
+        driver = threading.Thread(target=expire_then_release)
+        driver.start()
         try:
-            with patch.object(
+            with patch.object(bridge.time, 'monotonic', lambda: clock['t']), \
+                 patch.object(
                     bridge, 'handle_convoy_call', side_effect=relay):
                 result = bridge.handle_convoy_batch(params)
         finally:
             release.set()
-            timer.join(1.0)
+            all_started.set()
+            driver.join(30.0)
 
         # Eight targets occupied the hard fanout cap.  The ninth did not
         # receive a fresh 150 ms after that queue wait; it expired under the
@@ -8988,3 +9110,30 @@ class TestConvoyCallPayloadDedup(EmbodyTestCase):
         self.assertIn('remote', out)
         self.assertNotIn('job', out['remote'],
                          'the job payload must not ship twice')
+
+
+class TestFindLatestVersionedToe(EmbodyTestCase):
+    """Only TD's ".N" save suffix is a version (same rule as _toe_lineage)."""
+
+    def _touch(self, directory, *names):
+        for name in names:
+            with open(os.path.join(directory, name), 'w'):
+                pass
+
+    def test_a_digit_in_the_name_is_not_a_save_version(self):
+        # `^(.*?)(\d+)\.toe$` read the 5 of Embody-5.toe as a version, so a
+        # missing Embody-5.toe resolved to a different project, Embody-6.toe
+        # (audit 2026-11-10).
+        with tempfile.TemporaryDirectory() as folder:
+            self._touch(folder, 'show2025.toe', 'Embody-6.toe')
+            for missing in ('show2024.toe', 'Embody-5.toe'):
+                path = os.path.join(folder, missing)
+                self.assertEqual(bridge.find_latest_versioned_toe(path), path)
+
+    def test_a_missing_save_resolves_to_the_newest_save_of_its_lineage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self._touch(folder, 'Embody-6.9.toe', 'Embody-6.386.toe',
+                        'Embody-7.400.toe')
+            resolved = bridge.find_latest_versioned_toe(
+                os.path.join(folder, 'Embody-6.385.toe'))
+            self.assertEqual(os.path.basename(resolved), 'Embody-6.386.toe')

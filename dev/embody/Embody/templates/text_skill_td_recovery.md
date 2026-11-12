@@ -56,10 +56,10 @@ The most frequent cause of connectivity issues is `.embody/envoy.json` having `a
 2. Test it: run `<command> -c "print(1)"` via Bash. If it fails with "No Python at ..." or similar, the venv is broken.
 3. Confirm by reading `.venv/pyvenv.cfg` -- check if the `home` path points to an existing directory.
 
-**Fix**:
-1. Delete the broken venv: `rm -rf <project_dir>/.venv`
-2. Envoy will recreate it on next startup. Tell the user to toggle Envoy off and on in TD, or restart TD.
-3. After recreation, reopen the AI client session so the bridge reconnects with the new venv Python.
+**Fix**: Envoy repairs this itself -- never delete the venv. When the venv interpreter fails, it switches the bridge to the system Python, rewrites the venv's interpreter layer (`pyvenv.cfg` and the launchers) on a background thread, and points `.mcp.json` back at the repaired venv; installed packages are kept.
+1. Tell the user to restart TD if the Textport reports the repair failed (one repair is attempted per venv per session).
+2. After the repair, reopen the AI client session so the bridge restarts on the repaired Python.
+3. Only if it is still broken after a restart: the USER closes TD, removes `<project_dir>/.venv` themselves, and reopens the project. Envoy rebuilds it and re-installs the declared extras. Never run that delete for them.
 
 **Prevention**: Envoy validates the venv Python on startup and logs a warning if broken. Check TD textport for "failed to execute" warnings after TD upgrades.
 

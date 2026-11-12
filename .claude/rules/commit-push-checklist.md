@@ -52,7 +52,7 @@ If no docs need updating, that's fine - but the evaluation must happen.
 
 ### 3. Test Audit
 
-CLAUDE.md critical rule #10: "Always update unit tests when modifying project code."
+CLAUDE.md critical rule #11: "Always update unit tests when modifying project code."
 
 - Changed code in `dev/embody/Embody/` -> check whether existing tests assert against the changed behavior.
 - New code path, function, or MCP tool -> add test coverage.

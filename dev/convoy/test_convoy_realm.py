@@ -383,3 +383,19 @@ def test_existing_established_or_conflict_state_cannot_restart_genesis(
     conflict.reconcile(established_ids=[CV_A, CV_B])
     with pytest.raises(realm.RealmStateError):
         conflict.begin_candidate(CV_C)
+
+
+def test_reset_stays_bound_when_the_record_cannot_be_removed(
+        tmp_path, monkeypatch):
+    # memory was cleared before the file: a failed remove left this process
+    # unbound while realm.json still said established (audit 2026-11-10).
+    store = make_store(tmp_path)
+    adopted = store.reconcile(established_ids=[CV_B])
+
+    def refuse(_path):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(realm.os, "remove", refuse)
+    with pytest.raises(realm.RealmUnreadable):
+        store.reset()
+    assert store.snapshot() == adopted

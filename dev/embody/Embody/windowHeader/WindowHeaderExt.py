@@ -32,9 +32,9 @@ class WindowHeaderExt:
 			'save_comp':        {'mode': 'constant', 'val': 1},
 			'save_folder':      {'mode': 'expression',
 				'expr': "1 if parent.Embody.par.Status == 'Enabled' else 0"},
-			'export_comp_tdn':  {'mode': 'constant', 'val': 1},
-			'export_tdn':       {'mode': 'constant', 'val': 1},
-			'import_tdn':       {'mode': 'constant', 'val': 1},
+			'export_comp_tdxn': {'mode': 'constant', 'val': 1},
+			'export_tdxn':      {'mode': 'constant', 'val': 1},
+			'import_tdxn':      {'mode': 'constant', 'val': 1},
 			'envoy_toggle':     {'mode': 'constant', 'val': 1},
 		}
 

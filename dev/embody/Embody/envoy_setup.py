@@ -1486,6 +1486,7 @@ def write_envoy_config(ext, embody_dir, port):
     # 'active' merely has to be VALID (name a registered instance) --
     # it does not have to be us; see adopt-if-vacant below.
     if (not stale_keys
+            and not dead_keys     # a prune must reach the file
             and instances.get(key) == new_entry
             and existing.get('active') in instances):
         ext._log('envoy.json already up to date', 'DEBUG')
@@ -2206,9 +2207,11 @@ def cleanup_temp_files(ext):
     import os
 
     tmp = tempfile.gettempdir()
-    patterns = [os.path.join(tmp, 'envoy_capture_*'),
-                os.path.join(tmp, 'envoy_query_network_*'),
-                os.path.join(tmp, 'envoy_get_op_*')]
+    # one per label EnvoyExt._maybe_offload_to_file is called with, plus
+    # captures; explicit names, never envoy_* (other tools share /tmp).
+    patterns = [os.path.join(tmp, 'envoy_%s_*' % label) for label in (
+        'capture', 'query_network', 'get_op', 'get_chop_data',
+        'get_pop_data', 'get_network_layout')]
     cutoff = time.time() - 86400  # 24 hours ago
     removed = 0
     for pattern in patterns:

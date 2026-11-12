@@ -919,3 +919,31 @@ def test_issue_capability_verifies_without_holding_the_store_lock(store):
         NS_A, ref["artifact_id"], audience="peer")
     assert cap["token"]
     assert observed.get("lock_free_during_hash") is True
+
+
+def test_artifact_without_a_filename_hint_survives_a_reopen(tmp_path, clock):
+    # a missing hint is stored as "", which the loader refused: the index
+    # became unloadable and the daemon could not start (audit 2026-11-10).
+    root = str(tmp_path / "private-cache")
+    options = dict(quota_mb=4, free_space_floor_bytes=0,
+                   max_artifact_bytes=2 * 1024 * 1024, clock=clock)
+    first = ca.ArtifactStore(root, **options)
+    ref = first.put_bytes(
+        NS_A, b"no hint", mime_type="application/octet-stream")
+    reopened = ca.ArtifactStore(root, **options)
+    described = reopened.describe(NS_A, ref["artifact_id"])
+    assert described["sha256"] == ref["sha256"]
+
+
+def test_eviction_that_empties_the_namespace_keeps_the_new_record(
+        store, clock, monkeypatch):
+    # evicting a namespace's last record drops the namespace dict; the new
+    # record was then written to the detached dict and lost (audit 2026-11-10).
+    monkeypatch.setattr(ca, "MAX_ARTIFACT_RECORDS", 1)
+    first = put(store, b"first")
+    clock.advance(1)
+    second = put(store, b"second")
+    assert store.describe(NS_A, second["artifact_id"])
+    with pytest.raises(ca.ArtifactNotFound):
+        store.describe(NS_A, first["artifact_id"])
+    assert store.status()["artifact_count"] == 1

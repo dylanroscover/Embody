@@ -522,7 +522,7 @@ class RealmStore:
         again.
         """
         with self._lock:
-            self._state = None
+            # disk first: a failed remove must leave memory bound too.
             try:
                 os.remove(self.path)
             except FileNotFoundError:
@@ -530,4 +530,5 @@ class RealmStore:
             except OSError as exc:
                 raise RealmUnreadable(
                     f"cannot clear {self.path}: {exc}") from exc
+            self._state = None
             return None

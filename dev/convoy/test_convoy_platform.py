@@ -465,3 +465,17 @@ def test_the_real_win32_branch_sees_a_protected_but_live_process():
 
 def test_missing_portfile_is_not_live(tmp_path):
     assert cp.read_live_portfile(str(tmp_path)) is None
+
+
+def test_write_private_removes_its_temp_file_when_the_replace_fails(tmp_path):
+    # only PermissionError unlinked the temp file; any other failure left a
+    # copy of the payload (identity.key included) beside the target
+    # (audit 2026-11-10).
+    def no_space(_src, _dst):
+        raise OSError(28, "No space left on device")
+
+    target = str(tmp_path / "identity.key")
+    with pytest.raises(OSError):
+        cp._write_private(target, "secret\n", replace=no_space,
+                          sleep=lambda _s: None)
+    assert os.listdir(tmp_path) == []

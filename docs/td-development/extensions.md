@@ -123,7 +123,7 @@ class MyFeatureExt:
 | **Use a delay of at least 5 frames** | The import runs across multiple phases; 5 frames provides sufficient margin |
 
 !!! tip "How to tell if you're inside a TDXN COMP"
-    Check whether your COMP (or an ancestor) has a TDXN entry in the externalizations table. In Claude Code, call `get_externalizations` and look for a `tdn` strategy on the COMP path. If your extension is a child of a TDXN-strategy COMP, this timing issue applies to you.
+    Check whether your COMP (or an ancestor) has a TDXN entry in the externalizations table. In Claude Code, call `get_externalizations` and look for a `tdxn` strategy on the COMP path (`tdn` in tables written before Embody 6.2.30). If your extension is a child of a TDXN-strategy COMP, this timing issue applies to you.
 
 !!! note "Extensions outside TDXN COMPs are unaffected"
     If your extension's ownerComp is **not** managed by TDXN (e.g., it's a TOX-strategy COMP or not externalized at all), `onInitTD` behaves normally — no deferral needed.

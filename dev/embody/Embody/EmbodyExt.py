@@ -1837,7 +1837,7 @@ class EmbodyExt:
         self.my.par.Envoyenable = True
         self.my.par.Envoystatus = 'Starting...'
 
-        client_label = self.my.par.Aiclient.label
+        client_label = self._aiClientLabel()
         self.Log(
             f'Envoy enabled! Config generated for {client_label}. '
             f'Dependencies install in the background; MCP connects when ready.',
@@ -4403,13 +4403,15 @@ class EmbodyExt:
         silent no-change sweep is indistinguishable from one that never
         ran (field 2026-08-24 -- the frame-chunked pulse removed the
         tell-tale UI hitch, so completion needs an explicit line)."""
-        plural = any(len(lst) > 1 for lst in [dirties, additions, subtractions])
+        def s(items):
+            return '' if len(items) == 1 else 's'
+
         if dirties:
-            self.Log(f"Saved {len(dirties)} externalization{'s' if plural else ''}", "SUCCESS")
+            self.Log(f"Saved {len(dirties)} externalization{s(dirties)}", "SUCCESS")
         if additions:
-            self.Log(f"Added {len(additions)} operator{'s' if plural else ''} in total", "SUCCESS")
+            self.Log(f"Added {len(additions)} operator{s(additions)} in total", "SUCCESS")
         if subtractions:
-            self.Log(f"Removed {len(subtractions)} operator{'s' if plural else ''} in total", "SUCCESS")
+            self.Log(f"Removed {len(subtractions)} operator{s(subtractions)} in total", "SUCCESS")
         if not (dirties or additions or subtractions):
             self.Log("Update complete -- everything up to date", "INFO")
 
@@ -5948,6 +5950,7 @@ class EmbodyExt:
         saved_state = []
         saved_tags = []  # list of (op_ref, set_of_removed_tags, path)
         transient_snapshot = []  # [(par, value)] -- runtime-status scrub (A-50)
+        log_snapshot = []        # [(dat, text)] -- display-log scrub
         storage_snapshot = None  # COMP storage scrub (2026-09-05)
         success = False
         try:
@@ -9815,7 +9818,7 @@ class EmbodyExt:
                     item.tags.add(exclude_tag)
                     self.Log(f'{item.path}: tagged {exclude_tag} -- '
                              f'invisible to TDXN', 'SUCCESS')
-                    if item.parent() is not target:
+                    if target is not None and item.parent() is not target:
                         # Mirror the exporter's tolerance + warning:
                         # exclusion is honored only for DIRECT children
                         # of a TDXN boundary; deeper tags serialize as
@@ -10647,7 +10650,9 @@ class EmbodyExt:
         if result != 1:
             return
 
-        if strategy == 'tdn':
+        # normalize: a tagged COMP carries the CELL value ('tdxn'), the
+        # table lookup answers with the WIRE value ('tdn').
+        if self._normalizeStrategy(strategy) == self._TDXN_STRATEGY_WIRE:
             self._reloadTDXN(oper)
         else:
             self._reloadTox(oper)

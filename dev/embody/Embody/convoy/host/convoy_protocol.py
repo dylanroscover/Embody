@@ -306,8 +306,12 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
 
     # The signature covers the DIGEST; confirm the body still matches it.
     actual = canonical_arguments_digest(envelope.get("arguments"))
-    if not hmac.compare_digest(actual,
-                               envelope.get("arguments_sha256") or ""):
+    signed_digest = envelope.get("arguments_sha256") or ""
+    # compare_digest raises TypeError on non-str or non-ASCII input.
+    if not isinstance(signed_digest, str) or not signed_digest.isascii():
+        raise EnvelopeRejected("malformed",
+                               "arguments_sha256 must be ASCII text")
+    if not hmac.compare_digest(actual, signed_digest):
         raise EnvelopeRejected("arguments_tampered",
                                "arguments do not match the signed digest")
 

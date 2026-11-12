@@ -741,7 +741,8 @@ def _command_data(payload, *, expected_statuses, outcome_unknown=False,
         command_id = raw_command_id if isinstance(raw_command_id, str) else None
         warnings.append("commandId does not match the public cmd_ format")
     status = data.get("status")
-    if status not in expected_statuses:
+    # isinstance first: an unhashable status raises TypeError on `in`.
+    if not isinstance(status, str) or status not in expected_statuses:
         if not lenient:
             raise OwletteProtocolError(
                 "command response has an invalid status",

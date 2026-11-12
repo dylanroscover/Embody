@@ -21,5 +21,5 @@ pytest
 cryptography>=3.4
 pyyaml
 # test_tdxn_schema.py validates every committed .tdn/.tdxn against the
-# shipped docs/tdn.schema.yaml (contract C7).
+# shipped docs/tdxn.schema.yaml (contract C7).
 jsonschema>=4

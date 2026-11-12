@@ -202,6 +202,12 @@ def verdict(summary):
         reasons.append('lowest fps (%.1f) fell inside an Envoy perturbation '
                        'window; clean minimum %.1f -- a measurement artifact, '
                        'not a show defect' % (fmr, fmc if fmc is not None else 0))
+    if not (summary.get('clean_samples') or 0):
+        # nothing was measured outside a perturbation window: an empty
+        # run is inconclusive, never a pass.
+        worst('WARN')
+        reasons.insert(0, 'no clean samples -- the run measured nothing; '
+                          'run longer than the sampling interval')
     if not reasons:
         reasons.append('no dropped frames, fps held above %s, memory flat'
                        % (('%.1f' % floor) if floor else 'floor'))

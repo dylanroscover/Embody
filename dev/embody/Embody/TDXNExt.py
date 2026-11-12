@@ -2068,7 +2068,7 @@ class TDXNExt:
 
 	def _exportProgressComp(self):
 		"""The progress dialog COMP, or None when not built yet."""
-		return self.ownerComp.op('tdn_export_progress')
+		return self.ownerComp.op('tdxn_export_progress')
 
 	def _openExportProgress(self, state) -> None:
 		"""Open the progress dialog for a running chunked export.

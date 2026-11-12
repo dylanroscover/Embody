@@ -178,7 +178,8 @@ def normalize_realm_states(convoy_ids, values=None):
     clean = {}
     for namespace in namespaces:
         state = values.get(namespace)
-        if state not in REALM_STATES:
+        # isinstance first: an unhashable value raises TypeError on `in`.
+        if not isinstance(state, str) or state not in REALM_STATES:
             raise DiscoveryError(
                 "malformed_realms",
                 "realm state must be candidate or established")
@@ -435,8 +436,9 @@ def parse_announcement(packet, source, now=None, replay_cache=None):
         raise DiscoveryError("malformed_nonce",
                              "nonce must be 32 lowercase hex chars")
     timestamp_ms = body["timestamp_ms"]
+    # bounded: an oversized int raises OverflowError in the float math below.
     if (isinstance(timestamp_ms, bool) or not isinstance(timestamp_ms, int)
-            or timestamp_ms < 0):
+            or not 0 <= timestamp_ms < 2 ** 63):
         raise DiscoveryError("malformed_timestamp",
                              "timestamp_ms must be a nonnegative integer")
     now = time.time() if now is None else float(now)
@@ -647,6 +649,11 @@ class DiscoveryCoordinator:
         except DiscoveryError as exc:
             return {"ok": False, "status": "rejected",
                     "reason": exc.reason, "detail": exc.detail}
+        except Exception as exc:
+            # untrusted bytes: a parse bug is one rejected datagram, never a
+            # reason for the service loop to tear its sockets down.
+            return {"ok": False, "status": "rejected",
+                    "reason": "malformed", "detail": type(exc).__name__}
         if announcement["host_id"] == self.host_id:
             return {"ok": True, "status": "self", "detail": "ignored self"}
 

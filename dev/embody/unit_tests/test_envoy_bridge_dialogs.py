@@ -157,6 +157,25 @@ class TestListDialogs(EmbodyTestCase):
             r = bridge.handle_list_dialogs({}, _state(), backend=bridge._FakeDialogBackend([BOX]))
         self.assertEqual(r['error_code'], 'envoy.dialog.no_process')
 
+    def test_a_session_with_no_instance_identity_addresses_no_process(self):
+        """With no pin and no registered default, the tracked pid is the
+        resolver's any-TD guess: another project's TouchDesigner, whose
+        dialogs are not this session's to read or dismiss (audit 2026-11-10)."""
+        st = bridge.BridgeState(url='http://127.0.0.1:9870/mcp', td_pid=999)
+        st.config = {'active': None, 'instances': {}}
+        backend = bridge._FakeDialogBackend([MAIN, BOX])
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            listed = bridge.handle_list_dialogs({}, st, backend=backend)
+            dismissed = bridge.handle_dismiss_dialog({}, st, backend=backend)
+        self.assertEqual(listed['error_code'], 'envoy.dialog.no_process')
+        self.assertEqual(dismissed['error_code'], 'envoy.dialog.no_process')
+        # a TD this bridge launched is its own before any row exists: the
+        # startup dialog is exactly when these tools are needed.
+        st.launched_pid = 999
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            listed = bridge.handle_list_dialogs({}, st, backend=backend)
+        self.assertTrue(listed['ok'], listed)
+
     def test_dispatched_through_handle_bridge_tool(self):
         fake = bridge._FakeDialogBackend([MAIN, BOX])
         with patch.object(bridge, 'dialog_backend', return_value=fake):

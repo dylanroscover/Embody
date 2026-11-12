@@ -754,3 +754,24 @@ def test_the_pin_conflict_observer_must_be_callable(store):
     with pytest.raises(cd.DiscoveryError):
         cd.DiscoveryCoordinator(LOCAL_HOST, store, lambda: ("studio",),
                                 pin_conflict_observer=42)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("timestamp_ms", 10 ** 400),
+    ("realm_states", {"studio": []}),
+])
+def test_hostile_unsigned_fields_are_rejections_not_exceptions(
+        store, remote_keys, field, value):
+    # these raised OverflowError / TypeError BEFORE the signature check, and
+    # the service loop answered by tearing both sockets down: one unsigned
+    # datagram stopped discovery (audit 2026-11-10).
+    wire = json.loads(packet(remote_keys).decode("utf-8"))
+    wire["body"][field] = value
+    raw = cd._canonical_json(wire)
+    assert len(raw) <= cd.MAX_DATAGRAM_BYTES
+    with pytest.raises(cd.DiscoveryError):
+        cd.parse_announcement(raw, (REMOTE_IP, 1), now=NOW)
+    result = coordinator(store, ["studio"]).handle_datagram(
+        raw, (REMOTE_IP, 1))
+    assert result["ok"] is False
+    assert result["status"] == "rejected"

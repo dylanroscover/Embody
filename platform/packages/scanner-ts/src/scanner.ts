@@ -244,6 +244,15 @@ function scanTdxnRoot(tdxn: unknown, state: ScanState): void {
   const path = rootPath(tdxn);
   scanOperatorLike(tdxn, path, typeDefaults, state);
 
+  // The importer merges a template into every custom page that names it
+  // ($t), so a template def is live code surface like an inline one.
+  // Mirrors scanner.py::_scan_tdxn_root.
+  if (isRecord(tdxn.par_templates)) {
+    for (const template of Object.values(tdxn.par_templates)) {
+      scanCustomParameters(template, path, state);
+    }
+  }
+
   for (const child of safeList(tdxn.operators)) {
     if (isRecord(child)) {
       scanOperator(child, path, typeDefaults, state);

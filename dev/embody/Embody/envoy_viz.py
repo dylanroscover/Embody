@@ -1593,7 +1593,7 @@ def botUnsafeNet(ext, net: 'COMP') -> bool:
     and EmbodyExt._computeTDXNFingerprint skips them, so standing in one
     neither reaches disk nor marks the COMP dirty."""
     try:
-        if net.path.startswith('/local'):
+        if pathInsideSubtree(net.path, '/local'):
             return True
         embody_path = ext.ownerComp.path
         p = net

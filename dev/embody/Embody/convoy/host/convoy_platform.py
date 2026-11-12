@@ -199,6 +199,14 @@ def _write_private(path, data, *, replace=None, sleep=None):
                 raise
             if attempt:
                 sleep(_REPLACE_BACKOFF_S * attempt)
+        except OSError:
+            # not retried, but the temp file holds the payload (a private
+            # key, for identity.key): never leave it behind.
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
 
 def ensure_ipc_token(directory):
