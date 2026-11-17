@@ -60,10 +60,12 @@ jobs:
       group: release-smoke-${{ matrix.os }}
       cancel-in-progress: false
     # ready ~7 min + features ~6 min + probe + a cold venv build, then the
-    # upgrade / faults / uninstall legs (~10 min together), with room for a
-    # laptop that is awake but busy. A sleeping Mac never starts the job,
-    # so this only bounds a job that did start.
-    timeout-minutes: 45
+    # wizard / upgrade / faults / uninstall legs (~12 min together), with room
+    # for a laptop that is awake but busy. Stays above smoke_run.run_timeout
+    # for all four legs, so the run writes result.json before the job is
+    # killed. A sleeping Mac never starts the job, so this only bounds a job
+    # that did start.
+    timeout-minutes: 50
     permissions:
       contents: read
     steps:
@@ -75,8 +77,8 @@ jobs:
           # checkout has neither the tags nor the blobs.
           fetch-depth: 0
 
-      - name: Fresh-install smoke + upgrade, faults, uninstall legs
-        run: ${{ matrix.python }} dev/release_testing/smoke_run.py --out "${{ runner.temp }}" --legs upgrade,faults,uninstall
+      - name: Fresh-install smoke + wizard, upgrade, faults, uninstall legs
+        run: ${{ matrix.python }} dev/release_testing/smoke_run.py --out "${{ runner.temp }}" --legs wizard,upgrade,faults,uninstall
 
       - name: Upload run directory
         if: always()
@@ -92,6 +94,8 @@ jobs:
             ${{ runner.temp }}/embody-smoke/*/bootstrap.log
             ${{ runner.temp }}/embody-smoke/*/logs/*.log
             ${{ runner.temp }}/embody-smoke/*/uninstall_summary.json
+            ${{ runner.temp }}/embody-smoke/*/wizard_check.json
+            ${{ runner.temp }}/embody-smoke/*/wizard_toxdrop.png
             ${{ runner.temp }}/embody-smoke/*/faults_backup/*
             ${{ runner.temp }}/embody-smoke/*/.embody/envoy.json
             ${{ runner.temp }}/embody-smoke/*/.mcp.json

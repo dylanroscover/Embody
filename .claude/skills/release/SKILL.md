@@ -254,19 +254,25 @@ Evidence: `result.json` in the run dir (its path ends the summary), beside
 **The release gate is the full command, not the bare smoke:**
 
 ```
-dev/.venv-tests/Scripts/python.exe dev/release_testing/smoke_run.py --legs upgrade,faults,uninstall
+dev/.venv-tests/Scripts/python.exe dev/release_testing/smoke_run.py --legs wizard,upgrade,faults,uninstall
 ```
 
-`--legs` runs three more legs against the same smoke TD after the MCP probe
-(always in that order; `dev/release_testing/smoke_legs/`): `upgrade` installs
+`--legs` runs four more legs after the MCP probe (always in that order;
+`dev/release_testing/smoke_legs/`): `wizard` boots a second virgin TD on the
+build under test, where two COMPs already carry TD's drag-in External .tox
+link, and clicks through the real setup wizard -- no dropped-.tox dialog may
+fire before or during it, the wizard must ask, and Unlink must clear every
+link (v6.3.4 showed that dialog first); the other three drive the same smoke
+TD: `upgrade` installs
 the PREVIOUS release first (from git history by tag, or `--upgrade-from`) and
 drives its self-updater to the build under test, rolls back to the updater's
 backup and updates again; `faults` breaks the venv interpreter, the port, the
 server socket and the instance registry and proves each self-heal from the
 logs; `uninstall` removes Embody the way a user does and checks what is left.
-PASS then also reads `upgrade PASS`, `faults PASS`, `uninstall PASS` in the
-summary; a failed leg is exit 1 with the failed step named. Nothing has been
-release-smoked until all three legs pass on BOTH machines (v6.2.57 shipped
+PASS then also reads `wizard PASS`, `upgrade PASS`, `faults PASS`,
+`uninstall PASS` in the summary; a failed leg is exit 1 with the failed step
+named. Nothing has been release-smoked until all four legs pass on BOTH
+machines (v6.2.57 shipped
 with only the bare smoke -- the legs were still being built).
 
 The Convoy leg installs and starts the REAL per-user Convoy host app on the
