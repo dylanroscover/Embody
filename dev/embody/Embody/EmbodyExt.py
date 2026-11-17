@@ -1857,6 +1857,9 @@ class EmbodyExt:
         during a test run or a project save (_suppressDialogs), so it cannot
         surprise-pop during automation. Falls back to the classic _promptEnvoy
         dialog when the wizard sub-network is absent (older / headless builds)."""
+        # cleared even when suppressed: a wizard that never opens must not
+        # hold the dropped-.tox prompt all session (see _queueSetupWizard).
+        self._setup_wizard_queued = False
         if self._suppressDialogs():
             return
         win = self.my.op('window_wizard')
@@ -1878,7 +1881,8 @@ class EmbodyExt:
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
                           client='', root='gitroot', custom_root='',
-                          permissions='all', git='', externalize='', convoy=''):
+                          permissions='all', git='', externalize='', convoy='',
+                          toxdrop=''):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1925,6 +1929,11 @@ class EmbodyExt:
                        _ensureHostApp, confirm=False): the wizard records the
                        install consent first, so the Convoy step's answer IS
                        the approval and no second dialog appears.
+          toxdrop:     '' | 'clean' | 'ignore' -- the wizard's dropped-.tox
+                       step (shown only when user COMPs carry TD's drag-in
+                       externaltox expression and Toxdropexpr is still Ask).
+                       Sets Toxdropexpr; the sweep the wizard's close
+                       schedules applies it. '' leaves it unchanged.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1967,6 +1976,13 @@ class EmbodyExt:
                      f'leaving Convoy unchanged.', 'WARNING')
             convoy = ''
 
+        toxdrop = (toxdrop or '').strip().lower()
+        if toxdrop not in ('', 'clean', 'ignore'):
+            self.Log(f'Setup wizard: unrecognized toxdrop choice "{toxdrop}" '
+                     f'-- leaving Dropped .tox Expression unchanged.',
+                     'WARNING')
+            toxdrop = ''
+
         # Applying assistant='none' to any running Envoy must stop it BEFORE
         # root/client parameter writes below. Both
         # parexec handlers regenerate AI config while Envoy is on; stopping
@@ -2002,6 +2018,10 @@ class EmbodyExt:
         #     externalization is the half of Embody that has nothing to do with
         #     the AI, so an assistant='none' user must still get their choice.
         self._applyWizardExternalize(externalize)
+
+        # 2.7 Dropped-.tox decision: the answer IS the preference.
+        if toxdrop:
+            self.my.par.Toxdropexpr = toxdrop
 
         # 3. AI client / assistant. Convoy does not require an attached AI
         #    client, but remote TD operations still need Envoy's loopback
@@ -4091,14 +4111,30 @@ class EmbodyExt:
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
 
-        # Chain the first-run setup wizard AFTER init completes.
-        # verify() sets this flag; we consume it here so the wizard opens only
-        # after deprecated-pattern and re-scan dialogs resolve. _openSetupWizard
-        # respects _suppressDialogs (never opens during a test/save) and falls
-        # back to the classic _promptEnvoy dialog if the wizard UI is absent.
+        self._queueSetupWizard()
+
+    def _queueSetupWizard(self) -> None:
+        """Chain the first-run setup wizard AFTER init completes.
+
+        verify() sets _pending_envoy_prompt; consuming it here opens the
+        wizard only once the first sweep has run. _setup_wizard_queued spans
+        the 5 frames until the window opens, so _setupWizardBusy() holds
+        prompts (the dropped-.tox one) through the Refresh that lands first.
+        _openSetupWizard respects _suppressDialogs (never opens during a
+        test/save) and falls back to _promptEnvoy if the wizard UI is absent.
+        """
         if getattr(self, '_pending_envoy_prompt', False):
             self._pending_envoy_prompt = False
+            self._setup_wizard_queued = True
             run(f"op('{self.my}').ext.Embody._openSetupWizard()", delayFrames=5)
+
+    def _setupWizardBusy(self) -> bool:
+        """True from first-run detection until the setup wizard closes."""
+        if (getattr(self, '_pending_envoy_prompt', False)
+                or getattr(self, '_setup_wizard_queued', False)):
+            return True
+        win = self.my.op('window_wizard')
+        return win is not None and win.isOpen
 
     def _updateHead(self, save_dirty: bool = True) -> None:
         """Update phase 1 (shared by Update() and the deferred chunks):
@@ -4393,10 +4429,7 @@ class EmbodyExt:
         self._reportResults(st['saved'], st['additions'],
                             st['subtractions'])
         run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
-        if getattr(self, '_pending_envoy_prompt', False):
-            self._pending_envoy_prompt = False
-            run(f"op('{self.my}').ext.Embody._openSetupWizard()",
-                delayFrames=5)
+        self._queueSetupWizard()
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log. Always says SOMETHING: a
@@ -8054,33 +8087,37 @@ class EmbodyExt:
         #60: users tag their startup-file COMPs tdn_exclude precisely so
         Embody never touches them).
         """
-        comps_with_filefolder = self.root.findChildren(
+        internal, external = self._findToxdropComps()
+        # Embody's own descendants: always clean, regardless of preference.
+        for comp in internal:
+            self._resetToxdropExpr(comp)
+        self._resolveToxdropExternals(external)
+
+    def _findToxdropComps(self) -> tuple:
+        """(Embody's own, user) COMPs carrying TD's drag-in externaltox
+        expression; user COMPs under the exclude tag are left out."""
+        comps = self.root.findChildren(
             type=COMP,
             key=lambda x: (
                 x.par.externaltox.expr and
                 "me.parent().fileFolder + '/' +" in x.par.externaltox.expr
             )
         )
-
-        if not comps_with_filefolder:
-            return
-
-        embody_path = self.my.path
         exclude_tag = self.my.par.Tdxnexcludetag.eval()
         internal, external = [], []
-        for comp in comps_with_filefolder:
-            if comp.path == embody_path or comp.path.startswith(embody_path + '/'):
+        for comp in comps:
+            if self._isInsideEmbody(comp.path):
                 internal.append(comp)
-            elif self._hasExcludeTagInAncestry(comp, exclude_tag):
-                continue
-            else:
+            elif not self._hasExcludeTagInAncestry(comp, exclude_tag):
                 external.append(comp)
+        return internal, external
 
-        # Embody's own descendants: always clean, regardless of preference.
-        for comp in internal:
-            self._resetToxdropExpr(comp)
-
-        self._resolveToxdropExternals(external)
+    def _toxdropAskPaths(self) -> list:
+        """User COMP paths the setup wizard's dropped-.tox step asks about:
+        empty once Toxdropexpr holds an answer (clean / ignore)."""
+        if self.my.par.Toxdropexpr.eval() != 'ask':
+            return []
+        return [c.path for c in self._findToxdropComps()[1]]
 
     def _hasExcludeTagInAncestry(self, comp, exclude_tag=None) -> bool:
         """True if comp or any ancestor COMP carries the TDXN exclude tag.
@@ -8147,6 +8184,12 @@ class EmbodyExt:
         # re-asking about the same COMPs each sweep is the issue #60
         # nagging loop. A new drop (new path) still prompts; the set
         # resets on extension reinit / project reload.
+        # A new user meets the setup wizard first, which asks this as a
+        # step: hold the prompt (not an answer, so nothing is remembered)
+        # while it is pending or open. wizard/logic.py _close() re-runs
+        # this sweep, which applies the step's answer or, on cancel, asks.
+        if self._setupWizardBusy():
+            return
         ignored = getattr(self, '_toxdrop_ignored_session', set())
         external = [c for c in external if c.path not in ignored]
         if not external:

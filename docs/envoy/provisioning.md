@@ -25,12 +25,37 @@ It is the unattended cousin of the [Textport paste](../quickstart.md): same rele
 
 Over SSH, PowerShell Remoting, or an Owlette job, that is the whole provisioning step. The script lives in the repo at `dev/embody/embody_bootstrap.py`; `https://embody.tools/bootstrap.py` serves the same bytes.
 
+## No show file yet
+
+The bootstrap installs into a `.toe` that already exists, and TouchDesigner cannot create one from the command line. Start from the [starter project](https://github.com/dylanroscover/Embody/tree/main/starter), an empty project made to be copied and renamed, then run the bootstrap on it as above:
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    Invoke-WebRequest https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe -OutFile "C:\shows\show.toe"
+    ```
+
+=== "macOS"
+
+    ```bash
+    curl -fsSL https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe -o ~/shows/show.toe
+    ```
+
+Opened on its own, the starter downloads Embody and shows the setup wizard. After a bootstrap it finds Embody already in the project and installs nothing.
+
+!!! warning "Never start from a test project"
+    The `.toe` files under `dev/` in the Embody repository exist to develop and test Embody. `dev/release_testing/smoke_template.toe` clears its own folder when it runs. None of them is a blank project: use the starter.
+
 ## What it does
 
 1. **Finds TouchDesigner.** The newest install under `C:\Program Files\Derivative` (or `/Applications`), unless `--td <install dir>` names one. It needs `toeexpand` and `toecollapse` from that install's `bin`, and the `TouchDesigner` executable for `--launch`.
 2. **Fetches the latest release.** The same manifest the Textport paste reads, the same sha256 check. `--tox <file>` uses a local release tox instead, for air-gapped machines.
 3. **Grafts Embody into the project.** The `.toe` is expanded beside a staging copy, the release tox is expanded, and the Embody COMP's files and `.toc` entries are added at the project root. An Embody already at the root is refused unless `--replace` is passed, in which case the old one is removed first.
-4. **Adds first-run provisioning.** A freshly installed Embody opens its setup wizard and keeps Envoy disabled until someone clicks. The bootstrap adds a root-level Execute DAT, `embody_provision`, whose `onStart` waits for Embody, closes the wizard, applies the wizard's own backend with Auto mode and the assistant you chose (`--assistant`, default `claudecode`; `none` leaves Envoy disabled), saves the project, and destroys itself. Every later open is configured and quiet. `--no-provision` skips this and lets the wizard show.
+4. **Adds first-run provisioning.** A freshly installed Embody opens its setup wizard and keeps Envoy disabled until someone clicks. The bootstrap adds a root-level Execute DAT, `embody_provision`, whose `onStart` waits for Embody, closes the wizard, applies the wizard's own backend with Auto mode and the assistant you chose (`--assistant`, default `claudecode`; `none` leaves Envoy disabled), enables Embody, saves the project, and destroys itself. Every later open is configured and quiet. `--no-provision` skips this and lets the wizard show.
+
+    Enabling is the step a dragged-in `.tox` gets for free and a graft does not: until Embody's **Embody Status** reads `Enabled`, nothing is externalized. Nobody is there to answer a dialog, so if the project holds COMPs with TouchDesigner's drag-in External .tox link and **Dropped .tox Expression** is still `Ask`, provisioning sets it to `Ignore` and the links are kept.
+
+    A project bootstrapped before v6.3.6 was left `Disabled`. Pulse **Enable / Update** on the Embody COMP once, or run the bootstrap again with `--replace`.
 5. **Collapses and verifies.** `toecollapse` rebuilds the `.toe`; the result is re-expanded and every grafted entry must be present, or nothing is touched. Success is judged by filesystem evidence, never by the tools' exit codes (`toeexpand` returns 1 on success).
 6. **Replaces the original.** The original is kept beside it as `<name>.toe.bak-<timestamp>`; the new file takes its place atomically.
 7. **Launches, if asked.** `--launch` starts TouchDesigner on the project, detached. On the first open the provisioning runs, Envoy comes up, and the instance registers itself in `.embody/envoy.json` under the project folder, so a [Convoy](../convoy/index.md) controller or an AI session can reach it.

@@ -1,18 +1,19 @@
 SURF=(0.16,0.17,0.165)
 BACK_ON=(0.19,0.20,0.195); NEXT_ON=(0.24,0.52,0.35); NEXT_OFF=(0.135,0.15,0.14)
 TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
-GROUPS=['grp_save','grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize']
+GROUPS=['grp_save','grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize','grp_toxdrop']
 DEFS={
  'save':{'g':'grp_save','sel':None,'title':'Save your project first','hint':"Embody creates its Python env (.venv), AI config, and .embody state in your project's folder -- and an unsaved project has no folder yet. Save first so everything lands beside your .toe.",'hintfn':'_saveHint'},
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
  'convoy':{'g':'grp_convoy','sel':'sel_convoy','title':'Enable Convoy?','hint':'Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Convoy installs a small background app so this computer stays reachable while TouchDesigner is closed, and other projects opened here join by themselves unless you turn them off.','hintfn':'_convoyHint'},
  'externalize':{'g':'grp_externalize','sel':'sel_externalize','title':'Make your project AI-readable?','hint':'Write your network to diffable files git and AI tools can read.'},
+ 'toxdrop':{'g':'grp_toxdrop','sel':'sel_toxdrop','title':'Unlink dragged-in .tox files?','hint':'Some COMPs still carry the External .tox link TouchDesigner adds on drag-in.','hintfn':'_toxdropHint'},
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
  'git':{'g':'grp_git','sel':'sel_git','title':'Make this project a Git repository?','hint':'Externalized files diff and restore best under version control.'},
- 'footprint':{'g':'grp_footprint','sel':'sel_root','title':'Review what Embody will add','hint':'Embody will add a Python env (.venv) + MCP server, config files (.mcp.json, .embody, TDPyEnvManagerContext.yaml, AI rules), .gitignore/.gitattributes entries, and the Embot assistant in your network. Everything is recorded and reversible via Uninstall.'},
- 'permissions':{'g':'grp_permissions','sel':'sel_permissions','title':'How should the AI ask permission?','hint':'Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).'},
- 'summary':{'g':None,'sel':None,'title':'Ready to set up Embody','hint':''},
+ 'footprint':{'g':'grp_footprint','sel':'sel_root','title':'Review what Embody will add','hint':'Embody will add a Python env (.venv) + MCP server, config files (.mcp.json, .embody, TDPyEnvManagerContext.yaml, AI rules), .gitignore/.gitattributes entries, and the Embot assistant in your network. Everything is recorded and reversible via Uninstall.','hintfn':'_footprintHint'},
+ 'permissions':{'g':'grp_permissions','sel':'sel_permissions','title':'How should the AI ask permission?','hint':'Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).','hintfn':'_permHint'},
+ 'summary':{'g':None,'sel':None,'title':'Ready to set up Embody','hint':'','hintfn':'_recap'},
 }
 def _w(): return parent()
 def _bg(o,c):
@@ -39,6 +40,9 @@ def spine():
 	# disabled until a group option is picked), and the project must still
 	# have something to externalize (probed once at start()).
 	if w.op('grp_externalize') and w.fetch('ext_needed',True): s.append('externalize')
+	# Dropped-.tox links: only when start() found some while Toxdropexpr
+	# was still Ask, so a first-run user is asked here, never by a modal.
+	if w.op('grp_toxdrop') and w.fetch('toxdrop_paths',None): s.append('toxdrop')
 	s.append('assistant')
 	if a=='other': s.append('client')
 	if a=='claudecode': s.append('permissions')
@@ -74,6 +78,8 @@ def _recap():
 		g+={'full':' Externalize: whole project now, plus new work.','auto':' Externalize: new work from here on.','skip':' Externalize: skipped for now.'}.get(w.fetch('sel_externalize',''),'')
 	if 'convoy' in spine():
 		g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
+	if 'toxdrop' in spine():
+		g+={'clean':' Dragged-in .tox links: unlink.','ignore':' Dragged-in .tox links: keep.'}.get(w.fetch('sel_toxdrop',''),'')
 	if a=='none': return 'Mode: %s. AI assistant: off.%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
 	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
@@ -196,6 +202,11 @@ def _convoyHint():
 	# step shows; the parameter-page enable keeps its own
 	# 'Waiting for project save' handling for non-wizard paths.
 	return DEFS['convoy']['hint']
+def _toxdropHint():
+	p=_w().fetch('toxdrop_paths',None) or []
+	if not p: return DEFS['toxdrop']['hint']
+	more=' and %d more'%(len(p)-3) if len(p)>3 else ''
+	return '%d COMP%s the External .tox link TouchDesigner adds on drag-in: %s%s.'%(len(p),' still carries' if len(p)==1 else 's still carry',', '.join(x.rsplit('/',1)[-1] for x in p[:3]),more)
 def _footprintHint():
 	w=_w()
 	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
@@ -211,7 +222,8 @@ def render():
 		g=w.op(gid)
 		if g: g.par.display = 1 if gid==d.get('g') else 0
 	w.op('title').par.text=d['title']
-	w.op('hint').par.text=_saveHint() if cur=='save' else (_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_convoyHint() if cur=='convoy' else (_recap() if cur=='summary' else d['hint']))))
+	fn=d.get('hintfn')
+	w.op('hint').par.text=globals()[fn]() if fn else d['hint']
 	w.op('hint').par.h = _hintHeight(w.op('hint').par.text.eval())
 	bb=_nav('back'); nb=_nav('next'); first=idx==0
 	if bb:
@@ -300,6 +312,10 @@ def _close():
 	_resetUI()
 	try: op.Embody.op('window_wizard').par.winclose.pulse()
 	except Exception: pass
+	# re-run the dropped-.tox sweep held while the wizard was up: applies
+	# the step's answer, or asks on cancel. After finish()'s apply (+2),
+	# before its externalize step (+32).
+	run('op.Embody.ext.Embody._checkExternalToxPar()', delayFrames=5)
 def finish():
 	w=_w()
 	m=w.fetch('sel_mode','auto'); a=w.fetch('sel_assistant','claudecode')
@@ -310,6 +326,7 @@ def finish():
 	# uses, so a hidden step can never mutate the whole project.
 	x=w.fetch('sel_externalize','') if 'externalize' in spine() else ''
 	cv=w.fetch('sel_convoy','') if 'convoy' in spine() else ''
+	td=w.fetch('sel_toxdrop','') if 'toxdrop' in spine() else ''
 	cr=''
 	if r=='custom':
 		try: cr=ui.chooseFolder(title='Choose the folder for Embody config') or ''
@@ -317,7 +334,7 @@ def finish():
 	_close()
 	# Defer so the window closes cleanly before setup runs. Tokens come from the
 	# wizard's fixed option set, so repr-interpolation is safe.
-	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r, convoy=%r)'%(m,a,c,r,cr,pm,g,x,cv), delayFrames=2)
+	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r, convoy=%r, toxdrop=%r)'%(m,a,c,r,cr,pm,g,x,cv,td), delayFrames=2)
 def start():
 	w=_w()
 	# A wizard closed mid-dialog would otherwise reopen with its save
@@ -359,6 +376,13 @@ def start():
 	try: need=not op.Embody.ext.Embody._projectLooksExternalized()
 	except Exception: need=True
 	w.store('ext_needed',need)
+	# Dropped-.tox step gate, probed once like ext_needed. Pre-select the
+	# non-destructive answer: keep the links.
+	try: tp=op.Embody.ext.Embody._toxdropAskPaths()
+	except Exception: tp=[]
+	w.store('toxdrop_paths',tp)
+	tb=w.op('grp_toxdrop/opt_ignore')
+	if tb: tb.par.value0=1
 	# Pre-select the safe, non-destructive option: externalize new work only.
 	xb=w.op('grp_externalize/opt_auto')
 	if xb: xb.par.value0=1
@@ -368,5 +392,5 @@ def start():
 	except Exception: cv_on=False
 	vb=w.op('grp_convoy/opt_'+('enable' if cv_on else 'disable'))
 	if vb: vb.par.value0=1
-	w.store('sel_assistant',a); w.store('sel_client',ai if a=='other' else ''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit'); w.store('sel_externalize','auto'); w.store('sel_convoy','enable' if cv_on else 'disable')
+	w.store('sel_assistant',a); w.store('sel_client',ai if a=='other' else ''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit'); w.store('sel_externalize','auto'); w.store('sel_convoy','enable' if cv_on else 'disable'); w.store('sel_toxdrop','ignore')
 	render()

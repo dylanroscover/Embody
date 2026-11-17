@@ -292,6 +292,14 @@ The pinned TouchDesigner left the registry (it closed or crashed). The bridge ne
 
 Envoy scans 10 ports (default: 9870–9879). If all are occupied, it can't start. Close unused TD instances or change the **Envoy Port** parameter to a different base (e.g., 9880).
 
+## `externalize_op` Refuses: "Embody is disabled"
+
+**Symptoms:** `externalize_op` returns `Embody is disabled, so nothing would be written and nothing was tagged` (`error_code` `envoy.embody.disabled`). Before v6.3.6 the same call answered `success: true` with an empty `file`, and `save_externalization` then failed with `Save() needs a tracked COMP`.
+
+**Cause:** Embody's **Embody Status** reads `Disabled`, and a disabled Embody writes nothing. Either someone pulsed **Disable**, or the project was set up by a `bootstrap.py` older than v6.3.6: the bootstrap grafts Embody into the file, so the initialisation that enables a dragged-in `.tox` never ran.
+
+**Fix:** Pulse **Enable / Update** on the Embody COMP (from an AI session, `execute_python` with `op.Embody.par.Update.pulse()`), then call `externalize_op` again. The same tool answers `envoy.embody.perform_mode` while Perform Mode is on: turn it off first.
+
 ## Broken Virtual Environment
 
 **Symptoms:** Bridge process doesn't start at all, or starts and immediately exits. `dev/logs/envoy-bridge.log` is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.

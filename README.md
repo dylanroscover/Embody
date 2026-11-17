@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.3.4-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.3.6-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-70-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -57,6 +57,8 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, what to externalize, whether to enable the AI assistant (Envoy) and for which tool, permissions, whether to join a trusted-LAN Convoy, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
 
 > **Updating Embody:** Embody updates itself — pulse **Check for Update** on the About page (or set **Auto-Update** to check at startup), and a verified release is downloaded, backed up against, and swapped in place. Your settings and tracked externalizations live on disk and survive the update untouched. See the [auto-update guide](https://dylanroscover.github.io/Embody/embody/auto-update/). Manual alternative: delete the old Embody COMP and drag the new `.tox` in its place — the new version picks up your on-disk state automatically, no re-scan, no files rewritten.
+
+Starting a brand-new project? Copy [`starter/Embody-starter.toe`](starter/) into an empty folder, rename it and open it: it is a blank project that downloads and verifies the latest release into itself on first open, and asks for a release `.tox` if there is no connection.
 
 Provisioning a machine with no one at it (a render node, a media server)? The [bootstrap](https://dylanroscover.github.io/Embody/envoy/provisioning/) installs Embody into a `.toe` offline with TouchDesigner's own tools, in one line.
 
@@ -211,6 +213,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
+- **6.3.6** — a starter project that installs Embody into itself on first open, the dragged-in `.tox` question moves into the setup wizard, and bootstrapped projects come up enabled so `externalize_op` writes
 - **6.3.3** — Convoy is set up once per computer: machines stay on with no project open, a version-up keeps a node's address and approvals, and the page lists one row per machine
 - **6.2.77** — the update-complete dialog offers Save Now, so the saved `.toe` keeps the new Embody
 - **6.2.76** — Externalize Full Project keeps Embody and TouchDesigner's own COMPs out of your files, older over-tagged projects clean up after the update, and a project saved before its first externalization reopens with its tracking (issue #176)

@@ -51,7 +51,7 @@ You need two things installed before you start:
 
 ## Step 2 - Install Embody
 
-Two ways in - both end in the same place. Pick whichever suits you.
+Three ways in - all end in the same place. Pick whichever suits you.
 
 === "Paste into a Textport"
 
@@ -67,7 +67,13 @@ Two ways in - both end in the same place. Pick whichever suits you.
 
     Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)** - it's a single file - and **drag it into the network** of your open project.
 
-Either way, that's the entire install - there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
+=== "New project: open the starter"
+
+    No project yet? Download **[Embody-starter.toe](https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe)** into a new, empty folder, rename it to your project's name, and open it.
+
+    It is an empty project that runs the same download-and-verify install by itself the first time it opens, in the background, so Embody appears in `/project1` a few seconds after the window does. With no internet connection it asks you to pick a release `.tox` you already have instead. Save the project to keep it.
+
+Whichever you pick, that's the entire install - there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
 
 ---
 
@@ -689,7 +695,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times (milliseconds), memory usage (bytes), cook counts |
 | `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
-| `run_soak_test` | `duration_s?`, `interval_s?`, `fps_target?`, `label?`, `stop?`, `idempotency_key?` | Low-overhead performance soak as a background job. Samples Envoy's Perform CHOP on the frame hook -- three channel reads per frame, memory and op counts once per interval, nothing cooked, captured or created -- so the instrument does not move the needle it reads. Envoy calls that cook, capture, write or execute during the run are logged as perturbations and their 2 s neighborhood is excluded from the clean statistics. Finishes with per-metric first/last/min/max/mean/slope, exact dropped-frame counts, worst frame time, GPU headroom, hotspots at start and end, up to 600 samples, and a PASS/WARN/FAIL verdict on the performance rule's thresholds. Poll `get_job_status`; `stop=True` ends it early |
+| `run_soak_test` | `duration_s?`, `interval_s?`, `fps_target?`, `label?`, `stop?`, `idempotency_key?` | Low-overhead performance soak as a background job. Samples Envoy's Perform CHOP on the frame hook -- three channel reads per frame, memory and op counts once per interval, nothing cooked, captured or created -- so the instrument does not move the needle it reads. Envoy calls that cook, capture, write or execute during the run are logged as perturbations and their 2 s neighborhood is excluded from the clean statistics. Finishes with per-metric first/last/min/max/mean/slope, exact dropped-frame counts, worst frame time, GPU headroom, hotspots at start and end, up to 600 samples, and a PASS/WARN/FAIL verdict on the performance rule's thresholds (WARN when no sample was clean). Poll `get_job_status`; `stop=True` ends it early |
 
 ## Code Execution
 
@@ -716,7 +722,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted). Never shows the locked-content dialog: a TDXN export with locked TOP/CHOP/SOP/POP operators logs one WARNING (in `_logs`) naming each operator's source and the COMP to tag `tox` |
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted). Refuses, tagging nothing, while Embody is `Disabled` (`envoy.embody.disabled`: pulse **Enable / Update**) or in Perform Mode (`envoy.embody.perform_mode`), and returns `envoy.embody.not_written` instead of success when a saved project ends with no file. Never shows the locked-content dialog: a TDXN export with locked TOP/CHOP/SOP/POP operators logs one WARNING (in `_logs`) naming each operator's source and the COMP to tag `tox` |
 | `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDXN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk. Refuses to overwrite a non-empty file with an operator-empty COMP and returns an error instead - untrack the operator or delete the file if the empty state is intended. Like `externalize_op`, it logs locked-content findings instead of showing the dialog |

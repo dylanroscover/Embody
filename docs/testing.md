@@ -87,7 +87,10 @@ The orchestrator, `dev/release_testing/smoke_run.py`:
 2. stages a fresh `<out>/embody-smoke/<platform>-<timestamp>/` holding
    `smoke_template.toe`, `smoke_bootstrap.py` and a `smoke_run.json` sidecar
    (run id, platform, repo root, tox path, flags dir) -- old run directories
-   are never deleted;
+   are never deleted. The template needs the script beside it: the copy baked
+   into the `.toe` is an inert stub, because the script clears its own folder
+   and a template opened anywhere else must do nothing
+   (`dev/release_testing/README.md`);
 3. launches TouchDesigner on the template by explicit absolute path -- a
    direct spawn of the executable on both platforms (on macOS the bundle's
    own binary under `Contents/MacOS`, so the `.toe` is in argv and the
@@ -383,7 +386,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |
-| `test_embody_bootstrap` | 18 | `embody_bootstrap.py`: offline install of Embody into a `.toe` (toc parsing, graft planning, provisioning DAT, manifest verification) |
+| `test_embody_bootstrap` | 29 | `embody_bootstrap.py`: offline install of Embody into a `.toe` (toc parsing, graft planning, provisioning DAT, manifest verification), run end to end against `starter/Embody-starter.toe`; the starter's install script on faked TouchDesigner globals (download and sha256 on a worker that touches no TD object, the pick-a-tox fallback, self-removal) and the committed `.toe` against its source; the smoke template's baked script deletes nothing |
 | `test_release_artifact_contract` | 2 | What the shipped `.tox` must not carry: expands the newest release with `toeexpand` and checks its storage and table link |
 | `test_release_toe` | 93 | `ExportReleaseToe` planners, off-TD: one test per refusal, the save path, and the scrub plan |
 | `test_release_toe_live` | 4 | The read side of `ExportReleaseToe`, in TD (the export itself destroys Embody and quits, so it never runs under the runner) |

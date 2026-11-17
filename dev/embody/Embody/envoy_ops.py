@@ -801,6 +801,25 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
                          f'Annotate internals are TD-managed stock content '
                          f'and are never externalized.'}
 
+    # Update() returns at once while Embody is Disabled or in Perform Mode,
+    # so the tag would land and nothing be written: refuse before tagging.
+    # A project set up by embody_bootstrap stayed Disabled and this tool
+    # answered success with file '' (issue #194). The codes ride on the
+    # envelope, so no recovery-hint rule has to match the wording.
+    if str(op.Embody.par.Status.eval()) == 'Disabled':
+        return {'error': f'{op_path}: Embody is disabled, so nothing would be '
+                         f'written and nothing was tagged. Enable it with the '
+                         f'Enable / Update button on the Embody COMP '
+                         f'(execute_python: op.Embody.par.Update.pulse()), '
+                         f'then call externalize_op again.',
+                'error_code': 'envoy.embody.disabled'}
+    if op.Embody.ext.Embody._performMode:
+        return {'error': f'{op_path}: Embody is in Perform Mode, which pauses '
+                         f'externalization, so nothing would be written and '
+                         f'nothing was tagged. Turn Perform Mode off on the '
+                         f'Embody COMP, then call externalize_op again.',
+                'error_code': 'envoy.embody.perform_mode'}
+
     try:
         # Determine tag based on operator type if not specified
         if not tag_type:
@@ -848,6 +867,14 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
                 or target.fetch('_tdn_rel_path', '', search=False))
         else:
             file_path = target.par.externaltox.eval()
+        saved = op.Embody.ext.Embody._projectSavedOnDisk()
+        # A saved project that ends with no file wrote nothing: never success.
+        if saved and not file_path:
+            return {'error': f'{op_path}: tagged {tag_type!r}, but the sweep '
+                             f'wrote no file for it. Read the Embody log with '
+                             f'get_logs, fix the cause, then call '
+                             f'save_externalization or externalize_op again.',
+                    'error_code': 'envoy.embody.not_written'}
         result = {
             'success': True,
             'path': op_path,
@@ -857,7 +884,7 @@ def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
         # On a never-saved project the tag applied but the disk write was
         # deferred by the save gate -- tell the caller instead of handing
         # back success with an empty file path.
-        if not op.Embody.ext.Embody._projectSavedOnDisk():
+        if not saved:
             result['deferred'] = True
             result['note'] = ('Project not saved yet: the tag is applied '
                               'and the file will be written by the first '
