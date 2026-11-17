@@ -1040,10 +1040,12 @@ def _await_convoy(attempt):
         _write_features_flag(results, final=True)
         _log('FEATURE convoy: PASS (%s)' % status)
         return
-    if _convoy_isolated() and low.startswith('no convoy host app'):
+    if _convoy_isolated() and low.startswith(('no convoy host app',
+                                              'not installed')):
         # smoke_run --isolate-convoy: the enable path ran against an
         # ISOLATED data directory, where no login host app is installed
-        # by design (ConvoyExt refuses). That is the terminal answer.
+        # by design (ConvoyExt refuses). That is the terminal answer; since
+        # 6.3.x the host line 'Not installed' outranks the node's line.
         results['convoy'] = ('PASS', 'isolated: %s' % status)
         _write_features_flag(results, final=True)
         _log('FEATURE convoy: PASS (isolated -- %s)' % status)

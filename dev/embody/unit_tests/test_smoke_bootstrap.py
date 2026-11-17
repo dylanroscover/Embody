@@ -1092,6 +1092,27 @@ class TestFeaturesFlag(_Case):
         self.assertIn('timed out', feats['legs']['convoy']['detail'])
         self.assertTrue(feats['terminal'])
 
+    def test_an_isolated_convoy_passes_on_not_installed(self):
+        # 6.3.x: the refused install leaves the host line 'Not installed',
+        # which outranks the node's 'No Convoy host app' (2026-11-16)
+        self._sidecar(convoy_isolated='yes')
+        self.td.convoy_verdict = 'Not installed'
+        ready, feats = self.runToEnd()
+        self.assertEqual(feats['legs']['convoy']['verdict'], 'PASS',
+                         feats['legs']['convoy'])
+        self.assertIn('isolated', feats['legs']['convoy']['detail'])
+
+    def test_not_installed_is_no_pass_without_isolation(self):
+        saved = os.environ.pop('EMBODY_CONVOY_DATA_DIR', None)
+        try:
+            self.td.convoy_verdict = 'Not installed'
+            ready, feats = self.runToEnd(max_frames=200000)
+        finally:
+            if saved is not None:
+                os.environ['EMBODY_CONVOY_DATA_DIR'] = saved
+        self.assertEqual(feats['legs']['convoy']['verdict'], 'FAIL')
+        self.assertIn('timed out', feats['legs']['convoy']['detail'])
+
     def test_a_refused_convoy_fails_without_waiting_out_the_poll(self):
         self.td.convoy_verdict = 'Error: host app install failed'
         ready, feats = self.runToEnd()
