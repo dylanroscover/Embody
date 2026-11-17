@@ -58,6 +58,8 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 > **Updating Embody:** Embody updates itself — pulse **Check for Update** on the About page (or set **Auto-Update** to check at startup), and a verified release is downloaded, backed up against, and swapped in place. Your settings and tracked externalizations live on disk and survive the update untouched. See the [auto-update guide](https://dylanroscover.github.io/Embody/embody/auto-update/). Manual alternative: delete the old Embody COMP and drag the new `.tox` in its place — the new version picks up your on-disk state automatically, no re-scan, no files rewritten.
 
+Starting a brand-new project? Copy [`starter/Embody-starter.toe`](starter/) into an empty folder, rename it and open it: it is a blank project that downloads and verifies the latest release into itself on first open, and asks for a release `.tox` if there is no connection.
+
 Provisioning a machine with no one at it (a render node, a media server)? The [bootstrap](https://dylanroscover.github.io/Embody/envoy/provisioning/) installs Embody into a `.toe` offline with TouchDesigner's own tools, in one line.
 
 ### 2. Tag and Work

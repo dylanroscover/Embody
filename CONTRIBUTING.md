@@ -39,6 +39,22 @@ Practical consequences:
 If you are unsure which zone a file is in: if it sits under `dev/embody/` or
 `dev/specimen_lab/`, assume TouchDesigner writes it.
 
+## The `.toe` files in this repository
+
+Each one has a single job. Only the first is a place to start a project.
+
+| File | What it is | Open it? |
+|---|---|---|
+| `starter/Embody-starter.toe` | An empty project that installs the latest Embody release into itself on first open. Built by `starter/build_starter.py`, never saved by hand. | Yes, to start a new project. Copy it out of the repo first. |
+| `dev/Embody-6.toe` and its numbered siblings | Embody's own development project, the ground truth for everything under `dev/embody/`. | Only to work on Embody (see Development setup). |
+| `dev/release_testing/smoke_template.toe` | The release smoke harness. With `smoke_bootstrap.py` beside it, it clears its own folder and installs the release `.tox`. | Never by hand. `smoke_run.py` stages it in a throwaway folder. |
+
+Never use a test or development `.toe` as the base of a project. A unit-test
+fixture cut from the smoke template was used that way once, and it wiped that
+project's folder on every open (issue #194). The fixture is gone, the template's
+baked script is now an inert stub (`dev/release_testing/README.md`), and the
+bootstrap's own test runs against the starter.
+
 ## Requirements
 
 - **TouchDesigner 2025.33230 or later** (Windows / macOS). Pre-2025 builds

@@ -25,6 +25,27 @@ It is the unattended cousin of the [Textport paste](../quickstart.md): same rele
 
 Over SSH, PowerShell Remoting, or an Owlette job, that is the whole provisioning step. The script lives in the repo at `dev/embody/embody_bootstrap.py`; `https://embody.tools/bootstrap.py` serves the same bytes.
 
+## No show file yet
+
+The bootstrap installs into a `.toe` that already exists, and TouchDesigner cannot create one from the command line. Start from the [starter project](https://github.com/dylanroscover/Embody/tree/main/starter), an empty project made to be copied and renamed, then run the bootstrap on it as above:
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    Invoke-WebRequest https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe -OutFile "C:\shows\show.toe"
+    ```
+
+=== "macOS"
+
+    ```bash
+    curl -fsSL https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe -o ~/shows/show.toe
+    ```
+
+Opened on its own, the starter downloads Embody and shows the setup wizard. After a bootstrap it finds Embody already in the project and installs nothing.
+
+!!! warning "Never start from a test project"
+    The `.toe` files under `dev/` in the Embody repository exist to develop and test Embody. `dev/release_testing/smoke_template.toe` clears its own folder when it runs. None of them is a blank project: use the starter.
+
 ## What it does
 
 1. **Finds TouchDesigner.** The newest install under `C:\Program Files\Derivative` (or `/Applications`), unless `--td <install dir>` names one. It needs `toeexpand` and `toecollapse` from that install's `bin`, and the `TouchDesigner` executable for `--launch`.

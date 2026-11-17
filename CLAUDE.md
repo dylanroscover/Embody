@@ -43,6 +43,8 @@ Discoverable with `ls`; the non-obvious locations:
 - `dev/embody/Embody/` -- main extension source (`EmbodyExt.py`, `EnvoyExt.py`, `TDXNExt.py`); `templates/` holds the generated-rule/skill templates shipped to user projects; `text_claude.md` is the user-project CLAUDE.md template
 - `dev/Embody-6.toe` -- active development project (versioned siblings `dev/Embody-6.NNN.toe`); `dev/Backup/` -- versioned `.toe` backups
 - `release/` -- latest release `.tox` + self-updater manifest
+- `starter/Embody-starter.toe` -- the ONLY `.toe` to start a new project from: TD's blank project plus one Execute DAT that installs the latest release on first open. Edit `starter/embody_install.py`, then rebuild with `starter/build_starter.py`
+- `dev/release_testing/smoke_template.toe` -- release smoke harness, never a project base: with `smoke_bootstrap.py` beside it, it CLEARS ITS OWN FOLDER on open (issue #194). Only `smoke_run.py` opens it
 
 ## Architecture
 

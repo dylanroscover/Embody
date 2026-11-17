@@ -22,7 +22,7 @@ You need two things installed before you start:
 
 ## Step 2 — Install Embody
 
-Two ways in — both end in the same place. Pick whichever suits you.
+Three ways in — all end in the same place. Pick whichever suits you.
 
 === "Paste into a Textport"
 
@@ -38,7 +38,13 @@ Two ways in — both end in the same place. Pick whichever suits you.
 
     Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)** — it's a single file — and **drag it into the network** of your open project.
 
-Either way, that's the entire install — there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
+=== "New project: open the starter"
+
+    No project yet? Download **[Embody-starter.toe](https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe)** into a new, empty folder, rename it to your project's name, and open it.
+
+    It is an empty project that runs the same download-and-verify install by itself the first time it opens, in the background, so Embody appears in `/project1` a few seconds after the window does. With no internet connection it asks you to pick a release `.tox` you already have instead. Save the project to keep it.
+
+Whichever you pick, that's the entire install — there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
 
 ---
 

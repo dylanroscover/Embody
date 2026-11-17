@@ -51,7 +51,7 @@ You need two things installed before you start:
 
 ## Step 2 - Install Embody
 
-Two ways in - both end in the same place. Pick whichever suits you.
+Three ways in - all end in the same place. Pick whichever suits you.
 
 === "Paste into a Textport"
 
@@ -67,7 +67,13 @@ Two ways in - both end in the same place. Pick whichever suits you.
 
     Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)** - it's a single file - and **drag it into the network** of your open project.
 
-Either way, that's the entire install - there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
+=== "New project: open the starter"
+
+    No project yet? Download **[Embody-starter.toe](https://github.com/dylanroscover/Embody/raw/main/starter/Embody-starter.toe)** into a new, empty folder, rename it to your project's name, and open it.
+
+    It is an empty project that runs the same download-and-verify install by itself the first time it opens, in the background, so Embody appears in `/project1` a few seconds after the window does. With no internet connection it asks you to pick a release `.tox` you already have instead. Save the project to keep it.
+
+Whichever you pick, that's the entire install - there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
 
 ---
 
@@ -689,7 +695,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times (milliseconds), memory usage (bytes), cook counts |
 | `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
-| `run_soak_test` | `duration_s?`, `interval_s?`, `fps_target?`, `label?`, `stop?`, `idempotency_key?` | Low-overhead performance soak as a background job. Samples Envoy's Perform CHOP on the frame hook -- three channel reads per frame, memory and op counts once per interval, nothing cooked, captured or created -- so the instrument does not move the needle it reads. Envoy calls that cook, capture, write or execute during the run are logged as perturbations and their 2 s neighborhood is excluded from the clean statistics. Finishes with per-metric first/last/min/max/mean/slope, exact dropped-frame counts, worst frame time, GPU headroom, hotspots at start and end, up to 600 samples, and a PASS/WARN/FAIL verdict on the performance rule's thresholds. Poll `get_job_status`; `stop=True` ends it early |
+| `run_soak_test` | `duration_s?`, `interval_s?`, `fps_target?`, `label?`, `stop?`, `idempotency_key?` | Low-overhead performance soak as a background job. Samples Envoy's Perform CHOP on the frame hook -- three channel reads per frame, memory and op counts once per interval, nothing cooked, captured or created -- so the instrument does not move the needle it reads. Envoy calls that cook, capture, write or execute during the run are logged as perturbations and their 2 s neighborhood is excluded from the clean statistics. Finishes with per-metric first/last/min/max/mean/slope, exact dropped-frame counts, worst frame time, GPU headroom, hotspots at start and end, up to 600 samples, and a PASS/WARN/FAIL verdict on the performance rule's thresholds (WARN when no sample was clean). Poll `get_job_status`; `stop=True` ends it early |
 
 ## Code Execution
 
