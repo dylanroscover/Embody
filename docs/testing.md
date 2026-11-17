@@ -115,13 +115,22 @@ Exit codes: **0** every verdict PASS, **1** a verdict failed, **2** the smoke
 could not run (no TouchDesigner, bad manifest, no flag by the deadline). 2 is
 deliberately not 0 -- a run that never happened must never read as green.
 
-#### Release legs: `--legs upgrade,faults,uninstall`
+#### Release legs: `--legs wizard,upgrade,faults,uninstall`
 
-After the fresh-install verdict and the MCP probe, `--legs` runs extra legs
-against the same smoke TD -- always in this order, whatever the flag lists
+After the fresh-install verdict and the MCP probe, `--legs` runs extra legs --
+always in this order, whatever the flag lists
 (`dev/release_testing/smoke_legs/`, one module per leg; the contract is its
-`__init__.py` docstring). The release gate is all three:
+`__init__.py` docstring). The release gate is all four:
 
+- **`wizard`** -- a first-time drag-in, in a second virgin TD of its own on
+  the build under test (its own run directory beside the smoke's, Convoy
+  isolated). The project already holds two COMPs carrying the External .tox
+  link TouchDesigner writes on drag-in; the leg clicks through the real setup
+  wizard and passes only when no dropped-.tox dialog fired before or during
+  it, the wizard asked about the links (naming both COMPs, Keep preselected),
+  and Unlink cleared every one. v6.3.4 opened that dialog before the wizard,
+  the first thing a new user saw. The leg leaves `wizard_check.json` and a
+  picture of the step, `wizard_toxdrop.png`, in its run directory.
 - **`upgrade`** -- the run first installs the PREVIOUS release (the asset
   extracted from git history by tag, or `--upgrade-from <tag|tox>`), then the
   leg drives that build's own self-updater to the build under test: a real
@@ -159,9 +168,10 @@ against the same smoke TD -- always in this order, whatever the flag lists
   itself.
 
 A failed `upgrade` or `faults` leg stops the chain (a project in an unknown
-state proves nothing about uninstall). Any failed leg is a FAIL verdict (exit
+state proves nothing about uninstall); a failed `wizard` leg stops nothing,
+since it never touched the smoke TD. Any failed leg is a FAIL verdict (exit
 1); the summary prints the failed step, and every leg's steps land in
-`result.json` under `legs`. The CI workflow runs all three on every push.
+`result.json` under `legs`. The CI workflow runs all four on every push.
 
 Two things to know before starting one:
 

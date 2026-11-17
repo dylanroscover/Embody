@@ -48,7 +48,6 @@ opencode.json
 .vscode/mcp.json
 .gemini/settings.json
 .codex/config.toml
-.agents/mcp_config.json
 .embody_backup/
 
 # Other AI clients' generated configs. This repo's own AI client is Claude Code
@@ -57,6 +56,7 @@ opencode.json
 # regenerates the configs below, so keep them out of git.
 .cursor/
 .windsurf/
+.agents/
 .github/copilot-instructions.md
 .github/instructions/
 GEMINI.md

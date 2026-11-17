@@ -53,7 +53,7 @@ DEFAULT_REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(DEFAULT_REPO, 'dev', 'embody'))
 sys.path.insert(0, HERE)
 import envoy_bridge  # noqa: E402  (stdlib-only; TD discovery, pids, quit)
-import smoke_legs  # noqa: E402  (the extra legs: upgrade, faults, uninstall)
+import smoke_legs  # noqa: E402  (the extra legs: wizard, upgrade, faults, uninstall)
 
 # The bootstrap self-polls Envoy for up to 240 x 1 s before it writes
 # ready.flag, on top of TD's own boot; the Convoy leg then polls for up to
@@ -230,6 +230,8 @@ def check_out_dir(out, repo):
 
 BASE_TIMEOUT_S = 900.0
 LEG_TIMEOUT_S = 500.0
+# legs that boot a TD of their own and only wait for its flag
+SHORT_LEG_TIMEOUT_S = {'wizard': 240.0}
 
 
 def run_timeout(explicit, legs):
@@ -242,7 +244,8 @@ def run_timeout(explicit, legs):
     """
     if explicit is not None:
         return float(explicit)
-    return BASE_TIMEOUT_S + LEG_TIMEOUT_S * len(legs or ())
+    return BASE_TIMEOUT_S + sum(SHORT_LEG_TIMEOUT_S.get(leg, LEG_TIMEOUT_S)
+                                for leg in legs or ())
 
 
 def stage_run(repo, build, out, platform=None, now=None, install_tox=None,
@@ -937,6 +940,28 @@ def compute_outcome(ready, features, mcp, teardown, no_mcp=False, legs=None):
     return 'PASS'
 
 
+def run_fresh_td(repo, build, out, td_exe, script, flag, timeout, done):
+    """A second virgin install of `build` for a leg that needs one: stage a
+    new run dir with `script` in place of smoke_bootstrap.py, launch TD,
+    wait for `flag`, quit that TD. Convoy is always isolated. Returns
+    {'dir', 'text', 'ok', 'teardown'}."""
+    run = stage_run(repo, build, out, convoy_isolated=True)
+    shutil.copyfile(script, os.path.join(run['dir'], 'smoke_bootstrap.py'))
+    env = dict(os.environ)
+    env['EMBODY_CONVOY_DATA_DIR'] = os.path.join(run['dir'], 'convoy-data')
+    os.makedirs(env['EMBODY_CONVOY_DATA_DIR'], exist_ok=True)
+    with open(os.path.join(run['dir'], 'td-console.log'), 'ab') as console:
+        pid, proc = launch_td(td_exe,
+                              os.path.join(run['dir'], 'smoke_template.toe'),
+                              console=console, env=env)
+        try:
+            text, ok = wait_for(os.path.join(run['dir'], flag), timeout, done)
+        finally:
+            teardown = quit_smoke_td(pid, run['dir'],
+                                     reap=lambda p: proc.poll())
+    return {'dir': run['dir'], 'text': text, 'ok': ok, 'teardown': teardown}
+
+
 def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
                      budget, rpc=None, log=None):
     """The `ctx` every smoke_legs module receives (contract in
@@ -978,6 +1003,11 @@ def make_leg_context(run, build, installed, upgrade_from, port, pid, td_exe,
         'call': call, 'py': py, 'log': log, 'budget': budget,
         'wait_for_flag': lambda name, timeout, done: wait_for(
             os.path.join(run['dir'], name), timeout, done),
+        # run dirs are <out>/embody-smoke/<id>: the second one goes beside
+        'fresh_td': lambda script, flag, timeout, done: run_fresh_td(
+            build.get('repo'), build,
+            os.path.dirname(os.path.dirname(run['dir'])), td_exe, script,
+            flag, min(float(timeout), budget()), done),
     })
     return ctx
 
@@ -1074,15 +1104,15 @@ def main(argv=None):
                     help='where run directories go (never inside the repo)')
     ap.add_argument('--timeout', type=float, default=None,
                     help='overall ceiling in seconds (default: 900, '
-                         'plus 500 per --legs leg)')
+                         'plus 500 per --legs leg, 240 for wizard)')
     ap.add_argument('--no-mcp', action='store_true',
                     help='skip the MCP probe')
     ap.add_argument('--keep-td', action='store_true',
                     help='leave the smoke TouchDesigner running')
     ap.add_argument('--legs', default='',
                     help='extra legs after the fresh-install verdict, comma '
-                         'separated: upgrade, faults, uninstall (run in '
-                         'that order; see smoke_legs/__init__.py)')
+                         'separated: wizard, upgrade, faults, uninstall (run '
+                         'in that order; see smoke_legs/__init__.py)')
     ap.add_argument('--isolate-convoy', action='store_true',
                     help='point the smoke TD at a throwaway Convoy data '
                          'directory (EMBODY_CONVOY_DATA_DIR under the run '

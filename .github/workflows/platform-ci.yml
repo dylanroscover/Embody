@@ -26,10 +26,13 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref to save CI minutes.
+# Superseded branch/PR runs are cancelled to save minutes. Main never is: its
+# runs deploy and sync prod, and a merge 31 s after another cancelled the first
+# deploy mid-flight (field 2026-09-12), so main runs queue. The event is in the
+# key so a manual sync and a push deploy never cancel or queue behind each other.
 concurrency:
-  group: platform-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: platform-ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-and-test:
@@ -399,6 +402,10 @@ jobs:
       && needs.check-deploy-secrets.outputs.enabled == 'true'
       && (needs.deploy.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.deploy.result == 'skipped'))
     runs-on: ubuntu-latest
+    # One prod sync at a time across push and dispatch runs; never cancel one mid-write.
+    concurrency:
+      group: specimen-sync-production
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: platform/apps/web

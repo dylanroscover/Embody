@@ -953,12 +953,18 @@ class TestRunCeiling(_Case):
         self.assertEqual(smoke.run_timeout(
             None, ('upgrade', 'faults', 'uninstall')), 2400.0)
 
+    def test_the_wizard_leg_buys_only_what_its_own_td_needs(self):
+        self.assertEqual(smoke.run_timeout(
+            None, ('wizard', 'upgrade', 'faults', 'uninstall')), 2640.0)
+
     def test_the_ceiling_stays_under_the_ci_job_timeout(self):
-        # release-smoke.yml sets timeout-minutes: 45. The RUN must expire
-        # first, so the job writes result.json instead of being killed with
-        # no evidence. Raising one without the other breaks that.
+        # release-smoke.yml sets timeout-minutes: 50. The RUN must expire
+        # first, with room for teardown, so the job writes result.json
+        # instead of being killed with no evidence. Raising one without the
+        # other breaks that.
         self.assertLess(smoke.run_timeout(
-            None, ('upgrade', 'faults', 'uninstall')), 45 * 60)
+            None, ('wizard', 'upgrade', 'faults', 'uninstall'))
+            + 2 * smoke.QUIT_TIMEOUT_S, 50 * 60)
 
     def test_an_explicit_timeout_still_wins(self):
         self.assertEqual(smoke.run_timeout(7.0, ('upgrade', 'faults')), 7.0)
