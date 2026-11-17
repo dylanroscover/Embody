@@ -238,8 +238,14 @@ def apply_graft(project_dir: str, project_toc: str, tox_dir: str, tox_toc: str, 
 # node has no someone. So the graft also adds a root-level Execute DAT whose
 # onStart waits for Embody's extension, closes the wizard window, applies the
 # wizard's own backend (_applyWizardSetup -- the same call its Finish button
-# makes), saves the project and destroys itself. The result is a project that
-# opens configured, Envoy up, no dialog, on every later start.
+# makes), enables Embody, saves the project and destroys itself. The result
+# is a project that opens configured, Envoy up, no dialog, on every later
+# start.
+#
+# Enabling is not optional. A graft never fires onCreate, and onCreate's
+# verify() is the only startup path that flips Embody's Status to Enabled;
+# left Disabled, Update() returns at once and externalize_op tags an operator
+# and writes nothing (issue #194, every bootstrapped project through 6.3.5).
 #
 # Expanded .text framing (derived from toeexpand output, 2025.33070): the
 # line "2", then "*", five big-endian uint32 (1,1,1,1,2), a big-endian uint32
@@ -292,6 +298,14 @@ def _provision(attempt):
                 mode='auto', assistant=ASSISTANT, client=CLIENT,
                 root='projectfolder', custom_root='', permissions='all',
                 git='gitskip', externalize='skip')
+            # Enable Embody: the Enable / Update button, which a dropped-in
+            # .tox gets from onCreate and a graft never does. Its first sweep
+            # asks about dragged-in .tox links, and nobody is here to answer,
+            # so an unanswered Ask becomes Ignore: the links are kept.
+            drop = getattr(emb.par, 'Toxdropexpr', None)
+            if drop is not None and drop.eval() == 'ask':
+                drop.val = 'ignore'
+            emb.par.Update.pulse()
             emb.store('embody_provisioned', True)
             debug('embody_provision: setup applied (%s)' % ASSISTANT)
         except Exception as e:

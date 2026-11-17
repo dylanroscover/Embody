@@ -136,6 +136,12 @@ class TestProvisioning(EmbodyTestCase):
         self.assertIn("CLIENT = ''", body)
         self.assertIn('_applyWizardSetup(', body)
         self.assertIn('me.destroy()', body)
+        # a graft never fires onCreate, so nothing else enables Embody: left
+        # Disabled, Update() and externalize_op do nothing (issue #194)
+        self.assertLess(body.index('_applyWizardSetup('), body.index('emb.par.Update.pulse()'))
+        # the enable's first sweep would ask about dragged-in .tox links,
+        # and a modal hangs a node nobody is sitting at
+        self.assertLess(body.index("drop.val = 'ignore'"), body.index('emb.par.Update.pulse()'))
         body = eb.decode_text(eb.provisioning_files('opencode')['embody_provision.text']).decode()
         self.assertIn("ASSISTANT = 'other'", body)
         self.assertIn("CLIENT = 'opencode'", body)
