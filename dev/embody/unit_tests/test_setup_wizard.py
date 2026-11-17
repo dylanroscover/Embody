@@ -31,7 +31,7 @@ class TestSetupWizard(EmbodyTestCase):
 
     _PARAMS = ('Embodymode', 'Aiprojectroot', 'Aiprojectrootcustom',
                'Aiclient', 'Envoyenable', 'Envoystatus', 'Toolpermissions',
-               'Convoyenable')
+               'Convoyenable', 'Toxdropexpr')
 
     def setUp(self):
         self._emb = op.Embody
@@ -290,6 +290,23 @@ class TestSetupWizard(EmbodyTestCase):
         bogus = Path(r'\\?\definitely-not-a-host\no\such\dir')
         self.assertIsNone(setup_mod.init_git_repo(self._envoy, bogus),
                           'a failed init must return None, never raise')
+
+    # ----- dropped-.tox step -----------------------------------------------
+
+    def test_toxdrop_token_sets_the_preference(self):
+        # The step's answer IS Toxdropexpr; the wizard's close re-runs the
+        # sweep, which then applies it silently.
+        for token in ('clean', 'ignore'):
+            self._emb.par.Toxdropexpr = 'ask'
+            self._ext._applyWizardSetup(assistant='none', toxdrop=token)
+            self.assertEqual(self._emb.par.Toxdropexpr.eval(), token)
+
+    def test_blank_or_bogus_toxdrop_leaves_the_preference(self):
+        for token in ('', 'unlink-everything'):
+            self._emb.par.Toxdropexpr = 'ask'
+            self._ext._applyWizardSetup(assistant='none', toxdrop=token)
+            self.assertEqual(self._emb.par.Toxdropexpr.eval(), 'ask',
+                             f'toxdrop={token!r} must change nothing')
 
     # ----- _openSetupWizard suppression -----------------------------------
 

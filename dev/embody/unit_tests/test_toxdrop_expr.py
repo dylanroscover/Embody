@@ -244,6 +244,68 @@ class TestToxdropExpr(EmbodyTestCase):
             getattr(self.embody_ext, '_toxdrop_ignored_session', set()),
             'a dismissed dialog is not an answer and must not be remembered')
 
+    # ----- first run: the setup wizard comes first --------------------------
+
+    def test_ask_held_while_setup_wizard_pending(self):
+        """While the first-run wizard is pending or queued, the ask prompt is
+        held: no dialog, nothing cleaned, nothing remembered. The wizard's
+        close re-runs the sweep, which then offers it."""
+        self.embody.par.Toxdropexpr = 'ask'
+        comp = self._make()
+        emb = self.embody_ext  # resolve once so the instance shadow sticks
+        calls = []
+
+        def _unexpected(title, message, buttons):
+            calls.append(title)
+            return 0  # Clean, had it (wrongly) been shown
+
+        emb._messageBox = _unexpected
+        try:
+            for flag in ('_pending_envoy_prompt', '_setup_wizard_queued'):
+                saved = getattr(emb, flag, False)
+                setattr(emb, flag, True)
+                try:
+                    emb._resolveToxdropExternals([comp])
+                finally:
+                    setattr(emb, flag, saved)
+        finally:
+            try:
+                del emb._messageBox
+            except Exception:
+                pass
+        self.assertEqual(calls, [],
+                         'no prompt while the setup wizard is pending')
+        self.assertTrue(self._dropped(comp), 'held COMPs must stay untouched')
+        self.assertNotIn(comp.path, emb._toxdrop_ignored_session,
+                         'a held prompt is not an answer')
+
+    def test_wizard_asks_only_while_preference_is_ask(self):
+        """_toxdropAskPaths gates the wizard's step: the user COMPs with a
+        drag-in link while Toxdropexpr is Ask, nothing once it holds an
+        answer, never Embody's own descendants."""
+        comp = self._make()
+        self.embody.par.Toxdropexpr = 'ask'
+        paths = self.embody_ext._toxdropAskPaths()
+        self.assertIn(comp.path, paths)
+        self.assertFalse(any(p.startswith(self.embody.path + '/')
+                             for p in paths))
+        for answered in ('clean', 'ignore'):
+            self.embody.par.Toxdropexpr = answered
+            self.assertEqual(self.embody_ext._toxdropAskPaths(), [],
+                             f'{answered!r} is an answer: no step')
+
+    def test_suppressed_wizard_open_releases_hold(self):
+        """_openSetupWizard clears the queued flag even when suppressed, so a
+        wizard that never opens cannot hold the prompt all session."""
+        emb = self.embody_ext
+        saved = getattr(emb, '_setup_wizard_queued', False)
+        try:
+            emb._setup_wizard_queued = True
+            emb._openSetupWizard()  # suppressed during a test run: no window
+            self.assertFalse(emb._setupWizardBusy())
+        finally:
+            emb._setup_wizard_queued = saved
+
     # ----- tdn_exclude opt-out (issue #60) ---------------------------------
 
     def test_exclude_tag_ancestry_helper(self):

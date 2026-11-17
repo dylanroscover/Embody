@@ -45,8 +45,8 @@ class _Wizard:
         return self.values.get(name, default)
 
     def op(self, path):
-        # spine() only needs to know that the externalize group exists.
-        return object() if path == "grp_externalize" else None
+        # spine() only needs to know that the option groups exist.
+        return object() if path in ("grp_externalize", "grp_toxdrop") else None
 
 
 def _logic_with(**values):
@@ -279,6 +279,10 @@ def test_every_wizard_step_fits_the_panel_height():
                        sel_externalize="full", sel_convoy="enable")
     busy._projectSaved = lambda: True
     variants["summary"].append(busy._recap())
+    # Worst-case toxdrop hint: three long names plus the overflow count.
+    many = _logic_with(toxdrop_paths=["/p/" + "x" * 40 + str(i)
+                                      for i in range(9)])
+    variants["toxdrop"].append(many._toxdropHint())
 
     for step, d in logic.DEFS.items():
         grp = d.get("g")
@@ -401,3 +405,31 @@ def test_one_dialog_per_click():
     deferred = src.split("def _saveStepDeferred", 1)[1].split("\ndef ", 1)[0]
     assert "finally:" in deferred
     assert "unstore('save_pending')" in deferred
+
+
+# -- DROPPED-.TOX STEP ---------------------------------------------------
+#
+# A first-run user was met by a modal about TD's drag-in External .tox
+# link BEFORE the wizard. The wizard now asks it as a step, shown only
+# when start() found such COMPs while Toxdropexpr was still Ask.
+
+def test_toxdrop_step_only_when_start_found_links():
+    assert "toxdrop" not in _logic_with(toxdrop_paths=[]).spine()
+    sp = _logic_with(toxdrop_paths=["/a/DROSTE"], ext_needed=True).spine()
+    assert sp.index("toxdrop") == sp.index("externalize") + 1
+
+
+def test_toxdrop_recap_states_the_choice():
+    for sel, words in (("clean", "unlink"), ("ignore", "keep")):
+        logic = _logic_with(toxdrop_paths=["/a/DROSTE"], sel_toxdrop=sel,
+                            sel_assistant="none")
+        assert "Dragged-in .tox links: %s." % words in logic._recap()
+
+
+def test_toxdrop_hint_names_three_comps_then_counts():
+    hint = _logic_with(toxdrop_paths=["/a/DROSTE", "/b/TDTodo", "/c/Marks",
+                                      "/d/Mapper"])._toxdropHint()
+    assert hint.startswith("4 COMPs still carry")
+    assert "DROSTE, TDTodo, Marks and 1 more." in hint
+    one = _logic_with(toxdrop_paths=["/a/DROSTE"])._toxdropHint()
+    assert one.startswith("1 COMP still carries")
