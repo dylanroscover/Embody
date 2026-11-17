@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.3.6
+
+A blank project to start from, and the setup wizard comes first.
+
+- **Start from the starter.** `starter/Embody-starter.toe` is an empty project that downloads and verifies the latest release into `/project1` on first open, and asks for a release `.tox` when offline. It is also the bootstrap's blank target.
+- **The setup wizard comes first.** A first install no longer opens with the Dropped .tox Expression dialog: the wizard asks once (Unlink them / Keep the links) and sets **Dropped .tox Expression**.
+- **Bootstrapped projects externalize.** The bootstrap now enables Embody on first run; before, `externalize_op` answered success and wrote nothing (issue #194). It now refuses, with the reason, while Embody is Disabled or in Perform Mode.
+- **Fixes.** A test fixture that cleared the folder of a project built on it is gone, and the smoke template does nothing when opened alone. +25 tests.
+
 ## v6.3.4
 
 Fixes from a whole-project audit: Envoy keeps healing itself, and the bridge stays on its own project.
