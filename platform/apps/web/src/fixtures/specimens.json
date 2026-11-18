@@ -231,5 +231,79 @@
       "channelmixTOP",
       "textTOP"
     ]
+  },
+  {
+    "slug": "ember-plume",
+    "name": "Ember Plume",
+    "category": "simulation",
+    "level": "starter",
+    "description": "A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.",
+    "tags": [
+      "simulation",
+      "pop",
+      "particles",
+      "forces",
+      "curl-noise",
+      "no-glsl"
+    ],
+    "requires": [],
+    "operator_count": 16,
+    "key_ops": [
+      "particlePOP",
+      "forceradialPOP",
+      "noisePOP",
+      "lookuptexturePOP",
+      "pointspriteMAT"
+    ]
+  },
+  {
+    "slug": "strange-attractor",
+    "name": "Strange Attractor",
+    "category": "simulation",
+    "level": "intermediate",
+    "description": "Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame's points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.",
+    "tags": [
+      "simulation",
+      "glsl",
+      "pop",
+      "feedback",
+      "particles",
+      "attractor",
+      "chaos"
+    ],
+    "requires": [],
+    "operator_count": 16,
+    "key_ops": [
+      "feedbackPOP",
+      "glslPOP",
+      "pointgeneratorPOP",
+      "pointspriteMAT",
+      "rendersimpleTOP"
+    ]
+  },
+  {
+    "slug": "flow-field",
+    "name": "Flow Field",
+    "category": "simulation",
+    "level": "intermediate",
+    "description": "A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.",
+    "tags": [
+      "simulation",
+      "glsl",
+      "feedback",
+      "particles",
+      "flow-field",
+      "texture",
+      "trails"
+    ],
+    "requires": [],
+    "operator_count": 25,
+    "key_ops": [
+      "glslTOP",
+      "feedbackTOP",
+      "toptoPOP",
+      "lookuptexturePOP",
+      "pointspriteMAT"
+    ]
   }
 ]

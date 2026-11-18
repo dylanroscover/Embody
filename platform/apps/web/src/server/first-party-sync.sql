@@ -55,6 +55,18 @@ INSERT INTO specimens (id, slug, author_id, title, description, category, level,
 SELECT 'sp-tile-zoom-type', 'tile-zoom-type', u.id, 'Tile Zoom Type', 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.', 'compositing', 'intermediate', '[]', 14, 'TOP', NULL, 'thumbnails/ceb245fb5f2eea47e13ea1add9f9f325a46e92d663381e01ed41f3891c4823f7', 'videos/366f9b4b2e43169001e78f56f6d12b3c3ffad5446aca8e997c89cab38010fcd2', 'CC-BY-4.0', 'public', 'featured', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
 FROM users_profile AS u WHERE u.handle = 'envoy'
   AND NOT EXISTS (SELECT 1 FROM specimens WHERE slug = 'tile-zoom-type');
+INSERT INTO specimens (id, slug, author_id, title, description, category, level, requires, op_count, family_summary, current_version_id, thumbnail_key, video_key, license, visibility, tier, scan_status, capability_json)
+SELECT 'sp-ember-plume', 'ember-plume', u.id, 'Ember Plume', 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.', 'simulation', 'starter', '[]', 16, 'POP,MAT', NULL, 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0', 'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6', 'CC-BY-4.0', 'public', 'featured', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+FROM users_profile AS u WHERE u.handle = 'envoy'
+  AND NOT EXISTS (SELECT 1 FROM specimens WHERE slug = 'ember-plume');
+INSERT INTO specimens (id, slug, author_id, title, description, category, level, requires, op_count, family_summary, current_version_id, thumbnail_key, video_key, license, visibility, tier, scan_status, capability_json)
+SELECT 'sp-strange-attractor', 'strange-attractor', u.id, 'Strange Attractor', 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.', 'simulation', 'intermediate', '[]', 16, 'POP,MAT,TOP', NULL, 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7', 'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610', 'CC-BY-4.0', 'public', 'featured', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+FROM users_profile AS u WHERE u.handle = 'envoy'
+  AND NOT EXISTS (SELECT 1 FROM specimens WHERE slug = 'strange-attractor');
+INSERT INTO specimens (id, slug, author_id, title, description, category, level, requires, op_count, family_summary, current_version_id, thumbnail_key, video_key, license, visibility, tier, scan_status, capability_json)
+SELECT 'sp-flow-field', 'flow-field', u.id, 'Flow Field', 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.', 'simulation', 'intermediate', '[]', 25, 'TOP,POP,MAT', NULL, 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e', 'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c', 'CC-BY-4.0', 'public', 'featured', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+FROM users_profile AS u WHERE u.handle = 'envoy'
+  AND NOT EXISTS (SELECT 1 FROM specimens WHERE slug = 'flow-field');
 
 -- 1. FTS mirror rows, FIRST: the gate reads the pre-update row. Only on the
 --    contentless_delete=1 table (migration 0005); on a plain content='' table
@@ -300,6 +312,81 @@ WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile
    OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'compositing')
   );
 
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT s.rowid, s.slug, 'Ember Plume', 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.', 'simulation pop particles forces curl-noise no-glsl', u.handle, 'particlePOP forceradialPOP noisePOP lookuptexturePOP pointspriteMAT'
+FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id
+WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts' AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)
+  AND (
+      s.title IS NOT 'Ember Plume'
+   OR s.description IS NOT 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'starter'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0'
+   OR s.video_key IS NOT 'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'pop', 'particles', 'forces', 'curl-noise', 'no-glsl')) <> 6
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT s.rowid, s.slug, 'Strange Attractor', 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.', 'simulation glsl pop feedback particles attractor chaos', u.handle, 'feedbackPOP glslPOP pointgeneratorPOP pointspriteMAT rendersimpleTOP'
+FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id
+WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts' AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)
+  AND (
+      s.title IS NOT 'Strange Attractor'
+   OR s.description IS NOT 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT,TOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7'
+   OR s.video_key IS NOT 'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'feedback', 'particles', 'attractor', 'chaos')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT s.rowid, s.slug, 'Flow Field', 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.', 'simulation glsl feedback particles flow-field texture trails', u.handle, 'glslTOP feedbackTOP toptoPOP lookuptexturePOP pointspriteMAT'
+FROM specimens AS s JOIN users_profile AS u ON u.id = s.author_id
+WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'specimens_fts' AND instr(replace(lower(sql), ' ', ''), 'contentless_delete=1') > 0)
+  AND (
+      s.title IS NOT 'Flow Field'
+   OR s.description IS NOT 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 25
+   OR s.family_summary IS NOT 'TOP,POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e'
+   OR s.video_key IS NOT 'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'particles', 'flow-field', 'texture', 'trails')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+
 -- 2. Tags the six need (an existing tag row is never rewritten).
 INSERT OR IGNORE INTO tags (id, name, slug) VALUES
   ('tag-simulation', 'simulation', 'simulation'),
@@ -337,7 +424,13 @@ INSERT OR IGNORE INTO tags (id, name, slug) VALUES
   ('tag-uv', 'uv', 'uv'),
   ('tag-motion-graphics', 'motion-graphics', 'motion-graphics'),
   ('tag-text', 'text', 'text'),
-  ('tag-no-glsl', 'no-glsl', 'no-glsl');
+  ('tag-no-glsl', 'no-glsl', 'no-glsl'),
+  ('tag-forces', 'forces', 'forces'),
+  ('tag-curl-noise', 'curl-noise', 'curl-noise'),
+  ('tag-attractor', 'attractor', 'attractor'),
+  ('tag-chaos', 'chaos', 'chaos'),
+  ('tag-flow-field', 'flow-field', 'flow-field'),
+  ('tag-trails', 'trails', 'trails');
 
 -- murmuration: specimens/simulation/murmuration.tdxn sha256=c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f size=13631
 -- Version row for the repo blob, unless this specimen already has one.
@@ -749,3 +842,129 @@ DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s 
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('compositing', 'typography', 'remap', 'uv', 'motion-graphics', 'text', 'no-glsl') WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
 DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('compositing');
 INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'compositing' FROM specimens AS s WHERE s.slug = 'tile-zoom-type' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+
+-- ember-plume: specimens/simulation/ember-plume.tdxn sha256=c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d size=8212
+-- Version row for the repo blob, unless this specimen already has one.
+INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
+SELECT 'ver-ember-plume-c6313eb45ee7cbf8', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d', 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d', 8212, 16, 'scan-ember-plume-c6313eb45ee7cbf8', NULL, 'First-party sync of specimens/simulation/ember-plume.tdxn'
+FROM specimens AS s
+WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d');
+INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
+SELECT 'scan-ember-plume-c6313eb45ee7cbf8', 'ver-ember-plume-c6313eb45ee7cbf8', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-ember-plume-c6313eb45ee7cbf8') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-ember-plume-c6313eb45ee7cbf8');
+-- Metadata, cover (+ video when the repo has one) + current version. Engagement, visibility, tier untouched.
+UPDATE specimens AS s
+SET title = 'Ember Plume', description = 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.', category = 'simulation', level = 'starter', requires = '[]', op_count = 16, family_summary = 'POP,MAT', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0', video_key = 'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6',
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d' ORDER BY v.version_num DESC LIMIT 1),
+    updated_at = datetime('now')
+WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d')
+  AND (
+      s.title IS NOT 'Ember Plume'
+   OR s.description IS NOT 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'starter'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0'
+   OR s.video_key IS NOT 'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'pop', 'particles', 'forces', 'curl-noise', 'no-glsl')) <> 6
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+-- Tag and category sets: drop links the repo no longer lists, add missing ones.
+DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND tag_id NOT IN (SELECT t.id FROM tags AS t WHERE t.slug IN ('simulation', 'pop', 'particles', 'forces', 'curl-noise', 'no-glsl'));
+INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('simulation', 'pop', 'particles', 'forces', 'curl-noise', 'no-glsl') WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('simulation');
+INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'simulation' FROM specimens AS s WHERE s.slug = 'ember-plume' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+
+-- strange-attractor: specimens/simulation/strange-attractor.tdxn sha256=9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d size=12018
+-- Version row for the repo blob, unless this specimen already has one.
+INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
+SELECT 'ver-strange-attractor-9abb7e257249dbc0', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d', '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d', 12018, 16, 'scan-strange-attractor-9abb7e257249dbc0', NULL, 'First-party sync of specimens/simulation/strange-attractor.tdxn'
+FROM specimens AS s
+WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d');
+INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
+SELECT 'scan-strange-attractor-9abb7e257249dbc0', 'ver-strange-attractor-9abb7e257249dbc0', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-strange-attractor-9abb7e257249dbc0') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-strange-attractor-9abb7e257249dbc0');
+-- Metadata, cover (+ video when the repo has one) + current version. Engagement, visibility, tier untouched.
+UPDATE specimens AS s
+SET title = 'Strange Attractor', description = 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.', category = 'simulation', level = 'intermediate', requires = '[]', op_count = 16, family_summary = 'POP,MAT,TOP', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7', video_key = 'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610',
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d' ORDER BY v.version_num DESC LIMIT 1),
+    updated_at = datetime('now')
+WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d')
+  AND (
+      s.title IS NOT 'Strange Attractor'
+   OR s.description IS NOT 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT,TOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7'
+   OR s.video_key IS NOT 'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'feedback', 'particles', 'attractor', 'chaos')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+-- Tag and category sets: drop links the repo no longer lists, add missing ones.
+DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND tag_id NOT IN (SELECT t.id FROM tags AS t WHERE t.slug IN ('simulation', 'glsl', 'pop', 'feedback', 'particles', 'attractor', 'chaos'));
+INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('simulation', 'glsl', 'pop', 'feedback', 'particles', 'attractor', 'chaos') WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('simulation');
+INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'simulation' FROM specimens AS s WHERE s.slug = 'strange-attractor' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+
+-- flow-field: specimens/simulation/flow-field.tdxn sha256=aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9 size=14577
+-- Version row for the repo blob, unless this specimen already has one.
+INSERT INTO specimen_versions (id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id, signature_ref, changelog)
+SELECT 'ver-flow-field-aa12faaffcc0a460', s.id, (SELECT COALESCE(MAX(v.version_num), 0) + 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id), 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9', 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9', 14577, 25, 'scan-flow-field-aa12faaffcc0a460', NULL, 'First-party sync of specimens/simulation/flow-field.tdxn'
+FROM specimens AS s
+WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND NOT EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9');
+INSERT INTO scans (id, version_id, scanner_version, verdict, capability_json, findings_json)
+SELECT 'scan-flow-field-aa12faaffcc0a460', 'ver-flow-field-aa12faaffcc0a460', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'
+WHERE EXISTS (SELECT 1 FROM specimen_versions WHERE id = 'ver-flow-field-aa12faaffcc0a460') AND NOT EXISTS (SELECT 1 FROM scans WHERE id = 'scan-flow-field-aa12faaffcc0a460');
+-- Metadata, cover (+ video when the repo has one) + current version. Engagement, visibility, tier untouched.
+UPDATE specimens AS s
+SET title = 'Flow Field', description = 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.', category = 'simulation', level = 'intermediate', requires = '[]', op_count = 25, family_summary = 'TOP,POP,MAT', license = 'CC-BY-4.0', scan_status = 'clean', capability_json = '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', thumbnail_key = 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e', video_key = 'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c',
+    current_version_id = (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9' ORDER BY v.version_num DESC LIMIT 1),
+    updated_at = datetime('now')
+WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')
+  AND EXISTS (SELECT 1 FROM specimen_versions AS v WHERE v.specimen_id = s.id AND v.tdn_sha256 = 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9')
+  AND (
+      s.title IS NOT 'Flow Field'
+   OR s.description IS NOT 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 25
+   OR s.family_summary IS NOT 'TOP,POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e'
+   OR s.video_key IS NOT 'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'particles', 'flow-field', 'texture', 'trails')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  );
+-- Tag and category sets: drop links the repo no longer lists, add missing ones.
+DELETE FROM specimen_tags WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND tag_id NOT IN (SELECT t.id FROM tags AS t WHERE t.slug IN ('simulation', 'glsl', 'feedback', 'particles', 'flow-field', 'texture', 'trails'));
+INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) SELECT s.id, t.id FROM specimens AS s JOIN tags AS t ON t.slug IN ('simulation', 'glsl', 'feedback', 'particles', 'flow-field', 'texture', 'trails') WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');
+DELETE FROM specimen_categories WHERE specimen_id IN (SELECT s.id FROM specimens AS s WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy')) AND category NOT IN ('simulation');
+INSERT OR IGNORE INTO specimen_categories (specimen_id, category) SELECT s.id, 'simulation' FROM specimens AS s WHERE s.slug = 'flow-field' AND s.author_id IN (SELECT id FROM users_profile WHERE handle = 'envoy');

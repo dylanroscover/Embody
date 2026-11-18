@@ -1,0 +1,412 @@
+format: tdxn
+version: '2.2'
+build: 1
+generator: Embody/6.3.6
+td_build: 099.2025.33230
+network_path: /specimen_lab/strange_attractor
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  glslPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  nullPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Attractor:
+  - name: Count
+    style: Int
+    default: 200000
+    min: 1000.0
+    clampMin: true
+    normMin: 10000.0
+    normMax: 500000.0
+    help: Number of points. The population is fixed; nothing is born or dies, points are recycled through their emitter. Read when the loop starts, so after changing it pulse Initialize then Start on feedback_state.
+  - name: Speed
+    style: Float
+    default: 4
+    clampMin: true
+    normMax: 12.0
+    help: Attractor time per second. Higher draws the ribbons out faster; very high makes each integration step coarse.
+  - name: Damping
+    style: Float
+    default: 0.208186
+    min: 0.05
+    clampMin: true
+    normMin: 0.1
+    normMax: 0.4
+    help: The Thomas system's one constant, b. Up to about 0.21 the flow is chaotic, and the lower it goes the larger and looser the tangle (near 0.1 it outgrows the frame). Between about 0.21 and 0.33 everything settles onto two closed loops; above that it spirals into two points.
+  - name: Strands
+    style: Int
+    startSection: true
+    default: 48
+    min: 1.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 128.0
+    help: Number of emitters. Each one feeds a strand of points that traces the flow from its own starting place.
+  - name: Life
+    style: Float
+    default: 14
+    min: 1.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 40.0
+    help: Mean seconds before a point is recycled to its emitter. Long draws each strand deep into the attractor, short leaves bright young threads.
+  - name: Spread
+    style: Float
+    default: 0.04
+    clampMin: true
+    normMax: 0.5
+    help: Radius of each emitter. Small gives a thread that frays as chaos amplifies tiny differences; large seeds a cloud.
+  - name: Drift
+    style: Float
+    default: 0.05
+    normMin: -0.3
+    normMax: 0.3
+    help: How fast the emitters circle the attractor's symmetry axis, in radians per second. Moving emitters sweep the strands into ribbons; 0 holds them still.
+  - name: Pointsize
+    style: Float
+    label: Point Size
+    startSection: true
+    default: 2.2
+    min: 0.5
+    clampMin: true
+    normMin: 0.5
+    normMax: 8.0
+    help: Sprite diameter in pixels at a 1080 px wide output. Scales with Resw.
+  - name: Brightness
+    style: Float
+    default: 0.55
+    clampMin: true
+    normMax: 1.5
+    help: Brightness of one sprite. Sprites add, so where ribbons stack the picture runs hot; lower this before raising Count.
+  Output:
+  - name: Resw
+    style: Int
+    label: Resolution W
+    default: 1080
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output width in pixels. Drives the render and the sprite size.
+  - name: Resh
+    style: Int
+    label: Resolution H
+    default: 1080
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output height in pixels. The figure is framed for a square.
+parameters:
+  parentshortcut: Specimen
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  position: [4800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - bloom_glow
+- name: bloom_glow
+  type: bloomTOP
+  parameters:
+    bloomthreshold: 0.4
+  position: [4400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - render_attractor
+- name: glsl_color
+  type: glslPOP
+  parameters:
+    computedat: glsl_color_compute
+    outputattrs: Color
+  sequences:
+    attr:
+    - name: color
+    vec:
+    - name: uLook
+      type: vec4
+      valuex: =absTime.seconds
+      valuey: =parent.Specimen.par.Life
+  position: [2000, 0]
+  inputs:
+  - null_state
+- name: null_state
+  type: nullPOP
+  position: [1200, 0]
+  inputs:
+  - glsl_integrate
+- name: null_render
+  type: nullPOP
+  flags:
+  - display
+  position: [2400, 0]
+  inputs:
+  - glsl_color
+- name: ramp_sprite
+  type: rampTOP
+  parameters:
+    dat: ramp_sprite_keys
+    type: circular
+    extendleft: hold
+    interpnotches: easeineaseout
+    outputresolution: custom
+    resolutionw: 64
+    resolutionh: 64
+  position: [3200, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: feedback_state
+  type: feedbackPOP
+  parameters:
+    targetpop: null_state
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - pointgenerator_seed
+- name: glsl_integrate
+  type: glslPOP
+  parameters:
+    computedat: glsl_integrate_compute
+    outputattrs: P
+  sequences:
+    vec:
+    - name: uSim
+      type: vec4
+      valuex: =min(absTime.stepSeconds, 0.05) * parent.Specimen.par.Speed
+      valuey: =parent.Specimen.par.Damping
+      valuez: =parent.Specimen.par.Life
+      valuew: =parent.Specimen.par.Spread
+    - name: uClock
+      type: vec4
+      valuex: =absTime.seconds
+      valuey: =min(absTime.stepSeconds, 0.05)
+      valuez: =absTime.seconds * parent.Specimen.par.Drift
+      valuew: =parent.Specimen.par.Strands
+  position: [800, 0]
+  inputs:
+  - feedback_state
+- name: glsl_color_info
+  type: infoDAT
+  parameters:
+    op: glsl_color
+  position: [2000, -120]
+  dock: glsl_color
+  dat_read_only: true
+- name: ramp_sprite_keys
+  type: tableDAT
+  flags:
+  - viewer
+  - -showDocked
+  position: [3200, -320]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: ramp_sprite
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '1'
+    - '1'
+    - '1'
+    - '1'
+  - - '1'
+    - '0'
+    - '0'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: render_attractor
+  type: rendersimpleTOP
+  parameters:
+    camdistance: 11.5
+    bgcolorr: 0.008
+    bgcolorg: 0.01
+    bgcolorb: 0.022
+    bgcolora: 1
+    pop: null_render
+    georx: =35.26 + 6 * math.cos(absTime.seconds * 0.13)
+    geory: =-45 + 10 * math.sin(absTime.seconds * 0.1)
+    materialsource: matnode
+    mat: pointsprite_points
+    resolutionw: =parent.Specimen.par.Resw
+    resolutionh: =parent.Specimen.par.Resh
+    format: rgba16float
+  position: [4000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_color_compute
+  type: textDAT
+  position: [2150, -120]
+  dock: glsl_color
+  dat_content: |
+    // Strange Attractor - colour by age, outside the loop so the look never
+    // feeds back into the state.
+    //   uLook = (seconds, life seconds, -, -)
+
+    float hash11(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+
+    void main() {
+        const uint id = TDIndex();
+        if (id >= TDNumElements()) return;
+
+        float fid = float(id);
+        float life = uLook.y * (0.6 + 0.8 * hash11(fid + 0.5));
+        float a = fract((uLook.x + life * hash11(fid + 7.3)) / life);   // 0 at birth, 1 at death
+
+        vec3 young = vec3(0.95, 1.00, 1.00);
+        vec3 mid   = vec3(0.16, 0.60, 1.00);
+        vec3 old   = vec3(0.62, 0.20, 0.95);
+        vec3 col = a < 0.2 ? mix(young, mid, a / 0.2) : mix(mid, old, (a - 0.2) / 0.8);
+        float fade = smoothstep(0.0, 0.01, a) * (1.0 - smoothstep(0.75, 1.0, a));
+        Color[id] = vec4(col * fade, 1.0);
+    }
+  dat_content_format: text
+- name: pointsprite_points
+  type: pointspriteMAT
+  parameters:
+    colorr: =parent.Specimen.par.Brightness
+    colorg: =parent.Specimen.par.Brightness
+    colorb: =parent.Specimen.par.Brightness
+    colormap: ramp_sprite
+    pointsize: =parent.Specimen.par.Pointsize * parent.Specimen.par.Resw / 1080
+    skelrootpath: =parent()
+    blending: true
+    destblend: one
+    depthtest: false
+    depthwriting: false
+  position: [3600, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_integrate_info
+  type: infoDAT
+  parameters:
+    op: glsl_integrate
+  position: [800, -120]
+  dock: glsl_integrate
+  dat_read_only: true
+- name: pointgenerator_seed
+  type: pointgeneratorPOP
+  parameters:
+    shape: box
+    numpoints: =parent.Specimen.par.Count
+    sizex: 6
+    sizey: 6
+    sizez: 6
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_integrate_compute
+  type: textDAT
+  position: [950, -120]
+  dock: glsl_integrate
+  dat_content: |
+    // Strange Attractor - the integrator (GLSL POP inside the Feedback POP loop).
+    // P is the only state. Every frame each point takes one RK4 step along the
+    // Thomas system. A point's age is a pure function of time and its id, so
+    // recycling it through the emitter needs no extra attribute.
+    //   uSim   = (ode step, damping b, life seconds, emitter spread)
+    //   uClock = (seconds, frame seconds, emitter drift angle, strand count)
+
+    vec3 flow(vec3 p, float b) {
+        return vec3(sin(p.y) - b * p.x, sin(p.z) - b * p.y, sin(p.x) - b * p.z);
+    }
+
+    float hash11(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+
+    // emitter e sits on a sphere and circles the (1,1,1) axis, the axis the
+    // Thomas system is symmetric about
+    vec3 emitter(float e, float angle) {
+        vec3 d = normalize(vec3(hash11(e + 0.11), hash11(e + 0.37), hash11(e + 0.73)) - 0.5);
+        vec3 axis = vec3(0.57735);
+        d = d * cos(angle) + cross(axis, d) * sin(angle) + axis * dot(axis, d) * (1.0 - cos(angle));
+        return 2.6 * d;
+    }
+
+    void main() {
+        const uint id = TDIndex();
+        if (id >= TDNumElements()) return;
+
+        vec3 p = TDIn_P(0, id);
+        float b = uSim.y;
+        float h = uSim.x;
+        vec3 k1 = flow(p, b);
+        vec3 k2 = flow(p + 0.5 * h * k1, b);
+        vec3 k3 = flow(p + 0.5 * h * k2, b);
+        vec3 k4 = flow(p + h * k3, b);
+        p += h * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+
+        // age in lives; the same two lines are in glsl_color
+        float fid = float(id);
+        float life = uSim.z * (0.6 + 0.8 * hash11(fid + 0.5));
+        float lives = (uClock.x + life * hash11(fid + 7.3)) / life;
+
+        bool wrapped = fract(lives) < uClock.y / life;
+        bool lost = any(isnan(p)) || dot(p, p) > 400.0;
+        if (wrapped || lost) {
+            float cyc = floor(lives);
+            vec3 r = vec3(hash11(fid + cyc * 3.1 + 1.0),
+                          hash11(fid + cyc * 5.7 + 2.0),
+                          hash11(fid + cyc * 7.9 + 3.0)) - 0.5;
+            float e = mod(fid, max(uClock.w, 1.0));
+            p = emitter(e * 17.0, uClock.z) + uSim.w * 2.0 * r;
+        }
+        P[id] = p;
+    }
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: State loop - your own integrator
+  text: The seed box only sets how many points there are, and only when the loop starts (Initialize, then Start, on feedback_state). The Feedback POP hands last frame's points to the GLSL POP, which takes one RK4 step of the Thomas system and recycles expired points at their emitter. null_state is the Feedback POP's Target and closes the loop. No Particle POP, no forces, no velocity; P is the whole state.
+  position: [-70, -190]
+  size: [1470, 450]
+  color: [0.1, 0.14, 0.2]
+  opacity: 0.55
+- name: annotate2
+  mode: annotate
+  title: Colour by age
+  text: A second GLSL POP, on a branch off the loop, recomputes each point's age from time and its id and writes Color. Keeping the look out of the loop means it never feeds back into the state.
+  position: [1930, -190]
+  size: [670, 450]
+  color: [0.13, 0.12, 0.2]
+  opacity: 0.55
+- name: annotate3
+  mode: annotate
+  title: Sprites, render and bloom
+  text: Additive point sprites two pixels wide, so density becomes brightness. Render Simple looks down the attractor's three-fold axis and sways a few degrees, Bloom lifts the young ribbon, out1 is the output.
+  position: [3130, -390]
+  size: [1870, 650]
+  color: [0.14, 0.13, 0.18]
+  opacity: 0.55
