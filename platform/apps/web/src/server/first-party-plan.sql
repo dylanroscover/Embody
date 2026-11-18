@@ -28,6 +28,7 @@ SELECT 'murmuration' AS slug, 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/94892459a2ac5c681bbff67068122bd49317f11c9dde6cdc711fd614a4551d59'
+   OR s.video_key IS NOT 'videos/858e065bc368106e8f6a26899616c579391e2e38c965c97476bd797f53f34ac0'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c580b2523a3c8936c35212a7c895fb8933955a75d1ded4a33a7ffc5438bcb89f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'flocking', 'particles', 'generative')) <> 6
@@ -59,6 +60,7 @@ SELECT 'reaction-diffusion' AS slug, 'f13b413e61f31cc52288c4940b48a51d51880320e9
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/3850a364c8753fa5cbf8f9a9ec1c8b1dc9dfacfd04539a0b7a386c759185ec04'
+   OR s.video_key IS NOT 'videos/5fa94f157f0d937215001d6d32fcac4416b2293242024ffd2e996ce7515d55d8'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('feedback', 'glsl', 'generative', 'simulation', 'texture')) <> 5
@@ -90,6 +92,7 @@ SELECT 'kaleidoscope' AS slug, 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/b66ef37eb04a61f55c5ebb61f76ec0987f242f03dc85f449fe0d658c2f2b193d'
+   OR s.video_key IS NOT 'videos/1c74ce6a0d308a5212e280b995e16bc7cec4f39508625fc95c0fa48c21c0b404'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'd5c2d9fba5c73b85d86ad683d749f81d77a1c00a82b0f8a3554385b36fac01b1'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('compositing', 'glsl', 'mirror', 'symmetry', 'effect')) <> 5
@@ -121,6 +124,7 @@ SELECT 'noise-terrain' AS slug, 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91e
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/83d35b87e363c9d7ae5e8c2a6c5b42c7f7f89268cdfbcfa7e48756a8bd1d7e75'
+   OR s.video_key IS NOT 'videos/9bbfdcfd0ba89f1b662c83726d7a6d0da561a841b9c9a8d1f084781d29856ead'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 5
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('3d', 'glsl', 'terrain', 'geometry', 'procedural')) <> 5
@@ -152,6 +156,7 @@ SELECT 'plasma-interference' AS slug, 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/fe6ba80ec1e9bdc80a1e97fc30e971e7da205ae678b5116802da015e9cd9716e'
+   OR s.video_key IS NOT 'videos/d2ad04270343c5ad48f3ec01ce27959f084488b22f4ac48c7bdf314f0a2adceb'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'b6e2814e8e8b230bb8967f4e3d01a0bebcabcc9a0fc16f74da2428534f355ff2'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('generative', 'glsl', 'plasma', 'palette', 'vj', 'texture')) <> 6
@@ -183,6 +188,7 @@ SELECT 'mandelbulb-march' AS slug, 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63
    OR s.scan_status IS NOT 'clean'
    OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
    OR s.thumbnail_key IS NOT 'thumbnails/ea8c356215365ad392ed202c1cf816304f89e390bfc6c9ddf1f2823de51b68c4'
+   OR s.video_key IS NOT 'videos/e2898677a2f80e2e7ec036598af01bd0b19565a85f55c6b898257bab95c521a2'
    OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080'
    OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
    OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('raymarching', 'sdf', 'glsl', 'fractal', '3d', 'mandelbulb')) <> 6

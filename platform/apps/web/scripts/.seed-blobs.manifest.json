@@ -18,6 +18,15 @@
     "path": "specimens/simulation/murmuration.jpg"
   },
   {
+    "slug": "murmuration",
+    "kind": "video",
+    "key": "videos/858e065bc368106e8f6a26899616c579391e2e38c965c97476bd797f53f34ac0",
+    "sha256": "858e065bc368106e8f6a26899616c579391e2e38c965c97476bd797f53f34ac0",
+    "size": 4594316,
+    "content_type": "video/mp4",
+    "path": "specimens/simulation/murmuration.mp4"
+  },
+  {
     "slug": "reaction-diffusion",
     "kind": "tdxn",
     "key": "f13b413e61f31cc52288c4940b48a51d51880320e9741db4f52d9c4850c4b69f",
@@ -34,6 +43,15 @@
     "size": 30782,
     "content_type": "image/jpeg",
     "path": "specimens/generative/reaction-diffusion.jpg"
+  },
+  {
+    "slug": "reaction-diffusion",
+    "kind": "video",
+    "key": "videos/5fa94f157f0d937215001d6d32fcac4416b2293242024ffd2e996ce7515d55d8",
+    "sha256": "5fa94f157f0d937215001d6d32fcac4416b2293242024ffd2e996ce7515d55d8",
+    "size": 539430,
+    "content_type": "video/mp4",
+    "path": "specimens/generative/reaction-diffusion.mp4"
   },
   {
     "slug": "kaleidoscope",
@@ -54,6 +72,15 @@
     "path": "specimens/compositing/kaleidoscope.jpg"
   },
   {
+    "slug": "kaleidoscope",
+    "kind": "video",
+    "key": "videos/1c74ce6a0d308a5212e280b995e16bc7cec4f39508625fc95c0fa48c21c0b404",
+    "sha256": "1c74ce6a0d308a5212e280b995e16bc7cec4f39508625fc95c0fa48c21c0b404",
+    "size": 618939,
+    "content_type": "video/mp4",
+    "path": "specimens/compositing/kaleidoscope.mp4"
+  },
+  {
     "slug": "noise-terrain",
     "kind": "tdxn",
     "key": "aa66136a6d59ec3ef1deda1e786a913b0a98cf1fb0bd91ea65c4a88702f3f533",
@@ -70,6 +97,15 @@
     "size": 37817,
     "content_type": "image/jpeg",
     "path": "specimens/3d/noise-terrain.jpg"
+  },
+  {
+    "slug": "noise-terrain",
+    "kind": "video",
+    "key": "videos/9bbfdcfd0ba89f1b662c83726d7a6d0da561a841b9c9a8d1f084781d29856ead",
+    "sha256": "9bbfdcfd0ba89f1b662c83726d7a6d0da561a841b9c9a8d1f084781d29856ead",
+    "size": 3726010,
+    "content_type": "video/mp4",
+    "path": "specimens/3d/noise-terrain.mp4"
   },
   {
     "slug": "plasma-interference",
@@ -90,6 +126,15 @@
     "path": "specimens/generative/plasma-interference.jpg"
   },
   {
+    "slug": "plasma-interference",
+    "kind": "video",
+    "key": "videos/d2ad04270343c5ad48f3ec01ce27959f084488b22f4ac48c7bdf314f0a2adceb",
+    "sha256": "d2ad04270343c5ad48f3ec01ce27959f084488b22f4ac48c7bdf314f0a2adceb",
+    "size": 3368919,
+    "content_type": "video/mp4",
+    "path": "specimens/generative/plasma-interference.mp4"
+  },
+  {
     "slug": "mandelbulb-march",
     "kind": "tdxn",
     "key": "bbb8fd3067e2e283e16135f84a8877465526f3fa1d63f76b176e15786787e080",
@@ -106,6 +151,15 @@
     "size": 14253,
     "content_type": "image/jpeg",
     "path": "specimens/raymarching-sdf/mandelbulb-march.jpg"
+  },
+  {
+    "slug": "mandelbulb-march",
+    "kind": "video",
+    "key": "videos/e2898677a2f80e2e7ec036598af01bd0b19565a85f55c6b898257bab95c521a2",
+    "sha256": "e2898677a2f80e2e7ec036598af01bd0b19565a85f55c6b898257bab95c521a2",
+    "size": 758717,
+    "content_type": "video/mp4",
+    "path": "specimens/raymarching-sdf/mandelbulb-march.mp4"
   },
   {
     "slug": "prismatic-strata",
