@@ -1,7 +1,7 @@
 format: tdxn
 version: '2.2'
-build: 14
-generator: Embody/6.2.74
+build: 16
+generator: Embody/6.3.6
 td_build: 099.2025.33230
 network_path: /specimen_lab
 options:
@@ -39,10 +39,22 @@ operators:
   - viewer
   position: [1600, -400]
   tdn_ref: specimen_lab/mandala.tdxn
+- name: flow_field
+  type: baseCOMP
+  parameters:
+    parentshortcut: Specimen
+  position: [800, -1800]
+  tdn_ref: specimen_lab/flow_field.tdxn
 - name: hyper_ntsc
   type: baseCOMP
   position: [1200, 0]
   tdn_ref: specimen_lab/hyper_ntsc.tdxn
+- name: ember_plume
+  type: baseCOMP
+  parameters:
+    parentshortcut: Specimen
+  position: [0, -1800]
+  tdn_ref: specimen_lab/ember_plume.tdxn
 - name: murmuration
   type: baseCOMP
   position: [0, -800]
@@ -104,6 +116,12 @@ operators:
   type: baseCOMP
   position: [800, 0]
   tdn_ref: specimen_lab/crosspoint_matrix.tdxn
+- name: strange_attractor
+  type: baseCOMP
+  parameters:
+    parentshortcut: Specimen
+  position: [400, -1800]
+  tdn_ref: specimen_lab/strange_attractor.tdxn
 - name: reaction_diffusion
   type: baseCOMP
   position: [1200, -400]

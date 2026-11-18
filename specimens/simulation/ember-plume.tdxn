@@ -1,0 +1,348 @@
+format: tdxn
+version: '2.2'
+build: 1
+generator: Embody/6.3.6
+td_build: 099.2025.33230
+network_path: /specimen_lab/ember_plume
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  nullPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  rampTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  tableDAT:
+    flags:
+    - -showDocked
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Embers:
+  - name: Birthrate
+    style: Float
+    label: Birth Rate
+    default: 6000
+    clampMin: true
+    normMax: 12000.0
+    help: Particles born per second. The pool grows to fit Birth Rate x Life.
+  - name: Life
+    style: Float
+    default: 4
+    min: 0.5
+    clampMin: true
+    normMin: 0.5
+    normMax: 8.0
+    help: Mean lifetime in seconds. Each particle lives a quarter shorter or longer, and its colour runs the whole palette over that life.
+  - name: Lift
+    style: Float
+    startSection: true
+    default: 0.6
+    normMax: 2.0
+    help: Upward buoyancy force. With drag on, rise speed settles near sqrt(force / drag).
+  - name: Wind
+    style: Float
+    default: 0.3
+    normMin: -1.0
+    help: Sideways force. Positive leans the plume to the right.
+  - name: Turbulence
+    style: Float
+    default: 0.24
+    clampMin: true
+    help: Strength of the curl-noise force that breaks the column into billows.
+  - name: Drag
+    style: Float
+    default: 1
+    clampMin: true
+    normMax: 3.0
+    help: Air drag given to each particle at birth. Higher slows the rise and tightens the plume; 0 lets particles accelerate for their whole life.
+  - name: Pointsize
+    style: Float
+    label: Point Size
+    startSection: true
+    default: 7
+    min: 1.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 30.0
+    help: Sprite diameter in pixels at a 1080 px wide output. Scales with Resw so the look holds at any resolution.
+  - name: Brightness
+    style: Float
+    default: 0.32
+    clampMin: true
+    help: Brightness of one sprite. Sprites add, so dense areas run hot; lower this before raising Birth Rate.
+  Output:
+  - name: Resw
+    style: Int
+    label: Resolution W
+    default: 1080
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output width in pixels. Drives the render and the sprite size.
+  - name: Resh
+    style: Int
+    label: Resolution H
+    default: 1080
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 4096.0
+    help: Output height in pixels. The plume is framed for a square.
+parameters:
+  parentshortcut: Specimen
+color: [0.3, 0.5, 0.9]
+tags:
+- tdxn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  position: [5600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - bloom_glow
+- name: bloom_glow
+  type: bloomTOP
+  parameters:
+    bloomthreshold: 0.6
+  position: [5200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - render_embers
+- name: null_color
+  type: nullPOP
+  flags:
+  - display
+  position: [3200, 0]
+  inputs:
+  - lookuptexture_color
+- name: ramp_sprite
+  type: rampTOP
+  parameters:
+    dat: ramp_sprite_keys
+    type: circular
+    extendleft: hold
+    interpnotches: easeineaseout
+    outputresolution: custom
+    resolutionw: 64
+    resolutionh: 64
+  position: [4000, -200]
+- name: particle_sim
+  type: particlePOP
+  parameters:
+    targetpop: null_feedback
+    maxparticles: =int(parent.Specimen.par.Birthrate * parent.Specimen.par.Life * 1.3) + 100
+    birthrate: =parent.Specimen.par.Birthrate
+    life: =parent.Specimen.par.Life
+    lifevariance: 0.25
+    jitterbirthtime: true
+    initvelocityy: 1.5
+    initdrag: =parent.Specimen.par.Drag
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - pointgenerator_emit
+- name: ramp_palette
+  type: rampTOP
+  parameters:
+    dat: ramp_palette_keys
+  position: [2400, -200]
+- name: null_feedback
+  type: nullPOP
+  position: [1600, 0]
+  inputs:
+  - noise_turbulence
+- name: render_embers
+  type: rendersimpleTOP
+  parameters:
+    camdistance: 4.83
+    bgcolorr: 0.012
+    bgcolorg: 0.012
+    bgcolorb: 0.02
+    bgcolora: 1
+    pop: null_color
+    geotx: -0.6
+    geoty: -1.6
+    materialsource: matnode
+    mat: pointsprite_embers
+    resolutionw: =parent.Specimen.par.Resw
+    resolutionh: =parent.Specimen.par.Resh
+    format: rgba16float
+  position: [4800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: mathmix_agenorm
+  type: mathmixPOP
+  sequences:
+    comb:
+    - summary: =me.curBlock.summary
+      oper: adivb
+      scopea: PartAge
+      scopeb: PartLifeSpan
+      result: AgeNorm
+  position: [2400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - null_feedback
+- name: forceradial_lift
+  type: forceradialPOP
+  parameters:
+    radial: false
+    spiral: true
+    spiralstrength: 0.3
+    globforcex: =parent.Specimen.par.Wind
+    globforcey: =parent.Specimen.par.Lift
+    globforcemult: 1
+  position: [800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - particle_sim
+- name: noise_turbulence
+  type: noisePOP
+  parameters:
+    amp0: =parent.Specimen.par.Turbulence
+    t4d: =absTime.seconds * 0.15
+    curl3d: true
+    combineentity: curl3d
+    combineattrscope: PartForce
+    outputattrscope: PartForce
+  position: [1200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - forceradial_lift
+- name: ramp_sprite_keys
+  type: tableDAT
+  position: [4000, -320]
+  dock: ramp_sprite
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '1'
+    - '1'
+    - '1'
+    - '1'
+  - - '1'
+    - '0'
+    - '0'
+    - '0'
+    - '0'
+  dat_content_format: table
+- name: ramp_palette_keys
+  type: tableDAT
+  position: [2400, -320]
+  dock: ramp_palette
+  dat_content:
+  - - pos
+    - r
+    - g
+    - b
+    - a
+  - - '0'
+    - '1'
+    - '0.95'
+    - '0.8'
+    - '0'
+  - - '0.08'
+    - '1'
+    - '0.9'
+    - '0.65'
+    - '1'
+  - - '0.35'
+    - '1'
+    - '0.5'
+    - '0.12'
+    - '1'
+  - - '0.7'
+    - '0.75'
+    - '0.12'
+    - '0.03'
+    - '0.8'
+  - - '1'
+    - '0.2'
+    - '0.02'
+    - '0.01'
+    - '0'
+  dat_content_format: table
+- name: pointsprite_embers
+  type: pointspriteMAT
+  parameters:
+    colorr: =parent.Specimen.par.Brightness
+    colorg: =parent.Specimen.par.Brightness
+    colorb: =parent.Specimen.par.Brightness
+    colormap: ramp_sprite
+    pointsize: =parent.Specimen.par.Pointsize * parent.Specimen.par.Resw / 1080
+    skelrootpath: =parent()
+    blending: true
+    destblend: one
+    depthtest: false
+    depthwriting: false
+  position: [4400, -200]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: lookuptexture_color
+  type: lookuptexturePOP
+  parameters:
+    top: ramp_palette
+    lookupindexattr0: AgeNorm
+    lookupindexattr1: ''
+    outputattrscope: Color
+  position: [2800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - mathmix_agenorm
+- name: pointgenerator_emit
+  type: pointgeneratorPOP
+  parameters:
+    numpoints: 2000
+    radiusx: 0.3
+    radiusy: 0.02
+    radiusz: 0.3
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Simulation loop
+  text: Emitter points feed the Particle POP, which births, ages and integrates. Force Radial adds lift and wind, Noise adds curl turbulence, both into PartForce. null_feedback is the Particle POP's Target, so last frame's state comes back around. No GLSL anywhere.
+  position: [-70, -70]
+  size: [1870, 330]
+  color: [0.2, 0.13, 0.1]
+  opacity: 0.55
+- name: annotate2
+  mode: annotate
+  title: Colour by age
+  text: Math Mix divides PartAge by PartLifeSpan into AgeNorm (0 at birth, 1 at death). Lookup Texture reads the palette ramp at AgeNorm and writes Color. The ramp's alpha fades each particle in and out.
+  position: [2330, -390]
+  size: [1070, 650]
+  color: [0.2, 0.16, 0.1]
+  opacity: 0.55
+- name: annotate3
+  mode: annotate
+  title: Sprites, render and bloom
+  text: The Point Sprite MAT draws each point as a soft additive dot (ramp_sprite is the dot). Render Simple frames the plume by moving the geometry, Bloom lifts the hot core, out1 is the output.
+  position: [3930, -390]
+  size: [1870, 650]
+  color: [0.14, 0.13, 0.18]
+  opacity: 0.55

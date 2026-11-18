@@ -318,3 +318,99 @@ FROM (SELECT 1) AS one
 LEFT JOIN specimens AS s ON s.slug = 'tile-zoom-type'
 LEFT JOIN users_profile AS u ON u.id = s.author_id
 LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
+SELECT 'ember-plume' AS slug, 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d' AS repo_sha, 8212 AS repo_size,
+  s.id AS specimen_id, u.handle AS author_handle,
+  CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
+  CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
+  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
+  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0' AS repo_thumbnail_key,
+  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
+     AND v.tdn_sha256 = 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+  CASE WHEN s.id IS NULL THEN NULL WHEN (
+      s.title IS NOT 'Ember Plume'
+   OR s.description IS NOT 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'starter'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0'
+   OR s.video_key IS NOT 'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 6
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'pop', 'particles', 'forces', 'curl-noise', 'no-glsl')) <> 6
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  ) THEN 1 ELSE 0 END AS stale
+FROM (SELECT 1) AS one
+LEFT JOIN specimens AS s ON s.slug = 'ember-plume'
+LEFT JOIN users_profile AS u ON u.id = s.author_id
+LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
+SELECT 'strange-attractor' AS slug, '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d' AS repo_sha, 12018 AS repo_size,
+  s.id AS specimen_id, u.handle AS author_handle,
+  CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
+  CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
+  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
+  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7' AS repo_thumbnail_key,
+  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
+     AND v.tdn_sha256 = '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+  CASE WHEN s.id IS NULL THEN NULL WHEN (
+      s.title IS NOT 'Strange Attractor'
+   OR s.description IS NOT 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 16
+   OR s.family_summary IS NOT 'POP,MAT,TOP'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7'
+   OR s.video_key IS NOT 'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'pop', 'feedback', 'particles', 'attractor', 'chaos')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  ) THEN 1 ELSE 0 END AS stale
+FROM (SELECT 1) AS one
+LEFT JOIN specimens AS s ON s.slug = 'strange-attractor'
+LEFT JOIN users_profile AS u ON u.id = s.author_id
+LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;
+SELECT 'flow-field' AS slug, 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9' AS repo_sha, 14577 AS repo_size,
+  s.id AS specimen_id, u.handle AS author_handle,
+  CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS found,
+  CASE WHEN u.handle = 'envoy' THEN 1 ELSE 0 END AS first_party,
+  s.created_at, s.updated_at, s.visibility, s.likes_count, s.copies_count,
+  s.current_version_id, cv.version_num AS current_version, cv.tdn_sha256 AS live_sha,
+  s.thumbnail_key AS live_thumbnail_key, 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e' AS repo_thumbnail_key,
+  (SELECT v.id FROM specimen_versions AS v WHERE v.specimen_id = s.id
+     AND v.tdn_sha256 = 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9' ORDER BY v.version_num DESC LIMIT 1) AS repo_version_id,
+  CASE WHEN s.id IS NULL THEN NULL WHEN (
+      s.title IS NOT 'Flow Field'
+   OR s.description IS NOT 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.'
+   OR s.category IS NOT 'simulation'
+   OR s.level IS NOT 'intermediate'
+   OR s.requires IS NOT '[]'
+   OR s.op_count IS NOT 25
+   OR s.family_summary IS NOT 'TOP,POP,MAT'
+   OR s.license IS NOT 'CC-BY-4.0'
+   OR s.scan_status IS NOT 'clean'
+   OR s.capability_json IS NOT '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}'
+   OR s.thumbnail_key IS NOT 'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e'
+   OR s.video_key IS NOT 'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c'
+   OR (SELECT v.tdn_sha256 FROM specimen_versions AS v WHERE v.id = s.current_version_id) IS NOT 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9'
+   OR (SELECT COUNT(*) FROM specimen_tags AS st WHERE st.specimen_id = s.id) <> 7
+   OR (SELECT COUNT(*) FROM specimen_tags AS st JOIN tags AS t ON t.id = st.tag_id WHERE st.specimen_id = s.id AND t.slug IN ('simulation', 'glsl', 'feedback', 'particles', 'flow-field', 'texture', 'trails')) <> 7
+   OR (SELECT COUNT(*) FROM specimen_categories AS sc WHERE sc.specimen_id = s.id) <> 1
+   OR NOT EXISTS (SELECT 1 FROM specimen_categories AS sc WHERE sc.specimen_id = s.id AND sc.category = 'simulation')
+  ) THEN 1 ELSE 0 END AS stale
+FROM (SELECT 1) AS one
+LEFT JOIN specimens AS s ON s.slug = 'flow-field'
+LEFT JOIN users_profile AS u ON u.id = s.author_id
+LEFT JOIN specimen_versions AS cv ON cv.id = s.current_version_id;

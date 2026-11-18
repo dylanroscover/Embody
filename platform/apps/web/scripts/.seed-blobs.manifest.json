@@ -187,5 +187,86 @@
     "size": 2131189,
     "content_type": "video/mp4",
     "path": "specimens/compositing/tile-zoom-type.mp4"
+  },
+  {
+    "slug": "ember-plume",
+    "kind": "tdxn",
+    "key": "c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d",
+    "sha256": "c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d",
+    "size": 8212,
+    "content_type": "application/json",
+    "path": "specimens/simulation/ember-plume.tdxn"
+  },
+  {
+    "slug": "ember-plume",
+    "kind": "thumbnail",
+    "key": "thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0",
+    "sha256": "95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0",
+    "size": 86654,
+    "content_type": "image/jpeg",
+    "path": "specimens/simulation/ember-plume.jpg"
+  },
+  {
+    "slug": "ember-plume",
+    "kind": "video",
+    "key": "videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6",
+    "sha256": "616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6",
+    "size": 3001890,
+    "content_type": "video/mp4",
+    "path": "specimens/simulation/ember-plume.mp4"
+  },
+  {
+    "slug": "strange-attractor",
+    "kind": "tdxn",
+    "key": "9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d",
+    "sha256": "9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d",
+    "size": 12018,
+    "content_type": "application/json",
+    "path": "specimens/simulation/strange-attractor.tdxn"
+  },
+  {
+    "slug": "strange-attractor",
+    "kind": "thumbnail",
+    "key": "thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7",
+    "sha256": "2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7",
+    "size": 171459,
+    "content_type": "image/jpeg",
+    "path": "specimens/simulation/strange-attractor.jpg"
+  },
+  {
+    "slug": "strange-attractor",
+    "kind": "video",
+    "key": "videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610",
+    "sha256": "1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610",
+    "size": 2796360,
+    "content_type": "video/mp4",
+    "path": "specimens/simulation/strange-attractor.mp4"
+  },
+  {
+    "slug": "flow-field",
+    "kind": "tdxn",
+    "key": "aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9",
+    "sha256": "aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9",
+    "size": 14577,
+    "content_type": "application/json",
+    "path": "specimens/simulation/flow-field.tdxn"
+  },
+  {
+    "slug": "flow-field",
+    "kind": "thumbnail",
+    "key": "thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e",
+    "sha256": "55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e",
+    "size": 98879,
+    "content_type": "image/jpeg",
+    "path": "specimens/simulation/flow-field.jpg"
+  },
+  {
+    "slug": "flow-field",
+    "kind": "video",
+    "key": "videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c",
+    "sha256": "d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c",
+    "size": 381051,
+    "content_type": "video/mp4",
+    "path": "specimens/simulation/flow-field.mp4"
   }
 ]

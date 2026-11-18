@@ -4432,6 +4432,964 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ]
       }
     ]
+  },
+  "ember-plume": {
+    "format": "tdxn",
+    "version": "2.2",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          5600,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "bloom_glow"
+        ]
+      },
+      {
+        "name": "bloom_glow",
+        "type": "bloomTOP",
+        "position": [
+          5200,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "render_embers"
+        ]
+      },
+      {
+        "name": "null_color",
+        "type": "nullPOP",
+        "position": [
+          3200,
+          0
+        ],
+        "inputs": [
+          "lookuptexture_color"
+        ]
+      },
+      {
+        "name": "ramp_sprite",
+        "type": "rampTOP",
+        "position": [
+          4000,
+          -200
+        ]
+      },
+      {
+        "name": "particle_sim",
+        "type": "particlePOP",
+        "position": [
+          400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "pointgenerator_emit"
+        ]
+      },
+      {
+        "name": "ramp_palette",
+        "type": "rampTOP",
+        "position": [
+          2400,
+          -200
+        ]
+      },
+      {
+        "name": "null_feedback",
+        "type": "nullPOP",
+        "position": [
+          1600,
+          0
+        ],
+        "inputs": [
+          "noise_turbulence"
+        ]
+      },
+      {
+        "name": "render_embers",
+        "type": "rendersimpleTOP",
+        "position": [
+          4800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "mathmix_agenorm",
+        "type": "mathmixPOP",
+        "position": [
+          2400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "null_feedback"
+        ]
+      },
+      {
+        "name": "forceradial_lift",
+        "type": "forceradialPOP",
+        "position": [
+          800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "particle_sim"
+        ]
+      },
+      {
+        "name": "noise_turbulence",
+        "type": "noisePOP",
+        "position": [
+          1200,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "forceradial_lift"
+        ]
+      },
+      {
+        "name": "ramp_sprite_keys",
+        "type": "tableDAT",
+        "position": [
+          4000,
+          -320
+        ]
+      },
+      {
+        "name": "ramp_palette_keys",
+        "type": "tableDAT",
+        "position": [
+          2400,
+          -320
+        ]
+      },
+      {
+        "name": "pointsprite_embers",
+        "type": "pointspriteMAT",
+        "position": [
+          4400,
+          -200
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "lookuptexture_color",
+        "type": "lookuptexturePOP",
+        "position": [
+          2800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "mathmix_agenorm"
+        ]
+      },
+      {
+        "name": "pointgenerator_emit",
+        "type": "pointgeneratorPOP",
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "Simulation loop",
+        "text": "Emitter points feed the Particle POP, which births, ages and integrates. Force Radial adds lift and wind, Noise adds curl turbulence, both into PartForce. null_feedback is the Particle POP's Target, so last frame's state comes back around. No GLSL anywhere.",
+        "position": [
+          -70,
+          -70
+        ],
+        "size": [
+          1870,
+          330
+        ],
+        "color": [
+          0.2,
+          0.13,
+          0.1
+        ]
+      },
+      {
+        "name": "annotate2",
+        "title": "Colour by age",
+        "text": "Math Mix divides PartAge by PartLifeSpan into AgeNorm (0 at birth, 1 at death). Lookup Texture reads the palette ramp at AgeNorm and writes Color. The ramp's alpha fades each particle in and out.",
+        "position": [
+          2330,
+          -390
+        ],
+        "size": [
+          1070,
+          650
+        ],
+        "color": [
+          0.2,
+          0.16,
+          0.1
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "Sprites, render and bloom",
+        "text": "The Point Sprite MAT draws each point as a soft additive dot (ramp_sprite is the dot). Render Simple frames the plume by moving the geometry, Bloom lifts the hot core, out1 is the output.",
+        "position": [
+          3930,
+          -390
+        ],
+        "size": [
+          1870,
+          650
+        ],
+        "color": [
+          0.14,
+          0.13,
+          0.18
+        ]
+      }
+    ]
+  },
+  "strange-attractor": {
+    "format": "tdxn",
+    "version": "2.2",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          4800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "bloom_glow"
+        ]
+      },
+      {
+        "name": "bloom_glow",
+        "type": "bloomTOP",
+        "position": [
+          4400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "render_attractor"
+        ]
+      },
+      {
+        "name": "glsl_color",
+        "type": "glslPOP",
+        "position": [
+          2000,
+          0
+        ],
+        "inputs": [
+          "null_state"
+        ]
+      },
+      {
+        "name": "null_state",
+        "type": "nullPOP",
+        "position": [
+          1200,
+          0
+        ],
+        "inputs": [
+          "glsl_integrate"
+        ]
+      },
+      {
+        "name": "null_render",
+        "type": "nullPOP",
+        "position": [
+          2400,
+          0
+        ],
+        "inputs": [
+          "glsl_color"
+        ]
+      },
+      {
+        "name": "ramp_sprite",
+        "type": "rampTOP",
+        "position": [
+          3200,
+          -200
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "feedback_state",
+        "type": "feedbackPOP",
+        "position": [
+          400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "pointgenerator_seed"
+        ]
+      },
+      {
+        "name": "glsl_integrate",
+        "type": "glslPOP",
+        "position": [
+          800,
+          0
+        ],
+        "inputs": [
+          "feedback_state"
+        ]
+      },
+      {
+        "name": "glsl_color_info",
+        "type": "infoDAT",
+        "position": [
+          2000,
+          -120
+        ]
+      },
+      {
+        "name": "ramp_sprite_keys",
+        "type": "tableDAT",
+        "position": [
+          3200,
+          -320
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "render_attractor",
+        "type": "rendersimpleTOP",
+        "position": [
+          4000,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_color_compute",
+        "type": "textDAT",
+        "position": [
+          2150,
+          -120
+        ]
+      },
+      {
+        "name": "pointsprite_points",
+        "type": "pointspriteMAT",
+        "position": [
+          3600,
+          -200
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_integrate_info",
+        "type": "infoDAT",
+        "position": [
+          800,
+          -120
+        ]
+      },
+      {
+        "name": "pointgenerator_seed",
+        "type": "pointgeneratorPOP",
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_integrate_compute",
+        "type": "textDAT",
+        "position": [
+          950,
+          -120
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "State loop - your own integrator",
+        "text": "The seed box only sets how many points there are, and only when the loop starts (Initialize, then Start, on feedback_state). The Feedback POP hands last frame's points to the GLSL POP, which takes one RK4 step of the Thomas system and recycles expired points at their emitter. null_state is the Feedback POP's Target and closes the loop. No Particle POP, no forces, no velocity; P is the whole state.",
+        "position": [
+          -70,
+          -190
+        ],
+        "size": [
+          1470,
+          450
+        ],
+        "color": [
+          0.1,
+          0.14,
+          0.2
+        ]
+      },
+      {
+        "name": "annotate2",
+        "title": "Colour by age",
+        "text": "A second GLSL POP, on a branch off the loop, recomputes each point's age from time and its id and writes Color. Keeping the look out of the loop means it never feeds back into the state.",
+        "position": [
+          1930,
+          -190
+        ],
+        "size": [
+          670,
+          450
+        ],
+        "color": [
+          0.13,
+          0.12,
+          0.2
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "Sprites, render and bloom",
+        "text": "Additive point sprites two pixels wide, so density becomes brightness. Render Simple looks down the attractor's three-fold axis and sways a few degrees, Bloom lifts the young ribbon, out1 is the output.",
+        "position": [
+          3130,
+          -390
+        ],
+        "size": [
+          1870,
+          650
+        ],
+        "color": [
+          0.14,
+          0.13,
+          0.18
+        ]
+      }
+    ]
+  },
+  "flow-field": {
+    "format": "tdxn",
+    "version": "2.2",
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "out1",
+        "type": "outTOP",
+        "position": [
+          7600,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "level_grade"
+        ]
+      },
+      {
+        "name": "comp_add",
+        "type": "compositeTOP",
+        "position": [
+          6400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "level_fade",
+          "render_points"
+        ]
+      },
+      {
+        "name": "glsl_seed",
+        "type": "glslTOP"
+      },
+      {
+        "name": "level_fade",
+        "type": "levelTOP",
+        "position": [
+          6000,
+          -200
+        ],
+        "inputs": [
+          "feedback_trails"
+        ]
+      },
+      {
+        "name": "null_state",
+        "type": "nullTOP",
+        "position": [
+          1600,
+          0
+        ],
+        "inputs": [
+          "glsl_advect"
+        ]
+      },
+      {
+        "name": "glsl_advect",
+        "type": "glslTOP",
+        "position": [
+          1000,
+          0
+        ],
+        "inputs": [
+          "feedback_state"
+        ]
+      },
+      {
+        "name": "level_grade",
+        "type": "levelTOP",
+        "position": [
+          7200,
+          0
+        ],
+        "inputs": [
+          "null_trails"
+        ]
+      },
+      {
+        "name": "null_points",
+        "type": "nullPOP",
+        "position": [
+          3200,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "lookuptexture_color"
+        ]
+      },
+      {
+        "name": "null_trails",
+        "type": "nullTOP",
+        "position": [
+          6800,
+          0
+        ],
+        "inputs": [
+          "comp_add"
+        ]
+      },
+      {
+        "name": "ramp_sprite",
+        "type": "rampTOP",
+        "position": [
+          4000,
+          -200
+        ]
+      },
+      {
+        "name": "ramp_palette",
+        "type": "rampTOP",
+        "position": [
+          2400,
+          -200
+        ]
+      },
+      {
+        "name": "topto_points",
+        "type": "toptoPOP",
+        "position": [
+          2400,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "render_points",
+        "type": "rendersimpleTOP",
+        "position": [
+          4800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "feedback_state",
+        "type": "feedbackTOP",
+        "position": [
+          600,
+          0
+        ],
+        "inputs": [
+          "glsl_seed"
+        ]
+      },
+      {
+        "name": "glsl_seed_info",
+        "type": "infoDAT",
+        "position": [
+          0,
+          -120
+        ]
+      },
+      {
+        "name": "feedback_trails",
+        "type": "feedbackTOP",
+        "position": [
+          5600,
+          -200
+        ],
+        "inputs": [
+          "render_points"
+        ]
+      },
+      {
+        "name": "glsl_seed_pixel",
+        "type": "textDAT",
+        "position": [
+          150,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_advect_info",
+        "type": "infoDAT",
+        "position": [
+          1000,
+          -120
+        ]
+      },
+      {
+        "name": "ramp_sprite_keys",
+        "type": "tableDAT",
+        "position": [
+          4000,
+          -320
+        ]
+      },
+      {
+        "name": "glsl_advect_pixel",
+        "type": "textDAT",
+        "position": [
+          1150,
+          -120
+        ]
+      },
+      {
+        "name": "glsl_seed_compute",
+        "type": "textDAT",
+        "position": [
+          300,
+          -120
+        ]
+      },
+      {
+        "name": "ramp_palette_keys",
+        "type": "tableDAT",
+        "position": [
+          2400,
+          -320
+        ]
+      },
+      {
+        "name": "pointsprite_points",
+        "type": "pointspriteMAT",
+        "position": [
+          4400,
+          -200
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ]
+      },
+      {
+        "name": "glsl_advect_compute",
+        "type": "textDAT",
+        "position": [
+          1300,
+          -120
+        ]
+      },
+      {
+        "name": "lookuptexture_color",
+        "type": "lookuptexturePOP",
+        "position": [
+          2800,
+          0
+        ],
+        "size": [
+          130,
+          90
+        ],
+        "color": [
+          0.67,
+          0.67,
+          0.67
+        ],
+        "inputs": [
+          "topto_points"
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "annotate1",
+        "title": "State in a texture",
+        "text": "Every pixel of a float texture is one particle (x, y, hue, age). glsl_seed scatters them once. The Feedback TOP hands last frame's texture to glsl_advect, which walks each particle one step along a morphing heading field and respawns it in the disc when it ages out. null_state is the Feedback TOP's target. This is how GPU particles were built before POPs, and it still scales furthest.",
+        "position": [
+          -70,
+          -190
+        ],
+        "size": [
+          1870,
+          450
+        ],
+        "color": [
+          0.1,
+          0.17,
+          0.18
+        ]
+      },
+      {
+        "name": "annotate2",
+        "title": "Pixels to points",
+        "text": "TOP to POP reads the state texture back as geometry, one point per pixel, with position from RGB. Because blue carries the hue, P(2) indexes the palette ramp and becomes Color.",
+        "position": [
+          2330,
+          -390
+        ],
+        "size": [
+          1070,
+          650
+        ],
+        "color": [
+          0.12,
+          0.16,
+          0.14
+        ]
+      },
+      {
+        "name": "annotate3",
+        "title": "Draw the points",
+        "text": "Additive point sprites through an orthographic Render Simple TOP, two units wide to match the sim's -1 to 1 square. Each point is far too dim to see on its own.",
+        "position": [
+          3930,
+          -390
+        ],
+        "size": [
+          1070,
+          650
+        ],
+        "color": [
+          0.14,
+          0.13,
+          0.18
+        ]
+      },
+      {
+        "name": "annotate4",
+        "title": "Trails - a second feedback loop",
+        "text": "Each frame the last picture is dimmed by Trail and the new points are added on top. Hundreds of faint frames pile up into continuous streamlines. level_grade's gamma lifts the faint fibres between the bright rivers; out1 is the output.",
+        "position": [
+          5530,
+          -270
+        ],
+        "size": [
+          2270,
+          530
+        ],
+        "color": [
+          0.18,
+          0.13,
+          0.14
+        ]
+      }
+    ]
   }
 };
 

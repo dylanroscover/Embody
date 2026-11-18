@@ -30,11 +30,11 @@ DELETE FROM specimen_categories WHERE specimen_id IN (SELECT id FROM specimens W
 DELETE FROM specimens WHERE slug IN ('layered-noise-field', 'infinite-zoom-tunnel', 'curl-noise-swarm', 'spectrum-reactor', 'signed-distance-lantern', 'bloom-grade-stack', 'ev', 'clean2', 'ff', 'clean-net', 'evil');
 
 -- Purge any prior copy of these real specimens (clean re-run).
-DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type'));
-DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
-DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
-DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
-DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type');
+DELETE FROM scans WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type', 'sp-ember-plume', 'sp-strange-attractor', 'sp-flow-field'));
+DELETE FROM specimen_tags WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type', 'sp-ember-plume', 'sp-strange-attractor', 'sp-flow-field');
+DELETE FROM specimen_versions WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type', 'sp-ember-plume', 'sp-strange-attractor', 'sp-flow-field');
+DELETE FROM specimen_categories WHERE specimen_id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type', 'sp-ember-plume', 'sp-strange-attractor', 'sp-flow-field');
+DELETE FROM specimens WHERE id IN ('sp-murmuration', 'sp-reaction-diffusion', 'sp-kaleidoscope', 'sp-noise-terrain', 'sp-plasma-interference', 'sp-mandelbulb-march', 'sp-prismatic-strata', 'sp-mandala', 'sp-thermite-and-freon', 'sp-tile-zoom-type', 'sp-ember-plume', 'sp-strange-attractor', 'sp-flow-field');
 
 -- Tags (deduped across all specimens).
 INSERT OR REPLACE INTO tags (id, name, slug) VALUES
@@ -73,7 +73,13 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
   ('tag-uv', 'uv', 'uv'),
   ('tag-motion-graphics', 'motion-graphics', 'motion-graphics'),
   ('tag-text', 'text', 'text'),
-  ('tag-no-glsl', 'no-glsl', 'no-glsl');
+  ('tag-no-glsl', 'no-glsl', 'no-glsl'),
+  ('tag-forces', 'forces', 'forces'),
+  ('tag-curl-noise', 'curl-noise', 'curl-noise'),
+  ('tag-attractor', 'attractor', 'attractor'),
+  ('tag-chaos', 'chaos', 'chaos'),
+  ('tag-flow-field', 'flow-field', 'flow-field'),
+  ('tag-trails', 'trails', 'trails');
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
@@ -310,6 +316,75 @@ INSERT OR REPLACE INTO specimens (
     0,
     0,
     0
+  ),
+  (
+    'sp-ember-plume',
+    'ember-plume',
+    'dev-user',
+    'Ember Plume',
+    'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.',
+    'simulation',
+    'starter',
+    '[]',
+    16,
+    'POP,MAT',
+    'ver-ember-plume',
+    'thumbnails/95afe3ce6380f2801106311d764f7d10970601d1eedb327b4804097791a1b5e0',
+    'videos/616e132f57dd092685f0c097e5b775b00844543ccec65ea642b569ae0ea8fff6',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
+  ),
+  (
+    'sp-strange-attractor',
+    'strange-attractor',
+    'dev-user',
+    'Strange Attractor',
+    'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.',
+    'simulation',
+    'intermediate',
+    '[]',
+    16,
+    'POP,MAT,TOP',
+    'ver-strange-attractor',
+    'thumbnails/2b098a6e5deac8779bd84e70316c1c515a723a637256a59b2ac85815cb8c35c7',
+    'videos/1060f4e93837ec5486195959030692f1f941bfae61fff024ef39080b9fac3610',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
+  ),
+  (
+    'sp-flow-field',
+    'flow-field',
+    'dev-user',
+    'Flow Field',
+    'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.',
+    'simulation',
+    'intermediate',
+    '[]',
+    25,
+    'TOP,POP,MAT',
+    'ver-flow-field',
+    'thumbnails/55cf97849732a1e73278379b797a2e62252b737f7545343694fad93a1a52f26e',
+    'videos/d6b55a6bba9189e0b01777afbfb1aaa4ff81acf6f4ad5f6163321c51fc870b6c',
+    'CC-BY-4.0',
+    'public',
+    'featured',
+    'clean',
+    '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}',
+    0,
+    0,
+    0
   );
 
 -- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdxn bytes).
@@ -326,7 +401,10 @@ INSERT OR REPLACE INTO specimen_versions (
   ('ver-prismatic-strata', 'sp-prismatic-strata', 1, '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', '3bdb820e01dbdb5ef1b3d4bec77a16a21dd4da8e3e4e1f7ce439a09b185160cd', 34243, 18, 'scan-prismatic-strata', NULL, 'First-party specimen.'),
   ('ver-mandala', 'sp-mandala', 1, '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', '3788fde3c9e2217d951901f957f36242a242aa8be5c146ea9104f96807bbbcc8', 89571, 461, 'scan-mandala', NULL, 'First-party specimen.'),
   ('ver-thermite-and-freon', 'sp-thermite-and-freon', 1, '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', '453cc35654105b78ee3877d4b34026150a320c9db34ea51a73d67350c5f77b5f', 130968, 111, 'scan-thermite-and-freon', NULL, 'First-party specimen.'),
-  ('ver-tile-zoom-type', 'sp-tile-zoom-type', 1, 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 15740, 14, 'scan-tile-zoom-type', NULL, 'First-party specimen.');
+  ('ver-tile-zoom-type', 'sp-tile-zoom-type', 1, 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 'f187a39bc552f38b96a2e802dd3fd19c1a4d02aad368f5634d43cc8d865fbf91', 15740, 14, 'scan-tile-zoom-type', NULL, 'First-party specimen.'),
+  ('ver-ember-plume', 'sp-ember-plume', 1, 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d', 'c6313eb45ee7cbf88f16777c253c217d17d839f1af206fbfb3339e20c2f97d3d', 8212, 16, 'scan-ember-plume', NULL, 'First-party specimen.'),
+  ('ver-strange-attractor', 'sp-strange-attractor', 1, '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d', '9abb7e257249dbc007240a7252a6fffea36007742eeb9a783c0f09c4e6bbf08d', 12018, 16, 'scan-strange-attractor', NULL, 'First-party specimen.'),
+  ('ver-flow-field', 'sp-flow-field', 1, 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9', 'aa12faaffcc0a4600da86e6022ac99387a3e32bfd3588b705e907d4285f57be9', 14577, 25, 'scan-flow-field', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -341,7 +419,10 @@ INSERT OR REPLACE INTO scans (
   ('scan-prismatic-strata', 'ver-prismatic-strata', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-mandala', 'ver-mandala', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
   ('scan-thermite-and-freon', 'ver-thermite-and-freon', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
-  ('scan-tile-zoom-type', 'ver-tile-zoom-type', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
+  ('scan-tile-zoom-type', 'ver-tile-zoom-type', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-ember-plume', 'ver-ember-plume', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-strange-attractor', 'ver-strange-attractor', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]'),
+  ('scan-flow-field', 'ver-flow-field', 'seed', 'clean', '{"scanner_version":"seed","verdict":"clean","counts":{"execute_dats":0,"file_read_exprs":0,"web_ops":0,"extensions":0,"storage_payloads":0,"denylisted_types":0,"traversal_paths":0,"external_refs":0},"findings":[]}', '[]');
 
 -- Specimen <-> tag links.
 INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
@@ -407,7 +488,27 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
   ('sp-tile-zoom-type', 'tag-uv'),
   ('sp-tile-zoom-type', 'tag-motion-graphics'),
   ('sp-tile-zoom-type', 'tag-text'),
-  ('sp-tile-zoom-type', 'tag-no-glsl');
+  ('sp-tile-zoom-type', 'tag-no-glsl'),
+  ('sp-ember-plume', 'tag-simulation'),
+  ('sp-ember-plume', 'tag-pop'),
+  ('sp-ember-plume', 'tag-particles'),
+  ('sp-ember-plume', 'tag-forces'),
+  ('sp-ember-plume', 'tag-curl-noise'),
+  ('sp-ember-plume', 'tag-no-glsl'),
+  ('sp-strange-attractor', 'tag-simulation'),
+  ('sp-strange-attractor', 'tag-glsl'),
+  ('sp-strange-attractor', 'tag-pop'),
+  ('sp-strange-attractor', 'tag-feedback'),
+  ('sp-strange-attractor', 'tag-particles'),
+  ('sp-strange-attractor', 'tag-attractor'),
+  ('sp-strange-attractor', 'tag-chaos'),
+  ('sp-flow-field', 'tag-simulation'),
+  ('sp-flow-field', 'tag-glsl'),
+  ('sp-flow-field', 'tag-feedback'),
+  ('sp-flow-field', 'tag-particles'),
+  ('sp-flow-field', 'tag-flow-field'),
+  ('sp-flow-field', 'tag-texture'),
+  ('sp-flow-field', 'tag-trails');
 
 -- FTS5 keyword mirror (rowid = specimen rowid; dat_text = key_ops).
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
@@ -449,6 +550,18 @@ FROM specimens WHERE id = 'sp-thermite-and-freon';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'tile-zoom-type', 'Tile Zoom Type', 'A grid of small letters breathes into one giant letter and back, cycling through a word with the polarity flipping on every letter. Every cell is a window onto the same glyph texture, driven by a UV map built entirely from Ramp, Channel Mix and Cross TOPs and sampled by one Remap TOP: the windows spin about their own centers as they zoom, and stopping just short of full zoom leaves the repeated slivers and arrowheads of the glitched big letter. Ten TOPs, no CHOPs, no GLSL.', 'compositing typography remap uv motion-graphics text no-glsl', 'envoy', 'remapTOP rampTOP crossTOP channelmixTOP textTOP'
 FROM specimens WHERE id = 'sp-tile-zoom-type';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'ember-plume', 'Ember Plume', 'A column of sparks rises off a small emitter, leans with the wind, twists and breaks into drifting embers as it cools from white through amber to deep red. The plain built-in way to make a particle system: a Particle POP in its feedback loop, lift and wind from a Force Radial POP, curl turbulence from a Noise POP, drag, and colour by age through a Math Mix POP and a ramp lookup. Sixteen operators, no GLSL.', 'simulation pop particles forces curl-noise no-glsl', 'envoy', 'particlePOP forceradialPOP noisePOP lookuptexturePOP pointspriteMAT'
+FROM specimens WHERE id = 'sp-ember-plume';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'strange-attractor', 'Strange Attractor', 'Two hundred thousand points trace the Thomas attractor seen down its three-fold axis: strands leave 48 emitters, stretch into ribbons and fray as chaos pulls neighbours apart. A particle system with nothing built in: a Feedback POP hands last frame''s points to a GLSL POP that takes one Runge-Kutta step and recycles expired points, with age computed statelessly from time and id. Position is the whole state.', 'simulation glsl pop feedback particles attractor chaos', 'envoy', 'feedbackPOP glslPOP pointgeneratorPOP pointspriteMAT rendersimpleTOP'
+FROM specimens WHERE id = 'sp-strange-attractor';
+
+INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
+SELECT rowid, 'flow-field', 'Flow Field', 'A quarter of a million particles walk through a morphing noise field and leave their paths behind: fans of fine fibres gather into bright rivers of teal, cream and magenta. Every particle is a pixel in a float texture, moved by a GLSL TOP in a Feedback TOP loop, read back as points with a TOP to POP, and drawn into a second feedback loop that piles up the trails. The texture-state approach to GPU particles.', 'simulation glsl feedback particles flow-field texture trails', 'envoy', 'glslTOP feedbackTOP toptoPOP lookuptexturePOP pointspriteMAT'
+FROM specimens WHERE id = 'sp-flow-field';
 
 -- Category membership (multi). Seed the join table from each specimen's primary
 -- category so the collection facet filter (which reads specimen_categories) and
