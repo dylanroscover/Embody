@@ -301,6 +301,34 @@ class TestSetupWizard(EmbodyTestCase):
             self._ext._applyWizardSetup(assistant='none', toxdrop=token)
             self.assertEqual(self._emb.par.Toxdropexpr.eval(), token)
 
+    def test_finish_records_toxdrop_before_queueing(self):
+        # close's sweep (+5) and the apply (+2) can fall due on one frame on
+        # a busy first launch, sweep first: the answer must already be set
+        # when finish() closes (release smoke wizard leg, 2026-11-20).
+        logic = self._emb.op('wizard/logic').module
+        w = logic._w()
+        keys = ('toxdrop_paths', 'sel_toxdrop', 'sel_root')
+        stored = {k: w.fetch(k, None, search=False) for k in keys}
+        real_close = logic._close
+        seen = []
+        logic._close = lambda: seen.append(self._emb.par.Toxdropexpr.eval())
+        logic.run = lambda *a, **k: None
+        try:
+            self._emb.par.Toxdropexpr = 'ask'
+            w.store('toxdrop_paths', ['/dropped'])
+            w.store('sel_toxdrop', 'clean')
+            w.store('sel_root', 'gitroot')
+            logic.finish()
+            self.assertEqual(seen, ['clean'])
+        finally:
+            logic._close = real_close
+            logic.__dict__.pop('run', None)
+            for k, v in stored.items():
+                if v is None:
+                    w.unstore(k)
+                else:
+                    w.store(k, v)
+
     def test_blank_or_bogus_toxdrop_leaves_the_preference(self):
         for token in ('', 'unlink-everything'):
             self._emb.par.Toxdropexpr = 'ask'
