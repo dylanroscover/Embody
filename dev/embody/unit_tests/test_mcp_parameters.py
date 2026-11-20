@@ -84,6 +84,50 @@ class TestMCPParameters(EmbodyTestCase):
             op_path=comp.path, par_name='nonexistent_param_xyz')
         self.assertDictHasKey(result, 'error')
 
+    def test_get_parameter_bind_mode(self):
+        # bindMaster is a Par, which has no .path (issue 201)
+        src = self.sandbox.create(geometryCOMP, 'bind_src')
+        dst = self.sandbox.create(geometryCOMP, 'bind_dst')
+        dst.par.tx.bindExpr = "op('bind_src').par.tx"
+        result = self.envoy._get_parameter(op_path=dst.path, par_name='tx')
+        self.assertNotIn('error', result)
+        self.assertEqual(result['bindExpr'], "op('bind_src').par.tx")
+        self.assertEqual(result['bindMaster'], src.path)
+        self.assertEqual(result['bindMasterPar'], 'tx')
+
+    def test_get_parameter_broken_bind(self):
+        dst = self.sandbox.create(geometryCOMP, 'bind_broken')
+        dst.par.tx.bindExpr = "op('missing_src').par.tx"
+        result = self.envoy._get_parameter(op_path=dst.path, par_name='tx')
+        self.assertNotIn('error', result)
+        self.assertIsNone(result['bindMaster'])
+
+    def test_get_parameter_unevaluable_expression(self):
+        # a failing eval must not hide the mode and expression (issue 201)
+        comp = self.sandbox.create(geometryCOMP, 'bad_expr')
+        comp.par.tx.expr = "op('does_not_exist').par.tx + 1"
+        result = self.envoy._get_parameter(op_path=comp.path, par_name='tx')
+        self.assertNotIn('error', result)
+        self.assertEqual(result['expression'], "op('does_not_exist').par.tx + 1")
+        self.assertStartsWith(result['value'], '<eval error:')
+
+    # an export only applies on a later frame, so the source naming is
+    # tested directly: a Channel's or Cell's bool() and str() are its value
+
+    def test_export_source_names_channel_at_zero(self):
+        chop = self.sandbox.create(constantCHOP, 'exp_chop')
+        chop.par.name0 = 'geo1:tx'
+        chop.par.value0 = 0
+        self.assertEqual(
+            self.envoy._exportSourceName(chop['geo1:tx']), 'geo1:tx')
+
+    def test_export_source_names_cell(self):
+        table = self.sandbox.create(tableDAT, 'exp_table')
+        table.clear()
+        table.appendRow(['path', 'parameter', 'value'])
+        table.appendRow(['geo1', 'tx', '0'])
+        self.assertEqual(self.envoy._exportSourceName(table[1, 2]), '[1,2]')
+
     # --- Toggle parameters ---
 
     def test_set_toggle_parameter_with_0_1(self):

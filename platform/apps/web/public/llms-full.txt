@@ -626,7 +626,7 @@ Search mode omits `par_name` and passes `search`. It scans the target operator a
 
 `search_in='value'` evaluates every parameter it scans (expressions included), so expression side effects and cooking cost are on the caller; `search_in='any'` only evaluates constant-mode values and matches expression/bind parameters by text.
 
-Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mode-specific refs (`expression`, `bindExpr`, `bindMaster`, `exportOP`), and `menuNames` for Menu parameters. Pass `details=True` to include defaults, custom/read-only/style metadata, numeric ranges, `menuLabels`, and `menuIndex`. Search mode ignores `details`.
+Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mode-specific refs (`expression`, `bindExpr`, `bindMaster` with `bindMasterPar` when the bind targets a parameter, `exportOP`), and `menuNames` for Menu parameters. A value that fails to evaluate comes back as `<eval error: ...>` beside its mode and expression. Pass `details=True` to include defaults, custom/read-only/style metadata, numeric ranges, `menuLabels`, `menuIndex`, and for an exported parameter `exportSource` (the channel name or `[row,col]` cell inside `exportOP`). Search mode ignores `details`.
 
 **Example** -- find expressions under `/project1` that reference absolute paths in that subtree:
 

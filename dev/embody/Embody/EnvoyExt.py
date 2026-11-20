@@ -9400,10 +9400,15 @@ class EnvoyExt:
 
         try:
             par = getattr(target.par, par_name)
+            # a failing eval must not hide the mode and expression (issue 201)
+            try:
+                value = str(par.eval())
+            except Exception as e:
+                value = f'<eval error: {e}>'
             result = {
                 'path': op_path,
                 'parameter': par_name,
-                'value': str(par.eval()),
+                'value': value,
                 'mode': str(par.mode),
                 'label': par.label,
             }
@@ -9420,11 +9425,19 @@ class EnvoyExt:
                 result['expression'] = par.expr
             elif par.mode.name == 'BIND':
                 result['bindExpr'] = par.bindExpr
-                result['bindMaster'] = par.bindMaster.path if par.bindMaster else None
+                # the master is usually a Par (no .path), and a Par's truthiness
+                # is its value, so test identity, never bool (issue 201)
+                master = par.bindMaster
+                if isinstance(master, Par):
+                    result['bindMaster'] = master.owner.path
+                    result['bindMasterPar'] = master.name
+                else:
+                    result['bindMaster'] = getattr(master, 'path', None)
             elif par.mode.name == 'EXPORT':
-                result['exportOP'] = par.exportOP.path if par.exportOP else None
+                export_op = par.exportOP
+                result['exportOP'] = export_op.path if export_op is not None else None
                 if details:
-                    result['exportSource'] = str(par.exportSource) if par.exportSource else None
+                    result['exportSource'] = self._exportSourceName(par.exportSource)
 
             # Numeric range info
             if details and par.isNumber:
@@ -9445,6 +9458,18 @@ class EnvoyExt:
             return result
         except Exception as e:
             return {'error': f'Failed to get parameter: {e}'}
+
+    def _exportSourceName(self, source: 'Optional[Channel | Cell | Par]') -> Optional[str]:
+        """Name an export source within its exportOP: a channel name or a [row,col] cell.
+
+        A Channel's or Cell's bool() and str() are its value, so neither is
+        usable here: a source at 0 read as None (issue 201).
+        """
+        if source is None:
+            return None
+        if isinstance(source, Cell):
+            return f'[{source.row},{source.col}]'
+        return str(getattr(source, 'name', source))
 
     def _connect_ops(self, source_path: str, dest_path: str,
                           source_index: int = 0, dest_index: int = 0,
