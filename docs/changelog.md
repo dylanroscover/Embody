@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.3.8
+
+`get_parameter` reads every parameter mode, and the setup wizard's Unlink always unlinks.
+
+- **Bound and exported parameters.** A bound parameter returns its target (`bindMaster`, `bindMasterPar`) instead of an error, and `exportSource` names the exporting channel or cell instead of returning its value. A target or source at 0 no longer reads as none (issue #201).
+- **Broken expressions.** A parameter whose expression cannot evaluate returns its mode and expression, with `<eval error: ...>` as the value.
+- **Setup wizard.** Choosing Unlink for dragged-in `.tox` files always unlinks; on a busy first launch it could show the Dropped .tox Expression dialog and leave the links. +32 tests.
+
 ## v6.3.6
 
 A blank project to start from, and the setup wizard comes first.
