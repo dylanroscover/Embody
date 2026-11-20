@@ -313,8 +313,8 @@ def _close():
 	try: op.Embody.op('window_wizard').par.winclose.pulse()
 	except Exception: pass
 	# re-run the dropped-.tox sweep held while the wizard was up: applies
-	# the step's answer, or asks on cancel. After finish()'s apply (+2),
-	# before its externalize step (+32).
+	# the step's answer (finish() records it first), or asks on cancel.
+	# Before finish()'s externalize step (+32).
 	run('op.Embody.ext.Embody._checkExternalToxPar()', delayFrames=5)
 def finish():
 	w=_w()
@@ -331,6 +331,10 @@ def finish():
 	if r=='custom':
 		try: cr=ui.chooseFolder(title='Choose the folder for Embody config') or ''
 		except Exception: cr=''
+	# record the dropped-.tox answer before queueing anything: on a busy first
+	# launch close's sweep (+5) and the apply (+2) can fall due on one frame,
+	# sweep first, and the sweep would ask (release smoke 2026-11-20)
+	if td: op.Embody.par.Toxdropexpr=td
 	_close()
 	# Defer so the window closes cleanly before setup runs. Tokens come from the
 	# wizard's fixed option set, so repr-interpolation is safe.
