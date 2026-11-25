@@ -46,3 +46,13 @@ updates:
           - version-update:semver-major
     commit-message:
       prefix: deps
+
+  # the docs site's builder (zensical, pinned in requirements-docs.txt)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: docs

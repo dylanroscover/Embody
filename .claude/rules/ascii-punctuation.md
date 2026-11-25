@@ -48,7 +48,7 @@ generates (`llms.txt`, `llms-full.txt`, `for-ai.*`, etc.):
 ## Hand-written Markdown prose is exempt
 
 `docs/` and `manifesto.md` may keep deliberate em-dashes -- they render
-correctly through MkDocs (UTF-8). When in doubt, still prefer ASCII.
+correctly through the docs build (UTF-8). When in doubt, still prefer ASCII.
 
 ## Why
 
