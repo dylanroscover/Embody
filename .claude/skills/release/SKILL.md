@@ -82,7 +82,7 @@ Mechanics:
 - Grep before you write: `grep -rn "<old behavior phrase>" docs/` finds the
   copies that would otherwise go stale. Fix all of them.
 - New page -> add it to `mkdocs.yml` nav, or it ships invisible.
-- `mkdocs build --strict` must pass (broken internal links are errors).
+- `zensical build --strict` must pass (broken internal links and anchors are errors).
   It proves the page BUILDS; step 7 is what makes it PUBLISHED.
 - Docs written in this pass are part of the release commit, so the changelog
   bullet and the page land together.

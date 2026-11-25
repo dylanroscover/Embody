@@ -32,7 +32,7 @@ Practical consequences:
 
 | Zone | Paths | How to contribute |
 |---|---|---|
-| **Open** -- normal PRs, no TD required | `platform/` (embody.tools web app), `docs/` (MkDocs site), `.github/` (CI), `README.md` and other root docs | Standard workflow. CI covers these. |
+| **Open** -- normal PRs, no TD required | `platform/` (embody.tools web app), `docs/` (Zensical site), `.github/` (CI), `README.md` and other root docs | Standard workflow. CI covers these. |
 | **TD-mediated** -- PRs welcome, maintainer verifies in TD | `dev/embody/Embody/*.py` (extension source), `dev/embody/unit_tests/`, `.claude/rules/` and `.claude/skills/` (paired with `dev/embody/Embody/templates/` -- keep both in sync) | Edit the Python/Markdown as text. Do not touch file names, encodings, or whitespace conventions. Your PR is merged after a TD round-trip. |
 | **Discuss first** -- open an issue instead of a PR | `dev/*.toe`, `release/*.tox` (binaries), `dev/specimen_lab/`, `specimens/` (TD-generated networks and shaders), `dev/embody/externalizations.tsv` | These are produced by a live TD session and cannot be meaningfully reviewed or merged as diffs. |
 
